@@ -11,6 +11,7 @@ import { PromptBuilder } from '../orchestrator/prompt-builder';
 import type { TweakResult } from '../types/chain-output.types';
 import type { TweakRequest } from '../types/job-payload.types';
 import type { BrandDNARecord } from '../types/job-payload.types';
+import { wrapSystemPrompt } from '../config/platform-system-prompt';
 
 function parseTweakOutput(raw: string): Omit<TweakResult, 'contentItemId' | 'tokenCost'> {
   const cleaned = raw.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
@@ -61,7 +62,7 @@ export class TweakChain {
     });
 
     const response = await this.model.invoke([
-      new SystemMessage(systemPrompt),
+      new SystemMessage(wrapSystemPrompt(systemPrompt)),
       new HumanMessage(userPrompt),
     ]);
 

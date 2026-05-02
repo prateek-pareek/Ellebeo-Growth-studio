@@ -10,6 +10,7 @@ import type { ReelScriptResult } from '../types/chain-output.types';
 import type { BrandDNARecord } from '../types/job-payload.types';
 import type { CaptionGenerationResult, VisionAnalysisResult } from '../types/chain-output.types';
 import type { ModelRouter } from '../orchestrator/model-router';
+import { wrapSystemPrompt } from '../config/platform-system-prompt';
 
 function parseReelScriptOutput(raw: string, brandTone: string): ReelScriptResult {
   const cleaned = raw.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
@@ -98,7 +99,7 @@ Higher stability = more consistent/controlled delivery. Higher style = more expr
 For ${brandDNA.primaryTone.replace(/_/g, ' ')} tone: choose appropriate values.`;
 
     const response = await this.model.invoke([
-      new SystemMessage(systemPrompt),
+      new SystemMessage(wrapSystemPrompt(systemPrompt)),
       new HumanMessage(userPrompt),
     ]);
 

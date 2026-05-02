@@ -10,6 +10,7 @@ import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { AI_CONFIG } from '../../config/ai.config';
 import type { CaptionGenerationResult, LLMConfig, AssembledPrompt } from '../types/chain-output.types';
+import { wrapSystemPrompt } from '../config/platform-system-prompt';
 
 function parseCaptionOutput(raw: string): CaptionGenerationResult {
   // Strip markdown code fences if model wrapped the JSON
@@ -33,6 +34,11 @@ function parseCaptionOutput(raw: string): CaptionGenerationResult {
     estimatedReadTime: Number(obj['estimatedReadTime'] ?? 10),
     brandVoiceConfidenceScore: Math.min(1, Math.max(0, Number(obj['brandVoiceConfidenceScore'] ?? 0.5))),
   };
+}
+
+function estimateTokens(text: string): number {
+  // Lightweight heuristic: ~4 chars/token for English mixed content
+  return Math.max(1, Math.ceil(text.length / 4));
 }
 
 // ---------------------------------------------------------------------------
@@ -83,7 +89,7 @@ export class CaptionGenerationChain {
     prompt: AssembledPrompt
   ): Promise<CaptionGenerationResult> {
     const messages = [
-      new SystemMessage(prompt.systemPrompt),
+      new SystemMessage(wrapSystemPrompt(prompt.systemPrompt)),
       new HumanMessage(prompt.userPrompt),
     ];
 
@@ -91,8 +97,14 @@ export class CaptionGenerationChain {
     const content = typeof response.content === 'string'
       ? response.content
       : JSON.stringify(response.content);
-
-    return parseCaptionOutput(content);
+    const parsed = parseCaptionOutput(content);
+    const promptText = `${prompt.systemPrompt}\n${prompt.userPrompt}`;
+    const usage = (response as { usage_metadata?: { input_tokens?: number; output_tokens?: number } }).usage_metadata;
+    parsed.tokenUsage = {
+      inputTokens: usage?.input_tokens ?? estimateTokens(promptText),
+      outputTokens: usage?.output_tokens ?? estimateTokens(content),
+    };
+    return parsed;
   }
 
   // --------------------------------------------------------------------------

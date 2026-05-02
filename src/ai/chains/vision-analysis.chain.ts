@@ -10,6 +10,7 @@ import { PrismaClient } from '@prisma/client';
 import { AI_CONFIG } from '../../config/ai.config';
 import type { VisionAnalysisResult } from '../types/chain-output.types';
 import type { ModelRouter } from '../orchestrator/model-router';
+import { wrapSystemPrompt } from '../config/platform-system-prompt';
 
 // Zod-validated output schema enforcer (inline for strict mode)
 function parseVisionOutput(raw: string): VisionAnalysisResult {
@@ -109,11 +110,9 @@ export class VisionAnalysisChain {
   // --------------------------------------------------------------------------
 
   private async callVisionModel(imageUrl: string): Promise<VisionAnalysisResult> {
-    const systemMessage = new SystemMessage(
-      `You are an expert beauty and wellness technician analyst. 
+    const systemPrompt = `You are an expert beauty and wellness technician analyst. 
 Analyse the provided image and extract structured information about the beauty service shown.
-Return ONLY valid JSON with no markdown, no explanation.`
-    );
+Return ONLY valid JSON with no markdown, no explanation.`;
 
     const humanMessage = new HumanMessage({
       content: [
@@ -137,7 +136,7 @@ Return ONLY valid JSON with no markdown, no explanation.`
       ],
     });
 
-    const response = await this.model.invoke([systemMessage, humanMessage]);
+    const response = await this.model.invoke([new SystemMessage(wrapSystemPrompt(systemPrompt)), humanMessage]);
     const content = typeof response.content === 'string'
       ? response.content
       : JSON.stringify(response.content);

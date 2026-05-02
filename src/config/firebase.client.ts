@@ -3,19 +3,19 @@
 // ============================================================================
 
 import * as admin from 'firebase-admin';
-import { aiConfig } from './ai.config';
+import { AI_CONFIG } from './ai.config';
 
 /**
  * Initialize Firebase Admin SDK using service account credentials
  * from environment variables.
  */
-function initializeFirebase(): admin.app.App {
+function initializeFirebase() {
   // Check if already initialized to prevent errors during hot-reloading
-  if (admin.apps.length \u003e 0) {
+  if (admin.apps.length > 0) {
     return admin.apps[0]!;
   }
 
-  const { firebase } = aiConfig;
+  const { firebase } = AI_CONFIG;
 
   // Handle private key formatting (newlines in env vars)
   const privateKey = firebase.privateKey.replace(/\\\\n/g, '\\n');
