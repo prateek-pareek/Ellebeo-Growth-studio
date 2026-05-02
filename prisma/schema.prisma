@@ -1,0 +1,222 @@
+// ============================================================================
+// schema.prisma — Database Schema for the AI Orchestration Layer
+// Covers all tables the AI layer reads from and writes to.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// TABLES THE AI LAYER WRITES TO
+// ---------------------------------------------------------------------------
+
+model GenerationJob {
+  jobId         String    @id @default(uuid()) @map("job_id") @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  appointmentId String    @map("appointment_id") @db.Uuid
+  clientId      String    @map("client_id") @db.Uuid
+  state         String    @default("CREATED")   // JobState enum as string
+  priority      Int       @default(5)            // 1 = premium, 5 = standard
+  modelUsed     String?   @map("model_used")
+  tokensInput   Int?      @map("tokens_input")
+  tokensOutput  Int?      @map("tokens_output")
+  estimatedCost Float?    @map("estimated_cost")
+  processingMs  Int?      @map("processing_ms")
+  attemptsMade  Int       @default(0) @map("attempts_made")
+  failedAtStep  String?   @map("failed_at_step")
+  createdAt     DateTime  @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  contentItem   ContentItem?
+  failedJob     FailedJob?
+
+  @@index([tenantId])
+  @@index([state])
+  @@index([clientId])
+  @@map("generation_jobs")
+}
+
+model ContentItem {
+  contentItemId    String   @id @default(uuid()) @map("content_item_id") @db.Uuid
+  jobId            String   @unique @map("job_id") @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  appointmentId    String   @map("appointment_id") @db.Uuid
+
+  // Component statuses — partial success support
+  captionStatus    String   @default("pending") @map("caption_status")
+  imageStatus      String   @default("pending") @map("image_status")
+  reelStatus       String   @default("pending") @map("reel_status")
+
+  // Caption outputs
+  caption          String?  @db.Text
+  hookSentence     String?  @map("hook_sentence")
+  callToAction     String?  @map("call_to_action")
+  hashtags         String[] @default([])
+  altText          String?  @map("alt_text") @db.Text
+  estimatedReadTime Int?    @map("estimated_read_time")
+  confidenceScore  Float?   @map("confidence_score")
+
+  // Platform variants stored as JSON array
+  platformVariants Json?    @map("platform_variants")
+
+  // Image outputs
+  cloudinaryPublicId  String? @map("cloudinary_public_id")
+  feedImageUrl        String? @map("feed_image_url")
+  storyImageUrl       String? @map("story_image_url")
+  thumbnailUrl        String? @map("thumbnail_url")
+  faceBlurred         Boolean @default(false) @map("face_blurred")
+  brandOverlayApplied Boolean @default(false) @map("brand_overlay_applied")
+
+  // Reel outputs
+  reelS3Key          String? @map("reel_s3_key")
+  reelCdnUrl         String? @map("reel_cdn_url")
+  reelDurationSec    Int?    @map("reel_duration_sec")
+  reelScript         String? @map("reel_script") @db.Text
+  hasVoiceover       Boolean @default(false) @map("has_voiceover")
+  hasMusic           Boolean @default(false) @map("has_music")
+  musicTrackId       String? @map("music_track_id")
+  musicTrackTitle    String? @map("music_track_title")
+
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  completedAt        DateTime? @map("completed_at")
+
+  job GenerationJob @relation(fields: [jobId], references: [jobId])
+
+  @@index([tenantId])
+  @@index([appointmentId])
+  @@map("content_items")
+}
+
+model FailedJob {
+  failedJobId              String   @id @default(uuid()) @map("failed_job_id") @db.Uuid
+  originalJobId            String   @unique @map("original_job_id") @db.Uuid
+  tenantId                 String   @map("tenant_id") @db.Uuid
+  appointmentId            String   @map("appointment_id") @db.Uuid
+  failedAtStep             String   @map("failed_at_step")
+  errorMessage             String   @map("error_message") @db.Text
+  errorStack               String   @map("error_stack") @db.Text
+  fullPayload              String   @map("full_payload") @db.Text  // JSON
+  partialResultsPreserved  Boolean  @default(false) @map("partial_results_preserved")
+  reviewedAt               DateTime? @map("reviewed_at")
+  createdAt                DateTime @default(now()) @map("created_at")
+
+  job GenerationJob @relation(fields: [originalJobId], references: [jobId])
+
+  @@index([tenantId])
+  @@map("failed_jobs")
+}
+
+model ImageVisionCache {
+  cacheId           String   @id @default(uuid()) @map("cache_id") @db.Uuid
+  s3ObjectHash      String   @unique @map("s3_object_hash")   // SHA-256 of raw S3 object
+  s3Key             String   @map("s3_key")
+  visionResult      Json     @map("vision_result")             // VisionAnalysisResult JSON
+  modelVersion      String   @map("model_version")             // e.g. "gpt-4o-2024-11-20"
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@map("image_vision_cache")
+}
+
+// ---------------------------------------------------------------------------
+// TABLES THE AI LAYER READS FROM (defined here for Prisma type generation)
+// Owned by other parts of the application — do NOT modify schema here.
+// ---------------------------------------------------------------------------
+
+model BrandDNA {
+  brandDNAId          String   @id @map("brand_dna_id") @db.Uuid
+  tenantId            String   @unique @map("tenant_id") @db.Uuid
+  version             Int      @default(1)
+  primaryTone         String   @map("primary_tone")
+  secondaryTone       String?  @map("secondary_tone")
+  personaDescription  String   @map("persona_description") @db.Text
+  preferredVocabulary String[] @map("preferred_vocabulary")
+  blacklistedWords    String[] @map("blacklisted_words")
+  clientTerminology   String   @map("client_terminology")
+  businessName        String   @map("business_name")
+  heroServices        String[] @map("hero_services")
+  targetAudience      String   @map("target_audience") @db.Text
+  uniqueSellingPoint  String   @map("unique_selling_point") @db.Text
+  locationCity        String   @map("location_city")
+  primaryBrandColour  String   @map("primary_brand_colour")
+  secondaryBrandColour String  @map("secondary_brand_colour")
+  brandFontPreference String?  @map("brand_font_preference")
+  moodTag             String   @map("mood_tag")
+  captionLengthPreference String @map("caption_length_preference") @default("medium")
+  useEmojis           Boolean  @default(true) @map("use_emojis")
+  emojiStyle          String   @default("moderate") @map("emoji_style")
+  preferredCTAStyle   String   @map("preferred_cta_style")
+  complexityScore     Float    @default(0.5) @map("complexity_score")
+  lastUpdatedAt       DateTime @updatedAt @map("last_updated_at")
+
+  @@map("brand_dna")
+}
+
+model GoldenExample {
+  exampleId    String   @id @default(uuid()) @map("example_id") @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  captionText  String   @map("caption_text") @db.Text
+  platform     String
+  qualityScore Float    @map("quality_score")
+  hashtags     String[] @default([])
+  postedAt     DateTime @map("posted_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, qualityScore(sort: Desc)])
+  @@map("golden_examples")
+}
+
+model ConsentRecord {
+  consentId     String    @id @default(uuid()) @map("consent_id") @db.Uuid
+  clientId      String    @map("client_id") @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  status        String    @default("granted")  // granted | partial | withdrawn | expired
+  restrictions  Json                            // ConsentRestrictions JSON
+  grantedAt     DateTime  @map("granted_at")
+  expiresAt     DateTime? @map("expires_at")
+  lastUpdatedAt DateTime  @updatedAt @map("last_updated_at")
+  version       Int       @default(1)
+
+  @@index([clientId])
+  @@index([tenantId])
+  @@map("consent_records")
+}
+
+model Appointment {
+  appointmentId   String   @id @map("appointment_id") @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  clientId        String   @map("client_id") @db.Uuid
+  serviceType     String   @map("service_type")
+  serviceDetails  String?  @map("service_details") @db.Text
+  appointmentDate DateTime @map("appointment_date")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@map("appointments")
+}
+
+model BusinessGoal {
+  goalId       String    @id @default(uuid()) @map("goal_id") @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  goalType     String    @map("goal_type")
+  goalContext  String?   @map("goal_context") @db.Text
+  activatedAt  DateTime  @map("activated_at")
+  expiresAt    DateTime? @map("expires_at")
+
+  @@index([tenantId])
+  @@map("business_goals")
+}
+
+model Tenant {
+  tenantId  String @id @map("tenant_id") @db.Uuid
+  tier      String @default("standard")  // standard | premium
+  name      String
+
+  @@map("tenants")
+}
