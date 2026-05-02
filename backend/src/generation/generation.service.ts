@@ -1,11 +1,12 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GenerateContentDto, TweakContentDto } from './dto/generation.dto';
-import { v4 as uuidv4 } from 'uuid';
+import { GenerationGateway } from './generation.gateway';
+import { contentGenerationQueue } from '../ai/queues/queue.definitions';
 
 @Injectable()
 export class GenerationService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private generationGateway: GenerationGateway) {}
 
   async generate(tenantId: string, clientId: string, dto: GenerateContentDto) {
     const appointment = await this.prisma.appointment.findUnique({
@@ -49,11 +50,35 @@ export class GenerationService {
       }
     });
 
-    // Here we would push `job.id` to the BullMQ queue
-    // this.orchestratorQueue.add('generate', { jobId: job.id });
+    await contentGenerationQueue.add(
+      `generation:${job.id}`,
+      {
+        jobId: job.id,
+        tenantId,
+        appointmentId: appointment.id,
+        clientId: appointment.clientId,
+        consentSnapshot: appointment.consentRecord,
+        brandDNA: brandDna,
+        businessGoal: 'build_brand_authority',
+        imageAssets: [],
+        generationOptions: {
+          outputFormats: dto.outputFormats,
+          includeVoiceover: dto.includeVoiceover,
+          includeMusic: dto.includeMusic,
+          platform: dto.platforms,
+          userTier: 'standard',
+        },
+        goldenExamples: [],
+        createdAt: new Date().toISOString(),
+        priority: 5,
+      },
+      { jobId: job.id },
+    );
 
     // Assuming a simple calculation for estimated seconds based on formats
     const estimatedSeconds = dto.outputFormats.includes('reel' as any) ? 120 : 30;
+
+    this.generationGateway.emitJobUpdate(job.id, job.state);
 
     return {
       jobId: job.id,
@@ -68,6 +93,7 @@ export class GenerationService {
   async getJobStatus(tenantId: string, jobId: string) {
     const job = await this.prisma.generationJob.findUnique({ where: { id: jobId } });
     if (!job || job.tenantId !== tenantId) throw new NotFoundException('Job not found');
+    this.generationGateway.emitJobUpdate(job.id, job.state);
     return job;
   }
 
@@ -97,7 +123,9 @@ export class GenerationService {
       }
     });
 
-    // Push to queue...
+    await contentGenerationQueue.add(`tweak:${job.id}`, { jobId: job.id }, { jobId: job.id });
+
+    this.generationGateway.emitJobUpdate(job.id, job.state);
 
     return {
       jobId: job.id,
