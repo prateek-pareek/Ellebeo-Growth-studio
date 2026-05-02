@@ -3,7 +3,7 @@
 // Manages state transitions, partial success, and component-level tracking.
 // ============================================================================
 
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { ConsentGuard } from '../guards/consent.guard';
 import { ModelRouter } from './model-router';
 import { PromptBuilder } from './prompt-builder';
@@ -11,6 +11,7 @@ import { VisionAnalysisChain } from '../chains/vision-analysis.chain';
 import { CaptionGenerationChain } from '../chains/caption-generation.chain';
 import { ReelScriptChain } from '../chains/reel-script.chain';
 import { PlatformVariantChain } from '../chains/platform-variant.chain';
+import { OutputValidator } from '../guards/output-validator';
 import { JobProgressEmitter } from '../emitters/job-progress.emitter';
 import type { GenerationJobPayload } from '../types/job-payload.types';
 import type { GenerationResult, ComponentStatus } from '../types/generation-result.types';
@@ -25,6 +26,7 @@ export class GenerationOrchestrator {
   private readonly captionChain: CaptionGenerationChain;
   private readonly reelScriptChain: ReelScriptChain;
   private readonly platformVariantChain: PlatformVariantChain;
+  private readonly outputValidator: OutputValidator;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -39,6 +41,7 @@ export class GenerationOrchestrator {
     this.captionChain = new CaptionGenerationChain();
     this.reelScriptChain = new ReelScriptChain(modelRouter);
     this.platformVariantChain = new PlatformVariantChain(modelRouter);
+    this.outputValidator = new OutputValidator();
   }
 
   // --------------------------------------------------------------------------
@@ -129,6 +132,34 @@ export class GenerationOrchestrator {
         allowRetry: true,
       });
       componentStatus.caption = 'completed';
+      const validation = await this.outputValidator.validate(
+        captionResult.caption,
+        payload.consentSnapshot,
+        'general',
+        tenantId
+      );
+      if (validation.correctedOutput) captionResult.caption = validation.correctedOutput;
+      if (validation.requiresRegeneration) {
+        const retryPrompt = {
+          ...assembledPrompt,
+          userPrompt: `${assembledPrompt.userPrompt}\n\nCRITICAL REGENERATION REQUIREMENT:\nPrevious output failed validation for:\n- ${validation.hardFailures.join('\n- ')}\nDo not use any prohibited phrasing.`,
+        };
+        captionResult = await this.captionChain.generate({
+          assembledPrompt: retryPrompt,
+          llmConfig,
+          brandDNABlacklist: brandDNA.blacklistedWords,
+          allowRetry: false,
+        });
+        const secondPass = await this.outputValidator.validate(
+          captionResult.caption,
+          payload.consentSnapshot,
+          'general',
+          tenantId
+        );
+        if (secondPass.requiresRegeneration) componentStatus.caption = 'failed';
+      }
+      totalTokensIn += captionResult.tokenUsage?.inputTokens ?? 0;
+      totalTokensOut += captionResult.tokenUsage?.outputTokens ?? 0;
 
       // Emit partial result — send caption to frontend as soon as it's ready
       await this.progressEmitter.emitPartialResult(jobId, tenantId, {
@@ -227,11 +258,7 @@ export class GenerationOrchestrator {
     to: JobState
   ): Promise<void> {
     validateStateTransition(from, to);
-    await this.prisma.$executeRaw`
-      UPDATE generation_jobs
-      SET state = ${to}, updated_at = NOW()
-      WHERE job_id = ${jobId}::uuid
-    `;
+    await this.prisma.generationJob.update({ where: { jobId }, data: { state: to } });
   }
 
   // --------------------------------------------------------------------------
@@ -254,45 +281,40 @@ export class GenerationOrchestrator {
     const { v4: uuidv4 } = await import('uuid');
     const contentItemId = uuidv4();
 
-    await this.prisma.$executeRaw`
-      INSERT INTO content_items (
-        content_item_id, job_id, tenant_id, appointment_id,
-        caption_status, image_status, reel_status,
-        caption, hook_sentence, call_to_action, hashtags, alt_text,
-        estimated_read_time, confidence_score,
-        platform_variants, reel_script,
-        created_at, updated_at, completed_at
-      ) VALUES (
-        ${contentItemId}::uuid,
-        ${payload.jobId}::uuid,
-        ${payload.tenantId}::uuid,
-        ${payload.appointmentId}::uuid,
-        ${componentStatus.caption},
-        ${componentStatus.image},
-        ${componentStatus.reel},
-        ${captionResult?.caption ?? null},
-        ${captionResult?.hookSentence ?? null},
-        ${captionResult?.callToAction ?? null},
-        ${captionResult?.hashtags ?? []}::text[],
-        ${captionResult?.altText ?? null},
-        ${captionResult?.estimatedReadTime ?? null},
-        ${captionResult?.brandVoiceConfidenceScore ?? null},
-        ${platformVariants ? JSON.stringify(platformVariants) : null}::jsonb,
-        ${reelScriptResult?.script ?? null},
-        NOW(), NOW(), NOW()
-      )
-    `;
+    await this.prisma.contentItem.create({
+      data: {
+        contentItemId,
+        jobId: payload.jobId,
+        tenantId: payload.tenantId,
+        appointmentId: payload.appointmentId,
+        captionStatus: componentStatus.caption,
+        imageStatus: componentStatus.image,
+        reelStatus: componentStatus.reel,
+        caption: captionResult?.caption ?? null,
+        hookSentence: captionResult?.hookSentence ?? null,
+        callToAction: captionResult?.callToAction ?? null,
+        hashtags: captionResult?.hashtags ?? [],
+        altText: captionResult?.altText ?? null,
+        estimatedReadTime: captionResult?.estimatedReadTime ?? null,
+        confidenceScore: captionResult?.brandVoiceConfidenceScore ?? null,
+        platformVariants: platformVariants
+          ? (platformVariants as unknown as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
+        reelScript: reelScriptResult?.script ?? null,
+        completedAt: new Date(),
+      },
+    });
 
     // Update generation_jobs with cost metadata
-    await this.prisma.$executeRaw`
-      UPDATE generation_jobs
-      SET model_used = ${params.modelUsed},
-          tokens_input = ${params.totalTokensIn},
-          tokens_output = ${params.totalTokensOut},
-          processing_ms = ${params.processingMs},
-          updated_at = NOW()
-      WHERE job_id = ${payload.jobId}::uuid
-    `;
+    await this.prisma.generationJob.update({
+      where: { jobId: payload.jobId },
+      data: {
+        modelUsed: params.modelUsed,
+        tokensInput: params.totalTokensIn,
+        tokensOutput: params.totalTokensOut,
+        processingMs: params.processingMs,
+      },
+    });
 
     return contentItemId;
   }
@@ -315,4 +337,3 @@ export class ConsentBlockedError extends Error {
     this.name = 'ConsentBlockedError';
   }
 }
-

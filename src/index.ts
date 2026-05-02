@@ -22,6 +22,9 @@ import { TweakChain } from './ai/chains/tweak.chain';
 import { AI_CONFIG } from './config/ai.config';
 import type { GenerationOptions } from './ai/types/job-payload.types';
 import type { TweakRequest } from './ai/types/job-payload.types';
+import type { BrandDNARecord } from './ai/types/job-payload.types';
+import client from 'prom-client';
+import { InputSanitiser } from './ai/guards/input-sanitiser';
 
 const PORT = parseInt(process.env['PORT'] ?? '3001', 10);
 const FRONTEND_URL = process.env['FRONTEND_URL'] ?? 'http://localhost:3000';
@@ -56,6 +59,9 @@ async function bootstrap(): Promise<void> {
   const promptBuilder = new PromptBuilder(promptCache);
   const jobFactory = new JobFactory(prisma, redis, consentGuard);
   const tweakChain = new TweakChain(promptBuilder);
+  const inputSanitiser = new InputSanitiser();
+  const metricsRegistry = new client.Registry();
+  client.collectDefaultMetrics({ register: metricsRegistry });
 
   // ── API Routes ─────────────────────────────────────────────────────────────
 
@@ -77,6 +83,19 @@ async function bootstrap(): Promise<void> {
       if (!tenantId || !appointmentId || !clientId || !generationOptions) {
         res.status(400).json({ error: 'Missing required fields' });
         return;
+      }
+      const customInstruction = String((req.body as { customInstruction?: string }).customInstruction ?? '');
+      if (customInstruction) {
+        const s = inputSanitiser.sanitise(customInstruction);
+        if (!s.safe) {
+          const msg = s.flagReason === 'injection_attempt'
+            ? 'That instruction couldn\'t be processed. Please describe what you\'d like in plain terms — for example, \'make it more playful\' or \'keep it under 100 words\'.'
+            : s.flagReason === 'off_topic'
+              ? 'Growth Studio is designed for beauty and wellness content. Please keep instructions related to your services and brand.'
+              : 'Your instruction is too long. Please keep it under 500 characters.';
+          res.status(422).json({ error: msg });
+          return;
+        }
       }
 
       const result = await jobFactory.createGenerationJob({
@@ -111,51 +130,56 @@ async function bootstrap(): Promise<void> {
         res.status(400).json({ error: 'Missing required fields for tweak' });
         return;
       }
+      const sanitisedTweak = inputSanitiser.sanitise(request.tweakInstruction);
+      if (!sanitisedTweak.safe) {
+        const msg = sanitisedTweak.flagReason === 'injection_attempt'
+          ? 'That instruction couldn\'t be processed. Please describe what you\'d like in plain terms — for example, \'make it more playful\' or \'keep it under 100 words\'.'
+          : sanitisedTweak.flagReason === 'off_topic'
+            ? 'Growth Studio is designed for beauty and wellness content. Please keep instructions related to your services and brand.'
+            : 'Your instruction is too long. Please keep it under 500 characters.';
+        res.status(422).json({ error: msg });
+        return;
+      }
+      request.tweakInstruction = sanitisedTweak.sanitisedInput;
 
       // Rate check and debounce
       await jobFactory.checkTweakAllowed(request.tenantId, request.contentItemId);
 
       // Fetch Brand DNA and previous hashtags from DB
-      const records = await prisma.$queryRaw<Array<{ hashtags: string[]; complexity_score: number; primary_tone: string }>>`
-        SELECT ci.hashtags, bd.complexity_score, bd.primary_tone
-        FROM content_items ci
-        JOIN generation_jobs gj ON gj.job_id = ci.job_id
-        JOIN brand_dna bd ON bd.tenant_id = gj.tenant_id
-        WHERE ci.content_item_id = ${request.contentItemId}::uuid
-        LIMIT 1
-      `;
-
-      const record = records[0];
+      const record = await prisma.contentItem.findUnique({
+        where: { contentItemId: request.contentItemId },
+        select: { hashtags: true },
+      });
       if (!record) {
         res.status(404).json({ error: 'Content item not found' });
         return;
       }
 
       // Fetch full brand DNA
-      const brandDNARecords = await prisma.$queryRaw<import('./ai/types/job-payload.types').BrandDNARecord[]>`
-        SELECT * FROM brand_dna WHERE tenant_id = ${request.tenantId}::uuid LIMIT 1
-      `;
-
-      if (!brandDNARecords[0]) {
+      const brandDNA = await prisma.brandDNA.findUnique({
+        where: { tenantId: request.tenantId },
+      });
+      const mappedBrandDNA = toBrandDNARecord(brandDNA);
+      if (!mappedBrandDNA) {
         res.status(404).json({ error: 'Brand DNA not found' });
         return;
       }
 
       const result = await tweakChain.tweak({
         request,
-        brandDNA: brandDNARecords[0],
+        brandDNA: mappedBrandDNA,
         previousHashtags: record.hashtags ?? [],
       });
 
       // Update content_items with tweaked caption
-      await prisma.$executeRaw`
-        UPDATE content_items
-        SET caption     = ${result.tweakedCaption},
-            hashtags    = ${result.tweakedHashtags}::text[],
-            call_to_action = ${result.tweakedCallToAction},
-            updated_at  = NOW()
-        WHERE content_item_id = ${request.contentItemId}::uuid
-      `;
+      await prisma.contentItem.update({
+        where: { contentItemId: request.contentItemId },
+        data: {
+          caption: result.tweakedCaption,
+          hashtags: result.tweakedHashtags,
+          callToAction: result.tweakedCallToAction,
+        },
+      });
 
       res.json(result);
     } catch (err) {
@@ -187,9 +211,8 @@ async function bootstrap(): Promise<void> {
 
   // GET /metrics — Prometheus metrics endpoint
   app.get('/metrics', async (_req, res) => {
-    // OpenTelemetry Prometheus export — placeholder for OTEL SDK integration
-    res.set('Content-Type', 'text/plain');
-    res.send('# Metrics endpoint — connect OpenTelemetry Prometheus exporter here\n');
+    res.set('Content-Type', metricsRegistry.contentType);
+    res.send(await metricsRegistry.metrics());
   });
 
   // ── Start Workers ──────────────────────────────────────────────────────────
@@ -216,6 +239,19 @@ async function bootstrap(): Promise<void> {
 
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
   process.on('SIGINT', () => void shutdown('SIGINT'));
+}
+
+function toBrandDNARecord(record: Awaited<ReturnType<PrismaClient['brandDNA']['findUnique']>>): BrandDNARecord | null {
+  if (!record) return null;
+  return {
+    ...record,
+    primaryTone: record.primaryTone as BrandDNARecord['primaryTone'],
+    secondaryTone: record.secondaryTone as BrandDNARecord['secondaryTone'],
+    moodTag: record.moodTag as BrandDNARecord['moodTag'],
+    captionLengthPreference: record.captionLengthPreference as BrandDNARecord['captionLengthPreference'],
+    emojiStyle: record.emojiStyle as BrandDNARecord['emojiStyle'],
+    lastUpdatedAt: record.lastUpdatedAt.toISOString(),
+  };
 }
 
 bootstrap().catch((err) => {

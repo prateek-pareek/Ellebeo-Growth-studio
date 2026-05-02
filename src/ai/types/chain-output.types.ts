@@ -30,6 +30,10 @@ export interface CaptionGenerationResult {
   altText: string;
   estimatedReadTime: number;
   brandVoiceConfidenceScore: number;
+  tokenUsage?: {
+    inputTokens: number;
+    outputTokens: number;
+  };
 }
 
 // ---------------------------------------------------------------------------

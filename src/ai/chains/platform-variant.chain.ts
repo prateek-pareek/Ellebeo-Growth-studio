@@ -10,6 +10,7 @@ import type { PlatformVariantResult } from '../types/chain-output.types';
 import type { CaptionGenerationResult } from '../types/chain-output.types';
 import type { BrandDNARecord, SocialPlatform } from '../types/job-payload.types';
 import type { ModelRouter } from '../orchestrator/model-router';
+import { wrapSystemPrompt } from '../config/platform-system-prompt';
 
 const PLATFORM_ADAPTATION_RULES: Partial<Record<SocialPlatform, string>> = {
   facebook: `Adapt this caption for Facebook:
@@ -118,7 +119,7 @@ Return ONLY this JSON:
 }`;
 
     const response = await this.model.invoke([
-      new SystemMessage(systemPrompt),
+      new SystemMessage(wrapSystemPrompt(systemPrompt)),
       new HumanMessage(userPrompt),
     ]);
 

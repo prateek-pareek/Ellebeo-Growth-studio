@@ -11,6 +11,7 @@ import type {
 } from '../types/job-payload.types';
 import type { VisionAnalysisResult, AssembledPrompt } from '../types/chain-output.types';
 import { PromptCache } from './prompt-cache';
+import { getGuardrailsForService, type ServiceCategory } from '../config/service-guardrails';
 
 // Business goal → prompt framing instruction
 const GOAL_FRAMING: Record<BusinessGoalType, string> = {
@@ -44,8 +45,9 @@ export class PromptBuilder {
     businessGoal: BusinessGoalType;
     goldenExamples: GoldenExample[];
     platform: SocialPlatform;
+    serviceCategory?: ServiceCategory;
   }): Promise<AssembledPrompt> {
-    const { brandDNA, visionResult, businessGoal, goldenExamples, platform } = params;
+    const { brandDNA, visionResult, businessGoal, goldenExamples, platform, serviceCategory = 'general' } = params;
 
     const { brandDNAFragment, brandDNACacheHit } = await this.getBrandDNAFragment(brandDNA);
     const { goldenExamplesFragment, goldenExamplesCacheHit } =
@@ -70,6 +72,9 @@ export class PromptBuilder {
       '',
       '## LENGTH REQUIREMENT',
       lengthSection,
+      '',
+      '## SAFETY GUARDRAILS',
+      getGuardrailsForService(serviceCategory),
       '',
       '## YOUR BEST PAST CONTENT (FEW-SHOT EXAMPLES)',
       goldenExamplesFragment,
