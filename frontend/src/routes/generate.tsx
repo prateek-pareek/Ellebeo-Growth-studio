@@ -144,8 +144,10 @@ function GeneratePage() {
       const res = await api.post('/generation/generate', {
         appointmentId: appointment.id,
         goal: goal,
-        formats: [format.toLowerCase()],
-        platforms: ['instagram']
+        outputFormats: [format.toLowerCase()],
+        platforms: ['instagram'],
+        includeVoiceover: false,
+        includeMusic: false
       });
       setJobId(res.data.data.jobId);
     } catch (e: any) {
