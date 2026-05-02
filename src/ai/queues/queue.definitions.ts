@@ -45,7 +45,7 @@ export interface ImageProcessingJobPayload {
   tenantId: string;
   clientId: string;
   contentItemId: string;
-  rawS3Key: string;
+  rawStoragePath: string;
   cloudinaryPublicId?: string;
   consentShowFace: boolean;
   brandPrimaryColour: string;

@@ -73,10 +73,10 @@ export class VisionAnalysisChain {
 
   async analyse(params: {
     imageUrl: string;   // Cloudinary CDN URL (processed, accessible)
-    s3Key: string;      // Used to compute the cache key
+    storagePath: string; // Used to compute the cache key
     cachedResult?: string; // Pre-fetched from job payload if already cached
   }): Promise<{ result: VisionAnalysisResult; fromCache: boolean }> {
-    const { imageUrl, s3Key, cachedResult } = params;
+    const { imageUrl, storagePath, cachedResult } = params;
 
     // 1. Check in-payload cache (fastest — already in memory)
     if (cachedResult) {
@@ -89,8 +89,8 @@ export class VisionAnalysisChain {
     }
 
     // 2. Compute image hash and check PostgreSQL cache
-    const s3Hash = createHash('sha256').update(s3Key).digest('hex');
-    const dbCached = await this.checkDBCache(s3Hash);
+    const storageHash = createHash('sha256').update(storagePath).digest('hex');
+    const dbCached = await this.checkDBCache(storageHash);
     if (dbCached) {
       return { result: dbCached, fromCache: true };
     }
@@ -99,7 +99,7 @@ export class VisionAnalysisChain {
     const result = await this.callVisionModel(imageUrl);
 
     // 4. Save to PostgreSQL cache (permanent — never expires)
-    await this.saveToDBCache(s3Hash, s3Key, result);
+    await this.saveToDBCache(storageHash, storagePath, result);
 
     return { result, fromCache: false };
   }
@@ -149,13 +149,13 @@ Return ONLY valid JSON with no markdown, no explanation.`
   // PostgreSQL Cache Read/Write
   // --------------------------------------------------------------------------
 
-  private async checkDBCache(s3Hash: string): Promise<VisionAnalysisResult | null> {
+  private async checkDBCache(storageHash: string): Promise<VisionAnalysisResult | null> {
     const records = await this.prisma.$queryRaw<
       Array<{ vision_result: unknown }>
     >`
       SELECT vision_result
       FROM image_vision_cache
-      WHERE s3_object_hash = ${s3Hash}
+      WHERE storage_object_hash = ${storageHash}
       LIMIT 1
     `;
 
@@ -169,15 +169,15 @@ Return ONLY valid JSON with no markdown, no explanation.`
   }
 
   private async saveToDBCache(
-    s3Hash: string,
-    s3Key: string,
+    storageHash: string,
+    storagePath: string,
     result: VisionAnalysisResult
   ): Promise<void> {
     const modelVersion = AI_CONFIG.models.vision.modelId;
     await this.prisma.$executeRaw`
-      INSERT INTO image_vision_cache (s3_object_hash, s3_key, vision_result, model_version)
-      VALUES (${s3Hash}, ${s3Key}, ${JSON.stringify(result)}::jsonb, ${modelVersion})
-      ON CONFLICT (s3_object_hash) DO NOTHING
+      INSERT INTO image_vision_cache (storage_object_hash, storage_path, vision_result, model_version)
+      VALUES (${storageHash}, ${storagePath}, ${JSON.stringify(result)}::jsonb, ${modelVersion})
+      ON CONFLICT (storage_object_hash) DO NOTHING
     `;
   }
 }

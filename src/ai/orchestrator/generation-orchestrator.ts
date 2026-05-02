@@ -86,8 +86,8 @@ export class GenerationOrchestrator {
       try {
         const primaryImage = payload.imageAssets[0]!;
         const visionAnalysis = await this.visionChain.analyse({
-          imageUrl: `https://res.cloudinary.com/${process.env['CLOUDINARY_CLOUD_NAME']}/image/upload/${primaryImage.cloudinaryPublicId ?? primaryImage.rawS3Key}`,
-          s3Key: primaryImage.rawS3Key,
+          imageUrl: `https://res.cloudinary.com/${process.env['CLOUDINARY_CLOUD_NAME']}/image/upload/${primaryImage.cloudinaryPublicId ?? primaryImage.rawStoragePath}`,
+          storagePath: primaryImage.rawStoragePath,
           cachedResult: primaryImage.visionAnalysisCache,
         });
         visionResult = visionAnalysis.result;

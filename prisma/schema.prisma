@@ -74,7 +74,7 @@ model ContentItem {
   brandOverlayApplied Boolean @default(false) @map("brand_overlay_applied")
 
   // Reel outputs
-  reelS3Key          String? @map("reel_s3_key")
+  reelStoragePath    String? @map("reel_storage_path")
   reelCdnUrl         String? @map("reel_cdn_url")
   reelDurationSec    Int?    @map("reel_duration_sec")
   reelScript         String? @map("reel_script") @db.Text
@@ -115,8 +115,8 @@ model FailedJob {
 
 model ImageVisionCache {
   cacheId           String   @id @default(uuid()) @map("cache_id") @db.Uuid
-  s3ObjectHash      String   @unique @map("s3_object_hash")   // SHA-256 of raw S3 object
-  s3Key             String   @map("s3_key")
+  storageObjectHash String   @unique @map("storage_object_hash")   // SHA-256 of raw storage object
+  storagePath       String   @map("storage_path")
   visionResult      Json     @map("vision_result")             // VisionAnalysisResult JSON
   modelVersion      String   @map("model_version")             // e.g. "gpt-4o-2024-11-20"
   createdAt         DateTime @default(now()) @map("created_at")

@@ -62,7 +62,7 @@ export const AI_CONFIG = {
     shotstackRender: 180_000,     // 3 minutes
     elevenLabs: 30_000,
     pixabayMusic: 10_000,
-    s3Upload: 30_000,
+    storageUpload: 30_000,
   },
 
   // --------------------------------------------------------------------------
@@ -235,12 +235,13 @@ export const AI_CONFIG = {
   },
 
   // --------------------------------------------------------------------------
-  // S3 Settings
-  // --------------------------------------------------------------------------
-  s3: {
+  // Firebase Settings
+  firebase: {
+    projectId: process.env['FIREBASE_PROJECT_ID'] || '',
+    clientEmail: process.env['FIREBASE_CLIENT_EMAIL'] || '',
+    privateKey: process.env['FIREBASE_PRIVATE_KEY'] || '',
+    storageBucket: process.env['FIREBASE_STORAGE_BUCKET'] || '',
     presignedUrlExpirySeconds: 600,
-    allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic'],
-    maxFileSizeBytes: 20 * 1024 * 1024,   // 20 MB
   },
 
   // --------------------------------------------------------------------------

@@ -23,7 +23,7 @@ export function startImageProcessingWorker(): Worker<ImageProcessingJobPayload> 
   const worker = new Worker<ImageProcessingJobPayload>(
     AI_CONFIG.queues.imageProcessing.name,
     async (job: Job<ImageProcessingJobPayload>) => {
-      const { jobId, tenantId, contentItemId, rawS3Key, consentShowFace,
+      const { jobId, tenantId, contentItemId, rawStoragePath, consentShowFace,
               brandPrimaryColour, brandSecondaryColour, outputFormats,
               cloudinaryPublicId } = job.data;
 
@@ -37,7 +37,7 @@ export function startImageProcessingWorker(): Worker<ImageProcessingJobPayload> 
       `;
 
       const result = await imagePipeline.process({
-        rawS3Key,
+        rawStoragePath,
         existingCloudinaryId: cloudinaryPublicId,
         consentShowFace,
         brandPrimaryColour,

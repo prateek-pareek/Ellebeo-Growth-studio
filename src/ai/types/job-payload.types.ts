@@ -113,7 +113,7 @@ export interface GoldenExample {
 // ---------------------------------------------------------------------------
 
 export interface ImageAsset {
-  rawS3Key: string;
+  rawStoragePath: string;
   cloudinaryPublicId?: string;
   visionAnalysisCache?: string;
 }

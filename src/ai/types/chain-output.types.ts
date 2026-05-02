@@ -124,7 +124,7 @@ export interface ImageProcessingResult {
   faceBlurred: boolean;
   facesDetectedCount: number;
   brandOverlayApplied: boolean;
-  originalS3Key: string;
+  originalStoragePath: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -132,7 +132,7 @@ export interface ImageProcessingResult {
 // ---------------------------------------------------------------------------
 
 export interface ReelResult {
-  s3Key: string;
+  storagePath: string;
   cdnUrl: string;
   durationSeconds: number;
   hasVoiceover: boolean;
@@ -147,7 +147,7 @@ export interface ReelResult {
 // ---------------------------------------------------------------------------
 
 export interface VoiceoverResult {
-  audioS3Key: string;
+  audioStoragePath: string;
   audioCdnUrl: string;
   durationSeconds: number;
   voiceId: string;

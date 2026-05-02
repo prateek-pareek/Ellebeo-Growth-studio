@@ -345,9 +345,9 @@ export class JobFactory {
 
   private async fetchImageAssets(appointmentId: string): Promise<ImageAsset[]> {
     return this.prisma.$queryRaw<ImageAsset[]>`
-      SELECT raw_s3_key              AS "rawS3Key",
-             cloudinary_public_id    AS "cloudinaryPublicId",
-             vision_analysis_cache   AS "visionAnalysisCache"
+      SELECT raw_storage_path        AS \"rawStoragePath\",
+             cloudinary_public_id    AS \"cloudinaryPublicId\",
+             vision_analysis_cache   AS \"visionAnalysisCache\"
       FROM appointment_images
       WHERE appointment_id = ${appointmentId}
       ORDER BY created_at ASC

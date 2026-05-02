@@ -11,7 +11,7 @@ import { PixabayMusicService } from './pixabay-music.service';
 import { AI_CONFIG } from '../../config/ai.config';
 import type { ReelResult, ReelScriptResult } from '../types/chain-output.types';
 import type { BrandDNARecord } from '../types/job-payload.types';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { firebaseStorage } from '../../config/firebase.client';
 import { randomUUID } from 'crypto';
 import fetch from 'node-fetch';
 
@@ -19,22 +19,13 @@ export class ReelAssemblerService {
   private readonly shotstackService: ShotstackService;
   private readonly elevenLabsService: ElevenLabsService;
   private readonly pixabayMusicService: PixabayMusicService;
-  private readonly s3: S3Client;
 
   constructor(private readonly prisma: PrismaClient) {
     this.shotstackService = new ShotstackService();
     this.elevenLabsService = new ElevenLabsService();
     // PixabayMusicService requires Redis for caching — instantiate with a lazy getter
-    // The redis client is imported at the module level
     const { getRedisClient } = require('../../config/redis.client') as { getRedisClient: () => import('ioredis').default };
     this.pixabayMusicService = new PixabayMusicService(getRedisClient());
-    this.s3 = new S3Client({
-      region: process.env['AWS_REGION'] ?? 'us-east-1',
-      credentials: {
-        accessKeyId: process.env['AWS_ACCESS_KEY_ID'] ?? '',
-        secretAccessKey: process.env['AWS_SECRET_ACCESS_KEY'] ?? '',
-      },
-    });
   }
 
   // --------------------------------------------------------------------------
@@ -118,16 +109,17 @@ export class ReelAssemblerService {
     // Step 7: Poll for completion
     const renderResult = await this.shotstackService.pollRenderStatus(renderId);
 
-    // Step 8: Download MP4 and upload to S3
-    const s3Key = `reels/${tenantId}/${jobId}/${randomUUID()}.mp4`;
-    await this.downloadAndUploadToS3(renderResult.url, s3Key);
+    // Step 8: Download MP4 and upload to Firebase
+    const storagePath = `reels/${tenantId}/${jobId}/${randomUUID()}.mp4`;
+    await this.downloadAndUploadToFirebase(renderResult.url, storagePath);
 
-    const cdnUrl = `https://${process.env['S3_BUCKET_NAME']}.s3.${process.env['AWS_REGION']}.amazonaws.com/${s3Key}`;
+    const bucket = firebaseStorage.bucket();
+    const cdnUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(storagePath)}?alt=media`;
 
     // Step 8 (continued): Persist to content_items
     await this.persistReelResult({
       contentItemId,
-      s3Key,
+      storagePath,
       cdnUrl,
       durationSeconds: totalDurationSeconds,
       hasVoiceover: includeVoiceover && !!voiceoverUrl,
@@ -138,7 +130,7 @@ export class ReelAssemblerService {
     });
 
     return {
-      s3Key,
+      storagePath,
       cdnUrl,
       durationSeconds: totalDurationSeconds,
       hasVoiceover: includeVoiceover && !!voiceoverUrl,
@@ -150,23 +142,26 @@ export class ReelAssemblerService {
   }
 
   // --------------------------------------------------------------------------
-  // Download MP4 from Shotstack CDN and upload to S3
+  // Download MP4 from Shotstack CDN and upload to Firebase
   // --------------------------------------------------------------------------
 
-  private async downloadAndUploadToS3(videoUrl: string, s3Key: string): Promise<void> {
+  private async downloadAndUploadToFirebase(videoUrl: string, storagePath: string): Promise<void> {
     const response = await fetch(videoUrl);
     if (!response.ok) {
       throw new ReelAssemblerError(`Failed to download video from Shotstack: ${response.statusText}`);
     }
 
-    const buffer = await response.buffer();
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
-    await this.s3.send(new PutObjectCommand({
-      Bucket: process.env['S3_BUCKET_NAME'],
-      Key: s3Key,
-      Body: buffer,
-      ContentType: 'video/mp4',
-    }));
+    const bucket = firebaseStorage.bucket();
+    const file = bucket.file(storagePath);
+
+    await file.save(buffer, {
+      metadata: {
+        contentType: 'video/mp4',
+      },
+    });
   }
 
   // --------------------------------------------------------------------------
@@ -175,7 +170,7 @@ export class ReelAssemblerService {
 
   private async persistReelResult(params: {
     contentItemId: string;
-    s3Key: string;
+    storagePath: string;
     cdnUrl: string;
     durationSeconds: number;
     hasVoiceover: boolean;
@@ -186,7 +181,7 @@ export class ReelAssemblerService {
   }): Promise<void> {
     await this.prisma.$executeRaw`
       UPDATE content_items
-      SET reel_s3_key       = ${params.s3Key},
+      SET reel_storage_path = ${params.storagePath},
           reel_cdn_url       = ${params.cdnUrl},
           reel_duration_sec  = ${params.durationSeconds},
           has_voiceover      = ${params.hasVoiceover},

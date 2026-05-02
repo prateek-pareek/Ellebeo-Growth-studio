@@ -6,6 +6,7 @@
 // → 7. Generate variant URLs → 8. Store in DB
 // ============================================================================
 
+import { firebaseStorage } from '../../config/firebase.client';
 import { v2 as cloudinary } from 'cloudinary';
 import { PrismaClient } from '@prisma/client';
 import { AI_CONFIG } from '../../config/ai.config';
@@ -31,7 +32,7 @@ export class ImagePipelineService {
   // --------------------------------------------------------------------------
 
   async process(params: {
-    rawS3Key: string;
+    rawStoragePath: string;
     existingCloudinaryId?: string;
     consentShowFace: boolean;
     brandPrimaryColour: string;
@@ -40,10 +41,10 @@ export class ImagePipelineService {
     contentItemId: string;
     tenantId: string;
   }): Promise<ImageProcessingResult> {
-    const { rawS3Key, existingCloudinaryId, consentShowFace, brandPrimaryColour, contentItemId } = params;
+    const { rawStoragePath, existingCloudinaryId, consentShowFace, brandPrimaryColour, contentItemId } = params;
 
-    // Step 1: Upload to Cloudinary from S3 (or use existing)
-    const publicId = existingCloudinaryId ?? await this.uploadFromS3(rawS3Key, params.tenantId);
+    // Step 1: Upload to Cloudinary from Firebase (or use existing)
+    const publicId = existingCloudinaryId ?? await this.uploadFromFirebase(rawStoragePath, params.tenantId);
 
     // Step 2: Face Detection
     const faceDetection = await this.detectFaces(publicId);
@@ -73,18 +74,25 @@ export class ImagePipelineService {
       faceBlurred: facesBlurred,
       facesDetectedCount: faceDetection.facesDetected,
       brandOverlayApplied: true,
-      originalS3Key: rawS3Key,
+      originalStoragePath: rawStoragePath,
     };
   }
 
   // --------------------------------------------------------------------------
-  // Step 1: Upload from S3 via Cloudinary's fetch-from-URL feature
-  // (avoids double bandwidth — Cloudinary pulls directly from S3)
+  // Step 1: Upload from Firebase via Cloudinary's fetch-from-URL feature
   // --------------------------------------------------------------------------
 
-  private async uploadFromS3(s3Key: string, tenantId: string): Promise<string> {
-    const s3Url = `https://${process.env['S3_BUCKET_NAME']}.s3.${process.env['AWS_REGION']}.amazonaws.com/${s3Key}`;
-    const publicId = `growthstudio/${tenantId}/${s3Key.replace(/\.[^.]+$/, '')}`;
+  private async uploadFromFirebase(storagePath: string, tenantId: string): Promise<string> {
+    const bucket = firebaseStorage.bucket();
+    const file = bucket.file(storagePath);
+
+    // Generate a temporary signed URL for Cloudinary to fetch the file
+    const [signedUrl] = await file.getSignedUrl({
+      action: 'read',
+      expires: Date.now() + 5 * 60 * 1000, // 5 minutes
+    });
+
+    const publicId = `growthstudio/${tenantId}/${storagePath.split('/').pop()?.replace(/\.[^.]+$/, '') || 'image'}`;
 
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(
@@ -93,7 +101,7 @@ export class ImagePipelineService {
       );
 
       cloudinary.uploader.upload(
-        s3Url,
+        signedUrl,
         {
           public_id: publicId,
           overwrite: false,

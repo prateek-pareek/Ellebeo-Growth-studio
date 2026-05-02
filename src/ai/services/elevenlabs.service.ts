@@ -2,25 +2,13 @@
 // elevenlabs.service.ts — AI Voiceover Generation
 // ============================================================================
 
-import fetch from 'node-fetch';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { firebaseStorage } from '../../config/firebase.client';
 import { randomUUID } from 'crypto';
 import { AI_CONFIG } from '../../config/ai.config';
 import type { VoiceoverResult } from '../types/chain-output.types';
 
 export class ElevenLabsService {
   private readonly baseUrl = 'https://api.elevenlabs.io/v1';
-  private readonly s3: S3Client;
-
-  constructor() {
-    this.s3 = new S3Client({
-      region: process.env['AWS_REGION'] ?? 'us-east-1',
-      credentials: {
-        accessKeyId: process.env['AWS_ACCESS_KEY_ID'] ?? '',
-        secretAccessKey: process.env['AWS_SECRET_ACCESS_KEY'] ?? '',
-      },
-    });
-  }
 
   async generateVoiceover(params: {
     script: string;
@@ -67,26 +55,33 @@ export class ElevenLabsService {
         throw new ElevenLabsError(`ElevenLabs failed ${response.status}: ${body}`);
       }
 
-      audioBuffer = await response.buffer();
+      const arrayBuffer = await response.arrayBuffer();
+      audioBuffer = Buffer.from(arrayBuffer);
     } finally {
       clearTimeout(timeout);
     }
 
-    // Upload audio to S3
-    const s3Key = `voiceovers/${randomUUID()}.mp3`;
-    await this.s3.send(new PutObjectCommand({
-      Bucket: process.env['S3_BUCKET_NAME'],
-      Key: s3Key,
-      Body: audioBuffer,
-      ContentType: 'audio/mpeg',
-    }));
+    // Upload audio to Firebase Storage
+    const storagePath = `voiceovers/${randomUUID()}.mp3`;
+    const bucket = firebaseStorage.bucket();
+    const file = bucket.file(storagePath);
 
-    const cdnUrl = `https://${process.env['S3_BUCKET_NAME']}.s3.${process.env['AWS_REGION']}.amazonaws.com/${s3Key}`;
+    await file.save(audioBuffer, {
+      metadata: {
+        contentType: 'audio/mpeg',
+      },
+    });
+
+    // Generate a long-lived signed URL or public URL
+    // For simplicity in this layer, we construct the public URL format
+    // Alternatively, file.getSignedUrl({ action: 'read', expires: '03-09-2491' })
+    const cdnUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(storagePath)}?alt=media`;
+
     const wordCount = script.split(/\s+/).length;
     const estimatedDuration = Math.ceil(wordCount / 2.5);
 
     return {
-      audioS3Key: s3Key,
+      audioStoragePath: storagePath,
       audioCdnUrl: cdnUrl,
       durationSeconds: estimatedDuration,
       voiceId,
