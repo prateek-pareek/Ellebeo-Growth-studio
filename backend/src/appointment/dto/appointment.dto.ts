@@ -1,4 +1,5 @@
 import { IsString, IsOptional, IsNumber, IsBoolean, IsDateString, IsEnum } from 'class-validator';
+import { Type } from 'class-transformer';
 
 enum ServiceCategory {
   HAIR_COLOUR = 'hair_colour',
@@ -68,10 +69,10 @@ export class UploadUrlRequestDto {
 
 export class ConfirmUploadDto {
   @IsString()
-  s3Key: string;
+  storagePath: string;
 
   @IsString()
-  s3ObjectHash: string; // Used to prevent duplicates
+  fileHash: string; // Used to prevent duplicates
 
   @IsNumber()
   fileSizeBytes: number;
@@ -79,4 +80,16 @@ export class ConfirmUploadDto {
   @IsBoolean()
   @IsOptional()
   isBeforePhoto?: boolean;
+}
+
+export class PaginationQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  pageSize?: number;
 }

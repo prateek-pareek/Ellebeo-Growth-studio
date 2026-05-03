@@ -23,7 +23,7 @@ function AppointmentsPage() {
   // Form state
   const [clientName, setClientName] = useState("");
   const [serviceName, setServiceName] = useState("");
-  const [category, setCategory] = useState("HAIRDRESSER");
+  const [category, setCategory] = useState("general");
   const [isAdding, setIsAdding] = useState(false);
   const [beforeFile, setBeforeFile] = useState<File | null>(null);
   const [afterFile, setAfterFile] = useState<File | null>(null);
@@ -35,15 +35,15 @@ function AppointmentsPage() {
         contentType: file.type,
         isBeforePhoto: isBefore
       });
-      const { uploadUrl, s3Key } = urlRes.data.data;
+      const { uploadUrl, storagePath } = urlRes.data.data;
 
       await axios.put(uploadUrl, file, {
         headers: { 'Content-Type': file.type }
       });
 
       await api.post(`/appointments/${appointmentId}/images/confirm-upload`, {
-        s3Key,
-        s3ObjectHash: `hash-${Date.now()}`,
+        storagePath,
+        fileHash: `hash-${Date.now()}`,
         fileSizeBytes: file.size,
         isBeforePhoto: isBefore
       });

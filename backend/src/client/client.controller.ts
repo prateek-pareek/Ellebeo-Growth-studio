@@ -1,6 +1,6 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Req, UseGuards, Query } from '@nestjs/common';
 import { ClientService } from './client.service';
-import { CreateClientDto, UpdateClientDto, UpsertConsentDto, WithdrawConsentDto } from './dto/client.dto';
+import { CreateClientDto, UpdateClientDto, UpsertConsentDto, WithdrawConsentDto, PaginationQueryDto } from './dto/client.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TenantStatusGuard } from '../common/guards/tenant-status.guard';
 
@@ -10,8 +10,8 @@ export class ClientController {
   constructor(private readonly clientService: ClientService) {}
 
   @Get()
-  getClients(@Req() req: any) {
-    return this.clientService.getClients(req.user.tenantId);
+  getClients(@Req() req: any, @Query() query: PaginationQueryDto) {
+    return this.clientService.getClients(req.user.tenantId, query.page, query.pageSize);
   }
 
   @Post()

@@ -18,6 +18,27 @@ export interface Response<T> {
 
 @Injectable()
 export class ResponseInterceptor<T> implements NestInterceptor<T, Response<T>> {
+  private sanitize(value: unknown): unknown {
+    if (Array.isArray(value)) {
+      return value.map((v) => this.sanitize(v));
+    }
+    if (value && typeof value === 'object') {
+      const entries = Object.entries(value as Record<string, unknown>)
+        .filter(([key]) =>
+          key !== 'password_hash'
+          && key !== 'passwordHash'
+          && key !== 'deleted_at'
+          && key !== 'deletedAt'
+          && key !== 'firebase_storage_path'
+          && key !== 'firebaseStoragePath'
+          && !key.startsWith('internal_'),
+        )
+        .map(([key, val]) => [key, this.sanitize(val)]);
+      return Object.fromEntries(entries);
+    }
+    return value;
+  }
+
   intercept(context: ExecutionContext, next: CallHandler): Observable<Response<T>> {
     const ctx = context.switchToHttp();
     const request = ctx.getRequest();
@@ -26,7 +47,7 @@ export class ResponseInterceptor<T> implements NestInterceptor<T, Response<T>> {
     return next.handle().pipe(
       map((data) => ({
         success: true,
-        data: data || null,
+        data: (this.sanitize(data) as T) || null,
         meta: {
           timestamp: new Date().toISOString(),
           requestId,

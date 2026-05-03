@@ -1,4 +1,5 @@
-import { IsString, IsOptional, IsEmail, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsEmail, IsBoolean, IsNumber } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateClientDto {
   @IsString()
@@ -48,4 +49,16 @@ export class UpsertConsentDto {
 export class WithdrawConsentDto {
   @IsString()
   withdrawalReason: string;
+}
+
+export class PaginationQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  pageSize?: number;
 }

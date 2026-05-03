@@ -1,6 +1,6 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Req, UseGuards, Query } from '@nestjs/common';
 import { AppointmentService } from './appointment.service';
-import { CreateAppointmentDto, UpdateAppointmentDto, CancelAppointmentDto, UploadUrlRequestDto, ConfirmUploadDto } from './dto/appointment.dto';
+import { CreateAppointmentDto, UpdateAppointmentDto, CancelAppointmentDto, UploadUrlRequestDto, ConfirmUploadDto, PaginationQueryDto } from './dto/appointment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TenantStatusGuard } from '../common/guards/tenant-status.guard';
 
@@ -10,8 +10,8 @@ export class AppointmentController {
   constructor(private readonly appointmentService: AppointmentService) {}
 
   @Get()
-  getAppointments(@Req() req: any) {
-    return this.appointmentService.getAppointments(req.user.tenantId);
+  getAppointments(@Req() req: any, @Query() query: PaginationQueryDto) {
+    return this.appointmentService.getAppointments(req.user.tenantId, query.page, query.pageSize);
   }
 
   @Post()
