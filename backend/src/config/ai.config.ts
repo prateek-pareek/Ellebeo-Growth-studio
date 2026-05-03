@@ -211,18 +211,18 @@ export const AI_CONFIG = {
   // WebSocket Progress Mapping
   // --------------------------------------------------------------------------
   progressMap: {
-    CREATED: { percent: 0, step: 'Submitting your content request...' },
-    QUEUED: { percent: 5, step: 'Getting your content ready...' },
-    PROCESSING_IMAGE: { percent: 20, step: 'Applying your brand style to the photo...' },
-    PROCESSING_VISION: { percent: 35, step: 'Understanding what was done in this appointment...' },
-    BUILDING_PROMPT: { percent: 50, step: 'Reading your Brand DNA...' },
-    GENERATING_TEXT: { percent: 70, step: 'Writing your caption in your voice...' },
-    GENERATING_REEL: { percent: 85, step: 'Assembling your Reel...' },
-    COMPLETED: { percent: 100, step: 'Your content is ready to review' },
-    FAILED: { percent: 0, step: 'Something went wrong — we\'re looking into it' },
-    RETRYING: { percent: 0, step: 'Retrying your content request...' },
-    BLOCKED: { percent: 0, step: 'Content blocked — consent settings have changed' },
-    DLQ: { percent: 0, step: 'Content request could not be completed' },
+    created: { percent: 0, step: 'Submitting your content request...' },
+    queued: { percent: 5, step: 'Getting your content ready...' },
+    processing_image: { percent: 20, step: 'Applying your brand style to the photo...' },
+    processing_vision: { percent: 35, step: 'Understanding what was done in this appointment...' },
+    building_prompt: { percent: 50, step: 'Reading your Brand DNA...' },
+    generating_text: { percent: 70, step: 'Writing your caption in your voice...' },
+    generating_reel: { percent: 85, step: 'Assembling your Reel...' },
+    completed: { percent: 100, step: 'Your content is ready to review' },
+    failed: { percent: 0, step: 'Something went wrong — we\'re looking into it' },
+    retrying: { percent: 0, step: 'Retrying your content request...' },
+    blocked: { percent: 0, step: 'Content blocked — consent settings have changed' },
+    dead_letter: { percent: 0, step: 'Content request could not be completed' },
   },
 
   // --------------------------------------------------------------------------

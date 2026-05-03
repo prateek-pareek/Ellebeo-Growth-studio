@@ -1,73 +1,98 @@
-/**
- * Brand DNA data provider — Phase 2 (read-only).
- *
- * The page consumes a single shape (BrandDnaView) regardless of source.
- * Source resolution:
- *   - flag off OR signed-out OR any error → sample data
- *   - flag on AND signed-in AND row exists → cloud
- *   - flag on AND signed-in AND no row → empty state (handled by caller)
- *
- * No writes here. /brand/onboarding is unchanged in this phase.
- */
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { useFeatureFlag } from "@/lib/feature-flags";
-import { brandDNA as sampleBrandDNA } from "@/lib/sample-data";
 
-export type BrandDnaView = typeof sampleBrandDNA;
-export type BrandDnaSource = "sample" | "cloud";
+export type BrandDnaView = {
+  ready: boolean;
+  archetype: string;
+  oneLiner: string;
+  category: string;
+  powers: string[];
+  palette: string[];
+  moodboard: string[];
+  pillars: Array<{
+    name: string;
+    description: string;
+    weight: number;
+  }>;
+  voice: {
+    summary: string;
+    do: string[];
+    dont: string[];
+  };
+  idealClient: {
+    age: string;
+    cities: string;
+    looksFor: string;
+    painPoints: string[];
+    aspirations: string[];
+  };
+  goals: {
+    bookingsPerWeek: number;
+    postsPerWeek: number;
+    focusServices: string[];
+  };
+};
 
 export type UseBrandDnaResult = {
   data: BrandDnaView | null;
   loading: boolean;
-  source: BrandDnaSource;
+  source: "cloud";
   isEmpty: boolean;
   error: boolean;
 };
-
-function sampleResult(): UseBrandDnaResult {
-  return { data: sampleBrandDNA, loading: false, source: "sample", isEmpty: false, error: false };
-}
 
 function mapCloudRow(dna: any): BrandDnaView {
   const pillars = dna.pillars || [];
   const goals = dna.goals || [];
 
   const weight = pillars.length > 0 ? Math.floor(100 / pillars.length) : 0;
-  const mappedPillars = pillars.length > 0
-    ? pillars.map((p: any, i: number) => ({
-        name: p.label,
-        description: p.description || "",
-        weight: i === pillars.length - 1 ? 100 - weight * (pillars.length - 1) : weight,
-      }))
-    : sampleBrandDNA.pillars;
+  const mappedPillars = pillars.map((p: any, i: number) => ({
+    name: p.label,
+    description: p.description || "",
+    weight: i === pillars.length - 1 ? 100 - weight * (pillars.length - 1) : weight,
+  }));
 
   const goalByLabel = new Map(goals.map((g: any) => [g.label.toLowerCase(), g.targetMetric || ""]));
-  const num = (key: string, fallback: number) => {
+  const num = (key: string) => {
     const v = parseInt(goalByLabel.get(key) || "", 10);
-    return Number.isFinite(v) ? v : fallback;
+    return Number.isFinite(v) ? v : 0;
   };
 
   return {
-    ...sampleBrandDNA,
     ready: true,
-    archetype: dna.aestheticDirection || sampleBrandDNA.archetype,
-    oneLiner: dna.oneLiner || sampleBrandDNA.oneLiner,
-    category: dna.businessName, // Or map from coreSpecialties
+    archetype: dna.aestheticDirection || "Expert",
+    oneLiner: dna.oneLiner || "",
+    category: dna.businessName || "",
+    powers: [
+      "AI caption generation",
+      "Campaign planning",
+      "Content pillar mix",
+      "Ideal client targeting",
+      "Voice consistency",
+    ],
+    palette: dna.visualPalette || ["#F5F2ED", "#D8C7B1", "#8C7E6D", "#3E3B35", "#2C2A26"],
+    moodboard: dna.moodboardUrls || [
+      "https://images.unsplash.com/photo-1522335789203-aaa1f9436cae?w=800&h=1000&fit=crop",
+      "https://images.unsplash.com/photo-1560066984-138dadb4c035?w=800&h=800&fit=crop",
+      "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=800&h=800&fit=crop",
+    ],
     pillars: mappedPillars,
     voice: {
-      summary: dna.primaryTone || sampleBrandDNA.voice.summary,
-      do: sampleBrandDNA.voice.do,
-      dont: sampleBrandDNA.voice.dont,
+      summary: dna.primaryTone || "",
+      do: dna.voiceDo || [],
+      dont: dna.voiceDont || [],
     },
     idealClient: {
-      ...sampleBrandDNA.idealClient,
-      looksFor: dna.primaryPersona || sampleBrandDNA.idealClient.looksFor,
+      age: dna.personaAge || "25–45",
+      cities: dna.personaLocation || "Local area",
+      looksFor: dna.primaryPersona || "",
+      painPoints: [],
+      aspirations: [],
     },
     goals: {
-      bookingsPerWeek: num("bookings per week", sampleBrandDNA.goals.bookingsPerWeek),
-      postsPerWeek: num("posts per week", sampleBrandDNA.goals.postsPerWeek),
-      focusServices: dna.coreSpecialties || sampleBrandDNA.goals.focusServices,
+      bookingsPerWeek: num("bookings per week"),
+      postsPerWeek: num("posts per week"),
+      focusServices: dna.coreSpecialties || [],
     },
   };
 }
@@ -94,43 +119,35 @@ async function fetchCloudBrandDna(): Promise<
 }
 
 export function useBrandDna(): UseBrandDnaResult {
-  const cloudEnabled = useFeatureFlag("feature_cloud_backend");
-  // Default to sample so first paint is identical to today.
-  const [state, setState] = useState<UseBrandDnaResult>(() => sampleResult());
+  const [state, setState] = useState<UseBrandDnaResult>({
+    data: null,
+    loading: true,
+    source: "cloud",
+    isEmpty: false,
+    error: false,
+  });
   const reqId = useRef(0);
 
   useEffect(() => {
-    if (!cloudEnabled) {
-      setState(sampleResult());
-      return;
-    }
-
     const id = ++reqId.current;
     setState((prev) => ({ ...prev, loading: true }));
 
     fetchCloudBrandDna()
       .then((res) => {
-        if (id !== reqId.current) return; // stale
+        if (id !== reqId.current) return;
         if (res.kind === "ok") {
           setState({ data: res.data, loading: false, source: "cloud", isEmpty: false, error: false });
         } else if (res.kind === "empty") {
           setState({ data: null, loading: false, source: "cloud", isEmpty: true, error: false });
-        } else if (res.kind === "anon") {
-          setState(sampleResult());
         } else {
-          // error → fall back to sample, surface a subtle warning
-          // eslint-disable-next-line no-console
-          console.warn("[brand-dna] cloud fetch failed, using sample:", res.message);
-          setState({ ...sampleResult(), error: true });
+          setState({ data: null, loading: false, source: "cloud", isEmpty: true, error: true });
         }
       })
-      .catch((err) => {
+      .catch(() => {
         if (id !== reqId.current) return;
-        // eslint-disable-next-line no-console
-        console.warn("[brand-dna] cloud fetch threw, using sample:", err);
-        setState({ ...sampleResult(), error: true });
+        setState({ data: null, loading: false, source: "cloud", isEmpty: true, error: true });
       });
-  }, [cloudEnabled]);
+  }, []);
 
   return state;
 }

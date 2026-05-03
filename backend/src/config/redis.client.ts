@@ -11,7 +11,7 @@ export function getRedisClient(): Redis {
 
   const host = process.env['REDIS_HOST'] ?? 'localhost';
   const port = parseInt(process.env['REDIS_PORT'] ?? '6379', 10);
-  const password = process.env['REDIS_PASSWORD'];
+  const password = process.env['REDIS_PASSWORD'] || undefined;
   const tls = process.env['REDIS_TLS'] === 'true';
 
   redisInstance = new Redis({
@@ -21,20 +21,28 @@ export function getRedisClient(): Redis {
     tls: tls ? {} : undefined,
     maxRetriesPerRequest: null,   // Required by BullMQ
     enableReadyCheck: false,      // Required by BullMQ
-    lazyConnect: false,
-    retryStrategy: (times: number) => Math.min(times * 500, 5_000),
+    lazyConnect: true,            // Don't block startup — connect on first use
+    connectTimeout: 10_000,       // 10s per attempt
+    // Cap retries at 10 (~30s total) to prevent infinite ETIMEDOUT spam.
+    retryStrategy: (times: number) => {
+      if (times > 10) {
+        console.error(`[Redis] Giving up after ${times} attempts. Is Redis reachable at ${host}:${port}?`);
+        return null;
+      }
+      return Math.min(times * 1_000, 5_000);
+    },
   });
 
   redisInstance.on('connect', () => {
-    console.log('[Redis] Connected');
+    console.log(`[Redis] Connected to ${host}:${port}`);
   });
 
   redisInstance.on('error', (err: Error) => {
     console.error('[Redis] Error:', err.message);
   });
 
-  redisInstance.on('reconnecting', () => {
-    console.warn('[Redis] Reconnecting...');
+  redisInstance.on('reconnecting', (delay: number) => {
+    console.warn(`[Redis] Reconnecting in ${delay}ms...`);
   });
 
   return redisInstance;

@@ -1,60 +1,51 @@
-/**
- * Content library data provider — Phase B (read-only).
- *
- * Mirrors the appointments-provider pattern.
- *   - flag off OR signed-out → sample data (sync)
- *   - flag on AND signed-in AND ok → cloud rows normalized into ContentItem
- *   - flag on AND signed-in AND error → sample data with `error: true`
- *   - flag on AND signed-in AND zero rows → empty cloud result (handled by caller)
- *
- * No writes. No realtime. No AI. No media-asset signed URLs (Phase B.2).
- *
- * Cloud → ContentItem mapping rules (see /content Phase B plan):
- *   - title: first sentence of caption, fallback `{format} · {client first name}`
- *   - state: derived from (consent.status, schedule_slots, content_items.status)
- *   - pillar: derived from goal (showcase→Transformations, educate→Education,
- *             convert/availability→Behind the chair, trust→Client stories)
- *   - image: neutral placeholder for cloud rows in v1
- *   - schedule slot picking: prefer the most recent published slot, then the
- *             soonest future scheduled slot
- */
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { useFeatureFlag } from "@/lib/feature-flags";
-import {
-  appointments as sampleAppointments,
-  contentLibrary as sampleContentLibrary,
-  type Appointment,
-  type ContentItem,
-  type ContentState,
-} from "@/lib/sample-data";
 
-export type ContentSource = "sample" | "cloud";
+export type ContentState = "draft" | "scheduled" | "published" | "Needs review" | "Scheduled" | "Published";
+
+export type ContentItem = {
+  id: string;
+  title: string;
+  type: "Post" | "Story" | "Reel" | "Caption";
+  pillar: string;
+  category: string;
+  status: string;
+  state: string;
+  goal: string;
+  image: string;
+  caption: string;
+  cta?: string;
+  hashtags?: string[];
+  scheduledFor?: string;
+  postedAt?: string;
+  qualityScore?: number;
+  sourceAppointmentId?: string;
+  updatedAt: string;
+};
+
+export type Appointment = {
+  id: string;
+  clientName: string;
+  service: string;
+  category: string;
+  date: string;
+  hasBefore: boolean;
+  hasAfter: boolean;
+  consent: string;
+  contentReady: number;
+};
 
 export type UseContentItemsResult = {
   items: ContentItem[];
   appointmentsById: Map<string, Appointment>;
   loading: boolean;
-  source: ContentSource;
+  source: "cloud";
   isEmpty: boolean;
   error: boolean;
 };
 
 const CLOUD_PLACEHOLDER_IMAGE =
   "https://images.unsplash.com/photo-1522335789203-aaa1f9436cae?w=800&h=1000&fit=crop";
-
-function sampleResult(): UseContentItemsResult {
-  const map = new Map<string, Appointment>();
-  for (const a of sampleAppointments) map.set(a.id, a);
-  return {
-    items: sampleContentLibrary,
-    appointmentsById: map,
-    loading: false,
-    source: "sample",
-    isEmpty: false,
-    error: false,
-  };
-}
 
 function mapRow(row: any): { item: ContentItem; appointment: Appointment | null } {
   const item: ContentItem = {
@@ -124,15 +115,17 @@ async function fetchCloudContent(): Promise<
 }
 
 export function useContentItems(): UseContentItemsResult {
-  const cloudEnabled = useFeatureFlag("feature_cloud_backend");
-  const [state, setState] = useState<UseContentItemsResult>(() => sampleResult());
+  const [state, setState] = useState<UseContentItemsResult>({
+    items: [],
+    appointmentsById: new Map(),
+    loading: true,
+    source: "cloud",
+    isEmpty: false,
+    error: false,
+  });
   const reqId = useRef(0);
 
   useEffect(() => {
-    if (!cloudEnabled) {
-      setState(sampleResult());
-      return;
-    }
     const id = ++reqId.current;
     setState((prev) => ({ ...prev, loading: true }));
 
@@ -157,21 +150,29 @@ export function useContentItems(): UseContentItemsResult {
             isEmpty: true,
             error: false,
           });
-        } else if (res.kind === "anon") {
-          setState(sampleResult());
         } else {
-          // eslint-disable-next-line no-console
-          console.warn("[content] cloud fetch failed, using sample:", res.message);
-          setState({ ...sampleResult(), error: true });
+          setState({
+            items: [],
+            appointmentsById: new Map(),
+            loading: false,
+            source: "cloud",
+            isEmpty: true,
+            error: true,
+          });
         }
       })
-      .catch((err) => {
+      .catch(() => {
         if (id !== reqId.current) return;
-        // eslint-disable-next-line no-console
-        console.warn("[content] cloud fetch threw, using sample:", err);
-        setState({ ...sampleResult(), error: true });
+        setState({
+          items: [],
+          appointmentsById: new Map(),
+          loading: false,
+          source: "cloud",
+          isEmpty: true,
+          error: true,
+        });
       });
-  }, [cloudEnabled]);
+  }, []);
 
   return state;
 }

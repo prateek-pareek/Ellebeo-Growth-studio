@@ -58,7 +58,7 @@ export class GenerationOrchestrator {
       clientId
     );
     if (!consentCheck.valid) {
-      await this.transitionState(jobId, 'QUEUED', 'BLOCKED');
+      await this.transitionState(jobId, 'queued', 'blocked');
       throw new ConsentBlockedError(`Job ${jobId} blocked: ${consentCheck.reason}`);
     }
 
@@ -79,12 +79,12 @@ export class GenerationOrchestrator {
     let modelUsed = AI_CONFIG_MODEL_LABEL(payload);
 
     // ── Step 1: Vision Analysis ──────────────────────────────────────────────
-    await this.transitionState(jobId, 'QUEUED', 'PROCESSING_IMAGE');
-    await this.progressEmitter.emit(jobId, tenantId, 'PROCESSING_IMAGE');
+    await this.transitionState(jobId, 'queued', 'processing_image');
+    await this.progressEmitter.emit(jobId, tenantId, 'processing_image');
 
     if (payload.imageAssets.length > 0) {
-      await this.transitionState(jobId, 'PROCESSING_IMAGE', 'PROCESSING_VISION');
-      await this.progressEmitter.emit(jobId, tenantId, 'PROCESSING_VISION');
+      await this.transitionState(jobId, 'processing_image', 'processing_vision');
+      await this.progressEmitter.emit(jobId, tenantId, 'processing_vision');
 
       try {
         const primaryImage = payload.imageAssets[0]!;
@@ -101,8 +101,8 @@ export class GenerationOrchestrator {
     }
 
     // ── Step 2: Prompt Building ──────────────────────────────────────────────
-    await this.transitionState(jobId, 'PROCESSING_VISION', 'BUILDING_PROMPT');
-    await this.progressEmitter.emit(jobId, tenantId, 'BUILDING_PROMPT');
+    await this.transitionState(jobId, 'processing_vision', 'building_prompt');
+    await this.progressEmitter.emit(jobId, tenantId, 'building_prompt');
 
     const primaryPlatform = generationOptions.platform[0] ?? 'instagram';
     const assembledPrompt = await this.promptBuilder.assembleGenerationPrompt({
@@ -114,8 +114,8 @@ export class GenerationOrchestrator {
     });
 
     // ── Step 3: Caption Generation ───────────────────────────────────────────
-    await this.transitionState(jobId, 'BUILDING_PROMPT', 'GENERATING_TEXT');
-    await this.progressEmitter.emit(jobId, tenantId, 'GENERATING_TEXT');
+    await this.transitionState(jobId, 'building_prompt', 'generating_text');
+    await this.progressEmitter.emit(jobId, tenantId, 'generating_text');
 
     const routingContext = {
       userTier: generationOptions.userTier,
@@ -219,8 +219,8 @@ export class GenerationOrchestrator {
     });
 
     // ── Step 7: Final State Transition ────────────────────────────────────────
-    await this.transitionState(jobId, 'GENERATING_TEXT', 'COMPLETED');
-    await this.progressEmitter.emit(jobId, tenantId, 'COMPLETED');
+    await this.transitionState(jobId, 'generating_text', 'completed');
+    await this.progressEmitter.emit(jobId, tenantId, 'completed');
 
     return {
       jobId,
@@ -258,7 +258,7 @@ export class GenerationOrchestrator {
     to: JobState
   ): Promise<void> {
     validateStateTransition(from, to);
-    await this.prisma.generationJob.update({ where: { jobId }, data: { state: to } });
+    await this.prisma.generationJob.update({ where: { id: jobId }, data: { state: to } });
   }
 
   // --------------------------------------------------------------------------
@@ -283,8 +283,8 @@ export class GenerationOrchestrator {
 
     await this.prisma.contentItem.create({
       data: {
-        contentItemId,
-        jobId: payload.jobId,
+        id: contentItemId,
+        generationJobId: payload.jobId,
         tenantId: payload.tenantId,
         appointmentId: payload.appointmentId,
         captionStatus: componentStatus.caption,
@@ -307,7 +307,7 @@ export class GenerationOrchestrator {
 
     // Update generation_jobs with cost metadata
     await this.prisma.generationJob.update({
-      where: { jobId: payload.jobId },
+      where: { id: payload.jobId },
       data: {
         modelUsed: params.modelUsed,
         tokensInput: params.totalTokensIn,

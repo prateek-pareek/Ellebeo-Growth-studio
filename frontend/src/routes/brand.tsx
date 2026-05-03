@@ -1,6 +1,6 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { technician } from "@/lib/sample-data";
+import { createFileRoute, Link, Outlet, useLocation } from "@tanstack/react-router";
 import { useBrandDna } from "@/lib/providers/brand-dna-provider";
+import { useProfile } from "@/lib/providers/profile-provider";
 
 export const Route = createFileRoute("/brand")({
   head: () => ({
@@ -14,18 +14,23 @@ export const Route = createFileRoute("/brand")({
 });
 
 function BrandPage() {
-  const { data: brandDNA, loading, source, isEmpty, error } = useBrandDna();
+  const { data: brandDNA, loading, isEmpty, error } = useBrandDna();
+  const { technician } = useProfile();
+  const location = useLocation();
 
-  // Empty state: signed-in, cloud-backed, but no Brand DNA row yet.
-  if (isEmpty && source === "cloud") {
+  // If we are on a sub-route (like /brand/onboarding), just render the Outlet
+  if (location.pathname !== "/brand") {
+    return <Outlet />;
+  }
+
+  if (isEmpty) {
     return <BrandEmptyState />;
   }
 
-  // Loading state for first cloud fetch (sample stays as fallback so this is rare).
   if (loading && !brandDNA) {
     return (
-      <div className="mt-6 lg:mt-10">
-        <p className="eyebrow">Loading your Brand DNA…</p>
+      <div className="flex min-h-[60vh] items-center justify-center text-taupe italic">
+        Loading your Brand DNA…
       </div>
     );
   }
@@ -46,12 +51,9 @@ function BrandPage() {
           <span className="text-[10px] uppercase tracking-widest border hairline px-3 py-1.5">{brandDNA.category}</span>
           <span className="text-[10px] uppercase tracking-widest text-sage">Active</span>
           {error && (
-            <span className="text-[10px] uppercase tracking-widest border hairline px-3 py-1.5 text-taupe">
-              Showing sample preview · couldn't reach your saved profile
+            <span className="text-[10px] uppercase tracking-widest text-destructive">
+              Error loading saved profile
             </span>
-          )}
-          {source === "cloud" && !error && (
-            <span className="text-[10px] uppercase tracking-widest text-taupe">Live</span>
           )}
         </div>
         <div className="mt-6 flex flex-wrap gap-3">
@@ -112,7 +114,9 @@ function BrandPage() {
               <div>
                 <p className="text-[10px] uppercase tracking-widest text-sage mb-3">Always</p>
                 <ul className="space-y-2 text-sm text-foreground">
-                  {brandDNA.voice.do.map((d) => (
+                  {brandDNA.voice.do.length === 0 ? (
+                    <li className="text-taupe/60 italic">No rules set</li>
+                  ) : brandDNA.voice.do.map((d) => (
                     <li key={d} className="flex gap-2">
                       <span className="text-sage">·</span>
                       <span>{d}</span>
@@ -123,7 +127,9 @@ function BrandPage() {
               <div>
                 <p className="text-[10px] uppercase tracking-widest text-taupe mb-3">Never</p>
                 <ul className="space-y-2 text-sm text-foreground">
-                  {brandDNA.voice.dont.map((d) => (
+                  {brandDNA.voice.dont.length === 0 ? (
+                    <li className="text-taupe/60 italic">No rules set</li>
+                  ) : brandDNA.voice.dont.map((d) => (
                     <li key={d} className="flex gap-2">
                       <span className="text-taupe">·</span>
                       <span>{d}</span>
@@ -142,7 +148,9 @@ function BrandPage() {
             Every post is tagged to one pillar. The mix below is what we plan against in your calendar.
           </p>
           <div className="space-y-px bg-border mb-10">
-            {brandDNA.pillars.map((p) => (
+            {brandDNA.pillars.length === 0 ? (
+              <div className="bg-card p-6 text-taupe italic text-sm">No pillars defined yet.</div>
+            ) : brandDNA.pillars.map((p) => (
               <div key={p.name} className="bg-card p-6 flex items-center gap-6">
                 <div className="flex-1">
                   <p className="font-serif text-2xl mb-1">{p.name}</p>
@@ -172,7 +180,7 @@ function BrandPage() {
           <div className="grid grid-cols-3 gap-2">
             {brandDNA.moodboard.map((src, i) => (
               <div
-                key={src}
+                key={i}
                 className={
                   "overflow-hidden ring-1 ring-border " +
                   (i % 5 === 0 ? "aspect-[3/4] col-span-2 row-span-2" : "aspect-square")
@@ -195,12 +203,12 @@ function BrandPage() {
             </div>
             <div>
               <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">She is looking for</p>
-              <p className="text-base leading-relaxed">{brandDNA.idealClient.looksFor}</p>
+              <p className="text-base leading-relaxed">{brandDNA.idealClient.looksFor || "Not defined"}</p>
             </div>
             <div>
-              <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Your niche</p>
-              <p className="font-serif text-xl mb-2">{technician.niche}</p>
-              <p className="text-sm text-taupe">{technician.yearsActive} years active</p>
+              <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Technician</p>
+              <p className="font-serif text-xl mb-2">{technician.name}</p>
+              <p className="text-sm text-taupe">{technician.handle}</p>
             </div>
           </div>
         </section>

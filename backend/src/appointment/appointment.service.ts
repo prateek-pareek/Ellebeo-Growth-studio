@@ -12,9 +12,14 @@ export class AppointmentService {
   constructor(
     private prisma: PrismaService,
     private configService: ConfigService,
-    @Inject('FIREBASE_ADMIN') private firebaseAdmin: admin.app.App,
+    @Inject('FIREBASE_ADMIN') private firebaseAdmin: any,
   ) {
-    this.bucket = this.firebaseAdmin.storage().bucket();
+    const bucketName = this.configService.get<string>('FIREBASE_STORAGE_BUCKET');
+    if (bucketName) {
+      this.bucket = this.firebaseAdmin.storage().bucket(bucketName);
+    } else {
+      console.warn('FIREBASE_STORAGE_BUCKET not configured. Upload features will be disabled.');
+    }
   }
 
   async getAppointments(tenantId: string) {
@@ -124,7 +129,7 @@ export class AppointmentService {
         tenantId,
         appointmentId,
         s3Key: dto.s3Key, // Column name s3Key in schema, mapping to firebase path
-        s3Bucket: this.configService.get('FIREBASE_STORAGE_BUCKET'),
+        s3Bucket: this.configService.get<string>('FIREBASE_STORAGE_BUCKET') || '',
         s3ObjectHash: dto.s3ObjectHash,
         fileSizeBytes: dto.fileSizeBytes,
         isBeforePhoto,

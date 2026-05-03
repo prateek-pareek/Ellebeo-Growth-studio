@@ -11,12 +11,11 @@ export class BrandDnaService {
       where: { unique_current_brand_dna: { tenantId, isCurrent: true } },
       include: { pillars: true, goals: true }
     });
-    if (!dna) throw new NotFoundException('Brand DNA not found');
+    // Don't throw, just return null if not found for initial onboarding
     return dna;
   }
 
   async createOrUpdateDna(tenantId: string, dto: CreateBrandDnaDto) {
-    // Transaction to deprecate old DNA and create new one
     return this.prisma.$transaction(async (tx) => {
       const current = await tx.brandDNA.findUnique({
         where: { unique_current_brand_dna: { tenantId, isCurrent: true } }
@@ -36,14 +35,26 @@ export class BrandDnaService {
           oneLiner: dto.oneLiner,
           uniqueSellingProposition: dto.uniqueSellingProposition,
           primaryPersona: dto.primaryPersona,
+          personaAge: dto.personaAge,
+          personaLocation: dto.personaLocation,
           primaryTone: dto.primaryTone,
+          vocabularyPreferred: dto.voiceDo || [],
+          doNotSay: dto.voiceDont || [],
           aestheticDirection: dto.aestheticDirection as any,
           brandTier: dto.brandTier as any,
           pillars: {
-            create: dto.pillars?.map((label, i) => ({ label, sort_order: i })) || []
+            create: dto.pillars?.map((label, i) => ({ 
+              label, 
+              sortOrder: i,
+              tenantId 
+            })) || []
           },
           goals: {
-            create: dto.goals?.map((g) => ({ label: g.label, target_metric: g.target })) || []
+            create: dto.goals?.map((g) => ({ 
+              label: g.label, 
+              targetMetric: g.target,
+              tenantId
+            })) || []
           }
         }
       });
@@ -58,7 +69,6 @@ export class BrandDnaService {
   }
 
   async scanInstagram(tenantId: string, dto: ScanInstagramDto) {
-    // Placeholder for GPT-4o-mini scrape and analysis
     return {
       status: 'draft',
       businessName: `${dto.handle} Business`,

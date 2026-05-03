@@ -1,38 +1,37 @@
-/**
- * Appointments data provider — Phase 4 (read-only).
- *
- * Mirrors the brand-dna provider pattern.
- *   - flag off OR signed-out OR error → sample data
- *   - flag on AND signed-in AND rows → cloud
- *   - flag on AND signed-in AND zero rows → empty state (handled by caller)
- *
- * Cloud → view mapping:
- *   - status is derived from scheduled_at (>= now ? upcoming : completed),
- *     but the existing UI keys off `consent`. The DB has no consent column on
- *     appointments yet, so cloud rows default to `not_requested`.
- *   - photos / contentReady aren't in the appointments table → defaulted.
- */
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { useFeatureFlag } from "@/lib/feature-flags";
-import { appointments as sampleAppointments, type Appointment, type Category } from "@/lib/sample-data";
 
-export type AppointmentsSource = "sample" | "cloud";
+export type Category =
+  | "Hairdresser"
+  | "Colourist"
+  | "Bridal makeup"
+  | "Lash & brow"
+  | "Nail artist"
+  | "Injector"
+  | "Skin therapist"
+  | "Barber";
+
+export type Appointment = {
+  id: string;
+  clientName: string;
+  service: string;
+  category: Category;
+  date: string;
+  hasBefore: boolean;
+  hasAfter: boolean;
+  consent: "granted" | "pending" | "declined" | "not_requested";
+  notes?: string;
+  contentReady: number; // 0–100
+};
 
 export type UseAppointmentsResult = {
   data: Appointment[];
   loading: boolean;
-  source: AppointmentsSource;
-  /** True when cloud lookup succeeded but the user has zero appointments. */
+  source: "cloud";
   isEmpty: boolean;
-  /** True when we attempted cloud and fell back to sample. */
   error: boolean;
   refresh?: () => void;
 };
-
-function sampleResult(): UseAppointmentsResult {
-  return { data: sampleAppointments, loading: false, source: "sample", isEmpty: false, error: false };
-}
 
 const CATEGORY_MAP: Record<string, Category> = {
   HAIRDRESSER: "Hairdresser",
@@ -84,8 +83,13 @@ async function fetchCloudAppointments(): Promise<
 }
 
 export function useAppointments(): UseAppointmentsResult {
-  const cloudEnabled = useFeatureFlag("feature_cloud_backend");
-  const [state, setState] = useState<UseAppointmentsResult>(() => sampleResult());
+  const [state, setState] = useState<UseAppointmentsResult>({
+    data: [],
+    loading: true,
+    source: "cloud",
+    isEmpty: false,
+    error: false,
+  });
   const reqId = useRef(0);
 
   const fetch = (id: number) => {
@@ -97,30 +101,20 @@ export function useAppointments(): UseAppointmentsResult {
           setState({ data: res.data, loading: false, source: "cloud", isEmpty: false, error: false });
         } else if (res.kind === "empty") {
           setState({ data: [], loading: false, source: "cloud", isEmpty: true, error: false });
-        } else if (res.kind === "anon") {
-          setState(sampleResult());
         } else {
-          // eslint-disable-next-line no-console
-          console.warn("[appointments] cloud fetch failed, using sample:", res.message);
-          setState({ ...sampleResult(), error: true });
+          setState({ data: [], loading: false, source: "cloud", isEmpty: true, error: true });
         }
       })
-      .catch((err) => {
+      .catch(() => {
         if (id !== reqId.current) return;
-        // eslint-disable-next-line no-console
-        console.warn("[appointments] cloud fetch threw, using sample:", err);
-        setState({ ...sampleResult(), error: true });
+        setState({ data: [], loading: false, source: "cloud", isEmpty: true, error: true });
       });
   };
 
   useEffect(() => {
-    if (!cloudEnabled) {
-      setState(sampleResult());
-      return;
-    }
     const id = ++reqId.current;
     fetch(id);
-  }, [cloudEnabled]);
+  }, []);
 
   return { 
     ...state, 

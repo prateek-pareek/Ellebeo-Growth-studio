@@ -59,6 +59,10 @@ export class GetContentQueryDto {
   @IsString()
   @IsOptional()
   pageSize?: string;
+
+  @IsString()
+  @IsOptional()
+  jobId?: string;
 }
 
 enum ToneRating {

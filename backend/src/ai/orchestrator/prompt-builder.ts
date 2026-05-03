@@ -57,7 +57,7 @@ export class PromptBuilder {
     const visionSection = visionResult ? this.buildVisionSection(visionResult) : '';
     const goalSection = GOAL_FRAMING[businessGoal] ?? 'Generate engaging content.';
     const platformSection = PLATFORM_RULES[platform];
-    const lengthTarget = CAPTION_LENGTH_TARGETS[brandDNA.captionLengthPreference];
+    const lengthTarget = (CAPTION_LENGTH_TARGETS as any)[brandDNA.captionLengthPreference] || CAPTION_LENGTH_TARGETS.medium;
     const lengthSection = `Caption body should be ${lengthTarget.minWords}–${lengthTarget.maxWords} words (excluding hashtags).`;
 
     const userPrompt = [

@@ -1,7 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, useRef } from "react";
-import { type Appointment } from "@/lib/sample-data";
-import { useAppointments } from "@/lib/providers/appointments-provider";
+import { useState } from "react";
+import { useAppointments, type Appointment } from "@/lib/providers/appointments-provider";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import axios from "axios";
@@ -19,19 +18,18 @@ export const Route = createFileRoute("/appointments")({
 
 function AppointmentsPage() {
   const [filter, setFilter] = useState<"all" | "consent" | "ready">("all");
-  const { data: appointments, source, isEmpty, error, loading, refresh } = useAppointments();
+  const { data: appointments, isEmpty, error, loading, refresh } = useAppointments();
   
   // Form state
   const [clientName, setClientName] = useState("");
   const [serviceName, setServiceName] = useState("");
-  const [category, setCategory] = useState("skin_treatments");
+  const [category, setCategory] = useState("HAIRDRESSER");
   const [isAdding, setIsAdding] = useState(false);
   const [beforeFile, setBeforeFile] = useState<File | null>(null);
   const [afterFile, setAfterFile] = useState<File | null>(null);
 
   const uploadFile = async (appointmentId: string, file: File, isBefore: boolean) => {
     try {
-      // 1. Get signed URL
       const urlRes = await api.post(`/appointments/${appointmentId}/images/upload-url`, {
         filename: file.name,
         contentType: file.type,
@@ -39,15 +37,13 @@ function AppointmentsPage() {
       });
       const { uploadUrl, s3Key } = urlRes.data.data;
 
-      // 2. Upload to Firebase Storage (using PUT)
       await axios.put(uploadUrl, file, {
         headers: { 'Content-Type': file.type }
       });
 
-      // 3. Confirm upload
       await api.post(`/appointments/${appointmentId}/images/confirm-upload`, {
         s3Key,
-        s3ObjectHash: `hash-${Date.now()}`, // Placeholder
+        s3ObjectHash: `hash-${Date.now()}`,
         fileSizeBytes: file.size,
         isBeforePhoto: isBefore
       });
@@ -61,12 +57,8 @@ function AppointmentsPage() {
     e.preventDefault();
     setIsAdding(true);
     try {
-      // 1. Create client if needed (for now we assume name is enough or use a placeholder)
-      // Actually, we should probably have a client selector. 
-      // For now, let's create a dummy client or use a default.
-      
       const res = await api.post('/appointments', {
-        clientId: 'default-client', // Placeholder
+        clientId: 'default-client',
         serviceCategory: category,
         serviceName,
         appointmentDate: new Date().toISOString()
@@ -74,7 +66,6 @@ function AppointmentsPage() {
       
       const appt = res.data.data;
       
-      // 2. Upload images if present
       if (beforeFile) await uploadFile(appt.id, beforeFile, true);
       if (afterFile) await uploadFile(appt.id, afterFile, false);
 
@@ -93,7 +84,7 @@ function AppointmentsPage() {
 
   const filtered = appointments.filter((a) => {
     if (filter === "consent") return a.consent === "pending" || a.consent === "not_requested";
-    if (filter === "ready") return a.consent === "granted" && a.hasBefore && a.hasAfter;
+    if (filter === "ready") return a.consent === "granted";
     return true;
   });
 
@@ -194,11 +185,8 @@ function AppointmentsPage() {
       <div className="flex items-baseline justify-between mb-6">
         <div className="flex items-baseline gap-3">
           <h2 className="eyebrow">Recent appointments</h2>
-          {source === "cloud" && !error && (
-            <span className="text-[9px] uppercase tracking-widest border hairline px-2 py-1 text-sage">Live</span>
-          )}
-          {error && (
-            <span className="text-[9px] uppercase tracking-widest border hairline px-2 py-1 text-taupe">Showing sample preview</span>
+          {!error && !loading && !isEmpty && (
+            <span className="text-[9px] uppercase tracking-widest text-sage">Live</span>
           )}
           {loading && (
             <span className="text-[9px] uppercase tracking-widest text-taupe">Loading…</span>
@@ -224,7 +212,7 @@ function AppointmentsPage() {
         </div>
       </div>
 
-      {isEmpty ? (
+      {isEmpty && !loading ? (
         <div className="artifact p-10 text-center">
           <p className="eyebrow mb-3">No appointments yet</p>
           <p className="text-sm text-taupe leading-relaxed max-w-md mx-auto">
@@ -246,20 +234,9 @@ function AppointmentRow({ a }: { a: Appointment }) {
   return (
     <div className="bg-card p-5 sm:p-6 grid grid-cols-1 sm:grid-cols-12 gap-5 items-center">
       <div className="sm:col-span-2 flex gap-2">
-        {a.beforeImage ? (
-          <div className="size-20 overflow-hidden bg-nude/30 ring-1 ring-border">
-            <img src={a.beforeImage} alt="before" className="w-full h-full object-cover" />
-          </div>
-        ) : (
-          <div className="size-20 bg-nude/20 ring-1 ring-border flex items-center justify-center text-[9px] uppercase tracking-widest text-taupe">
-            No photo
-          </div>
-        )}
-        {a.afterImage && (
-          <div className="size-20 overflow-hidden bg-nude/30 ring-1 ring-border">
-            <img src={a.afterImage} alt="after" className="w-full h-full object-cover" />
-          </div>
-        )}
+        <div className="size-20 bg-nude/20 ring-1 ring-border flex items-center justify-center text-[9px] uppercase tracking-widest text-taupe">
+          Real Data
+        </div>
       </div>
 
       <div className="sm:col-span-4 min-w-0">
@@ -274,7 +251,7 @@ function AppointmentRow({ a }: { a: Appointment }) {
       </div>
 
       <div className="sm:col-span-3 flex flex-col items-start sm:items-end gap-2">
-        {a.consent === "granted" && a.hasAfter ? (
+        {a.consent === "granted" ? (
           <Link
             to="/generate"
             search={{ appointment: a.id }}

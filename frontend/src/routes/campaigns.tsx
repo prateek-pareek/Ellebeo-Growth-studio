@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { campaigns } from "@/lib/sample-data";
+import { useCampaigns } from "@/lib/providers/campaign-provider";
 
 export const Route = createFileRoute("/campaigns")({
   head: () => ({
@@ -20,6 +20,8 @@ const PRESETS = [
 ];
 
 function CampaignsPage() {
+  const { data: campaigns, loading } = useCampaigns();
+
   return (
     <div>
       <header className="mt-6 lg:mt-10 mb-10 max-w-[68ch]">
@@ -50,7 +52,11 @@ function CampaignsPage() {
       <section>
         <h2 className="eyebrow mb-6">Your campaigns</h2>
         <div className="space-y-px bg-border">
-          {campaigns.map((c) => (
+          {loading ? (
+            <div className="bg-card p-10 text-center text-taupe italic">Loading campaigns...</div>
+          ) : campaigns.length === 0 ? (
+            <div className="bg-card p-10 text-center text-taupe italic">No active campaigns. Pick a goal above to start your first one.</div>
+          ) : campaigns.map((c) => (
             <div key={c.id} className="bg-card p-6 grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
               <div className="md:col-span-5">
                 <p className="font-serif text-2xl mb-1">{c.name}</p>

@@ -17,6 +17,7 @@ export class ContentService {
     if (query.serviceCategory) {
       whereClause.appointment = { serviceCategory: query.serviceCategory };
     }
+    if (query.jobId) whereClause.generationJobId = query.jobId;
     if (query.dateFrom || query.dateTo) {
       whereClause.createdAt = {};
       if (query.dateFrom) whereClause.createdAt.gte = new Date(query.dateFrom);
@@ -40,7 +41,7 @@ export class ContentService {
   async getContentItem(tenantId: string, id: string) {
     const item = await this.prisma.contentItem.findUnique({
       where: { id },
-      include: { appointment: true, imageAsset: true }
+      include: { appointment: true, imageAssets: true }
     });
     if (!item || item.tenantId !== tenantId || item.deletedAt) throw new NotFoundException('Content not found');
     return item;
@@ -53,7 +54,7 @@ export class ContentService {
       data: {
         status: 'approved',
         approvedAt: new Date(),
-        approvedBy: userId
+        approvedBy: { connect: { id: userId } }
       }
     });
   }

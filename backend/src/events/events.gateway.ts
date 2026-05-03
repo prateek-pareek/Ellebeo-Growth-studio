@@ -37,7 +37,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
         client.join('admin_room');
       }
 
-    } catch (e) {
+    } catch (e: any) {
       console.log(`Connection failed for client ${client.id}:`, e.message);
       client.disconnect();
     }

@@ -1,5 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { calendarEntries, calendarMonth, campaigns, contentLibrary } from "@/lib/sample-data";
+import { useCalendar } from "@/lib/providers/calendar-provider";
+import { useContentItems } from "@/lib/providers/content-provider";
+import { useCampaigns } from "@/lib/providers/campaign-provider";
 
 export const Route = createFileRoute("/calendar")({
   head: () => ({
@@ -20,8 +22,15 @@ const STATUS_DOT: Record<string, string> = {
 };
 
 function CalendarPage() {
-  const grid = Array.from({ length: 28 }, (_, i) => calendarEntries[i] ?? null);
-  const upcoming = contentLibrary
+  const { entries, month, loading, error } = useCalendar();
+  const { items: contentItems } = useContentItems();
+  const { data: campaigns } = useCampaigns();
+
+  // Build a 28-slot grid from calendar entries (keyed by day of month)
+  const entryByDay = new Map(entries.map((e) => [e.date, e]));
+  const grid = Array.from({ length: 28 }, (_, i) => entryByDay.get(i + 1) ?? null);
+
+  const upcoming = contentItems
     .filter((c) => c.status === "Scheduled" || c.status === "Approved")
     .slice(0, 4);
 
@@ -31,11 +40,16 @@ function CalendarPage() {
         <div className="max-w-[60ch]">
           <p className="eyebrow mb-5">Calendar</p>
           <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight">
-            <span className="italic">{calendarMonth}</span>
+            <span className="italic">{month}</span>
           </h1>
           <p className="mt-6 text-base sm:text-lg text-taupe leading-relaxed">
-            Drag posts between days. Quiet weekdays are flagged so you can fill them with a campaign.
+            {loading ? "Loading your schedule…" : "Your live posting schedule, synced from the backend."}
           </p>
+          {error && (
+            <p className="mt-2 text-xs text-destructive">
+              Error loading schedule from cloud.
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button className="px-5 py-2.5 text-[11px] uppercase tracking-[0.2em] border hairline hover:bg-card">
@@ -88,6 +102,8 @@ function CalendarPage() {
               </div>
             ) : d?.status === "rest" ? (
               <p className="text-[10px] italic text-taupe/60 mt-auto">Open slot</p>
+            ) : loading ? (
+              <p className="text-[10px] italic text-taupe/30 mt-auto">—</p>
             ) : null}
           </div>
         ))}
@@ -111,7 +127,9 @@ function CalendarPage() {
             </Link>
           </div>
           <div className="space-y-px bg-border">
-            {campaigns.map((c) => (
+            {campaigns.length === 0 ? (
+               <div className="bg-card p-6 text-sm text-taupe italic">No active campaigns.</div>
+            ) : campaigns.map((c) => (
               <div key={c.id} className="bg-card p-6">
                 <div className="flex items-baseline justify-between mb-2">
                   <p className="font-serif text-xl">{c.name}</p>
@@ -144,7 +162,11 @@ function CalendarPage() {
         <section className="col-span-12 lg:col-span-7">
           <h2 className="eyebrow mb-6">Scheduled and approved</h2>
           <div className="space-y-px bg-border">
-            {upcoming.map((c) => (
+            {upcoming.length === 0 ? (
+              <div className="bg-card p-6 text-sm text-taupe italic">
+                No scheduled content yet. Generate and approve content to see it here.
+              </div>
+            ) : upcoming.map((c) => (
               <div key={c.id} className="bg-card p-5 flex items-center gap-5">
                 <div className="size-16 sm:size-20 shrink-0 overflow-hidden bg-nude/30 ring-1 ring-border">
                   <img src={c.image} alt={c.title} className="w-full h-full object-cover" loading="lazy" />
@@ -156,7 +178,7 @@ function CalendarPage() {
                 </div>
                 <div className="text-right hidden sm:block">
                   <p className="text-[10px] uppercase tracking-widest text-taupe">When</p>
-                  <p className="text-sm">{c.scheduledFor ?? "—"}</p>
+                  <p className="text-sm">{c.scheduledFor ? new Date(c.scheduledFor).toLocaleDateString() : "—"}</p>
                 </div>
               </div>
             ))}

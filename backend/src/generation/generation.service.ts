@@ -62,23 +62,23 @@ export class GenerationService {
         businessGoal: 'build_brand_authority',
         imageAssets: [],
         generationOptions: {
-          outputFormats: dto.outputFormats,
+          outputFormats: dto.outputFormats as any,
           includeVoiceover: dto.includeVoiceover,
           includeMusic: dto.includeMusic,
-          platform: dto.platforms,
+          platform: dto.platforms as any,
           userTier: 'standard',
         },
         goldenExamples: [],
         createdAt: new Date().toISOString(),
         priority: 5,
-      },
+      } as any,
       { jobId: job.id },
     );
 
     // Assuming a simple calculation for estimated seconds based on formats
-    const estimatedSeconds = dto.outputFormats.includes('reel' as any) ? 120 : 30;
+    const estimatedSeconds = dto.outputFormats.includes('REEL' as any) ? 120 : 30;
 
-    this.generationGateway.emitJobUpdate(job.id, job.state);
+    this.generationGateway.emitJobUpdate(job.id, job.state as any);
 
     return {
       jobId: job.id,
@@ -93,7 +93,7 @@ export class GenerationService {
   async getJobStatus(tenantId: string, jobId: string) {
     const job = await this.prisma.generationJob.findUnique({ where: { id: jobId } });
     if (!job || job.tenantId !== tenantId) throw new NotFoundException('Job not found');
-    this.generationGateway.emitJobUpdate(job.id, job.state);
+    this.generationGateway.emitJobUpdate(job.id, job.state as any);
     return job;
   }
 
@@ -123,7 +123,7 @@ export class GenerationService {
       }
     });
 
-    await contentGenerationQueue.add(`tweak:${job.id}`, { jobId: job.id }, { jobId: job.id });
+    await contentGenerationQueue.add(`tweak:${job.id}`, { jobId: job.id } as any, { jobId: job.id });
 
     this.generationGateway.emitJobUpdate(job.id, job.state);
 

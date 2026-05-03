@@ -28,15 +28,19 @@ export async function saveBrandDna(
   try {
     const pillars = payload.pillars.split(',').map(s => s.trim()).filter(Boolean);
     const goals = [];
-    if (payload.bookingsPerWeek) goals.push({ label: 'bookings per week', target: payload.bookingsPerWeek });
-    if (payload.postsPerWeek) goals.push({ label: 'posts per week', target: payload.postsPerWeek });
+    if (payload.bookingsPerWeek) goals.push({ label: 'bookings per week', targetMetric: payload.bookingsPerWeek });
+    if (payload.postsPerWeek) goals.push({ label: 'posts per week', targetMetric: payload.postsPerWeek });
 
     await api.post('/brand-dna', {
       businessName: payload.displayName,
       oneLiner: payload.niche,
       uniqueSellingProposition: payload.signatureService,
       primaryPersona: payload.idealClient,
+      personaAge: payload.ageRange,
+      personaLocation: payload.cities,
       primaryTone: payload.voiceWords,
+      voiceDo: payload.alwaysDo.split('\n').filter(Boolean),
+      voiceDont: payload.neverDo.split('\n').filter(Boolean),
       pillars,
       goals
     });
@@ -45,5 +49,34 @@ export async function saveBrandDna(
   } catch (error: any) {
     if (error.response?.status === 401) return { kind: "anon" };
     return { kind: "error", message: error.response?.data?.message || error.message };
+  }
+}
+
+export async function fetchBrandDnaForEditing(): Promise<OnboardingPayload | null> {
+  try {
+    const res = await api.get('/brand-dna');
+    const dna = res.data.data;
+    if (!dna) return null;
+
+    const goalMap = new Map(dna.goals?.map((g: any) => [g.label.toLowerCase(), g.targetMetric]) || []);
+
+    return {
+      displayName: dna.businessName || "",
+      niche: dna.oneLiner || "",
+      city: dna.personaLocation || "",
+      signatureService: dna.uniqueSellingProposition || "",
+      otherServices: "",
+      voiceWords: dna.primaryTone || "",
+      alwaysDo: (dna.voiceDo || []).join('\n'),
+      neverDo: (dna.voiceDont || []).join('\n'),
+      ageRange: dna.personaAge || "",
+      cities: dna.personaLocation || "",
+      idealClient: dna.primaryPersona || "",
+      bookingsPerWeek: goalMap.get('bookings per week') || "",
+      postsPerWeek: goalMap.get('posts per week') || "",
+      pillars: (dna.pillars || []).map((p: any) => p.label).join(', '),
+    };
+  } catch {
+    return null;
   }
 }

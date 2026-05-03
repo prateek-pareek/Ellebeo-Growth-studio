@@ -32,7 +32,23 @@ export class CreateBrandDnaDto {
 
   @IsString()
   @IsOptional()
+  personaAge?: string;
+
+  @IsString()
+  @IsOptional()
+  personaLocation?: string;
+
+  @IsString()
+  @IsOptional()
   primaryTone?: string;
+
+  @IsArray()
+  @IsOptional()
+  voiceDo?: string[];
+
+  @IsArray()
+  @IsOptional()
+  voiceDont?: string[];
 
   @IsEnum(BrandAesthetic)
   @IsOptional()

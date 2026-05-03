@@ -4,7 +4,9 @@ enum PostFormat {
   FEED = 'feed',
   STORY = 'story',
   REEL = 'reel',
-  CAROUSEL = 'carousel'
+  CAROUSEL = 'carousel',
+  TIKTOK = 'tiktok',
+  CAPTION = 'caption'
 }
 
 enum PlatformType {
@@ -32,6 +34,10 @@ export class GenerateContentDto {
 
   @IsBoolean()
   includeMusic: boolean;
+
+  @IsString()
+  @IsOptional()
+  goal?: string;
 
   @IsString()
   @IsOptional()

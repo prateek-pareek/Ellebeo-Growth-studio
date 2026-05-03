@@ -16,7 +16,6 @@ import { AdminModule } from './admin/admin.module';
 import { EventsModule } from './events/events.module';
 import { FirebaseModule } from './common/firebase/firebase.module';
 import { CacheModule } from '@nestjs/cache-manager';
-import * as redisStore from 'cache-manager-redis-store';
 import { TenantContextMiddleware } from './common/middleware/tenant-context.middleware';
 // import { AiModule } from './ai/ai.module';
 
@@ -30,11 +29,12 @@ import { TenantContextMiddleware } from './common/middleware/tenant-context.midd
       ttl: 60000,
       limit: 200, // 200 requests per minute
     }]),
+    // In-memory cache — BullMQ workers still use Redis directly via ioredis.
+    // Switched from cache-manager-redis-store to avoid ETIMEDOUT floods when
+    // the Redis VPS port is not yet reachable during local development.
     CacheModule.register({
       isGlobal: true,
-      store: redisStore,
-      host: process.env.REDIS_HOST || 'localhost',
-      port: process.env.REDIS_PORT || 6379,
+      ttl: 300, // 5 minutes default TTL
     }),
     PrismaModule,
     AuthModule,

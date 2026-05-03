@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { profile, technician } from "@/lib/sample-data";
+import { useProfile } from "@/lib/providers/profile-provider";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
@@ -13,6 +13,16 @@ export const Route = createFileRoute("/profile")({
 });
 
 function ProfilePage() {
+  const { profile, technician, loading } = useProfile();
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center text-taupe italic">
+        Loading profile data...
+      </div>
+    );
+  }
+
   return (
     <div>
       <header className="mt-6 lg:mt-10 mb-10 flex flex-wrap items-end justify-between gap-6">
@@ -65,7 +75,11 @@ function ProfilePage() {
         <section className="col-span-12 lg:col-span-7">
           <h2 className="eyebrow mb-6">Recommended improvements</h2>
           <div className="space-y-px bg-border">
-            {profile.suggestions.map((s, i) => (
+            {profile.suggestions.length === 0 ? (
+              <div className="bg-card p-10 text-center text-taupe italic text-sm">
+                Your profile is in great shape! No immediate improvements recommended.
+              </div>
+            ) : profile.suggestions.map((s, i) => (
               <div key={i} className="bg-card p-5 flex items-center justify-between gap-4">
                 <p className="text-sm flex-1">{s.label}</p>
                 <span

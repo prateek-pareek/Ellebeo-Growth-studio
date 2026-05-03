@@ -45,10 +45,10 @@ export class JobProgressEmitter {
     const event: Partial<JobProgressEvent> = {
       jobId,
       tenantId,
-      state: 'GENERATING_TEXT',
+      state: 'generating_text',
       progressPercent: 70,
       currentStep: 'Your caption is ready — processing your photo...',
-      estimatedSecondsRemaining: this.estimateRemaining('GENERATING_TEXT'),
+      estimatedSecondsRemaining: this.estimateRemaining('generating_text'),
       partialResult,
     };
 
@@ -70,7 +70,7 @@ export class JobProgressEmitter {
     const event: JobProgressEvent = {
       jobId,
       tenantId,
-      state: 'FAILED',
+      state: 'failed',
       progressPercent: 0,
       currentStep: 'Something went wrong',
       estimatedSecondsRemaining: 0,
@@ -90,9 +90,9 @@ export class JobProgressEmitter {
     const event: JobProgressEvent = {
       jobId,
       tenantId,
-      state: 'BLOCKED',
+      state: 'blocked',
       progressPercent: 0,
-      currentStep: AI_CONFIG.progressMap['BLOCKED'].step,
+      currentStep: AI_CONFIG.progressMap['blocked'].step,
       estimatedSecondsRemaining: 0,
     };
 
@@ -105,16 +105,16 @@ export class JobProgressEmitter {
 
   private estimateRemaining(state: JobState): number {
     const estimates: Partial<Record<JobState, number>> = {
-      QUEUED: 45,
-      PROCESSING_IMAGE: 35,
-      PROCESSING_VISION: 25,
-      BUILDING_PROMPT: 20,
-      GENERATING_TEXT: 12,
-      GENERATING_REEL: 90,
-      COMPLETED: 0,
-      FAILED: 0,
-      BLOCKED: 0,
-      DLQ: 0,
+      queued: 45,
+      processing_image: 35,
+      processing_vision: 25,
+      building_prompt: 20,
+      generating_text: 12,
+      generating_reel: 90,
+      completed: 0,
+      failed: 0,
+      blocked: 0,
+      dead_letter: 0,
     };
     return estimates[state] ?? 30;
   }

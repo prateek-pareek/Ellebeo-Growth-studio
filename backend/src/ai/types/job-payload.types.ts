@@ -16,16 +16,11 @@ export interface ConsentRestrictions {
   allow_extended_use: boolean;
 }
 
-export interface ConsentRecord {
-  consentId: string;
+export interface ConsentRecord extends Record<string, any> {
+  id: string;
   clientId: string;
   tenantId: string;
-  status: ConsentStatus;
-  restrictions: ConsentRestrictions;
-  grantedAt: string;
-  expiresAt: string | null;
-  lastUpdatedAt: string;
-  version: number;
+  status: any;
 }
 
 export interface ConsentValidationResult {
@@ -50,31 +45,10 @@ export type BrandMoodTag =
   | 'luxury' | 'upbeat' | 'chill' | 'elegant'
   | 'bold' | 'clinical' | 'warm' | 'playful';
 
-export interface BrandDNARecord {
-  brandDNAId: string;
+export interface BrandDNARecord extends Record<string, any> {
+  id: string;
   tenantId: string;
-  version: number;
-  primaryTone: BrandTone;
-  secondaryTone: BrandTone | null;
-  personaDescription: string;
-  preferredVocabulary: string[];
-  blacklistedWords: string[];
-  clientTerminology: string;
   businessName: string;
-  heroServices: string[];
-  targetAudience: string;
-  uniqueSellingPoint: string;
-  locationCity: string;
-  primaryBrandColour: string;
-  secondaryBrandColour: string;
-  brandFontPreference: string | null;
-  moodTag: BrandMoodTag;
-  captionLengthPreference: 'short' | 'medium' | 'long';
-  useEmojis: boolean;
-  emojiStyle: 'minimal' | 'moderate' | 'heavy';
-  preferredCTAStyle: string;
-  complexityScore: number;
-  lastUpdatedAt: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -154,32 +128,32 @@ export interface GenerationJobPayload {
 // ---------------------------------------------------------------------------
 
 export type JobState =
-  | 'CREATED'
-  | 'QUEUED'
-  | 'PROCESSING_IMAGE'
-  | 'PROCESSING_VISION'
-  | 'BUILDING_PROMPT'
-  | 'GENERATING_TEXT'
-  | 'GENERATING_REEL'
-  | 'COMPLETED'
-  | 'FAILED'
-  | 'RETRYING'
-  | 'BLOCKED'
-  | 'DLQ';
+  | 'created'
+  | 'queued'
+  | 'processing_image'
+  | 'processing_vision'
+  | 'building_prompt'
+  | 'generating_text'
+  | 'generating_reel'
+  | 'completed'
+  | 'failed'
+  | 'retrying'
+  | 'blocked'
+  | 'dead_letter';
 
 export const VALID_STATE_TRANSITIONS: Record<JobState, ReadonlyArray<JobState>> = {
-  CREATED:           ['QUEUED'],
-  QUEUED:            ['PROCESSING_IMAGE', 'BLOCKED'],
-  PROCESSING_IMAGE:  ['PROCESSING_VISION', 'FAILED', 'BLOCKED'],
-  PROCESSING_VISION: ['BUILDING_PROMPT', 'FAILED', 'BLOCKED'],
-  BUILDING_PROMPT:   ['GENERATING_TEXT', 'FAILED', 'BLOCKED'],
-  GENERATING_TEXT:   ['GENERATING_REEL', 'COMPLETED', 'FAILED', 'BLOCKED'],
-  GENERATING_REEL:   ['COMPLETED', 'FAILED', 'BLOCKED'],
-  COMPLETED:         ['BLOCKED'],
-  FAILED:            ['RETRYING', 'DLQ'],
-  RETRYING:          ['QUEUED', 'DLQ'],
-  BLOCKED:           [],
-  DLQ:               [],
+  created:           ['queued'],
+  queued:            ['processing_image', 'blocked'],
+  processing_image:  ['processing_vision', 'failed', 'blocked'],
+  processing_vision: ['building_prompt', 'failed', 'blocked'],
+  building_prompt:   ['generating_text', 'failed', 'blocked'],
+  generating_text:   ['generating_reel', 'completed', 'failed', 'blocked'],
+  generating_reel:   ['completed', 'failed', 'blocked'],
+  completed:         ['blocked'],
+  failed:            ['retrying', 'dead_letter'],
+  retrying:          ['queued', 'dead_letter'],
+  blocked:           [],
+  dead_letter:       [],
 } as const;
 
 export class InvalidStateTransitionError extends Error {

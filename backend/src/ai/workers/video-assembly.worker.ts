@@ -49,7 +49,7 @@ export function startVideoAssemblyWorker(): Worker<VideoAssemblyJobPayload> {
         afterImageUrl: afterImageCloudinaryUrl,
         hookSentence,
         brandDNA: {
-          brandDNAId: '',
+          id: '',
           tenantId,
           version: 0,
           primaryTone: 'warm_and_friendly',

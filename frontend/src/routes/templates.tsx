@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { categories, templates, type Category } from "@/lib/sample-data";
+import { useTemplates } from "@/lib/providers/template-provider";
 import { useState } from "react";
 
 export const Route = createFileRoute("/templates")({
@@ -16,8 +16,9 @@ export const Route = createFileRoute("/templates")({
 const PILLARS = ["All", "Transformations", "Education", "Behind the chair", "Client stories"];
 
 function TemplatesPage() {
+  const { templates, categories, loading } = useTemplates();
   const [pillar, setPillar] = useState("All");
-  const [category, setCategory] = useState<Category | "All">("All");
+  const [category, setCategory] = useState<string>("All");
 
   const list = templates.filter((t) => {
     if (pillar !== "All" && t.pillar !== pillar) return false;
@@ -44,7 +45,7 @@ function TemplatesPage() {
           {(["All", ...categories] as const).map((c) => (
             <button
               key={c}
-              onClick={() => setCategory(c as Category | "All")}
+              onClick={() => setCategory(c)}
               className={
                 "text-[11px] uppercase tracking-[0.18em] px-3 py-1.5 border hairline transition-colors " +
                 (category === c ? "bg-foreground text-offwhite" : "text-taupe hover:bg-card")
@@ -75,8 +76,10 @@ function TemplatesPage() {
         </div>
       </div>
 
-      {list.length === 0 ? (
-        <p className="text-sm text-taupe py-12">No templates match this filter yet.</p>
+      {loading ? (
+        <div className="bg-card p-12 text-center text-taupe italic">Loading templates...</div>
+      ) : list.length === 0 ? (
+        <p className="text-sm text-taupe py-12 italic">No templates match this filter yet.</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
           {list.map((t) => (

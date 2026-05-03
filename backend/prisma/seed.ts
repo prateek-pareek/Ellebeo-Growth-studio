@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
@@ -6,12 +7,13 @@ async function main() {
   console.log('Seeding database...');
 
   // 1. Create User
+  const passwordHash = await bcrypt.hash('password123', 12);
   const user = await prisma.user.upsert({
     where: { email: 'admin@ellebeo.com' },
     update: {},
     create: {
       email: 'admin@ellebeo.com',
-      passwordHash: 'dummy_hash', // In reality, this would be a bcrypt hash
+      passwordHash,
       role: 'admin',
       emailVerified: true,
     },
@@ -40,21 +42,16 @@ async function main() {
     create: {
       tenantId: tenant.id,
       businessName: 'Luminous Glow Beauty',
-      personaDescription: 'We are a luxury boutique salon specializing in lived-in colour and extensions. We treat every client like family, but we maintain an air of high-end exclusivity.',
+      oneLiner: 'Luxury boutique salon specializing in lived-in colour and extensions.',
+      uniqueSellingProposition: 'Lived-in colour techniques that last 6+ months without touch-ups.',
+      primaryPersona: 'Professional women in their 30s-40s who value low-maintenance luxury.',
       primaryTone: 'warm_professional',
-      clientTerminology: 'beauties',
-      heroServices: ['Balayage', 'Tape Extensions'],
-      targetAudience: 'Professional women in their 30s-40s who value their time and want low-maintenance luxury hair.',
-      uniqueSellingPoint: 'We guarantee our lived-in colour techniques will last 6+ months without needing a touch-up.',
-      locationCity: 'Sydney',
-      primaryBrandColour: '#D4AF37',
-      secondaryBrandColour: '#000000',
-      moodTag: 'luxury',
-      preferredVocabulary: ['obsessed', 'flawless', 'lived-in', 'dimension'],
-      blacklistedWords: ['cheap', 'quick', 'deal', 'discount'],
-      useEmojis: true,
-      emojiStyle: 'minimal',
-      preferredCTAStyle: 'soft_invitation',
+      brandColourPrimary: '#D4AF37',
+      brandColourSecondary: '#000000',
+      aestheticDirection: 'bold_luxury',
+      vocabularyPreferred: ['obsessed', 'flawless', 'lived-in', 'dimension'],
+      vocabularyBlacklist: ['cheap', 'quick', 'deal', 'discount'],
+      emojiPolicy: 'minimal',
     },
   });
 

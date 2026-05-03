@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useFeatureFlag } from "@/lib/feature-flags";
-import { saveBrandDna, type OnboardingPayload } from "@/lib/providers/brand-dna-save";
+import { saveBrandDna, fetchBrandDnaForEditing, type OnboardingPayload } from "@/lib/providers/brand-dna-save";
 
 export const Route = createFileRoute("/brand/onboarding")({
   head: () => ({
@@ -44,22 +44,33 @@ function OnboardingPage() {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<OnboardingPayload>(EMPTY);
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  const set = <K extends keyof OnboardingPayload>(k: K) => (v: string) =>
+  useEffect(() => {
+    if (cloudEnabled) {
+      fetchBrandDnaForEditing().then(data => {
+        if (data) setForm(data);
+        setLoading(false);
+      }).catch(() => setLoading(false));
+    } else {
+      setLoading(false);
+    }
+  }, [cloudEnabled]);
+
+  const fieldSetter = <K extends keyof OnboardingPayload>(k: K) => (v: string) =>
     setForm((f) => ({ ...f, [k]: v }));
 
   async function handleSave() {
     setError(null);
     if (!cloudEnabled) {
-      // Flag off → keep legacy behavior: just go to /brand. Form stays in memory.
       setSaved(true);
       return;
     }
     setSaving(true);
     const res = await saveBrandDna(form);
-    setSaving(false);
+    setSaving(true); // Keep UI in saving state until result is handled
     if (res.kind === "ok") {
       setSaved(true);
     } else if (res.kind === "anon") {
@@ -67,6 +78,15 @@ function OnboardingPage() {
     } else {
       setError(res.message);
     }
+    setSaving(false);
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center text-taupe italic">
+        Loading your Brand DNA details...
+      </div>
+    );
   }
 
   if (saved) {
@@ -111,10 +131,10 @@ function OnboardingPage() {
       <header className="mt-6 lg:mt-10 mb-10 max-w-[68ch]">
         <p className="eyebrow mb-5">Brand DNA · Step {step} of {STEPS.length}</p>
         <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight">
-          Build your <span className="italic">Brand DNA</span>.
+          Refine your <span className="italic">Brand DNA</span>.
         </h1>
         <p className="mt-6 text-base sm:text-lg text-taupe leading-relaxed">
-          Five short steps. Once it's done, every post we generate will sound like you.
+          Refining your DNA ensures the AI always speaks in your voice.
         </p>
       </header>
 
@@ -146,36 +166,36 @@ function OnboardingPage() {
             <div className="mt-8 space-y-6">
               {step === 1 && (
                 <>
-                  <Field label="Your name" placeholder="Von Glass" value={form.displayName} onChange={set("displayName")} />
-                  <Field label="Your niche" placeholder="Holistic facialist" value={form.niche} onChange={set("niche")} />
-                  <Field label="City" placeholder="Paris 3e" value={form.city} onChange={set("city")} />
+                  <Field label="Your name" placeholder="Von Glass" value={form.displayName} onChange={fieldSetter("displayName")} />
+                  <Field label="Your niche" placeholder="Holistic facialist" value={form.niche} onChange={fieldSetter("niche")} />
+                  <Field label="City" placeholder="Paris 3e" value={form.city} onChange={fieldSetter("city")} />
                 </>
               )}
               {step === 2 && (
                 <>
-                  <Field label="Service you want to grow" placeholder="6-week pigmentation protocol" value={form.signatureService} onChange={set("signatureService")} />
-                  <Field label="Other services you offer" placeholder="Signature facial, botanical peel" textarea value={form.otherServices} onChange={set("otherServices")} />
+                  <Field label="Service you want to grow" placeholder="6-week pigmentation protocol" value={form.signatureService} onChange={fieldSetter("signatureService")} />
+                  <Field label="Other services you offer" placeholder="Signature facial, botanical peel" textarea value={form.otherServices} onChange={fieldSetter("otherServices")} />
                 </>
               )}
               {step === 3 && (
                 <>
-                  <Field label="Three words that describe how you speak" placeholder="Calm · Expert · Warm" value={form.voiceWords} onChange={set("voiceWords")} />
-                  <Field label="What you always do in a post" placeholder="Lead with the result the client felt" textarea value={form.alwaysDo} onChange={set("alwaysDo")} />
-                  <Field label="What you never do (comma separated)" placeholder="emojis, discount-led captions" textarea value={form.neverDo} onChange={set("neverDo")} />
+                  <Field label="Three words that describe how you speak" placeholder="Calm · Expert · Warm" value={form.voiceWords} onChange={fieldSetter("voiceWords")} />
+                  <Field label="What you always do in a post" placeholder="Lead with the result the client felt" textarea value={form.alwaysDo} onChange={fieldSetter("alwaysDo")} />
+                  <Field label="What you never do (one per line)" placeholder="use emojis&#10;mention discounts&#10;use slang" textarea value={form.neverDo} onChange={fieldSetter("neverDo")} />
                 </>
               )}
               {step === 4 && (
                 <>
-                  <Field label="Age range" placeholder="32–48" value={form.ageRange} onChange={set("ageRange")} />
-                  <Field label="Cities" placeholder="Paris, Antwerp, Copenhagen" value={form.cities} onChange={set("cities")} />
-                  <Field label="What is she looking for?" placeholder="Quiet expertise — not a quick fix" textarea value={form.idealClient} onChange={set("idealClient")} />
+                  <Field label="Age range" placeholder="32–48" value={form.ageRange} onChange={fieldSetter("ageRange")} />
+                  <Field label="Cities" placeholder="Paris, Antwerp, Copenhagen" value={form.cities} onChange={fieldSetter("cities")} />
+                  <Field label="What is she looking for?" placeholder="Quiet expertise — not a quick fix" textarea value={form.idealClient} onChange={fieldSetter("idealClient")} />
                 </>
               )}
               {step === 5 && (
                 <>
-                  <Field label="Bookings per week (target)" placeholder="18" value={form.bookingsPerWeek} onChange={set("bookingsPerWeek")} />
-                  <Field label="Posts per week" placeholder="4" value={form.postsPerWeek} onChange={set("postsPerWeek")} />
-                  <Field label="Content pillars (comma separated)" placeholder="Results, Education, Behind the scenes, Client stories" value={form.pillars} onChange={set("pillars")} />
+                  <Field label="Bookings per week (target)" placeholder="18" value={form.bookingsPerWeek} onChange={fieldSetter("bookingsPerWeek")} />
+                  <Field label="Posts per week" placeholder="4" value={form.postsPerWeek} onChange={fieldSetter("postsPerWeek")} />
+                  <Field label="Content pillars (comma separated)" placeholder="Results, Education, Behind the scenes, Client stories" value={form.pillars} onChange={fieldSetter("pillars")} />
                 </>
               )}
             </div>

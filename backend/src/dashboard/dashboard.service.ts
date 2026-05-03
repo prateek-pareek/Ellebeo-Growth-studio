@@ -37,7 +37,7 @@ export class DashboardService {
       bookingProgress: {
         current: activeGoal?.currentValue || 0,
         target: activeGoal?.targetValue || 100,
-        percentComplete: activeGoal ? ((activeGoal.currentValue / activeGoal.targetValue) * 100) : 0,
+        percentComplete: (activeGoal && activeGoal.targetValue) ? ((activeGoal.currentValue / activeGoal.targetValue) * 100) : 0,
         daysRemainingInPeriod: 14, // Mock
       },
       upcomingPosts: upcomingPosts.map(p => ({
