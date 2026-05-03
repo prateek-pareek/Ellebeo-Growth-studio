@@ -10,10 +10,14 @@ export class ClientService {
     private eventsGateway: EventsGateway,
   ) {}
 
-  async getClients(tenantId: string) {
+  async getClients(tenantId: string, page = 1, pageSize = 20) {
+    const safePage = Number.isFinite(page) ? Math.max(1, Number(page)) : 1;
+    const safePageSize = Number.isFinite(pageSize) ? Math.min(100, Math.max(1, Number(pageSize))) : 20;
     return this.prisma.client.findMany({
       where: { tenantId, deletedAt: null },
-      orderBy: { lastVisitAt: 'desc' }
+      orderBy: { lastVisitAt: 'desc' },
+      skip: (safePage - 1) * safePageSize,
+      take: safePageSize,
     });
   }
 

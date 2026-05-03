@@ -65,9 +65,9 @@ async function fetchProfile(): Promise<{ profile: ProfileData, technician: Techn
         ]
       },
       technician: {
-        name: `${user.firstName} ${user.lastName}`,
-        handle: `@${user.firstName.toLowerCase()}`,
-        city: user.city || "London",
+        name: user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : "Technician",
+        handle: user.firstName ? `@${String(user.firstName).toLowerCase()}` : "@technician",
+        city: user.city || "Unknown",
         avatar: user.avatarUrl || DEFAULT_TECH.avatar,
       }
     };

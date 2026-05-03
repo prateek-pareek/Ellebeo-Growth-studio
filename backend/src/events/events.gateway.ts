@@ -10,7 +10,7 @@ import { ConfigService } from '@nestjs/config';
 
 @WebSocketGateway({
   cors: {
-    origin: '*', // Adjust to your frontend URL in production
+    origin: (process.env.ALLOWED_ORIGINS || process.env.FRONTEND_URL || '').split(',').map((v) => v.trim()).filter(Boolean),
   },
 })
 export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -24,7 +24,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const token = client.handshake.auth.token || client.handshake.headers['authorization']?.split(' ')[1];
       if (!token) throw new Error('No token');
 
-      const secret = this.configService.get<string>('JWT_SECRET') || 'fallback_secret_for_dev_only';
+      const secret = this.configService.getOrThrow<string>('JWT_ACCESS_SECRET');
       const decoded: any = jwt.verify(token, secret);
 
       const tenantId = decoded.tenantId;

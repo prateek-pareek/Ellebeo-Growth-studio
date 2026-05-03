@@ -108,8 +108,8 @@ export class ContentService {
 
   async exportPack(tenantId: string, id: string) {
     await this.getContentItem(tenantId, id);
-    // Placeholder for zip generation
-    const fakeUrl = `https://s3.aws.com/dummy/export-${id}.zip`;
+    // Placeholder path; retrieval should be done through signed URL generation endpoint.
+    const fakeUrl = `tenants/${tenantId}/exports/${id}/content_pack.zip`;
     return this.prisma.contentItem.update({
       where: { id },
       data: { exportPackUrl: fakeUrl, exportGeneratedAt: new Date() }

@@ -6,16 +6,24 @@ import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { ConfigService } from '@nestjs/config';
+import { createHash } from 'crypto';
 
 @Injectable()
 export class AuthService {
   private readonly saltRounds = 12;
+  private readonly refreshTokenPepper: string;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-  ) {}
+  ) {
+    this.refreshTokenPepper = this.configService.getOrThrow<string>('JWT_REFRESH_SECRET');
+  }
+
+  private hashRefreshToken(token: string): string {
+    return createHash('sha256').update(`${token}:${this.refreshTokenPepper}`).digest('hex');
+  }
 
   async register(registerDto: RegisterDto) {
     const { email, password, businessName, timezone } = registerDto;
@@ -99,12 +107,21 @@ export class AuthService {
   }
 
   async refreshTokens(oldRefreshToken: string, ipAddress?: string, userAgent?: string) {
+    const oldTokenHash = this.hashRefreshToken(oldRefreshToken);
     const storedToken = await this.prisma.refreshToken.findUnique({
-      where: { tokenHash: oldRefreshToken },
+      where: { tokenHash: oldTokenHash },
       include: { user: { include: { tenant: true } } }
     });
 
-    if (!storedToken || storedToken.revokedAt || storedToken.expiresAt < new Date()) {
+    if (!storedToken) {
+      await this.prisma.refreshToken.updateMany({
+        where: { revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      throw new UnauthorizedException('Refresh token reuse detected. Please log in again.');
+    }
+
+    if (storedToken.revokedAt || storedToken.expiresAt < new Date()) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
@@ -118,8 +135,9 @@ export class AuthService {
 
   async logout(refreshToken: string) {
     if (refreshToken) {
+      const tokenHash = this.hashRefreshToken(refreshToken);
       await this.prisma.refreshToken.updateMany({
-        where: { tokenHash: refreshToken },
+        where: { tokenHash },
         data: { revokedAt: new Date() },
       });
     }
@@ -133,13 +151,14 @@ export class AuthService {
     });
 
     const refreshTokenValue = uuidv4();
+    const refreshTokenHash = this.hashRefreshToken(refreshTokenValue);
     const refreshExpires = new Date();
     refreshExpires.setDate(refreshExpires.getDate() + 30); // 30 days
 
     await this.prisma.refreshToken.create({
       data: {
         userId,
-        tokenHash: refreshTokenValue,
+        tokenHash: refreshTokenHash,
         expiresAt: refreshExpires,
         ipAddress,
         userAgent,

@@ -25,6 +25,7 @@ function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [businessName, setBusinessName] = useState("");
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -50,8 +51,9 @@ function AuthPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await api.post('/auth/register', { email, password, businessName });
-      const { accessToken } = res.data.data;
+      await api.post('/auth/register', { email, password, businessName, timezone });
+      const loginRes = await api.post('/auth/login', { email, password });
+      const { accessToken } = loginRes.data.data;
       login(accessToken);
       toast.success("Account created successfully.");
     } catch (error: any) {

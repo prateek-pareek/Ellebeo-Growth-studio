@@ -17,6 +17,7 @@ import { EventsModule } from './events/events.module';
 import { FirebaseModule } from './common/firebase/firebase.module';
 import { CacheModule } from '@nestjs/cache-manager';
 import { TenantContextMiddleware } from './common/middleware/tenant-context.middleware';
+import { validateEnv } from './config/env.validation';
 // import { AiModule } from './ai/ai.module';
 
 @Module({
@@ -24,6 +25,7 @@ import { TenantContextMiddleware } from './common/middleware/tenant-context.midd
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
+      validate: validateEnv,
     }),
     ThrottlerModule.forRoot([{
       ttl: 60000,

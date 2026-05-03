@@ -22,10 +22,14 @@ export class AppointmentService {
     }
   }
 
-  async getAppointments(tenantId: string) {
+  async getAppointments(tenantId: string, page = 1, pageSize = 20) {
+    const safePage = Number.isFinite(page) ? Math.max(1, Number(page)) : 1;
+    const safePageSize = Number.isFinite(pageSize) ? Math.min(100, Math.max(1, Number(pageSize))) : 20;
     return this.prisma.appointment.findMany({
       where: { tenantId, deletedAt: null },
-      orderBy: { appointmentDate: 'desc' }
+      orderBy: { appointmentDate: 'desc' },
+      skip: (safePage - 1) * safePageSize,
+      take: safePageSize,
     });
   }
 
@@ -96,29 +100,42 @@ export class AppointmentService {
   async generateUploadUrl(tenantId: string, appointmentId: string, dto: UploadUrlRequestDto) {
     await this.getAppointment(tenantId, appointmentId);
 
-    const path = `tenants/${tenantId}/appointments/${appointmentId}/${uuidv4()}-${dto.filename}`;
+    const photoType = dto.isBeforePhoto ? 'before' : 'after';
+    const path = `tenants/${tenantId}/appointments/${appointmentId}/${photoType}/${uuidv4()}-${dto.filename}`;
     const file = this.bucket.file(path);
 
     // Generate signed URL for resumable upload (POST/PUT)
     const [uploadUrl] = await file.getSignedUrl({
       version: 'v4',
       action: 'write',
-      expires: Date.now() + 60 * 60 * 1000, // 1 hour
+      expires: Date.now() + 15 * 60 * 1000, // 15 minutes
       contentType: dto.contentType,
     });
 
     return {
       uploadUrl,
       storagePath: path,
-      expiresAt: new Date(Date.now() + 3600 * 1000),
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000),
     };
   }
 
   async confirmUpload(tenantId: string, appointmentId: string, dto: ConfirmUploadDto, isBeforePhoto: boolean) {
     await this.getAppointment(tenantId, appointmentId);
+    const expectedPrefix = `tenants/${tenantId}/appointments/${appointmentId}/`;
+    if (!dto.storagePath.startsWith(expectedPrefix)) {
+      throw new BadRequestException('Invalid storage path for appointment');
+    }
+
+    const file = this.bucket.file(dto.storagePath);
+    const [exists] = await file.exists();
+    if (!exists) {
+      throw new BadRequestException('Uploaded file could not be verified');
+    }
+
+    const [metadata] = await file.getMetadata();
 
     const existing = await this.prisma.imageAsset.findFirst({
-      where: { s3ObjectHash: dto.s3ObjectHash, deletedAt: null } // Column name still s3ObjectHash in schema, keeping for now or renaming logic
+      where: { s3ObjectHash: dto.fileHash, deletedAt: null } // Legacy column name; stores file hash
     });
     if (existing) {
       throw new BadRequestException('Image already exists (duplicate hash)');
@@ -128,13 +145,13 @@ export class AppointmentService {
       data: {
         tenantId,
         appointmentId,
-        s3Key: dto.s3Key, // Column name s3Key in schema, mapping to firebase path
+        s3Key: dto.storagePath, // Legacy column name; stores Firebase storage path
         s3Bucket: this.configService.get<string>('FIREBASE_STORAGE_BUCKET') || '',
-        s3ObjectHash: dto.s3ObjectHash,
-        fileSizeBytes: dto.fileSizeBytes,
+        s3ObjectHash: dto.fileHash,
+        fileSizeBytes: Number(metadata.size || dto.fileSizeBytes || 0),
         isBeforePhoto,
         isAfterPhoto: !isBeforePhoto,
-        uploadValidated: false,
+        uploadValidated: true,
       }
     });
 
