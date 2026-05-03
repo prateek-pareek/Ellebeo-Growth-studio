@@ -60,39 +60,32 @@ function mapCloudRow(dna: any): BrandDnaView {
 
   return {
     ready: true,
-    archetype: dna.aestheticDirection || "Expert",
+    archetype: dna.brandTier || dna.aestheticDirection || "Not set",
     oneLiner: dna.oneLiner || "",
     category: dna.businessName || "",
-    powers: [
-      "AI caption generation",
-      "Campaign planning",
-      "Content pillar mix",
-      "Ideal client targeting",
-      "Voice consistency",
-    ],
-    palette: dna.visualPalette || ["#F5F2ED", "#D8C7B1", "#8C7E6D", "#3E3B35", "#2C2A26"],
-    moodboard: dna.moodboardUrls || [
-      "https://images.unsplash.com/photo-1522335789203-aaa1f9436cae?w=800&h=1000&fit=crop",
-      "https://images.unsplash.com/photo-1560066984-138dadb4c035?w=800&h=800&fit=crop",
-      "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=800&h=800&fit=crop",
-    ],
+    powers: [], // Remove hardcoded powers, should come from business rules or DB if added later
+    palette: [
+      dna.primaryBrandColor,
+      dna.secondaryBrandColor
+    ].filter(Boolean),
+    moodboard: [], // Remove hardcoded moodboard
     pillars: mappedPillars,
     voice: {
       summary: dna.primaryTone || "",
-      do: dna.voiceDo || [],
-      dont: dna.voiceDont || [],
+      do: dna.vocabularyPreferred || [],
+      dont: dna.doNotSay || [],
     },
     idealClient: {
-      age: dna.personaAge || "25–45",
-      cities: dna.personaLocation || "Local area",
-      looksFor: dna.primaryPersona || "",
-      painPoints: [],
+      age: dna.primaryPersona || "",
+      cities: dna.locationCity || "",
+      looksFor: dna.uniqueSellingProposition || "",
+      painPoints: dna.clientPainPoints || [],
       aspirations: [],
     },
     goals: {
       bookingsPerWeek: num("bookings per week"),
       postsPerWeek: num("posts per week"),
-      focusServices: dna.coreSpecialties || [],
+      focusServices: [],
     },
   };
 }

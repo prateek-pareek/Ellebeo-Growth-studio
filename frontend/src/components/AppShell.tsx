@@ -61,17 +61,26 @@ export function AppShell() {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="hidden sm:flex flex-col items-end leading-tight">
-              <span className="text-xs font-medium text-foreground">{user?.tenant?.businessName || user?.email || "Guest"}</span>
-              <span className="text-[10px] text-taupe">{user?.email || "Signed out"}</span>
-            </div>
-            <Link to="/profile" className="size-10 rounded-full bg-nude overflow-hidden ring-1 ring-border flex items-center justify-center">
-              {user ? (
-                <span className="text-sm font-serif italic">{user.email[0].toUpperCase()}</span>
-              ) : (
-                <UserCircle2 className="size-6 text-taupe" />
-              )}
-            </Link>
+            {user ? (
+              <>
+                <div className="hidden sm:flex flex-col items-end leading-tight">
+                  <span className="text-xs font-medium text-foreground">{user?.tenant?.businessName || user?.email}</span>
+                  <span className="text-[10px] text-taupe">{user?.email}</span>
+                </div>
+                <Link to="/profile" className="size-10 rounded-full bg-nude overflow-hidden ring-1 ring-border flex items-center justify-center">
+                  <span className="text-sm font-serif italic">{user.email[0].toUpperCase()}</span>
+                </Link>
+              </>
+            ) : (
+              <div className="flex items-center gap-4">
+                <Link to="/login" className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
+                  Login
+                </Link>
+                <Link to="/signup" className="text-[10px] uppercase tracking-widest bg-foreground text-background px-4 py-2 hover:bg-taupe transition-colors">
+                  Join
+                </Link>
+              </div>
+            )}
           </div>
         </nav>
         <div className="max-w-7xl mx-auto mt-8 border-b hairline" />

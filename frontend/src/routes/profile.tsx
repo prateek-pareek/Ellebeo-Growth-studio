@@ -1,5 +1,8 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useProfile } from "@/lib/providers/profile-provider";
+import { useAuth } from "@/lib/providers/auth-provider";
+import { Button } from "@/components/ui/button";
+import { LogOut } from "lucide-react";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
@@ -14,6 +17,13 @@ export const Route = createFileRoute("/profile")({
 
 function ProfilePage() {
   const { profile, technician, loading } = useProfile();
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate({ to: "/login" });
+  };
 
   if (loading) {
     return (
@@ -35,14 +45,23 @@ function ProfilePage() {
             Small fixes to your marketplace listing — clearer bio, more photos, better service titles — typically lift bookings by 20%+.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="size-14 rounded-full bg-nude overflow-hidden ring-1 ring-border">
-            <img src={technician.avatar} alt={technician.name} className="w-full h-full object-cover" />
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3">
+            <div className="size-14 rounded-full bg-nude overflow-hidden ring-1 ring-border">
+              <img src={technician.avatar} alt={technician.name} className="w-full h-full object-cover" />
+            </div>
+            <div>
+              <p className="font-serif text-lg leading-tight">{technician.name}</p>
+              <p className="text-xs text-taupe">{technician.handle} · {technician.city}</p>
+            </div>
           </div>
-          <div>
-            <p className="font-serif text-lg leading-tight">{technician.name}</p>
-            <p className="text-xs text-taupe">{technician.handle} · {technician.city}</p>
-          </div>
+          <button 
+            onClick={handleLogout}
+            className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground flex items-center gap-2 border hairline px-4 py-3 transition-colors"
+          >
+            <LogOut className="size-3" />
+            Sign out
+          </button>
         </div>
       </header>
 

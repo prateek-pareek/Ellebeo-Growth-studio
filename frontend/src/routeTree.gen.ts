@@ -10,7 +10,9 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TemplatesRouteImport } from './routes/templates'
+import { Route as SignupRouteImport } from './routes/signup'
 import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as GenerateRouteImport } from './routes/generate'
 import { Route as ContentRouteImport } from './routes/content'
 import { Route as CampaignsRouteImport } from './routes/campaigns'
@@ -27,9 +29,19 @@ const TemplatesRoute = TemplatesRouteImport.update({
   path: '/templates',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProfileRoute = ProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GenerateRoute = GenerateRouteImport.update({
@@ -92,7 +104,9 @@ export interface FileRoutesByFullPath {
   '/campaigns': typeof CampaignsRoute
   '/content': typeof ContentRoute
   '/generate': typeof GenerateRoute
+  '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
+  '/signup': typeof SignupRoute
   '/templates': typeof TemplatesRoute
   '/brand/onboarding': typeof BrandOnboardingRoute
   '/consent/$id': typeof ConsentIdRoute
@@ -106,7 +120,9 @@ export interface FileRoutesByTo {
   '/campaigns': typeof CampaignsRoute
   '/content': typeof ContentRoute
   '/generate': typeof GenerateRoute
+  '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
+  '/signup': typeof SignupRoute
   '/templates': typeof TemplatesRoute
   '/brand/onboarding': typeof BrandOnboardingRoute
   '/consent/$id': typeof ConsentIdRoute
@@ -121,7 +137,9 @@ export interface FileRoutesById {
   '/campaigns': typeof CampaignsRoute
   '/content': typeof ContentRoute
   '/generate': typeof GenerateRoute
+  '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
+  '/signup': typeof SignupRoute
   '/templates': typeof TemplatesRoute
   '/brand/onboarding': typeof BrandOnboardingRoute
   '/consent/$id': typeof ConsentIdRoute
@@ -137,7 +155,9 @@ export interface FileRouteTypes {
     | '/campaigns'
     | '/content'
     | '/generate'
+    | '/login'
     | '/profile'
+    | '/signup'
     | '/templates'
     | '/brand/onboarding'
     | '/consent/$id'
@@ -151,7 +171,9 @@ export interface FileRouteTypes {
     | '/campaigns'
     | '/content'
     | '/generate'
+    | '/login'
     | '/profile'
+    | '/signup'
     | '/templates'
     | '/brand/onboarding'
     | '/consent/$id'
@@ -165,7 +187,9 @@ export interface FileRouteTypes {
     | '/campaigns'
     | '/content'
     | '/generate'
+    | '/login'
     | '/profile'
+    | '/signup'
     | '/templates'
     | '/brand/onboarding'
     | '/consent/$id'
@@ -180,7 +204,9 @@ export interface RootRouteChildren {
   CampaignsRoute: typeof CampaignsRoute
   ContentRoute: typeof ContentRoute
   GenerateRoute: typeof GenerateRoute
+  LoginRoute: typeof LoginRoute
   ProfileRoute: typeof ProfileRoute
+  SignupRoute: typeof SignupRoute
   TemplatesRoute: typeof TemplatesRoute
   ConsentIdRoute: typeof ConsentIdRoute
 }
@@ -194,11 +220,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TemplatesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/profile': {
       id: '/profile'
       path: '/profile'
       fullPath: '/profile'
       preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/generate': {
@@ -293,7 +333,9 @@ const rootRouteChildren: RootRouteChildren = {
   CampaignsRoute: CampaignsRoute,
   ContentRoute: ContentRoute,
   GenerateRoute: GenerateRoute,
+  LoginRoute: LoginRoute,
   ProfileRoute: ProfileRoute,
+  SignupRoute: SignupRoute,
   TemplatesRoute: TemplatesRoute,
   ConsentIdRoute: ConsentIdRoute,
 }

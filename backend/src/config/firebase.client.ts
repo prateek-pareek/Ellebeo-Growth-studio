@@ -1,10 +1,11 @@
-// ============================================================================
-// firebase.client.ts — Firebase Admin SDK Initialization
-// ============================================================================
-
 import { getFirebaseApp } from './firebase.config';
+import { getStorage } from 'firebase-admin/storage';
+import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
 
-export const firebaseApp = getFirebaseApp();
-export const firebaseStorage = firebaseApp.storage();
-export const firebaseAuth = firebaseApp.auth();
-export const firebaseFirestore = firebaseApp.firestore();
+const app = getFirebaseApp();
+
+export const firebaseApp = app;
+export const firebaseStorage = app ? getStorage(app) : null;
+export const firebaseAuth = app ? getAuth(app) : null;
+export const firebaseFirestore = app ? getFirestore(app) : null;

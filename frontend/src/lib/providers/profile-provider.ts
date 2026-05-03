@@ -52,22 +52,18 @@ async function fetchProfile(): Promise<{ profile: ProfileData, technician: Techn
     const res = await api.get("/auth/me");
     const user = res.data.data;
     
-    // In a real app, this would come from multiple endpoints or a rich user object
     return {
       profile: {
         ...DEFAULT_PROFILE,
-        completion: user.profileCompletion || 45,
+        completion: user.profileCompletion || 0,
         servicesListed: user.servicesCount || 0,
         photosCount: user.photosCount || 0,
-        suggestions: [
-          { label: "Add more service photos from recent appointments", impact: "High" },
-          { label: "Update your business one-liner to be more specific", impact: "Medium" }
-        ]
+        suggestions: [] // Remove hardcoded suggestions
       },
       technician: {
-        name: user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : "Technician",
-        handle: user.firstName ? `@${String(user.firstName).toLowerCase()}` : "@technician",
-        city: user.city || "Unknown",
+        name: user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : (user.tenant?.businessName || "Technician"),
+        handle: user.firstName ? `@${String(user.firstName).toLowerCase()}` : (user.tenant?.businessName ? `@${user.tenant.businessName.toLowerCase().replace(/\s+/g, '')}` : "@technician"),
+        city: user.tenant?.timezone || "Unknown",
         avatar: user.avatarUrl || DEFAULT_TECH.avatar,
       }
     };

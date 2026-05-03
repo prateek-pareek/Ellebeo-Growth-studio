@@ -9,7 +9,7 @@ import { map } from 'rxjs/operators';
 
 export interface Response<T> {
   success: boolean;
-  data: T;
+  data: T | null;
   meta: {
     timestamp: string;
     requestId: string;
@@ -42,7 +42,7 @@ export class ResponseInterceptor<T> implements NestInterceptor<T, Response<T>> {
   intercept(context: ExecutionContext, next: CallHandler): Observable<Response<T>> {
     const ctx = context.switchToHttp();
     const request = ctx.getRequest();
-    const requestId = request.headers['x-request-id'] || request.id || 'unknown';
+    const requestId = (request.headers['x-request-id'] || request.id || 'unknown') as string;
 
     return next.handle().pipe(
       map((data) => ({

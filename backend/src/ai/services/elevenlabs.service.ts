@@ -61,6 +61,10 @@ export class ElevenLabsService {
       clearTimeout(timeout);
     }
 
+    if (!firebaseStorage) {
+      throw new ElevenLabsError('Firebase Storage is not configured. Cannot upload voiceover.');
+    }
+
     // Upload audio to Firebase Storage
     const storagePath = `voiceovers/${randomUUID()}.mp3`;
     const bucket = firebaseStorage.bucket();
@@ -73,8 +77,6 @@ export class ElevenLabsService {
     });
 
     // Generate a long-lived signed URL or public URL
-    // For simplicity in this layer, we construct the public URL format
-    // Alternatively, file.getSignedUrl({ action: 'read', expires: '03-09-2491' })
     const cdnUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(storagePath)}?alt=media`;
 
     const wordCount = script.split(/\s+/).length;

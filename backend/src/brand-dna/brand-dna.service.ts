@@ -11,7 +11,6 @@ export class BrandDnaService {
       where: { unique_current_brand_dna: { tenantId, isCurrent: true } },
       include: { pillars: true, goals: true }
     });
-    // Don't throw, just return null if not found for initial onboarding
     return dna;
   }
 
@@ -34,9 +33,8 @@ export class BrandDnaService {
           businessName: dto.businessName,
           oneLiner: dto.oneLiner,
           uniqueSellingProposition: dto.uniqueSellingProposition,
-          primaryPersona: dto.primaryPersona,
-          personaAge: dto.personaAge,
-          personaLocation: dto.personaLocation,
+          primaryPersona: dto.primaryPersona || dto.personaAge, // Map age to persona if primary is empty
+          locationCity: dto.personaLocation,
           primaryTone: dto.primaryTone,
           vocabularyPreferred: dto.voiceDo || [],
           doNotSay: dto.voiceDont || [],

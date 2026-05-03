@@ -83,6 +83,10 @@ export class ImagePipelineService {
   // --------------------------------------------------------------------------
 
   private async uploadFromFirebase(storagePath: string, tenantId: string): Promise<string> {
+    if (!firebaseStorage) {
+      throw new ImagePipelineError('Firebase Storage is not configured. Cannot fetch raw image.');
+    }
+
     const bucket = firebaseStorage.bucket();
     const file = bucket.file(storagePath);
 

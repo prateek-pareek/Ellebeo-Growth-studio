@@ -113,6 +113,10 @@ export class ReelAssemblerService {
     const storagePath = `reels/${tenantId}/${jobId}/${randomUUID()}.mp4`;
     await this.downloadAndUploadToFirebase(renderResult.url, storagePath);
 
+    if (!firebaseStorage) {
+      throw new ReelAssemblerError('Firebase Storage is not configured. Cannot generate CDN URL.');
+    }
+
     const bucket = firebaseStorage.bucket();
     const cdnUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(storagePath)}?alt=media`;
 
@@ -153,6 +157,10 @@ export class ReelAssemblerService {
 
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+
+    if (!firebaseStorage) {
+      throw new ReelAssemblerError('Firebase Storage is not configured. Cannot save video.');
+    }
 
     const bucket = firebaseStorage.bucket();
     const file = bucket.file(storagePath);

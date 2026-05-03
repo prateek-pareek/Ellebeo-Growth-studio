@@ -5,7 +5,6 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsUrl,
   Max,
   Min,
   validateSync,
@@ -19,64 +18,55 @@ enum AppEnv {
 
 class EnvironmentVariables {
   @IsInt() @Min(1) @Max(65535)
-  APP_PORT!: number;
+  @IsOptional()
+  PORT?: number;
 
   @IsEnum(AppEnv)
-  APP_ENV!: AppEnv;
+  @IsOptional()
+  NODE_ENV?: AppEnv;
 
-  @IsUrl()
-  APP_URL!: string;
-
-  @IsUrl()
-  FRONTEND_URL!: string;
-
-  @IsString() @IsNotEmpty()
-  ALLOWED_ORIGINS!: string;
+  @IsString() @IsOptional()
+  FRONTEND_URL?: string;
 
   @IsString() @IsNotEmpty()
   DATABASE_URL!: string;
 
-  @IsInt() @Min(1)
-  DATABASE_POOL_MIN!: number;
-
-  @IsInt() @Min(1)
-  DATABASE_POOL_MAX!: number;
-
   @IsString() @IsNotEmpty()
-  REDIS_URL!: string;
+  REDIS_HOST!: string;
+
+  @IsInt() @Min(1) @Max(65535)
+  @IsOptional()
+  REDIS_PORT?: number;
 
   @IsString() @IsNotEmpty()
   REDIS_PASSWORD!: string;
 
-  @IsString() @IsNotEmpty()
-  JWT_ACCESS_SECRET!: string;
-
-  @IsString() @IsNotEmpty()
-  JWT_REFRESH_SECRET!: string;
-
-  @IsString() @IsNotEmpty()
-  JWT_ACCESS_EXPIRY!: string;
-
-  @IsString() @IsNotEmpty()
-  JWT_REFRESH_EXPIRY!: string;
-
-  @IsInt() @Min(8) @Max(16)
-  BCRYPT_ROUNDS!: number;
-
-  @IsString() @IsNotEmpty()
-  FIREBASE_PROJECT_ID!: string;
-
-  @IsString() @IsNotEmpty()
-  FIREBASE_CLIENT_EMAIL!: string;
-
-  @IsString() @IsNotEmpty()
-  FIREBASE_PRIVATE_KEY!: string;
-
-  @IsString() @IsNotEmpty()
-  FIREBASE_STORAGE_BUCKET!: string;
+  @IsOptional() @IsString()
+  OPENAI_API_KEY?: string;
 
   @IsOptional() @IsString()
-  FIREBASE_DATABASE_URL?: string;
+  ANTHROPIC_API_KEY?: string;
+
+  @IsOptional() @IsString()
+  FIREBASE_PROJECT_ID?: string;
+
+  @IsOptional() @IsString()
+  FIREBASE_CLIENT_EMAIL?: string;
+
+  @IsOptional() @IsString()
+  FIREBASE_PRIVATE_KEY?: string;
+
+  @IsOptional() @IsString()
+  FIREBASE_STORAGE_BUCKET?: string;
+
+  @IsOptional() @IsString()
+  CLOUDINARY_CLOUD_NAME?: string;
+
+  @IsOptional() @IsString()
+  CLOUDINARY_API_KEY?: string;
+
+  @IsOptional() @IsString()
+  CLOUDINARY_API_SECRET?: string;
 }
 
 export function validateEnv(config: Record<string, unknown>): EnvironmentVariables {
