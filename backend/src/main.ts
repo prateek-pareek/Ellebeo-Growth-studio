@@ -12,8 +12,20 @@ async function bootstrap() {
 
   // Security Middleware
   app.use(helmet());
+  const allowedOrigins = [
+    process.env.FRONTEND_URL || 'http://localhost:5173',
+    process.env.ADMIN_PORTAL_URL || 'http://localhost:3000',
+  ].filter(Boolean);
+
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+      // Allow server-to-server requests (no origin) and listed origins
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS: origin ${origin} not allowed`));
+      }
+    },
     credentials: true,
   });
   

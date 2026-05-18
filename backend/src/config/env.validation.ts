@@ -28,6 +28,9 @@ class EnvironmentVariables {
   @IsString() @IsOptional()
   FRONTEND_URL?: string;
 
+  @IsString() @IsOptional()
+  ADMIN_PORTAL_URL?: string;
+
   @IsString() @IsNotEmpty()
   DATABASE_URL!: string;
 

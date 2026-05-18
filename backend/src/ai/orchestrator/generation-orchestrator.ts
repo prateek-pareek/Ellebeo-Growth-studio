@@ -320,7 +320,7 @@ export class GenerationOrchestrator {
         altText: captionResult?.altText ?? null,
         estimatedReadTime: captionResult?.estimatedReadTime ?? null,
         confidenceScore: captionResult?.brandVoiceConfidenceScore ?? null,
-        generationOptions: generationOptionsResult as unknown as Prisma.InputJsonValue,
+        generationOptions: (Array.isArray(generationOptionsResult) ? generationOptionsResult : [generationOptionsResult]) as unknown as Prisma.InputJsonValue[],
         platformVariants: platformVariants
           ? (platformVariants as unknown as Prisma.InputJsonValue)
           : Prisma.JsonNull,
