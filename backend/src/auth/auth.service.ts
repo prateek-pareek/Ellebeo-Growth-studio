@@ -143,6 +143,22 @@ export class AuthService {
     }
   }
 
+  async getProfile(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { tenant: true },
+    });
+    if (!user) throw new UnauthorizedException('User not found');
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      tenant: user.tenant
+        ? { id: user.tenant.id, businessName: user.tenant.businessName }
+        : null,
+    };
+  }
+
   private async generateTokens(userId: string, role: string, tenantId?: string, ipAddress?: string, userAgent?: string) {
     const payload = { sub: userId, role, tenantId };
 

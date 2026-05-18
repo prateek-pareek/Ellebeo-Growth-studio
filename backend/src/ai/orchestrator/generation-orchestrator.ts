@@ -128,7 +128,7 @@ export class GenerationOrchestrator {
       businessGoal: payload.businessGoal,
       goldenExamples: payload.goldenExamples,
       platform: primaryPlatform,
-      serviceCategory: appointment?.serviceCategory,
+      serviceCategory: appointment?.serviceCategory as import('../config/service-guardrails').ServiceCategory | undefined,
       masterPromptText: masterPrompt?.systemPrompt,
     });
 

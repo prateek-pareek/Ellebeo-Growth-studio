@@ -27,10 +27,16 @@ const DESKTOP_NAV: Array<{ to: string; label: string }> = [
   { to: "/profile", label: "Profile" },
 ];
 
+const AUTH_ROUTES = ['/login', '/signup', '/auth'];
+
 export function AppShell() {
   const { pathname } = useLocation();
   const { user } = useAuth();
-  
+
+  if (AUTH_ROUTES.includes(pathname)) {
+    return <Outlet />;
+  }
+
   return (
     <div className="min-h-dvh bg-background text-foreground">
       <header className="px-6 lg:px-12 pt-8 pb-6">
@@ -68,7 +74,7 @@ export function AppShell() {
                   <span className="text-[10px] text-taupe">{user?.email}</span>
                 </div>
                 <Link to="/profile" className="size-10 rounded-full bg-nude overflow-hidden ring-1 ring-border flex items-center justify-center">
-                  <span className="text-sm font-serif italic">{user.email[0].toUpperCase()}</span>
+                  <span className="text-sm font-serif italic">{(user.email?.[0] ?? '?').toUpperCase()}</span>
                 </Link>
               </>
             ) : (

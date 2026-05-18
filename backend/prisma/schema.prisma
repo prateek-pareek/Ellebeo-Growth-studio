@@ -11,13 +11,6 @@ datasource db {
 
 // --- ELLE.BE.O PLATFORM MODELS ---
 
-enum UserRole {
-  technician
-  admin
-  super_admin
-  @@schema("platform")
-}
-
 enum SubscriptionTier {
   free
   standard
@@ -41,20 +34,6 @@ enum ConsentStatus {
   @@schema("platform")
 }
 
-enum ServiceCategory {
-  hair_colour
-  hair_cut_style
-  hair_extensions
-  laser_treatments
-  injectables_cosmetic
-  skin_treatments
-  nail_services
-  makeup
-  lashes_brows
-  massage_body
-  general
-  @@schema("platform")
-}
 
 enum PromptCategory {
   general
@@ -142,10 +121,10 @@ enum BrandTier {
 }
 
 model User {
-  id                  String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email               String    @unique @db.VarChar(320)
   passwordHash        String    @map("password_hash") @db.VarChar(255)
-  role                UserRole  @default(technician)
+  role                String    @default("technician") @db.VarChar(50)
   emailVerified       Boolean   @default(false) @map("email_verified")
   emailVerifiedAt     DateTime? @map("email_verified_at") @db.Timestamptz
   lastLoginAt         DateTime? @map("last_login_at") @db.Timestamptz
@@ -167,7 +146,7 @@ model User {
 }
 
 model Tenant {
-  id                    String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id                    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId                String           @unique @map("user_id") @db.Uuid
   businessName          String           @map("business_name") @db.VarChar(255)
   displayName           String?          @map("display_name") @db.VarChar(255)
@@ -218,7 +197,7 @@ model Tenant {
 }
 
 model MasterPrompt {
-  id           String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   category     PromptCategory
   systemPrompt String         @map("system_prompt") @db.Text
   isActive     Boolean        @default(true) @map("is_active")
@@ -231,7 +210,7 @@ model MasterPrompt {
 }
 
 model BrandDNA {
-  id                       String          @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id                       String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId                 String          @map("tenant_id") @db.Uuid
   version                  Int             @default(1)
   isCurrent                Boolean         @default(true) @map("is_current")
@@ -274,7 +253,7 @@ model BrandDNA {
 }
 
 model BrandPillar {
-  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId    String   @map("tenant_id") @db.Uuid
   label       String   @db.VarChar(255)
   description String?  @db.Text
@@ -293,7 +272,7 @@ model BrandPillar {
 }
 
 model BrandGoal {
-  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId    String   @map("tenant_id") @db.Uuid
   label        String   @db.VarChar(255)
   description  String?  @db.Text
@@ -311,7 +290,7 @@ model BrandGoal {
 }
 
 model Client {
-  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId    String   @map("tenant_id") @db.Uuid
   firstName   String   @map("first_name") @db.VarChar(255)
   lastName    String   @map("last_name") @db.VarChar(255)
@@ -336,7 +315,7 @@ model Client {
 }
 
 model ConsentRecord {
-  id                     String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id                     String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId               String        @map("tenant_id") @db.Uuid
   clientId               String        @map("client_id") @db.Uuid
   appointmentId          String?       @unique @map("appointment_id") @db.Uuid
@@ -372,11 +351,11 @@ model ConsentRecord {
 }
 
 model Appointment {
-  id              String          @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId        String          @map("tenant_id") @db.Uuid
   clientId        String          @map("client_id") @db.Uuid
   consentRecordId String?         @unique @map("consent_record_id") @db.Uuid
-  serviceCategory ServiceCategory @map("service_category")
+  serviceCategory String          @map("service_category") @db.VarChar(100)
   serviceName     String          @map("service_name") @db.VarChar(255)
   appointmentDate DateTime        @map("appointment_date") @db.Timestamptz
   appointmentTime DateTime?       @map("appointment_time") @db.Timestamptz
@@ -406,7 +385,7 @@ model Appointment {
 }
 
 model ImageAsset {
-  id                 String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId           String    @map("tenant_id") @db.Uuid
   appointmentId      String?   @map("appointment_id") @db.Uuid
   contentItemId      String?   @map("content_item_id") @db.Uuid
@@ -435,7 +414,7 @@ model ImageAsset {
 }
 
 model GoldenExample {
-  id           String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId     String       @map("tenant_id") @db.Uuid
   captionText  String       @map("caption_text") @db.Text
   hashtags     String[]
@@ -453,7 +432,7 @@ model GoldenExample {
 }
 
 model BusinessGoal {
-  id           String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id           String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId     String           @map("tenant_id") @db.Uuid
   goalType     BusinessGoalType @map("goal_type")
   description  String?          @db.Text
@@ -472,7 +451,7 @@ model BusinessGoal {
 }
 
 model GenerationJob {
-  id               String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId         String   @map("tenant_id") @db.Uuid
   appointmentId    String   @map("appointment_id") @db.Uuid
   clientId         String   @map("client_id") @db.Uuid
@@ -511,7 +490,7 @@ model GenerationJob {
 }
 
 model ContentItem {
-  id              String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId        String        @map("tenant_id") @db.Uuid
   appointmentId   String        @map("appointment_id") @db.Uuid
   generationJobId String?       @map("generation_job_id") @db.Uuid
@@ -566,7 +545,7 @@ model ContentItem {
 }
 
 model SocialAccount {
-  id                String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId          String              @map("tenant_id") @db.Uuid
   platform          String              @db.VarChar(100)
   platformAccountId String?             @map("platform_account_id") @db.VarChar(255)
@@ -596,7 +575,7 @@ model SocialAccount {
 }
 
 model ScheduledPost {
-  id              String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId        String        @map("tenant_id") @db.Uuid
   contentItemId   String        @map("content_item_id") @db.Uuid
   socialAccountId String        @map("social_account_id") @db.Uuid
@@ -632,7 +611,7 @@ model ScheduledPost {
 }
 
 model Campaign {
-  id                  String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id                  String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId            String           @map("tenant_id") @db.Uuid
   name                String           @db.VarChar(500)
   description         String?          @db.Text
@@ -656,7 +635,7 @@ model Campaign {
 }
 
 model GenerationAuditLog {
-  id                      String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id                      String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId                String           @map("tenant_id") @db.Uuid
   jobId                   String?          @map("job_id") @db.Uuid
   timestamp               DateTime         @default(now()) @db.Timestamptz
@@ -667,7 +646,7 @@ model GenerationAuditLog {
   outputHardFailures      String[]         @map("output_hard_failures")
   outputAutoCorrections   String[]         @map("output_auto_corrections")
   modelUsed               String?          @map("model_used") @db.VarChar(100)
-  serviceCategory         ServiceCategory? @map("service_category")
+  serviceCategory         String?          @map("service_category") @db.VarChar(100)
   flagTriggered           Boolean          @default(false) @map("flag_triggered")
   flagReasons             String[]         @map("flag_reasons")
   requiredRegeneration    Boolean          @default(false) @map("required_regeneration")
@@ -682,7 +661,7 @@ model GenerationAuditLog {
 }
 
 model GenerationFingerprint {
-  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId    String   @map("tenant_id") @db.Uuid
   fingerprint String   @db.VarChar(64)
   contentId   String?  @map("content_id") @db.Uuid
@@ -698,7 +677,7 @@ model GenerationFingerprint {
 }
 
 model FailedJob {
-  id               String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   originalJobId    String    @map("original_job_id") @db.Uuid
   tenantId         String    @map("tenant_id") @db.Uuid
   jobPayload       Json      @map("job_payload")
@@ -722,7 +701,7 @@ model FailedJob {
 }
 
 model RefreshToken {
-  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId      String    @map("user_id") @db.Uuid
   tokenHash   String    @unique @map("token_hash") @db.VarChar(255)
   expiresAt   DateTime  @map("expires_at") @db.Timestamptz

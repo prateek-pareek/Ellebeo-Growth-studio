@@ -84,11 +84,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Get('me')
   async getProfile(@Req() req: any) {
-    // The user object is attached by JwtStrategy
-    return {
-      userId: req.user.userId,
-      tenantId: req.user.tenantId,
-    };
+    return this.authService.getProfile(req.user.userId);
   }
 
   private setRefreshTokenCookie(res: Response, token: string) {
