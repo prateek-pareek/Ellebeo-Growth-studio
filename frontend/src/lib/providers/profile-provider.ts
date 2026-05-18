@@ -19,6 +19,7 @@ export type TechnicianData = {
   handle: string;
   city: string;
   avatar: string;
+  hasGrowthStudioAccess: boolean;
 };
 
 export type UseProfileResult = {
@@ -45,6 +46,7 @@ const DEFAULT_TECH: TechnicianData = {
   handle: "@handle",
   city: "Unknown",
   avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&h=200&fit=crop",
+  hasGrowthStudioAccess: false,
 };
 
 async function fetchProfile(): Promise<{ profile: ProfileData, technician: TechnicianData }> {
@@ -65,6 +67,7 @@ async function fetchProfile(): Promise<{ profile: ProfileData, technician: Techn
         handle: user.firstName ? `@${String(user.firstName).toLowerCase()}` : (user.tenant?.businessName ? `@${user.tenant.businessName.toLowerCase().replace(/\s+/g, '')}` : "@technician"),
         city: user.tenant?.timezone || "Unknown",
         avatar: user.avatarUrl || DEFAULT_TECH.avatar,
+        hasGrowthStudioAccess: user.tenant?.hasGrowthStudioAccess || false,
       }
     };
   } catch (error) {

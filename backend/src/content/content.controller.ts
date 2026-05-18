@@ -29,6 +29,11 @@ export class ContentController {
     return this.contentService.rejectContent(req.user.tenantId, id);
   }
 
+  @Post(':id/select-option')
+  selectOption(@Req() req: any, @Param('id') id: string, @Body() dto: { optionIndex: number }) {
+    return this.contentService.selectOption(req.user.tenantId, id, dto);
+  }
+
   @Post(':id/rate')
   rateContent(@Req() req: any, @Param('id') id: string, @Body() dto: RateContentDto) {
     return this.contentService.rateContent(req.user.tenantId, id, dto);

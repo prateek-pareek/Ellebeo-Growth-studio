@@ -65,6 +65,7 @@ export class GenerationOrchestrator {
     // Track partial results for partial success support
     let visionResult: VisionAnalysisResult | null = null;
     let captionResult: CaptionGenerationResult | null = null;
+    let generationOptionsResult: (CaptionGenerationResult & { generatedBy: string })[] = [];
     let reelScriptResult: ReelScriptResult | null = null;
     let platformVariants: PlatformVariantResult[] | null = null;
 
@@ -104,6 +105,22 @@ export class GenerationOrchestrator {
     await this.transitionState(jobId, 'processing_vision', 'building_prompt');
     await this.progressEmitter.emit(jobId, tenantId, 'building_prompt');
 
+    // Fetch appointment to determine service category mapping
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id: payload.appointmentId },
+      select: { serviceCategory: true }
+    });
+
+    const isMedical = appointment?.serviceCategory === 'injectables_cosmetic' || 
+                      appointment?.serviceCategory === 'laser_treatments';
+    const category = isMedical ? 'medical_aesthetics' : 'general';
+    
+    // Fetch active MasterPrompt based on mapped category
+    const masterPrompt = await this.prisma.masterPrompt.findFirst({
+      where: { category, isActive: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
     const primaryPlatform = generationOptions.platform[0] ?? 'instagram';
     const assembledPrompt = await this.promptBuilder.assembleGenerationPrompt({
       brandDNA,
@@ -111,6 +128,8 @@ export class GenerationOrchestrator {
       businessGoal: payload.businessGoal,
       goldenExamples: payload.goldenExamples,
       platform: primaryPlatform,
+      serviceCategory: appointment?.serviceCategory,
+      masterPromptText: masterPrompt?.systemPrompt,
     });
 
     // ── Step 3: Caption Generation ───────────────────────────────────────────
@@ -125,12 +144,14 @@ export class GenerationOrchestrator {
     modelUsed = `${llmConfig.provider}/${llmConfig.modelId}`;
 
     try {
-      captionResult = await this.captionChain.generate({
+      const multiResult = await this.captionChain.generateMultipleOptions({
         assembledPrompt,
-        llmConfig,
         brandDNABlacklist: brandDNA.blacklistedWords,
         allowRetry: true,
       });
+      captionResult = multiResult.primary;
+      generationOptionsResult = multiResult.options;
+      
       componentStatus.caption = 'completed';
       const validation = await this.outputValidator.validate(
         captionResult.caption,
@@ -216,6 +237,7 @@ export class GenerationOrchestrator {
       totalTokensIn,
       totalTokensOut,
       processingMs,
+      generationOptionsResult,
     });
 
     // ── Step 7: Final State Transition ────────────────────────────────────────
@@ -276,8 +298,9 @@ export class GenerationOrchestrator {
     totalTokensIn: number;
     totalTokensOut: number;
     processingMs: number;
+    generationOptionsResult: (CaptionGenerationResult & { generatedBy: string })[];
   }): Promise<string> {
-    const { payload, captionResult, platformVariants, reelScriptResult, componentStatus } = params;
+    const { payload, captionResult, platformVariants, reelScriptResult, componentStatus, generationOptionsResult } = params;
     const { v4: uuidv4 } = await import('uuid');
     const contentItemId = uuidv4();
 
@@ -297,6 +320,7 @@ export class GenerationOrchestrator {
         altText: captionResult?.altText ?? null,
         estimatedReadTime: captionResult?.estimatedReadTime ?? null,
         confidenceScore: captionResult?.brandVoiceConfidenceScore ?? null,
+        generationOptions: generationOptionsResult as unknown as Prisma.InputJsonValue,
         platformVariants: platformVariants
           ? (platformVariants as unknown as Prisma.InputJsonValue)
           : Prisma.JsonNull,

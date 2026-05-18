@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { api } from "@/lib/api";
 import { useAppointments, type Appointment } from "@/lib/providers/appointments-provider";
 import { useBrandDna, type BrandDnaView } from "@/lib/providers/brand-dna-provider";
+import { useProfile } from "@/lib/providers/profile-provider";
 import { z } from "zod";
 import { toast } from "sonner";
 
@@ -54,10 +55,20 @@ function GeneratePage() {
     : null;
   const idMissing = !!requestedId && !requestedMatch && !loading;
 
+  const { profile, technician, loading: profileLoading } = useProfile();
+  
   const [appointment, setAppointment] = useState<Appointment | null>(requestedMatch);
   const [step, setStep] = useState<Step>(requestedMatch ? "consent" : "select");
   const [goal, setGoal] = useState<Goal>("showcase");
   const [format, setFormat] = useState<Format>("Carousel");
+  
+  const [showPaywall, setShowPaywall] = useState(false);
+
+  useEffect(() => {
+    if (!profileLoading && !technician.hasGrowthStudioAccess) {
+      setShowPaywall(true);
+    }
+  }, [profileLoading, technician.hasGrowthStudioAccess]);
   
   const [generating, setGenerating] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
@@ -139,10 +150,26 @@ function GeneratePage() {
     }
   };
 
-  if (loading) return <div className="p-20 text-center text-taupe italic">Loading appointments...</div>;
+  if (loading || profileLoading) return <div className="p-20 text-center text-taupe italic">Loading...</div>;
 
   return (
-    <div>
+    <div className="relative">
+      {showPaywall && (
+        <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border hairline p-8 max-w-md w-full text-center shadow-xl">
+            <h2 className="font-serif text-3xl mb-4 text-foreground">Upgrade to Growth Studio</h2>
+            <p className="text-taupe mb-8 text-sm leading-relaxed">
+              Unlock AI-powered content generation, automated captions, and reels tailored to your exact Brand DNA.
+            </p>
+            <button className="w-full bg-foreground text-offwhite px-6 py-4 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors mb-4">
+              Unlock Now
+            </button>
+            <Link to="/" className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
+              Go Back
+            </Link>
+          </div>
+        </div>
+      )}
       <header className="mt-6 lg:mt-10 mb-8 max-w-[68ch]">
         <div className="flex items-center gap-3 mb-5">
           <p className="eyebrow">AI generation</p>
@@ -470,17 +497,31 @@ function FormatStep({
 
 function ReviewStep({ generating, backendVariants }: any) {
   if (generating) return <div className="p-20 text-center italic text-taupe">AI is drafting your posts...</div>;
-  if (!backendVariants) return <div className="p-20 text-center italic text-taupe">No variants generated.</div>;
+  if (!backendVariants || backendVariants.length === 0) return <div className="p-20 text-center italic text-taupe">No variants generated.</div>;
+
+  const contentItem = backendVariants[0];
+  const options = contentItem.generationOptions || [contentItem];
 
   return (
     <div className="space-y-10">
-      {backendVariants.map((v: any, i: number) => (
+      {options.map((opt: any, i: number) => (
         <article key={i} className="artifact p-8">
-           <p className="eyebrow mb-4">Option {i + 1}</p>
-           <p className="text-sm leading-relaxed mb-6 whitespace-pre-wrap">{v.caption}</p>
+           <p className="eyebrow mb-4">Option {i + 1} {opt.generatedBy ? `— ${opt.generatedBy}` : ''}</p>
+           <p className="text-sm leading-relaxed mb-6 whitespace-pre-wrap">{opt.caption}</p>
            <div className="flex gap-2">
-                <button className="bg-foreground text-offwhite px-4 py-2 text-[10px] uppercase tracking-widest">Approve & Schedule</button>
-                <button className="border hairline px-4 py-2 text-[10px] uppercase tracking-widest">Edit</button>
+                <button 
+                  onClick={async () => {
+                    try {
+                      await api.post(`/content/${contentItem.id}/select-option`, { optionIndex: i });
+                      toast.success("Option selected and saved!");
+                    } catch (e) {
+                      toast.error("Failed to select option");
+                    }
+                  }}
+                  className="bg-foreground text-offwhite px-4 py-2 text-[10px] uppercase tracking-widest"
+                >
+                  Select This Version
+                </button>
            </div>
         </article>
       ))}

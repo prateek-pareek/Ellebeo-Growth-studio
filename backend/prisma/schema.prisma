@@ -56,6 +56,12 @@ enum ServiceCategory {
   @@schema("platform")
 }
 
+enum PromptCategory {
+  general
+  medical_aesthetics
+  @@schema("platform")
+}
+
 enum BusinessGoalType {
   attract_new_clients
   fill_quiet_days
@@ -169,6 +175,7 @@ model Tenant {
   subscriptionStartedAt DateTime?        @map("subscription_started_at") @db.Timestamptz
   subscriptionExpiresAt DateTime?        @map("subscription_expires_at") @db.Timestamptz
   status                TenantStatus     @default(active)
+  hasGrowthStudioAccess Boolean          @default(false) @map("has_growth_studio_access")
   generationRestricted  Boolean          @default(false) @map("generation_restricted")
   generationSuspended   Boolean          @default(false) @map("generation_suspended")
   abuseFlagCount        Int              @default(0) @map("abuse_flag_count")
@@ -207,6 +214,19 @@ model Tenant {
   @@index([status])
   @@index([subscriptionTier])
   @@map("tenants")
+  @@schema("platform")
+}
+
+model MasterPrompt {
+  id           String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  category     PromptCategory
+  systemPrompt String         @map("system_prompt") @db.Text
+  isActive     Boolean        @default(true) @map("is_active")
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([category, isActive])
+  @@map("master_prompts")
   @@schema("platform")
 }
 
@@ -506,6 +526,8 @@ model ContentItem {
   estimatedReadTime Int?        @map("estimated_read_time")
   confidenceScore Float?        @map("confidence_score")
   platformVariants Json?        @map("platform_variants")
+  generationOptions Json[]      @default([]) @map("generation_options")
+  selectedModel   String?       @map("selected_model") @db.VarChar(100)
   hashtags              String[]
   callToAction          String?       @map("call_to_action") @db.Text
   voiceoverUrl          String?       @map("voiceover_url") @db.VarChar(2000)

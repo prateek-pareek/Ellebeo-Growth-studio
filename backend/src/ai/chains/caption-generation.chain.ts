@@ -81,6 +81,45 @@ export class CaptionGenerationChain {
   }
 
   // --------------------------------------------------------------------------
+  // Run multiple models in parallel to generate options
+  // --------------------------------------------------------------------------
+
+  async generateMultipleOptions(params: {
+    assembledPrompt: AssembledPrompt;
+    brandDNABlacklist: string[];
+    allowRetry?: boolean;
+  }): Promise<{ primary: CaptionGenerationResult; options: (CaptionGenerationResult & { generatedBy: string })[] }> {
+    const { assembledPrompt, brandDNABlacklist, allowRetry = true } = params;
+
+    const modelConfigs: LLMConfig[] = [
+      { provider: 'openai', modelId: 'gpt-4o-mini', temperature: 0.75, maxTokens: 1024, timeoutMs: 30000, systemPromptCacheKey: null },
+      { provider: 'openai', modelId: 'gpt-4o', temperature: 0.7, maxTokens: 1024, timeoutMs: 45000, systemPromptCacheKey: null },
+      { provider: 'anthropic', modelId: 'claude-3-5-sonnet-20241022', temperature: 0.72, maxTokens: 1024, timeoutMs: 45000, systemPromptCacheKey: null }
+    ];
+
+    const promises = modelConfigs.map(config => 
+      this.generate({ assembledPrompt, llmConfig: config, brandDNABlacklist, allowRetry })
+        .then(result => ({ ...result, generatedBy: config.modelId }))
+        .catch(err => {
+          console.error(`[CaptionGenerationChain] Model ${config.modelId} failed:`, err);
+          return null;
+        })
+    );
+
+    const results = await Promise.all(promises);
+    const validResults = results.filter(r => r !== null) as (CaptionGenerationResult & { generatedBy: string })[];
+
+    if (validResults.length === 0) {
+      throw new Error("All models failed to generate a caption.");
+    }
+
+    return {
+      primary: validResults[0],
+      options: validResults
+    };
+  }
+
+  // --------------------------------------------------------------------------
   // Internal LLM call
   // --------------------------------------------------------------------------
 

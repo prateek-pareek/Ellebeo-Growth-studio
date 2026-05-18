@@ -67,6 +67,31 @@ export class ContentService {
     });
   }
 
+  async selectOption(tenantId: string, id: string, dto: { optionIndex: number }) {
+    const item = await this.getContentItem(tenantId, id);
+    const options = item.generationOptions as any[];
+
+    if (!options || !options[dto.optionIndex]) {
+      throw new NotFoundException('Invalid option index');
+    }
+
+    const selected = options[dto.optionIndex];
+
+    return this.prisma.contentItem.update({
+      where: { id },
+      data: {
+        caption: selected.caption,
+        hookSentence: selected.hookSentence,
+        callToAction: selected.callToAction,
+        hashtags: selected.hashtags,
+        altText: selected.altText,
+        estimatedReadTime: selected.estimatedReadTime,
+        confidenceScore: selected.brandVoiceConfidenceScore,
+        selectedModel: selected.generatedBy,
+      }
+    });
+  }
+
   async rateContent(tenantId: string, id: string, dto: RateContentDto) {
     await this.getContentItem(tenantId, id);
     

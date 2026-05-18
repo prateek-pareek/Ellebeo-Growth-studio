@@ -46,14 +46,18 @@ export class PromptBuilder {
     goldenExamples: GoldenExample[];
     platform: SocialPlatform;
     serviceCategory?: ServiceCategory;
+    masterPromptText?: string;
   }): Promise<AssembledPrompt> {
-    const { brandDNA, visionResult, businessGoal, goldenExamples, platform, serviceCategory = 'general' } = params;
+    const { brandDNA, visionResult, businessGoal, goldenExamples, platform, serviceCategory = 'general', masterPromptText } = params;
 
     const { brandDNAFragment, brandDNACacheHit } = await this.getBrandDNAFragment(brandDNA);
     const { goldenExamplesFragment, goldenExamplesCacheHit } =
       await this.getGoldenExamplesFragment(brandDNA.tenantId, brandDNA.version, goldenExamples);
 
-    const systemPrompt = this.buildSystemPrompt(brandDNAFragment);
+    const systemPrompt = masterPromptText 
+      ? this.buildDynamicSystemPrompt(masterPromptText, brandDNAFragment) 
+      : this.buildSystemPrompt(brandDNAFragment);
+      
     const visionSection = visionResult ? this.buildVisionSection(visionResult) : '';
     const goalSection = GOAL_FRAMING[businessGoal] ?? 'Generate engaging content.';
     const platformSection = PLATFORM_RULES[platform];
@@ -135,6 +139,18 @@ Return JSON with the same structure as the original caption.`;
   private buildSystemPrompt(brandDNAFragment: string): string {
     return `You are a specialist social media copywriter for beauty and wellness technicians.
 Your ONLY job is to write content that sounds EXACTLY like the specific technician described below.
+
+${brandDNAFragment}
+
+CRITICAL RULES:
+- Never write generic AI phrases like "luxurious", "transformative experience", "indulge in"
+- Never use any word from the Blacklisted Words list
+- Always write in first person as the technician
+- Return ONLY valid JSON — no markdown, no explanation, no preamble`;
+  }
+
+  private buildDynamicSystemPrompt(masterPromptText: string, brandDNAFragment: string): string {
+    return `${masterPromptText}
 
 ${brandDNAFragment}
 

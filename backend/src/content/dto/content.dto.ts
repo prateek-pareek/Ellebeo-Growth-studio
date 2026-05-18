@@ -75,3 +75,8 @@ export class RateContentDto {
   @IsEnum(ToneRating)
   rating: ToneRating;
 }
+
+export class SelectOptionDto {
+  @IsNumber()
+  optionIndex: number;
+}
