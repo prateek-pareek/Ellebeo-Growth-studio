@@ -154,7 +154,13 @@ export class AuthService {
       email: user.email,
       role: user.role,
       tenant: user.tenant
-        ? { id: user.tenant.id, businessName: user.tenant.businessName }
+        ? {
+            id: user.tenant.id,
+            businessName: user.tenant.businessName,
+            hasGrowthStudioAccess: user.tenant.hasGrowthStudioAccess,
+            subscriptionTier: user.tenant.subscriptionTier,
+            status: user.tenant.status,
+          }
         : null,
     };
   }

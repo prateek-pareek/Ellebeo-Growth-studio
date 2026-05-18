@@ -25,12 +25,21 @@ export class AppointmentService {
   async getAppointments(tenantId: string, page = 1, pageSize = 20) {
     const safePage = Number.isFinite(page) ? Math.max(1, Number(page)) : 1;
     const safePageSize = Number.isFinite(pageSize) ? Math.min(100, Math.max(1, Number(pageSize))) : 20;
-    return this.prisma.appointment.findMany({
+    const rows = await this.prisma.appointment.findMany({
       where: { tenantId, deletedAt: null },
       orderBy: { appointmentDate: 'desc' },
       skip: (safePage - 1) * safePageSize,
       take: safePageSize,
+      include: {
+        client: { select: { firstName: true, lastName: true } },
+        consentRecord: { select: { status: true } },
+      },
     });
+    return rows.map((a) => ({
+      ...a,
+      clientName: a.client ? `${a.client.firstName} ${a.client.lastName}` : 'Client',
+      consentStatus: a.consentRecord?.status ?? 'not_requested',
+    }));
   }
 
   async getAppointment(tenantId: string, id: string) {
