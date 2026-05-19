@@ -235,7 +235,6 @@ function GeneratePage() {
               )}
               {step === "review" && appointment && (
                 <ReviewStep
-                  appointment={appointment}
                   generating={generating}
                   jobStatus={jobStatus}
                   backendVariants={backendVariants}
@@ -417,20 +416,48 @@ function ConsentStep({
   onContinue: () => void;
   onBack: () => void;
 }) {
+  const granted = appointment.consent === "granted";
+  const statusLabel: Record<string, { label: string; cls: string }> = {
+    granted: { label: "Consent granted", cls: "text-sage" },
+    pending: { label: "Consent pending — awaiting client response", cls: "text-foreground" },
+    declined: { label: "Consent declined — cannot generate public content", cls: "text-destructive" },
+    not_requested: { label: "Consent not yet requested", cls: "text-taupe" },
+  };
+  const status = statusLabel[appointment.consent] ?? statusLabel.not_requested;
+
   return (
     <div>
       <h2 className="eyebrow mb-4">Confirm client consent</h2>
       <div className="artifact p-8 sm:p-10">
-          <p className="font-serif text-3xl mb-4">{appointment.clientName}</p>
-          <p className="text-sm text-taupe mb-8">Consent Status: <span className="text-foreground">{appointment.consent}</span></p>
-          <button 
-            onClick={onContinue}
-            className="bg-foreground text-offwhite px-8 py-3 text-[11px] uppercase tracking-[0.22em]"
-          >
-            Continue
+        <p className="font-serif text-3xl mb-2">{appointment.clientName}</p>
+        <p className="text-xs text-taupe mb-6">{appointment.service} · {appointment.date}</p>
+
+        <div className={`flex items-center gap-2 mb-8 text-sm font-medium ${status.cls}`}>
+          <span className={`size-2 rounded-full ${granted ? "bg-sage" : "bg-current opacity-60"}`} />
+          {status.label}
+        </div>
+
+        {!granted && (
+          <div className="border hairline border-foreground/20 bg-nude/30 p-4 text-sm text-taupe mb-8">
+            You need client consent before generating content that may include their likeness or service details.
+            Go to <strong className="text-foreground">Appointments</strong> to send a consent request.
+          </div>
+        )}
+
+        <div className="flex gap-4">
+          {granted && (
+            <button
+              onClick={onContinue}
+              className="bg-foreground text-offwhite px-8 py-3 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors"
+            >
+              Continue →
+            </button>
+          )}
+          <button onClick={onBack} className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground">
+            ← Back
           </button>
+        </div>
       </div>
-      <button onClick={onBack} className="mt-6 text-[10px] uppercase tracking-widest text-taupe">← Back</button>
     </div>
   );
 }
@@ -495,34 +522,112 @@ function FormatStep({
   );
 }
 
-function ReviewStep({ generating, backendVariants }: any) {
-  if (generating) return <div className="p-20 text-center italic text-taupe">AI is drafting your posts...</div>;
-  if (!backendVariants || backendVariants.length === 0) return <div className="p-20 text-center italic text-taupe">No variants generated.</div>;
+function ReviewStep({ generating, jobStatus, backendVariants }: any) {
+  const [copied, setCopied] = useState<number | null>(null);
+
+  if (generating) {
+    const statusLabel: Record<string, string> = {
+      created: "Starting job...",
+      queued: "Queued...",
+      processing_image: "Analysing image...",
+      processing_vision: "Reading the photo...",
+      building_prompt: "Building your prompt...",
+      generating_text: "Writing your caption...",
+      generating_reel: "Assembling reel...",
+    };
+    return (
+      <div className="artifact p-12 text-center">
+        <div className="flex justify-center mb-6">
+          <span className="size-8 rounded-full border-2 border-foreground border-t-transparent animate-spin" />
+        </div>
+        <p className="font-serif text-2xl mb-2 italic">AI is drafting your posts...</p>
+        <p className="text-sm text-taupe">{statusLabel[jobStatus] ?? jobStatus ?? "Processing..."}</p>
+      </div>
+    );
+  }
+
+  if (!backendVariants || backendVariants.length === 0) {
+    return (
+      <div className="artifact p-12 text-center">
+        <p className="eyebrow mb-3">No content generated</p>
+        <p className="text-sm text-taupe">The job completed but returned no content. Try again.</p>
+      </div>
+    );
+  }
 
   const contentItem = backendVariants[0];
-  const options = contentItem.generationOptions || [contentItem];
+  const variants: any[] = Array.isArray(contentItem.generationOptions) && contentItem.generationOptions.length > 0
+    ? contentItem.generationOptions
+    : [{ caption: contentItem.caption, hashtags: contentItem.hashtags, hookSentence: contentItem.hookSentence }];
+
+  const copyToClipboard = (text: string, idx: number) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(idx);
+      setTimeout(() => setCopied(null), 2000);
+    });
+  };
 
   return (
-    <div className="space-y-10">
-      {options.map((opt: any, i: number) => (
+    <div className="space-y-8">
+      <div className="flex items-center justify-between">
+        <p className="eyebrow">{variants.length} variant{variants.length > 1 ? "s" : ""} generated</p>
+        <a
+          href="/content"
+          className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground border-b border-taupe pb-0.5"
+        >
+          View in Content →
+        </a>
+      </div>
+
+      {variants.map((opt: any, i: number) => (
         <article key={i} className="artifact p-8">
-           <p className="eyebrow mb-4">Option {i + 1} {opt.generatedBy ? `— ${opt.generatedBy}` : ''}</p>
-           <p className="text-sm leading-relaxed mb-6 whitespace-pre-wrap">{opt.caption}</p>
-           <div className="flex gap-2">
-                <button 
-                  onClick={async () => {
-                    try {
-                      await api.post(`/content/${contentItem.id}/select-option`, { optionIndex: i });
-                      toast.success("Option selected and saved!");
-                    } catch (e) {
-                      toast.error("Failed to select option");
-                    }
-                  }}
-                  className="bg-foreground text-offwhite px-4 py-2 text-[10px] uppercase tracking-widest"
-                >
-                  Select This Version
-                </button>
-           </div>
+          <div className="flex items-center justify-between mb-5">
+            <p className="eyebrow">Option {i + 1}</p>
+            <button
+              onClick={() => copyToClipboard(
+                [opt.hookSentence, opt.caption, (opt.hashtags ?? []).map((h: string) => `#${h}`).join(" ")].filter(Boolean).join("\n\n"),
+                i
+              )}
+              className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground"
+            >
+              {copied === i ? "Copied!" : "Copy"}
+            </button>
+          </div>
+
+          {opt.hookSentence && (
+            <div className="mb-4 pb-4 border-b hairline">
+              <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Hook</p>
+              <p className="text-base font-medium leading-snug">{opt.hookSentence}</p>
+            </div>
+          )}
+
+          <div className="mb-4">
+            <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Caption</p>
+            <p className="text-sm leading-relaxed whitespace-pre-wrap">{opt.caption}</p>
+          </div>
+
+          {opt.hashtags && opt.hashtags.length > 0 && (
+            <div className="mb-6">
+              <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Hashtags</p>
+              <p className="text-xs text-taupe leading-relaxed">
+                {opt.hashtags.map((h: string) => `#${h}`).join(" ")}
+              </p>
+            </div>
+          )}
+
+          <button
+            onClick={async () => {
+              try {
+                await api.post(`/content/${contentItem.id}/select-option`, { optionIndex: i });
+                toast.success("Version selected and saved to Content.");
+              } catch {
+                toast.error("Failed to select version.");
+              }
+            }}
+            className="bg-foreground text-offwhite px-5 py-2.5 text-[10px] uppercase tracking-widest hover:bg-taupe transition-colors"
+          >
+            Use This Version
+          </button>
         </article>
       ))}
     </div>
