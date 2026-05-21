@@ -83,8 +83,10 @@ export class GenerationOrchestrator {
     await this.transitionState(jobId, 'queued', 'processing_image');
     await this.progressEmitter.emit(jobId, tenantId, 'processing_image');
 
+    // Always advance through processing_vision — required by state machine regardless of whether images exist
+    await this.transitionState(jobId, 'processing_image', 'processing_vision');
+
     if (payload.imageAssets.length > 0) {
-      await this.transitionState(jobId, 'processing_image', 'processing_vision');
       await this.progressEmitter.emit(jobId, tenantId, 'processing_vision');
 
       try {
