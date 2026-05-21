@@ -46,17 +46,24 @@ function parseReelScriptOutput(raw: string, brandTone: string): ReelScriptResult
 }
 
 export class ReelScriptChain {
-  private readonly model: ChatOpenAI;
+  private model: ChatOpenAI | null = null;
+  private readonly cfg: ReturnType<ModelRouter['selectReelScriptModel']>;
 
   constructor(modelRouter: ModelRouter) {
-    const cfg = modelRouter.selectReelScriptModel();
-    this.model = new ChatOpenAI({
-      modelName: cfg.modelId,
-      temperature: cfg.temperature,
-      maxTokens: cfg.maxTokens,
-      timeout: cfg.timeoutMs,
-      openAIApiKey: process.env['OPENAI_API_KEY'],
-    });
+    this.cfg = modelRouter.selectReelScriptModel();
+  }
+
+  private getModel(): ChatOpenAI {
+    if (!this.model) {
+      this.model = new ChatOpenAI({
+        modelName: this.cfg.modelId,
+        temperature: this.cfg.temperature,
+        maxTokens: this.cfg.maxTokens,
+        timeout: this.cfg.timeoutMs,
+        openAIApiKey: process.env['OPENAI_API_KEY'] ?? '',
+      });
+    }
+    return this.model;
   }
 
   async generate(params: {
@@ -98,7 +105,7 @@ Set stability (0.0-1.0), similarityBoost (0.0-1.0), and style (0.0-1.0) based on
 Higher stability = more consistent/controlled delivery. Higher style = more expressive.
 For ${brandDNA.primaryTone.replace(/_/g, ' ')} tone: choose appropriate values.`;
 
-    const response = await this.model.invoke([
+    const response = await this.getModel().invoke([
       new SystemMessage(wrapSystemPrompt(systemPrompt)),
       new HumanMessage(userPrompt),
     ]);

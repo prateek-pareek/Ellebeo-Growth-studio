@@ -52,20 +52,30 @@ function validateImageQuality(
 // ---------------------------------------------------------------------------
 
 export class VisionAnalysisChain {
-  private readonly model: ChatOpenAI;
+  private model: ChatOpenAI | null = null;
+  private readonly cfg: ReturnType<ModelRouter['selectVisionModel']>;
 
   constructor(
     private readonly prisma: PrismaClient,
     modelRouter: ModelRouter
   ) {
-    const cfg = modelRouter.selectVisionModel();
-    this.model = new ChatOpenAI({
-      modelName: cfg.modelId,
-      temperature: cfg.temperature,
-      maxTokens: cfg.maxTokens,
-      timeout: cfg.timeoutMs,
-      openAIApiKey: process.env['OPENAI_API_KEY'],
-    });
+    this.cfg = modelRouter.selectVisionModel();
+  }
+
+  private getModel(): ChatOpenAI {
+    if (!this.model) {
+      if (!process.env['OPENAI_API_KEY']) {
+        throw new Error('OPENAI_API_KEY is required for vision analysis (image processing)');
+      }
+      this.model = new ChatOpenAI({
+        modelName: this.cfg.modelId,
+        temperature: this.cfg.temperature,
+        maxTokens: this.cfg.maxTokens,
+        timeout: this.cfg.timeoutMs,
+        openAIApiKey: process.env['OPENAI_API_KEY'],
+      });
+    }
+    return this.model;
   }
 
   // --------------------------------------------------------------------------
@@ -136,7 +146,7 @@ Return ONLY valid JSON with no markdown, no explanation.`;
       ],
     });
 
-    const response = await this.model.invoke([new SystemMessage(wrapSystemPrompt(systemPrompt)), humanMessage]);
+    const response = await this.getModel().invoke([new SystemMessage(wrapSystemPrompt(systemPrompt)), humanMessage]);
     const content = typeof response.content === 'string'
       ? response.content
       : JSON.stringify(response.content);

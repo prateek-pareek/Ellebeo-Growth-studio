@@ -24,6 +24,7 @@ interface DBConsentRecord {
   expires_at: Date | null;
   last_updated_at: Date;
   version: number;
+  is_current: boolean;
 }
 
 export class ConsentGuard {
@@ -79,23 +80,25 @@ export class ConsentGuard {
 
     // Even if live record is valid, check if restrictions tightened since snapshot
     if (liveResult.valid) {
-      const snapshot = consentSnapshot.restrictions;
+      const snapshot = consentSnapshot?.restrictions;
       const live = liveResult.activeRestrictions;
 
-      // If any previously-granted permission has been revoked since job was queued
-      const restrictionsTightened =
-        (!live.show_face && snapshot.show_face) ||
-        (!live.use_name && snapshot.use_name) ||
-        (!live.allow_tagging && snapshot.allow_tagging) ||
-        (!live.allow_before_after && snapshot.allow_before_after) ||
-        (!live.allow_extended_use && snapshot.allow_extended_use);
+      // Only compare if snapshot has restrictions data
+      if (snapshot) {
+        const restrictionsTightened =
+          (!live.show_face && snapshot.show_face) ||
+          (!live.use_name && snapshot.use_name) ||
+          (!live.allow_tagging && snapshot.allow_tagging) ||
+          (!live.allow_before_after && snapshot.allow_before_after) ||
+          (!live.allow_extended_use && snapshot.allow_extended_use);
 
-      if (restrictionsTightened) {
-        return {
-          valid: false,
-          reason: 'restrictions_violated',
-          activeRestrictions: live,
-        };
+        if (restrictionsTightened) {
+          return {
+            valid: false,
+            reason: 'restrictions_violated',
+            activeRestrictions: live,
+          };
+        }
       }
     }
 
@@ -189,11 +192,27 @@ export class ConsentGuard {
     clientId: string
   ): Promise<DBConsentRecord | null> {
     const records = await this.prisma.$queryRaw<DBConsentRecord[]>`
-      SELECT consent_id, client_id, tenant_id, status, restrictions,
-             granted_at, expires_at, last_updated_at, version
-      FROM consent_records
-      WHERE client_id = ${clientId}
-      ORDER BY last_updated_at DESC
+      SELECT
+        id            AS consent_id,
+        client_id,
+        tenant_id,
+        status,
+        jsonb_build_object(
+          'show_face',        allow_show_face,
+          'use_name',         allow_use_name,
+          'allow_tagging',    allow_tag_social,
+          'allow_before_after', allow_platform_promotion,
+          'allow_extended_use', allow_marketing_content
+        )             AS restrictions,
+        granted_at,
+        NULL          AS expires_at,
+        updated_at    AS last_updated_at,
+        1             AS version,
+        is_current
+      FROM platform.consent_records
+      WHERE client_id = ${clientId}::uuid
+        AND is_current = true
+      ORDER BY updated_at DESC
       LIMIT 1
     `;
     return records[0] ?? null;

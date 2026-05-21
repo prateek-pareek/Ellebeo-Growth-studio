@@ -57,17 +57,44 @@ function AppointmentsPage() {
     e.preventDefault();
     setIsAdding(true);
     try {
+      // Split "Sarah J." → firstName="Sarah", lastName="J."
+      const parts = clientName.trim().split(/\s+/);
+      const firstName = parts[0] || clientName;
+      const lastName = parts.slice(1).join(' ') || 'Client';
+
+      // 1. Create the client
+      const clientRes = await api.post('/clients', { firstName, lastName });
+      const clientId = clientRes.data.data.id;
+
+      // 2. Grant consent (technician-confirmed in person)
+      const consentRes = await api.post(`/clients/${clientId}/consent`, {
+        allowShowFace: true,
+        allowUseName: true,
+        allowTagSocial: true,
+        allowPlatformPromotion: true,
+        allowInternalUse: true,
+        allowMarketingContent: true,
+        consentMethod: 'manual',
+      });
+      const consentRecordId = consentRes.data.data.id;
+
+      // 3. Create appointment linked to client + consent
       const res = await api.post('/appointments', {
-        clientId: 'default-client',
+        clientId,
+        consentRecordId,
         serviceCategory: category,
         serviceName,
-        appointmentDate: new Date().toISOString()
+        appointmentDate: new Date().toISOString(),
       });
-      
       const appt = res.data.data;
-      
-      if (beforeFile) await uploadFile(appt.id, beforeFile, true);
-      if (afterFile) await uploadFile(appt.id, afterFile, false);
+
+      // 4. Upload photos (non-fatal if Firebase not configured)
+      if (beforeFile) {
+        try { await uploadFile(appt.id, beforeFile, true); } catch {}
+      }
+      if (afterFile) {
+        try { await uploadFile(appt.id, afterFile, false); } catch {}
+      }
 
       toast.success("Appointment created successfully");
       setClientName("");

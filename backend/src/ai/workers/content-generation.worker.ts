@@ -80,6 +80,8 @@ export function startContentGenerationWorker(io: SocketServer): Worker<Generatio
         }
 
         // All other errors — emit user-friendly message
+        console.error(`[Worker:content] Job ${jobId} failed with error: ${error.message}`);
+        console.error(error.stack);
         const userMessage = mapErrorToUserMessage(error);
         await progressEmitter.emitError(jobId, tenantId, error.name, userMessage);
 
@@ -103,7 +105,8 @@ export function startContentGenerationWorker(io: SocketServer): Worker<Generatio
 
     const maxAttempts = AI_CONFIG.queues.contentGeneration.defaultJobOptions.attempts;
     if (job.attemptsMade >= maxAttempts) {
-      console.error(`[Worker:content] Job ${job.id} sent to DLQ after ${job.attemptsMade} attempts`);
+      console.error(`[Worker:content] Job ${job.id} sent to DLQ after ${job.attemptsMade} attempts. Error: ${err.message}`);
+      console.error(err.stack);
 
       const dlqPayload: DLQJobPayload = {
         originalJobId: job.data.jobId,
@@ -123,20 +126,18 @@ export function startContentGenerationWorker(io: SocketServer): Worker<Generatio
       const prisma = new PrismaClient();
       try {
         await prisma.$executeRaw`
-          INSERT INTO failed_jobs (
-            original_job_id, tenant_id, appointment_id, failed_at_step,
-            error_message, error_stack, full_payload, partial_results_preserved
+          INSERT INTO platform.failed_jobs (
+            original_job_id, tenant_id, failed_at_step,
+            error_message, error_stack, job_payload
           ) VALUES (
             ${job.data.jobId}::uuid,
             ${job.data.tenantId}::uuid,
-            ${job.data.appointmentId}::uuid,
             'PROCESSING',
             ${err.message},
             ${err.stack ?? ''},
-            ${JSON.stringify(job.data)},
-            false
+            ${JSON.stringify(job.data)}::jsonb
           )
-          ON CONFLICT (original_job_id) DO NOTHING
+          ON CONFLICT DO NOTHING
         `;
       } finally {
         await prisma.$disconnect();

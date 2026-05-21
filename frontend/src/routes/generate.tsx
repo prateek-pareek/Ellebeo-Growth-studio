@@ -94,7 +94,10 @@ function GeneratePage() {
           if (status === 'completed') {
             clearInterval(pollRef.current!);
             const contentRes = await api.get(`/content?jobId=${jobId}`);
-            setBackendVariants(contentRes.data.data);
+            const contentBody = contentRes.data.data;
+            // Content service returns { data: items, meta: {...} } — extract the array
+            const items = Array.isArray(contentBody) ? contentBody : (contentBody?.data ?? []);
+            setBackendVariants(items);
             setGenerating(false);
           } else if (status === 'failed') {
             clearInterval(pollRef.current!);

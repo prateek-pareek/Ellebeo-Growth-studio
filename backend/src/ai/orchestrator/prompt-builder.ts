@@ -162,7 +162,30 @@ CRITICAL RULES:
   }
 
   private buildBrandDNAFragment(dna: BrandDNARecord): string {
-    return `## YOUR BRAND DNA\n**Business:** ${dna.businessName} — ${dna.locationCity}\n**Persona:** ${dna.personaDescription}\n**Primary Tone:** ${dna.primaryTone.replace(/_/g, ' ')}\n${dna.secondaryTone ? `**Secondary Tone:** ${dna.secondaryTone.replace(/_/g, ' ')}\n` : ''}**You call your clients:** "${dna.clientTerminology}"\n**Target Audience:** ${dna.targetAudience}\n**What makes you different:** ${dna.uniqueSellingPoint}\n**Hero Services:** ${dna.heroServices.join(', ')}\n\n**Vocabulary you love:** ${dna.preferredVocabulary.join(', ')}\n**BLACKLISTED WORDS (NEVER USE):** ${dna.blacklistedWords.join(', ')}\n\n**Emojis:** ${dna.useEmojis ? `Yes, ${dna.emojiStyle} use` : 'No emojis'}\n**Your CTA style:** ${dna.preferredCTAStyle}`;
+    const arr = (v: unknown) => (Array.isArray(v) ? v : []);
+    const str = (v: unknown, fallback = '') => (v != null ? String(v) : fallback);
+    const tone = (v: unknown) => str(v).replace(/_/g, ' ');
+
+    const preferred = arr(dna.vocabularyPreferred ?? dna.preferredVocabulary);
+    const blacklist = arr(dna.vocabularyBlacklist ?? dna.blacklistedWords);
+    const doNotSay = arr(dna.doNotSay);
+    const painPoints = arr(dna.clientPainPoints);
+
+    return [
+      `## YOUR BRAND DNA`,
+      `**Business:** ${str(dna.businessName)}${dna.locationCity ? ` — ${str(dna.locationCity)}` : ''}`,
+      dna.primaryPersona ? `**Target client:** ${str(dna.primaryPersona)}` : '',
+      painPoints.length ? `**Client pain points:** ${painPoints.join(', ')}` : '',
+      dna.primaryTone ? `**Primary Tone:** ${tone(dna.primaryTone)}` : '',
+      dna.secondaryTone ? `**Secondary Tone:** ${tone(dna.secondaryTone)}` : '',
+      dna.uniqueSellingProposition ? `**What makes you different:** ${str(dna.uniqueSellingProposition)}` : '',
+      dna.signatureOutcome ? `**Signature result:** ${str(dna.signatureOutcome)}` : '',
+      dna.oneLiner ? `**One-liner:** ${str(dna.oneLiner)}` : '',
+      preferred.length ? `**Vocabulary you love:** ${preferred.join(', ')}` : '',
+      blacklist.length ? `**BLACKLISTED WORDS (NEVER USE):** ${blacklist.join(', ')}` : '',
+      doNotSay.length ? `**Never say:** ${doNotSay.join(', ')}` : '',
+      `**Emojis:** ${str(dna.emojiPolicy, 'minimal')} use`,
+    ].filter(Boolean).join('\n');
   }
 
   private buildGoldenExamplesFragment(examples: GoldenExample[]): string {

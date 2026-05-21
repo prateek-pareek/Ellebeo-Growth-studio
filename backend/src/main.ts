@@ -6,6 +6,8 @@ import cookieParser from 'cookie-parser';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
+import { startContentGenerationWorker } from './ai/workers/content-generation.worker';
+import { GenerationGateway } from './generation/generation.gateway';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -54,6 +56,11 @@ async function bootstrap() {
   const port = process.env.PORT || 8080;
   await app.listen(port);
   console.log(`Growth Studio API is running on port ${port}`);
+
+  // Start BullMQ workers after server is live
+  const gateway = app.get(GenerationGateway);
+  startContentGenerationWorker(gateway.server);
+  console.log('Content generation worker started');
 }
 
 bootstrap();

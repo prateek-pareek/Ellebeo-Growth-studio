@@ -140,7 +140,7 @@ export class GenerationOrchestrator {
 
     const routingContext = {
       userTier: generationOptions.userTier,
-      brandDNAComplexityScore: brandDNA.complexityScore,
+      brandDNAComplexityScore: brandDNA.averageConfidenceScore ?? 0,
     };
     const llmConfig = this.modelRouter.selectTextModel(routingContext);
     modelUsed = `${llmConfig.provider}/${llmConfig.modelId}`;
@@ -148,7 +148,7 @@ export class GenerationOrchestrator {
     try {
       const multiResult = await this.captionChain.generateMultipleOptions({
         assembledPrompt,
-        brandDNABlacklist: brandDNA.blacklistedWords,
+        brandDNABlacklist: brandDNA.vocabularyBlacklist ?? brandDNA.blacklistedWords ?? [],
         allowRetry: true,
       });
       captionResult = multiResult.primary;
