@@ -3,7 +3,10 @@ import {
   Post,
   Get,
   Param,
+  Query,
   ParseUUIDPipe,
+  ParseIntPipe,
+  DefaultValuePipe,
   UseGuards,
   Request,
   HttpCode,
@@ -21,6 +24,20 @@ export class CrmController {
     private readonly crmReader: CrmReaderService,
   ) {}
 
+  @Get('bookings')
+  listBookings(
+    @Request() req: any,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+  ) {
+    return this.bookingImport.listBookingsWithStatus(
+      req.user.tenantId,
+      req.user.userId,
+      limit,
+      offset,
+    );
+  }
+
   @Post('bookings/:bookingId/import')
   @HttpCode(HttpStatus.CREATED)
   importBooking(
@@ -33,10 +50,9 @@ export class CrmController {
   @Post('bookings/import-all')
   @HttpCode(HttpStatus.OK)
   importAll(@Request() req: any) {
-    // technicianId is the same as the user's CRM technician ID
     return this.bookingImport.importAllBookingsForTenant(
       req.user.tenantId,
-      req.user.sub,
+      req.user.userId,
     );
   }
 

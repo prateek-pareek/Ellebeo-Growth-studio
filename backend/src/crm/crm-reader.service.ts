@@ -3,7 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 export interface CrmBooking {
   id: string;
-  technicianId: string;
+  technicianId: string | null;
   recipientName: string | null;
   recipientEmail: string | null;
   recipientPhone: string | null;
@@ -44,19 +44,22 @@ export class CrmReaderService {
   async getBookingById(bookingId: string): Promise<CrmBooking | null> {
     const rows = await this.prisma.$queryRaw<CrmBooking[]>`
       SELECT
-        b.id::text,
-        b."technicianId"::text AS "technicianId",
-        b."recipientName" AS "recipientName",
-        b."recipientEmail" AS "recipientEmail",
-        b."recipientPhone" AS "recipientPhone",
+        b.id,
+        b."technicianId",
+        COALESCE(b."recipientName", ru."fullName", bu."fullName") AS "recipientName",
+        COALESCE(b."recipientEmail", ru.email, bu.email)          AS "recipientEmail",
+        b."recipientMobile" AS "recipientPhone",
         b.category::text AS category,
-        b."serviceName" AS "serviceName",
-        b."confirmedStartTime" AS "confirmedStartTime",
-        b."recipientConsentData" AS "recipientConsentData",
-        b."recipientIntakeData" AS "recipientIntakeData",
-        b."marketingImageConsent" AS "marketingImageConsent"
+        ts."title" AS "serviceName",
+        b."confirmedStartTime",
+        b."recipientConsentData",
+        b."recipientIntakeData",
+        b."marketingImageConsent"
       FROM public."Booking" b
-      WHERE b.id = ${bookingId}::uuid
+      LEFT JOIN public."TechnicianService" ts ON ts.id = b."technicianServiceId"
+      LEFT JOIN public."User" ru ON ru.id = b."recipientUserId"
+      LEFT JOIN public."User" bu ON bu.id = b."bookerUserId"
+      WHERE b.id = ${bookingId}
       LIMIT 1
     `;
     return rows[0] ?? null;
@@ -69,20 +72,22 @@ export class CrmReaderService {
   ): Promise<CrmBooking[]> {
     return this.prisma.$queryRaw<CrmBooking[]>`
       SELECT
-        b.id::text,
-        b."technicianId"::text AS "technicianId",
-        b."recipientName" AS "recipientName",
-        b."recipientEmail" AS "recipientEmail",
-        b."recipientPhone" AS "recipientPhone",
+        b.id,
+        b."technicianId",
+        COALESCE(b."recipientName", ru."fullName", bu."fullName") AS "recipientName",
+        COALESCE(b."recipientEmail", ru.email, bu.email)          AS "recipientEmail",
+        b."recipientMobile" AS "recipientPhone",
         b.category::text AS category,
-        b."serviceName" AS "serviceName",
-        b."confirmedStartTime" AS "confirmedStartTime",
-        b."recipientConsentData" AS "recipientConsentData",
-        b."recipientIntakeData" AS "recipientIntakeData",
-        b."marketingImageConsent" AS "marketingImageConsent"
+        ts."title" AS "serviceName",
+        b."confirmedStartTime",
+        b."recipientConsentData",
+        b."recipientIntakeData",
+        b."marketingImageConsent"
       FROM public."Booking" b
-      WHERE b."technicianId" = ${technicianId}::uuid
-        AND b."marketingImageConsent" = true
+      LEFT JOIN public."TechnicianService" ts ON ts.id = b."technicianServiceId"
+      LEFT JOIN public."User" ru ON ru.id = b."recipientUserId"
+      LEFT JOIN public."User" bu ON bu.id = b."bookerUserId"
+      WHERE b."technicianId" = ${technicianId}
       ORDER BY b."confirmedStartTime" DESC NULLS LAST
       LIMIT ${limit} OFFSET ${offset}
     `;
@@ -91,12 +96,12 @@ export class CrmReaderService {
   async getQuestionnaireForBooking(bookingId: string): Promise<CrmQuestionnaire | null> {
     const rows = await this.prisma.$queryRaw<CrmQuestionnaire[]>`
       SELECT
-        r.id::text,
-        r."bookingId"::text AS "bookingId",
+        r.id,
+        r."bookingId",
         r.category::text AS category,
-        r.data AS data
+        r.data
       FROM public."BookingConsultationRecord" r
-      WHERE r."bookingId" = ${bookingId}::uuid
+      WHERE r."bookingId" = ${bookingId}
       LIMIT 1
     `;
     return rows[0] ?? null;
@@ -105,26 +110,36 @@ export class CrmReaderService {
   async getPortfolioMediaForTechnician(technicianId: string): Promise<CrmPortfolioMedia[]> {
     return this.prisma.$queryRaw<CrmPortfolioMedia[]>`
       SELECT
-        m.id::text,
-        m."technicianId"::text AS "technicianId",
-        m.url AS url,
-        m."displayOrder" AS "displayOrder"
+        m.id,
+        m."technicianId",
+        m.url,
+        m."displayOrder"
       FROM public."TechnicianPortfolioMedia" m
-      WHERE m."technicianId" = ${technicianId}::uuid
+      WHERE m."technicianId" = ${technicianId}
       ORDER BY m."displayOrder" ASC
     `;
   }
 
-  async getTechnicianInfo(technicianId: string): Promise<CrmTechnicianInfo | null> {
+  async getTechnicianByEmail(email: string): Promise<CrmTechnicianInfo | null> {
     const rows = await this.prisma.$queryRaw<CrmTechnicianInfo[]>`
       SELECT
-        t.id::text,
-        t.email AS email,
-        t."businessName" AS "businessName"
-      FROM public."Technician" t
-      WHERE t.id = ${technicianId}::uuid
+        tp.id,
+        u.email,
+        tp."displayName" AS "businessName"
+      FROM public."User" u
+      JOIN public."TechnicianProfile" tp ON tp."userId" = u.id
+      WHERE u.email = ${email}
       LIMIT 1
     `;
     return rows[0] ?? null;
+  }
+
+  async countBookingsForTechnician(technicianId: string): Promise<number> {
+    const rows = await this.prisma.$queryRaw<[{ count: bigint }]>`
+      SELECT COUNT(*) AS count
+      FROM public."Booking" b
+      WHERE b."technicianId" = ${technicianId}
+    `;
+    return Number(rows[0]?.count ?? 0);
   }
 }

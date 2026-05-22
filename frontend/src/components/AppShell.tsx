@@ -20,6 +20,7 @@ const DESKTOP_NAV: Array<{ to: string; label: string }> = [
   { to: "/", label: "Home" },
   { to: "/brand", label: "Brand" },
   { to: "/appointments", label: "Appointments" },
+  { to: "/crm", label: "CRM" },
   { to: "/content", label: "Content" },
   { to: "/calendar", label: "Calendar" },
   { to: "/templates", label: "Templates" },

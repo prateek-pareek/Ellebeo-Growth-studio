@@ -405,6 +405,7 @@ model ImageAsset {
   isBeforePhoto      Boolean   @default(false) @map("is_before_photo")
   isAfterPhoto       Boolean   @default(false) @map("is_after_photo")
   crmMediaId         String?   @map("crm_media_id") @db.Uuid
+  source             String    @default("manual") @db.VarChar(50)
   uploadValidated    Boolean   @default(false) @map("upload_validated")
   visionAnalysis     Json?     @map("vision_analysis")
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz

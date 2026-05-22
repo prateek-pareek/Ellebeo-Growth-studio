@@ -113,7 +113,44 @@ export class BookingImportService {
         }
       }
 
-      // 5. Link consent to appointment (update appointment with consentRecordId)
+      // 5. Auto-import before/after photos from recipientIntakeData
+      const intake = booking.recipientIntakeData as Record<string, unknown> | null;
+      const beforeUrl = intake?.beforePhotoUrl as string | undefined;
+      const afterUrl = intake?.afterPhotoUrl as string | undefined;
+      let imageCount = 0;
+
+      if (beforeUrl) {
+        await tx.imageAsset.create({
+          data: {
+            tenantId,
+            appointmentId: appointment.id,
+            rawUrl: beforeUrl,
+            assetType: 'image',
+            isBeforePhoto: true,
+            isAfterPhoto: false,
+            uploadValidated: true,
+            source: 'crm',
+          },
+        });
+        imageCount++;
+      }
+      if (afterUrl) {
+        await tx.imageAsset.create({
+          data: {
+            tenantId,
+            appointmentId: appointment.id,
+            rawUrl: afterUrl,
+            assetType: 'image',
+            isBeforePhoto: false,
+            isAfterPhoto: true,
+            uploadValidated: true,
+            source: 'crm',
+          },
+        });
+        imageCount++;
+      }
+
+      // 6. Link consent to appointment
       await tx.appointment.update({
         where: { id: appointment.id },
         data: { consentRecordId: consentRecord.id },
@@ -125,12 +162,64 @@ export class BookingImportService {
         appointmentId: appointment.id,
         clientId: client.id,
         consentRecordId: consentRecord.id,
+        imageCount,
         questionnaireCount: questionnaire ? Object.keys(questionnaire.data as object).length : 0,
       };
     });
   }
 
-  async importAllBookingsForTenant(tenantId: string, technicianId: string) {
+  private async resolveEmail(userId: string): Promise<string | null> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+    return user?.email ?? null;
+  }
+
+  async listBookingsWithStatus(
+    tenantId: string,
+    userId: string,
+    limit = 20,
+    offset = 0,
+  ) {
+    const technicianEmail = await this.resolveEmail(userId);
+    if (!technicianEmail) return { bookings: [], total: 0, technicianFound: false };
+    const technician = await this.crmReader.getTechnicianByEmail(technicianEmail);
+    if (!technician) {
+      return { bookings: [], total: 0, technicianFound: false };
+    }
+
+    const [bookings, total] = await Promise.all([
+      this.crmReader.getBookingsForTechnician(technician.id, limit, offset),
+      this.crmReader.countBookingsForTechnician(technician.id),
+    ]);
+
+    if (bookings.length === 0) {
+      return { bookings: [], total, technicianFound: true };
+    }
+
+    // Check which bookings are already imported
+    const bookingIds = bookings.map((b) => b.id);
+    const imported = await this.prisma.appointment.findMany({
+      where: { tenantId, crmBookingId: { in: bookingIds } },
+      select: { crmBookingId: true, id: true },
+    });
+    const importedMap = new Map(imported.map((a) => [a.crmBookingId, a.id]));
+
+    return {
+      bookings: bookings.map((b) => ({
+        ...b,
+        imported: importedMap.has(b.id),
+        appointmentId: importedMap.get(b.id) ?? null,
+      })),
+      total,
+      technicianFound: true,
+    };
+  }
+
+  async importAllBookingsForTenant(tenantId: string, userId: string) {
+    const technicianEmail = await this.resolveEmail(userId);
+    if (!technicianEmail) return [];
+    const technician = await this.crmReader.getTechnicianByEmail(technicianEmail);
+    if (!technician) return [];
+    const technicianId = technician.id;
     const bookings = await this.crmReader.getBookingsForTechnician(technicianId);
     const results = [];
 
