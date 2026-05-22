@@ -8,6 +8,7 @@ import type {
   GoldenExample,
   BusinessGoalType,
   SocialPlatform,
+  ConsentRestrictions,
 } from '../types/job-payload.types';
 import type { VisionAnalysisResult, AssembledPrompt } from '../types/chain-output.types';
 import { PromptCache } from './prompt-cache';
@@ -47,8 +48,9 @@ export class PromptBuilder {
     platform: SocialPlatform;
     serviceCategory?: ServiceCategory;
     masterPromptText?: string;
+    consentRestrictions?: ConsentRestrictions;
   }): Promise<AssembledPrompt> {
-    const { brandDNA, visionResult, businessGoal, goldenExamples, platform, serviceCategory = 'general', masterPromptText } = params;
+    const { brandDNA, visionResult, businessGoal, goldenExamples, platform, serviceCategory = 'general', masterPromptText, consentRestrictions } = params;
 
     const { brandDNAFragment, brandDNACacheHit } = await this.getBrandDNAFragment(brandDNA);
     const { goldenExamplesFragment, goldenExamplesCacheHit } =
@@ -64,6 +66,8 @@ export class PromptBuilder {
     const lengthTarget = (CAPTION_LENGTH_TARGETS as any)[brandDNA.captionLengthPreference] || CAPTION_LENGTH_TARGETS.medium;
     const lengthSection = `Caption body should be ${lengthTarget.minWords}–${lengthTarget.maxWords} words (excluding hashtags).`;
 
+    const consentSection = this.buildConsentRestrictionsSection(consentRestrictions);
+
     const userPrompt = [
       '## APPOINTMENT ANALYSIS',
       visionSection || '(No image — generate based on appointment context only)',
@@ -77,6 +81,9 @@ export class PromptBuilder {
       '## LENGTH REQUIREMENT',
       lengthSection,
       '',
+      consentSection ? '## CLIENT CONSENT RESTRICTIONS' : '',
+      consentSection,
+      consentSection ? '' : '',
       '## SAFETY GUARDRAILS',
       getGuardrailsForService(serviceCategory),
       '',
@@ -198,6 +205,18 @@ CRITICAL RULES:
 
   private buildVisionSection(vision: VisionAnalysisResult): string {
     return `**Service Performed:** ${vision.servicePerformed}\n**Technical Details:** ${vision.technicalDetails}\n**Transformation:** ${vision.transformationDescription}\n**Service Tags:** ${vision.serviceTags.join(', ')}\n**Setting:** ${vision.settingDetected}\n**Image Quality:** ${vision.imageQuality}\n**Faces Visible:** ${vision.facesDetected ? 'Yes' : 'No'}`;
+  }
+
+  private buildConsentRestrictionsSection(restrictions?: ConsentRestrictions): string {
+    if (!restrictions) return '';
+    const lines: string[] = [];
+    if (!restrictions.use_name) lines.push('- **Client name: NOT allowed** — do not reference the client by name, e.g. no "Sarah\'s glow-up" or similar');
+    if (!restrictions.allow_tagging) lines.push('- **Social tagging: NOT allowed** — do not suggest tagging the client or use language like "tag a friend who needs this"');
+    if (!restrictions.allow_extended_use) lines.push('- **Platform promotion: NOT allowed** — do not write content framed for showcases, awards, or platform-level promotion');
+    if (!restrictions.allow_before_after) lines.push('- **Before/after references: NOT allowed** — do not reference the before state or describe it as a transformation');
+    if (!restrictions.show_face) lines.push('- **Face references: NOT allowed** — do not describe facial features or imply the client\'s face is visible');
+    if (lines.length === 0) return '';
+    return `You MUST follow these client consent restrictions. Violating them is a serious breach of client trust:\n${lines.join('\n')}`;
   }
 
   private buildOutputFormatSection(): string {

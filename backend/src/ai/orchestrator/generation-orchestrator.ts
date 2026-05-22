@@ -132,6 +132,7 @@ export class GenerationOrchestrator {
       platform: primaryPlatform,
       serviceCategory: appointment?.serviceCategory as import('../config/service-guardrails').ServiceCategory | undefined,
       masterPromptText: masterPrompt?.systemPrompt,
+      consentRestrictions: consentCheck.activeRestrictions,
     });
 
     // ── Step 3: Caption Generation ───────────────────────────────────────────
