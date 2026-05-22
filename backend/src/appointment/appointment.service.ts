@@ -33,12 +33,18 @@ export class AppointmentService {
       include: {
         client: { select: { firstName: true, lastName: true } },
         consentRecord: { select: { status: true } },
+        imageAssets: {
+          where: { deletedAt: null },
+          select: { id: true, rawUrl: true, isBeforePhoto: true, isAfterPhoto: true },
+        },
       },
     });
     return rows.map((a) => ({
       ...a,
       clientName: a.client ? `${a.client.firstName} ${a.client.lastName}` : 'Client',
       consentStatus: a.consentRecord?.status ?? 'not_requested',
+      beforePhotoUrl: a.imageAssets.find((i) => i.isBeforePhoto)?.rawUrl ?? null,
+      afterPhotoUrl: a.imageAssets.find((i) => i.isAfterPhoto)?.rawUrl ?? null,
     }));
   }
 

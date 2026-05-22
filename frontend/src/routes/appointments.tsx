@@ -261,8 +261,19 @@ function AppointmentRow({ a }: { a: Appointment }) {
   return (
     <div className="bg-card p-5 sm:p-6 grid grid-cols-1 sm:grid-cols-12 gap-5 items-center">
       <div className="sm:col-span-2 flex gap-2">
-        <div className="size-20 bg-nude/20 ring-1 ring-border flex items-center justify-center text-[9px] uppercase tracking-widest text-taupe">
-          Real Data
+        <div className="size-20 bg-nude/20 ring-1 ring-border overflow-hidden flex-shrink-0">
+          {a.beforePhotoUrl ? (
+            <img src={a.beforePhotoUrl} alt="Before" className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-[9px] uppercase tracking-widest text-taupe">Before</div>
+          )}
+        </div>
+        <div className="size-20 bg-nude/20 ring-1 ring-border overflow-hidden flex-shrink-0">
+          {a.afterPhotoUrl ? (
+            <img src={a.afterPhotoUrl} alt="After" className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-[9px] uppercase tracking-widest text-taupe">After</div>
+          )}
         </div>
       </div>
 
