@@ -6,13 +6,14 @@ import {
   CalendarRange,
   Layers,
   UserCircle2,
+  BookOpen,
 } from "lucide-react";
 
 const NAV: Array<{ to: string; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { to: "/", label: "Home", icon: Home },
   { to: "/appointments", label: "Appointments", icon: Layers },
+  { to: "/crm", label: "Bookings", icon: BookOpen },
   { to: "/content", label: "Content", icon: Sparkles },
-  { to: "/calendar", label: "Calendar", icon: CalendarRange },
   { to: "/profile", label: "Profile", icon: UserCircle2 },
 ];
 
@@ -20,7 +21,7 @@ const DESKTOP_NAV: Array<{ to: string; label: string }> = [
   { to: "/", label: "Home" },
   { to: "/brand", label: "Brand" },
   { to: "/appointments", label: "Appointments" },
-  { to: "/crm", label: "CRM" },
+  { to: "/crm", label: "Bookings" },
   { to: "/content", label: "Content" },
   { to: "/calendar", label: "Calendar" },
   { to: "/templates", label: "Templates" },

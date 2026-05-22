@@ -122,7 +122,7 @@ function CrmPage() {
   return (
     <div>
       <header className="mt-6 lg:mt-10 mb-10 max-w-[68ch]">
-        <p className="eyebrow mb-5">CRM Integration</p>
+        <p className="eyebrow mb-5">Bookings</p>
         <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight">
           Bookings from your <span className="italic">Client CRM</span>.
         </h1>
