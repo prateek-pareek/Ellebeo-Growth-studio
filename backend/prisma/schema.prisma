@@ -188,6 +188,7 @@ model Tenant {
   generationAuditLogs    GenerationAuditLog[]
   generationFingerprints GenerationFingerprint[]
   failedJobs             FailedJob[]
+  crmIntegrationConfig   CrmIntegrationConfig?
 
   @@index([userId])
   @@index([status])
@@ -336,6 +337,7 @@ model ConsentRecord {
   createdAt              DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt              DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   supersededAt           DateTime?     @map("superseded_at") @db.Timestamptz
+  crmBookingId           String?       @map("crm_booking_id") @db.Uuid
 
   tenant      Tenant       @relation(fields: [tenantId], references: [id])
   client      Client       @relation(fields: [clientId], references: [id])
@@ -370,16 +372,20 @@ model Appointment {
   updatedAt       DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   deletedAt       DateTime?       @map("deleted_at") @db.Timestamptz
 
+  crmBookingId    String?         @map("crm_booking_id") @db.Uuid
+
   tenant Tenant @relation(fields: [tenantId], references: [id])
   client Client @relation(fields: [clientId], references: [id])
 
-  consentRecord  ConsentRecord?
-  generationJobs GenerationJob[]
-  contentItems   ContentItem[]
-  imageAssets    ImageAsset[]
+  consentRecord                ConsentRecord?
+  generationJobs               GenerationJob[]
+  contentItems                 ContentItem[]
+  imageAssets                  ImageAsset[]
+  questionnaireResponses       AppointmentQuestionnaireResponse[]
 
   @@index([tenantId, appointmentDate])
   @@index([clientId])
+  @@index([crmBookingId])
   @@map("appointments")
   @@schema("platform")
 }
@@ -398,6 +404,7 @@ model ImageAsset {
   fileSizeBytes      Int?      @map("file_size_bytes")
   isBeforePhoto      Boolean   @default(false) @map("is_before_photo")
   isAfterPhoto       Boolean   @default(false) @map("is_after_photo")
+  crmMediaId         String?   @map("crm_media_id") @db.Uuid
   uploadValidated    Boolean   @default(false) @map("upload_validated")
   visionAnalysis     Json?     @map("vision_analysis")
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz
@@ -697,6 +704,41 @@ model FailedJob {
 
   @@index([tenantId])
   @@map("failed_jobs")
+  @@schema("platform")
+}
+
+model AppointmentQuestionnaireResponse {
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  appointmentId  String      @map("appointment_id") @db.Uuid
+  crmBookingId   String      @map("crm_booking_id") @db.Uuid
+  questionKey    String      @map("question_key") @db.Text
+  questionLabel  String?     @map("question_label") @db.Text
+  answer         String?     @db.Text
+  answeredAt     DateTime?   @map("answered_at") @db.Timestamptz
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([appointmentId])
+  @@index([crmBookingId])
+  @@map("appointment_questionnaire_responses")
+  @@schema("platform")
+}
+
+model CrmIntegrationConfig {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId             String    @unique @map("tenant_id") @db.Uuid
+  crmSyncEnabled       Boolean   @default(false) @map("crm_sync_enabled")
+  autoImportBookings   Boolean   @default(false) @map("auto_import_bookings")
+  autoMapMedia         Boolean   @default(true) @map("auto_map_media")
+  webhookSecret        String?   @map("webhook_secret") @db.VarChar(255)
+  lastSyncedAt         DateTime? @map("last_synced_at") @db.Timestamptz
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("crm_integration_configs")
   @@schema("platform")
 }
 
