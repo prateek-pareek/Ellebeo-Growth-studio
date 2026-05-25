@@ -104,8 +104,11 @@ export class GenerationOrchestrator {
     if (payload.imageAssets.length > 0) {
       await this.progressEmitter.emit(jobId, tenantId, 'processing_vision');
 
-      try {
-        const primaryImage = payload.imageAssets[0]!;
+      const primaryImage = payload.imageAssets[0]!;
+      const isLocalVisionUrl = primaryImage.rawStoragePath.startsWith('http://localhost') ||
+                               primaryImage.rawStoragePath.startsWith('http://127.');
+
+      if (!isLocalVisionUrl) try {
         const imageUrl = process.env['CLOUDINARY_CLOUD_NAME']
           ? `https://res.cloudinary.com/${process.env['CLOUDINARY_CLOUD_NAME']}/image/upload/${primaryImage.cloudinaryPublicId ?? primaryImage.rawStoragePath}`
           : primaryImage.rawStoragePath;
@@ -247,19 +250,26 @@ export class GenerationOrchestrator {
     if (payload.imageAssets.length > 0) {
       const primaryAsset = payload.imageAssets[0]!;
       const consentShowFace = !!(consentCheck.activeRestrictions as any)?.show_face;
+
+      // Localhost URLs can't be reached by Cloudinary/OpenAI — use Sharp instead
+      const isLocalUrl = primaryAsset.rawStoragePath.startsWith('http://localhost') ||
+                         primaryAsset.rawStoragePath.startsWith('http://127.');
+      const useCloudinary = !!process.env['CLOUDINARY_CLOUD_NAME'] && !isLocalUrl;
+
       try {
-        if (process.env['CLOUDINARY_CLOUD_NAME']) {
+        if (useCloudinary) {
           imageResult = await this.imagePipeline.process({
             rawStoragePath: primaryAsset.rawStoragePath,
             existingCloudinaryId: primaryAsset.cloudinaryPublicId,
             consentShowFace,
-            brandPrimaryColour: brandDNA.primaryColour ?? '#000000',
-            brandSecondaryColour: brandDNA.secondaryColour ?? '#ffffff',
+            brandPrimaryColour: brandDNA.primaryBrandColor ?? '#000000',
+            brandSecondaryColour: brandDNA.secondaryBrandColor ?? '#ffffff',
             outputFormats: ['feed', 'story', 'reel'],
-            contentItemId: 'deferred',   // updated after content_item created
+            contentItemId: 'deferred',
             tenantId,
           });
         } else {
+          // Sharp handles localhost + no-Cloudinary cases
           imageResult = await this.sharpPipeline.process({
             rawImageUrl: primaryAsset.rawStoragePath,
             consentShowFace,
@@ -267,6 +277,17 @@ export class GenerationOrchestrator {
             contentItemId: 'deferred',
             tenantId,
           });
+
+          // If Cloudinary is configured, upload the Sharp-processed Firebase image
+          // so carousel slides can be generated using Cloudinary text overlays
+          if (process.env['CLOUDINARY_CLOUD_NAME'] && imageResult) {
+            try {
+              const cloudinaryId = await this.imagePipeline.uploadUrl(imageResult.variants.feedUrl, tenantId);
+              imageResult = { ...imageResult, cloudinaryPublicId: cloudinaryId };
+            } catch (err) {
+              console.error(`[Orchestrator] Cloudinary re-upload failed for job ${jobId}:`, err);
+            }
+          }
         }
         componentStatus.image = 'completed';
       } catch (err) {

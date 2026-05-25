@@ -81,6 +81,14 @@ export class ImagePipelineService {
   }
 
   // --------------------------------------------------------------------------
+  // Upload any public URL to Cloudinary — used by orchestrator after Sharp
+  // --------------------------------------------------------------------------
+
+  async uploadUrl(url: string, tenantId: string): Promise<string> {
+    return this.uploadFromFirebase(url, tenantId);
+  }
+
+  // --------------------------------------------------------------------------
   // Step 1: Upload from Firebase via Cloudinary's fetch-from-URL feature
   // --------------------------------------------------------------------------
 
