@@ -115,8 +115,13 @@ export class BookingImportService {
 
       // 5. Auto-import before/after photos from recipientIntakeData
       const intake = booking.recipientIntakeData as Record<string, unknown> | null;
-      const beforeUrl = intake?.beforePhotoUrl as string | undefined;
+      // After photo is stored at top-level: recipientIntakeData.afterPhotoUrl
       const afterUrl = intake?.afterPhotoUrl as string | undefined;
+      // Before photo is stored nested inside service-category key: recipientIntakeData.skinData.beforePhotoUrl
+      const SERVICE_DATA_KEYS = ['skinData', 'hairData', 'nailsData', 'injectablesData', 'browsLashesData', 'bodyData', 'wellnessData'];
+      const beforeUrl = SERVICE_DATA_KEYS
+        .map(k => (intake?.[k] as Record<string, unknown> | undefined)?.beforePhotoUrl as string | undefined)
+        .find(Boolean);
       let imageCount = 0;
 
       if (beforeUrl) {
