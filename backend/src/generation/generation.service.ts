@@ -3,10 +3,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GenerateContentDto, TweakContentDto } from './dto/generation.dto';
 import { GenerationGateway } from './generation.gateway';
 import { contentGenerationQueue } from '../ai/queues/queue.definitions';
+import { CrmReaderService } from '../crm/crm-reader.service';
 
 @Injectable()
 export class GenerationService {
-  constructor(private prisma: PrismaService, private generationGateway: GenerationGateway) {}
+  constructor(
+    private prisma: PrismaService,
+    private generationGateway: GenerationGateway,
+    private crmReader: CrmReaderService,
+  ) {}
 
   async generate(tenantId: string, clientId: string, dto: GenerateContentDto) {
     const appointment = await this.prisma.appointment.findUnique({
@@ -50,6 +55,30 @@ export class GenerationService {
       }
     });
 
+    // Check Growth Studio's own image_assets table first
+    const imageAssetRecords = await this.prisma.imageAsset.findMany({
+      where: { appointmentId: appointment.id, deletedAt: null },
+      orderBy: [{ isAfterPhoto: 'desc' }, { createdAt: 'asc' }],
+      select: { rawUrl: true, cloudinaryPublicId: true, visionAnalysis: true },
+    });
+
+    let imageAssets = imageAssetRecords
+      .filter(a => a.rawUrl)
+      .map(a => ({
+        rawStoragePath: a.rawUrl!,
+        cloudinaryPublicId: a.cloudinaryPublicId ?? undefined,
+        visionAnalysisCache: a.visionAnalysis ? JSON.stringify(a.visionAnalysis) : undefined,
+      }));
+
+    // Fall back to the CRM booking's after-photo if no Growth Studio image assets exist
+    if (imageAssets.length === 0 && appointment.crmBookingId) {
+      const crmBooking = await this.crmReader.getBookingById(appointment.crmBookingId);
+      const afterPhotoUrl = crmBooking?.recipientIntakeData?.['afterPhotoUrl'] as string | undefined;
+      if (afterPhotoUrl) {
+        imageAssets = [{ rawStoragePath: afterPhotoUrl }];
+      }
+    }
+
     await contentGenerationQueue.add(
       `generation:${job.id}`,
       {
@@ -60,7 +89,7 @@ export class GenerationService {
         consentSnapshot: appointment.consentRecord,
         brandDNA: brandDna,
         businessGoal: 'build_brand_authority',
-        imageAssets: [],
+        imageAssets,
         generationOptions: {
           outputFormats: dto.outputFormats as any,
           includeVoiceover: dto.includeVoiceover,
