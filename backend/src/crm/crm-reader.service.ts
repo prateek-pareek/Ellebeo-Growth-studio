@@ -67,7 +67,7 @@ export class CrmReaderService {
 
   async getBookingsForTechnician(
     technicianId: string,
-    limit = 50,
+    limit = 200,
     offset = 0,
   ): Promise<CrmBooking[]> {
     return this.prisma.$queryRaw<CrmBooking[]>`

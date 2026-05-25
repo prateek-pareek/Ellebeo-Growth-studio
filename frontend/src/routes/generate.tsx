@@ -114,12 +114,12 @@ function GeneratePage() {
     };
   }, [jobId, generating]);
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (selectedFormat?: Format) => {
     if (!appointment) return;
     setGenerating(true);
     setStep("review");
     setJobStatus("Queuing job...");
-    
+
     const formatMap: Record<Format, string> = {
       'Carousel': 'carousel',
       'Reel': 'reel',
@@ -133,15 +133,25 @@ function GeneratePage() {
       'educate': 'build_brand_authority',
       'convert': 'attract_new_clients',
       'availability': 'fill_quiet_days',
-      'trust': 'client_retention'
+      'trust': 'retain_existing_clients'
     };
+
+    const platformMap: Record<Format, string[]> = {
+      'Carousel': ['instagram'],
+      'Reel': ['instagram'],
+      'Story': ['instagram'],
+      'Caption': ['instagram'],
+      'TikTok': ['instagram', 'tiktok'],
+    };
+
+    const activeFormat = selectedFormat ?? format;
 
     try {
       const res = await api.post('/generation/generate', {
         appointmentId: appointment.id,
         goal: goalMap[goal],
-        outputFormats: [formatMap[format]],
-        platforms: ['instagram'],
+        outputFormats: [formatMap[activeFormat]],
+        platforms: platformMap[activeFormat],
         includeVoiceover: false,
         includeMusic: false
       });
@@ -232,7 +242,7 @@ function GeneratePage() {
                 <FormatStep
                   format={format}
                   setFormat={setFormat}
-                  onContinue={handleGenerate}
+                  onContinue={(selectedFormat) => handleGenerate(selectedFormat)}
                   onBack={() => setStep("goal")}
                 />
               )}
@@ -503,7 +513,7 @@ function FormatStep({
 }: {
   format: Format;
   setFormat: (f: Format) => void;
-  onContinue: () => void;
+  onContinue: (selectedFormat: Format) => void;
   onBack: () => void;
 }) {
   return (
@@ -513,7 +523,7 @@ function FormatStep({
         {FORMATS.map((f) => (
           <button
             key={f.id}
-            onClick={() => { setFormat(f.id); onContinue(); }}
+            onClick={() => { setFormat(f.id); onContinue(f.id); }}
             className={"p-5 text-left " + (f.id === format ? "bg-foreground text-offwhite" : "bg-card hover:bg-nude/30")}
           >
             <p className="font-serif text-xl mb-1">{f.name}</p>
