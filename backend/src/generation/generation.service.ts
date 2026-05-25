@@ -38,19 +38,8 @@ export class GenerationService {
     const limits = this.getTierLimits(tenant?.subscriptionTier ?? 'free');
     const usage = await this.getTodayUsage(tenantId);
 
-    if (usage.generations >= limits.generations) {
-      throw new HttpException(
-        `Daily generation limit reached (${limits.generations}/day). Resets at midnight UTC.`,
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
+    // Rate limit enforcement disabled for demo
     const isReel = (dto.outputFormats as string[]).some(f => f === 'reel');
-    if (isReel && usage.reels >= limits.reels) {
-      throw new HttpException(
-        `Daily reel limit reached (${limits.reels}/day). Resets at midnight UTC.`,
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
 
     // Create the generation job
     const job = await this.prisma.generationJob.create({
