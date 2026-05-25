@@ -592,7 +592,27 @@ function ReviewStep({ generating, jobStatus, backendVariants }: any) {
         </a>
       </div>
 
-      {contentItem.processedImageUrlFeed && (
+      {/* Carousel slides */}
+      {contentItem.platformVariants?.type === 'carousel' && (
+        <div className="artifact overflow-hidden">
+          <p className="text-[10px] uppercase tracking-widest text-taupe px-6 pt-5 pb-3">
+            Carousel slides ({contentItem.platformVariants.slides.length})
+          </p>
+          <div className="flex gap-2 overflow-x-auto px-6 pb-5">
+            {contentItem.platformVariants.slides.map((url: string, i: number) => (
+              <div key={i} className="shrink-0 w-56">
+                <img src={url} alt={`Slide ${i + 1}`} className="w-56 h-56 object-cover" />
+                <p className="text-[10px] text-taupe text-center mt-1">
+                  {['Hook', 'Result', 'CTA'][i] ?? `Slide ${i + 1}`}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Single processed image (non-carousel formats) */}
+      {!contentItem.platformVariants?.type && contentItem.processedImageUrlFeed && (
         <div className="artifact overflow-hidden">
           <img
             src={contentItem.processedImageUrlFeed}

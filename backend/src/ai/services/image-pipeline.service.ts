@@ -57,16 +57,18 @@ export class ImagePipelineService {
     const storyUrl = this.buildTransformedUrl(publicId, 'story', facesBlurred, brandPrimaryColour);
     const thumbnailUrl = this.buildTransformedUrl(publicId, 'thumbnail', facesBlurred, brandPrimaryColour);
 
-    // Step 8: Store URLs in PostgreSQL
-    await this.persistImageUrls({
-      contentItemId,
-      publicId,
-      feedUrl,
-      storyUrl,
-      thumbnailUrl,
-      faceBlurred: facesBlurred,
-      brandOverlayApplied: true,
-    });
+    // Step 8: Store URLs in PostgreSQL (skip when called from orchestrator with deferred ID)
+    if (contentItemId !== 'deferred') {
+      await this.persistImageUrls({
+        contentItemId,
+        publicId,
+        feedUrl,
+        storyUrl,
+        thumbnailUrl,
+        faceBlurred: facesBlurred,
+        brandOverlayApplied: true,
+      });
+    }
 
     return {
       cloudinaryPublicId: publicId,

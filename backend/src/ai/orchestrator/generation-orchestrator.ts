@@ -15,6 +15,7 @@ import { OutputValidator } from '../guards/output-validator';
 import { JobProgressEmitter } from '../emitters/job-progress.emitter';
 import { ImagePipelineService } from '../services/image-pipeline.service';
 import { SharpImagePipelineService } from '../services/sharp-image-pipeline.service';
+import { CarouselPipelineService, type CarouselSlides } from '../services/carousel-pipeline.service';
 import { ElevenLabsService } from '../services/elevenlabs.service';
 import { OpenAiTtsService } from '../services/openai-tts.service';
 import type { GenerationJobPayload } from '../types/job-payload.types';
@@ -33,6 +34,7 @@ export class GenerationOrchestrator {
   private readonly outputValidator: OutputValidator;
   private readonly imagePipeline: ImagePipelineService;
   private readonly sharpPipeline: SharpImagePipelineService;
+  private readonly carouselPipeline: CarouselPipelineService;
   private readonly elevenLabsService: ElevenLabsService;
   private readonly openAiTtsService: OpenAiTtsService;
 
@@ -52,6 +54,7 @@ export class GenerationOrchestrator {
     this.outputValidator = new OutputValidator();
     this.imagePipeline = new ImagePipelineService(prisma);
     this.sharpPipeline = new SharpImagePipelineService();
+    this.carouselPipeline = new CarouselPipelineService();
     this.elevenLabsService = new ElevenLabsService();
     this.openAiTtsService = new OpenAiTtsService();
   }
@@ -272,6 +275,23 @@ export class GenerationOrchestrator {
       }
     }
 
+    // ── Step 5.6: Carousel Slides (conditional) ───────────────────────────────
+    let carouselSlides: CarouselSlides | null = null;
+    const isCarousel = (generationOptions.outputFormats as string[]).includes('carousel');
+    if (isCarousel && imageResult?.cloudinaryPublicId && captionResult) {
+      try {
+        carouselSlides = this.carouselPipeline.generate({
+          cloudinaryPublicId: imageResult.cloudinaryPublicId,
+          hookText: captionResult.hookSentence || captionResult.caption.slice(0, 60),
+          ctaText: captionResult.callToAction || 'Book your appointment today',
+          brandColour: brandDNA.primaryColour ?? '#1a1a1a',
+        });
+        console.log(`[Orchestrator] Carousel slides generated for job ${jobId}`);
+      } catch (err) {
+        console.error(`[Orchestrator] Carousel slide generation failed for job ${jobId}:`, err);
+      }
+    }
+
     // ── Step 5.7: Voiceover (conditional) ────────────────────────────────────
     let voiceoverResult: VoiceoverResult | null = null;
     if (reelScriptResult && generationOptions.outputFormats.includes('reel')) {
@@ -311,6 +331,7 @@ export class GenerationOrchestrator {
       generationOptionsResult,
       imageResult,
       voiceoverResult,
+      carouselSlides,
     });
 
     // ── Step 7: Final State Transition ────────────────────────────────────────
@@ -374,6 +395,7 @@ export class GenerationOrchestrator {
     generationOptionsResult: (CaptionGenerationResult & { generatedBy: string })[];
     imageResult: ImageProcessingResult | null;
     voiceoverResult: VoiceoverResult | null;
+    carouselSlides: CarouselSlides | null;
   }): Promise<string> {
     const { payload, captionResult, platformVariants, reelScriptResult, componentStatus, generationOptionsResult } = params;
     const { v4: uuidv4 } = await import('uuid');
@@ -396,9 +418,11 @@ export class GenerationOrchestrator {
         estimatedReadTime: captionResult?.estimatedReadTime ?? null,
         confidenceScore: captionResult?.brandVoiceConfidenceScore ?? null,
         generationOptions: (Array.isArray(generationOptionsResult) ? generationOptionsResult : [generationOptionsResult]) as unknown as Prisma.InputJsonValue[],
-        platformVariants: platformVariants
-          ? (platformVariants as unknown as Prisma.InputJsonValue)
-          : Prisma.JsonNull,
+        platformVariants: params.carouselSlides
+          ? (params.carouselSlides as unknown as Prisma.InputJsonValue)
+          : platformVariants
+            ? (platformVariants as unknown as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
         reelScript: reelScriptResult?.script ?? null,
         completedAt: new Date(),
       },
