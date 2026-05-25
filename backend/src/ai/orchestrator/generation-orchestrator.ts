@@ -13,9 +13,13 @@ import { ReelScriptChain } from '../chains/reel-script.chain';
 import { PlatformVariantChain } from '../chains/platform-variant.chain';
 import { OutputValidator } from '../guards/output-validator';
 import { JobProgressEmitter } from '../emitters/job-progress.emitter';
+import { ImagePipelineService } from '../services/image-pipeline.service';
+import { SharpImagePipelineService } from '../services/sharp-image-pipeline.service';
+import { ElevenLabsService } from '../services/elevenlabs.service';
+import { OpenAiTtsService } from '../services/openai-tts.service';
 import type { GenerationJobPayload } from '../types/job-payload.types';
 import type { GenerationResult, ComponentStatus } from '../types/generation-result.types';
-import type { VisionAnalysisResult, CaptionGenerationResult, ReelScriptResult, PlatformVariantResult } from '../types/chain-output.types';
+import type { VisionAnalysisResult, CaptionGenerationResult, ReelScriptResult, PlatformVariantResult, ImageProcessingResult, VoiceoverResult } from '../types/chain-output.types';
 import { validateStateTransition } from '../types/job-payload.types';
 import type { JobState } from '../types/job-payload.types';
 
@@ -27,6 +31,10 @@ export class GenerationOrchestrator {
   private readonly reelScriptChain: ReelScriptChain;
   private readonly platformVariantChain: PlatformVariantChain;
   private readonly outputValidator: OutputValidator;
+  private readonly imagePipeline: ImagePipelineService;
+  private readonly sharpPipeline: SharpImagePipelineService;
+  private readonly elevenLabsService: ElevenLabsService;
+  private readonly openAiTtsService: OpenAiTtsService;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -42,6 +50,10 @@ export class GenerationOrchestrator {
     this.reelScriptChain = new ReelScriptChain(modelRouter);
     this.platformVariantChain = new PlatformVariantChain(modelRouter);
     this.outputValidator = new OutputValidator();
+    this.imagePipeline = new ImagePipelineService(prisma);
+    this.sharpPipeline = new SharpImagePipelineService();
+    this.elevenLabsService = new ElevenLabsService();
+    this.openAiTtsService = new OpenAiTtsService();
   }
 
   // --------------------------------------------------------------------------
@@ -91,8 +103,11 @@ export class GenerationOrchestrator {
 
       try {
         const primaryImage = payload.imageAssets[0]!;
+        const imageUrl = process.env['CLOUDINARY_CLOUD_NAME']
+          ? `https://res.cloudinary.com/${process.env['CLOUDINARY_CLOUD_NAME']}/image/upload/${primaryImage.cloudinaryPublicId ?? primaryImage.rawStoragePath}`
+          : primaryImage.rawStoragePath;
         const visionAnalysis = await this.visionChain.analyse({
-          imageUrl: `https://res.cloudinary.com/${process.env['CLOUDINARY_CLOUD_NAME']}/image/upload/${primaryImage.cloudinaryPublicId ?? primaryImage.rawStoragePath}`,
+          imageUrl,
           storagePath: primaryImage.rawStoragePath,
           cachedResult: primaryImage.visionAnalysisCache,
         });
@@ -224,6 +239,62 @@ export class GenerationOrchestrator {
       }
     }
 
+    // ── Step 5.5: Image Processing ────────────────────────────────────────────
+    let imageResult: ImageProcessingResult | null = null;
+    if (payload.imageAssets.length > 0) {
+      const primaryAsset = payload.imageAssets[0]!;
+      const consentShowFace = !!(consentCheck.activeRestrictions as any)?.show_face;
+      try {
+        if (process.env['CLOUDINARY_CLOUD_NAME']) {
+          imageResult = await this.imagePipeline.process({
+            rawStoragePath: primaryAsset.rawStoragePath,
+            existingCloudinaryId: primaryAsset.cloudinaryPublicId,
+            consentShowFace,
+            brandPrimaryColour: brandDNA.primaryColour ?? '#000000',
+            brandSecondaryColour: brandDNA.secondaryColour ?? '#ffffff',
+            outputFormats: ['feed', 'story', 'reel'],
+            contentItemId: 'deferred',   // updated after content_item created
+            tenantId,
+          });
+        } else {
+          imageResult = await this.sharpPipeline.process({
+            rawImageUrl: primaryAsset.rawStoragePath,
+            consentShowFace,
+            outputFormats: ['feed', 'story', 'reel'],
+            contentItemId: 'deferred',
+            tenantId,
+          });
+        }
+        componentStatus.image = 'completed';
+      } catch (err) {
+        componentStatus.image = 'failed';
+        console.error(`[Orchestrator] Image processing failed for job ${jobId}:`, err);
+      }
+    }
+
+    // ── Step 5.7: Voiceover (conditional) ────────────────────────────────────
+    let voiceoverResult: VoiceoverResult | null = null;
+    if (reelScriptResult && generationOptions.outputFormats.includes('reel')) {
+      try {
+        if (process.env['ELEVENLABS_API_KEY']) {
+          const voice = reelScriptResult.elevenLabsVoiceSettings;
+          voiceoverResult = await this.elevenLabsService.generateVoiceover({
+            script: reelScriptResult.script,
+            voiceId: voice.voiceId,
+            stability: voice.stability,
+            similarityBoost: voice.similarityBoost,
+            style: voice.style,
+          });
+        } else {
+          voiceoverResult = await this.openAiTtsService.generateVoiceover({
+            script: reelScriptResult.script,
+          });
+        }
+      } catch (err) {
+        console.error(`[Orchestrator] Voiceover generation failed for job ${jobId}:`, err);
+      }
+    }
+
     // ── Step 6: Persist Result ────────────────────────────────────────────────
     const processingMs = Date.now() - jobStart;
     const contentItemId = await this.persistResult({
@@ -238,6 +309,8 @@ export class GenerationOrchestrator {
       totalTokensOut,
       processingMs,
       generationOptionsResult,
+      imageResult,
+      voiceoverResult,
     });
 
     // ── Step 7: Final State Transition ────────────────────────────────────────
@@ -299,6 +372,8 @@ export class GenerationOrchestrator {
     totalTokensOut: number;
     processingMs: number;
     generationOptionsResult: (CaptionGenerationResult & { generatedBy: string })[];
+    imageResult: ImageProcessingResult | null;
+    voiceoverResult: VoiceoverResult | null;
   }): Promise<string> {
     const { payload, captionResult, platformVariants, reelScriptResult, componentStatus, generationOptionsResult } = params;
     const { v4: uuidv4 } = await import('uuid');
@@ -328,6 +403,27 @@ export class GenerationOrchestrator {
         completedAt: new Date(),
       },
     });
+
+    // Persist image URL if available (column not in Prisma model — use raw SQL)
+    if (params.imageResult) {
+      await this.prisma.$executeRaw`
+        UPDATE platform.content_items
+        SET processed_image_url_feed = ${params.imageResult.variants.feedUrl},
+            image_status             = 'completed',
+            updated_at               = NOW()
+        WHERE id = ${contentItemId}::uuid
+      `;
+    }
+
+    // Persist voiceover URL if available
+    if (params.voiceoverResult) {
+      await this.prisma.$executeRaw`
+        UPDATE platform.content_items
+        SET voiceover_url = ${params.voiceoverResult.audioCdnUrl},
+            updated_at    = NOW()
+        WHERE id = ${contentItemId}::uuid
+      `;
+    }
 
     // Update generation_jobs with cost metadata
     await this.prisma.generationJob.update({
