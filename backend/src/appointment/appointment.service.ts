@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAppointmentDto, UpdateAppointmentDto, CancelAppointmentDto, UploadUrlRequestDto, ConfirmUploadDto } from './dto/appointment.dto';
-import * as admin from 'firebase-admin';
+import { getStorage } from 'firebase-admin/storage';
 import { v4 as uuidv4 } from 'uuid';
 import { ConfigService } from '@nestjs/config';
 
@@ -16,7 +16,7 @@ export class AppointmentService {
   ) {
     const bucketName = this.configService.get<string>('FIREBASE_STORAGE_BUCKET');
     if (bucketName && this.firebaseAdmin) {
-      this.bucket = this.firebaseAdmin.storage().bucket(bucketName);
+      this.bucket = getStorage(this.firebaseAdmin).bucket(bucketName);
     } else {
       console.warn('FIREBASE_STORAGE_BUCKET or Firebase credentials not configured. Upload features will be disabled.');
     }

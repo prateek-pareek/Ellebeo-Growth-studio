@@ -3,14 +3,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GenerateContentDto, TweakContentDto } from './dto/generation.dto';
 import { GenerationGateway } from './generation.gateway';
 import { contentGenerationQueue } from '../ai/queues/queue.definitions';
-import { CrmReaderService } from '../crm/crm-reader.service';
 
 @Injectable()
 export class GenerationService {
   constructor(
     private prisma: PrismaService,
     private generationGateway: GenerationGateway,
-    private crmReader: CrmReaderService,
   ) {}
 
   async generate(tenantId: string, clientId: string, dto: GenerateContentDto) {
@@ -57,7 +55,7 @@ export class GenerationService {
 
     // Check Growth Studio's own image_assets table first
     const imageAssetRecords = await this.prisma.imageAsset.findMany({
-      where: { appointmentId: appointment.id, deletedAt: null },
+      where: { tenantId, appointmentId: appointment.id, deletedAt: null },
       orderBy: [{ isAfterPhoto: 'desc' }, { createdAt: 'asc' }],
       select: { rawUrl: true, cloudinaryPublicId: true, visionAnalysis: true },
     });
@@ -72,8 +70,10 @@ export class GenerationService {
 
     // Fall back to the CRM booking's after-photo if no Growth Studio image assets exist
     if (imageAssets.length === 0 && appointment.crmBookingId) {
-      const crmBooking = await this.crmReader.getBookingById(appointment.crmBookingId);
-      const afterPhotoUrl = crmBooking?.recipientIntakeData?.['afterPhotoUrl'] as string | undefined;
+      const rows = await this.prisma.$queryRaw<Array<{ recipientIntakeData: Record<string, unknown> | null }>>`
+        SELECT "recipientIntakeData" FROM public."Booking" WHERE id = ${appointment.crmBookingId}::uuid LIMIT 1
+      `;
+      const afterPhotoUrl = rows[0]?.recipientIntakeData?.['afterPhotoUrl'] as string | undefined;
       if (afterPhotoUrl) {
         imageAssets = [{ rawStoragePath: afterPhotoUrl, cloudinaryPublicId: undefined, visionAnalysisCache: undefined }];
       }
