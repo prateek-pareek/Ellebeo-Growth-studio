@@ -83,20 +83,14 @@ export class ImagePipelineService {
   // --------------------------------------------------------------------------
 
   private async uploadFromFirebase(storagePath: string, tenantId: string): Promise<string> {
-    if (!firebaseStorage) {
-      throw new ImagePipelineError('Firebase Storage is not configured. Cannot fetch raw image.');
-    }
+    const slug = storagePath.split('/').pop()?.replace(/[^a-zA-Z0-9_-]/g, '_').replace(/\.[^.]+$/, '') || `img_${Date.now()}`;
+    const publicId = `growthstudio/${tenantId}/${slug}`;
 
-    const bucket = firebaseStorage.bucket();
-    const file = bucket.file(storagePath);
-
-    // Generate a temporary signed URL for Cloudinary to fetch the file
-    const [signedUrl] = await file.getSignedUrl({
-      action: 'read',
-      expires: Date.now() + 5 * 60 * 1000, // 5 minutes
-    });
-
-    const publicId = `growthstudio/${tenantId}/${storagePath.split('/').pop()?.replace(/\.[^.]+$/, '') || 'image'}`;
+    // If rawStoragePath is already a public HTTP URL, upload it directly to Cloudinary
+    // (no Firebase needed — covers Unsplash, Firebase public URLs, CRM photo URLs, etc.)
+    const sourceUrl = (storagePath.startsWith('http://') || storagePath.startsWith('https://'))
+      ? storagePath
+      : await this.getFirebaseSignedUrl(storagePath);
 
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(
@@ -105,7 +99,7 @@ export class ImagePipelineService {
       );
 
       cloudinary.uploader.upload(
-        signedUrl,
+        sourceUrl,
         {
           public_id: publicId,
           overwrite: false,
@@ -120,6 +114,18 @@ export class ImagePipelineService {
         }
       );
     });
+  }
+
+  private async getFirebaseSignedUrl(storagePath: string): Promise<string> {
+    if (!firebaseStorage) {
+      throw new ImagePipelineError('Firebase Storage is not configured. Cannot fetch raw image.');
+    }
+    const bucket = firebaseStorage.bucket();
+    const [signedUrl] = await bucket.file(storagePath).getSignedUrl({
+      action: 'read',
+      expires: Date.now() + 5 * 60 * 1000,
+    });
+    return signedUrl;
   }
 
   // --------------------------------------------------------------------------

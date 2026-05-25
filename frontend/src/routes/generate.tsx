@@ -592,6 +592,17 @@ function ReviewStep({ generating, jobStatus, backendVariants }: any) {
         </a>
       </div>
 
+      {contentItem.processedImageUrlFeed && (
+        <div className="artifact overflow-hidden">
+          <img
+            src={contentItem.processedImageUrlFeed}
+            alt="Processed service photo"
+            className="w-full object-cover max-h-[480px]"
+          />
+          <p className="text-[10px] uppercase tracking-widest text-taupe px-6 py-3">Processed image</p>
+        </div>
+      )}
+
       {variants.map((opt: any, i: number) => (
         <article key={i} className="artifact p-8">
           <div className="flex items-center justify-between mb-5">
