@@ -76,9 +76,9 @@ export class ReelScriptChain {
 
     const systemPrompt = `You are writing a voiceover script for a social media Reel for ${brandDNA.businessName}.
 The voiceover must sound EXACTLY like this person when they speak:
-- Tone: ${brandDNA.primaryTone.replace(/_/g, ' ')}
-- They call their clients: "${brandDNA.clientTerminology}"
-- Their personality: ${brandDNA.personaDescription}
+- Tone: ${brandDNA.primaryTone?.replace(/_/g, ' ') ?? 'warm and friendly'}
+- They refer to their clients as: "${brandDNA.clientTerminology ?? 'clients'}"
+- Their target client: ${brandDNA.primaryPersona ?? brandDNA.oneLiner ?? 'beauty lovers who value quality'}
 
 STRICT RULES:
 - Maximum ${maxWords} words (spoken at natural pace = 15 seconds maximum)

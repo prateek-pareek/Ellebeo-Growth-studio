@@ -198,11 +198,11 @@ export class ConsentGuard {
         tenant_id,
         status,
         jsonb_build_object(
-          'show_face',        allow_show_face,
-          'use_name',         allow_use_name,
-          'allow_tagging',    allow_tag_social,
-          'allow_before_after', allow_platform_promotion,
-          'allow_extended_use', allow_marketing_content
+          'show_face',          allow_show_face,
+          'use_name',           allow_use_name,
+          'allow_tagging',      allow_tag_social,
+          'allow_before_after', allow_marketing_content,
+          'allow_extended_use', allow_platform_promotion
         )             AS restrictions,
         granted_at,
         NULL          AS expires_at,

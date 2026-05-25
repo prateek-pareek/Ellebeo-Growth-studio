@@ -75,7 +75,7 @@ export class GenerationService {
       const crmBooking = await this.crmReader.getBookingById(appointment.crmBookingId);
       const afterPhotoUrl = crmBooking?.recipientIntakeData?.['afterPhotoUrl'] as string | undefined;
       if (afterPhotoUrl) {
-        imageAssets = [{ rawStoragePath: afterPhotoUrl }];
+        imageAssets = [{ rawStoragePath: afterPhotoUrl, cloudinaryPublicId: undefined, visionAnalysisCache: undefined }];
       }
     }
 
@@ -88,7 +88,7 @@ export class GenerationService {
         clientId: appointment.clientId,
         consentSnapshot: appointment.consentRecord,
         brandDNA: brandDna,
-        businessGoal: 'build_brand_authority',
+        businessGoal: (dto.goal as any) || 'build_brand_authority',
         imageAssets,
         generationOptions: {
           outputFormats: dto.outputFormats as any,

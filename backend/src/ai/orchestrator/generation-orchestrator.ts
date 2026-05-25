@@ -210,20 +210,17 @@ export class GenerationOrchestrator {
     }
 
     // ── Step 5: Reel Script (conditional) ────────────────────────────────────
-    if (
-      captionResult &&
-      generationOptions.includeVoiceover &&
-      generationOptions.outputFormats.includes('reel')
-    ) {
+    if (captionResult && generationOptions.outputFormats.includes('reel')) {
       try {
         reelScriptResult = await this.reelScriptChain.generate({
           caption: captionResult,
           visionResult,
           brandDNA,
         });
+        componentStatus.reel = 'completed';
       } catch (err) {
+        componentStatus.reel = 'failed';
         console.error(`[Orchestrator] Reel script generation failed for job ${jobId}:`, err);
-        // Non-fatal
       }
     }
 
