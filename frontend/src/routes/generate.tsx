@@ -663,6 +663,9 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
   const [captionCopied, setCaptionCopied] = useState(false);
   const [actionDone, setActionDone] = useState<string | null>(null);
   const [refining, setRefining] = useState<string | null>(null);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduleDateTime, setScheduleDateTime] = useState('');
+  const [scheduling, setScheduling] = useState(false);
 
   if (generating) {
     return (
@@ -703,9 +706,11 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
   const safeFrame = Math.min(activeSlide, Math.max(0, storyFrames.length - 1));
 
   // For single-image posts: primary processed image or first frame url
-  const singleImageUrl = contentItem.processedImageUrlFeed
-    ?? (isCarousel ? (carouselSlides[0]?.url ?? null) : null)
-    ?? (isStory ? (storyFrames[0]?.url ?? null) : null);
+  const singleImageUrl: string | null =
+    contentItem.processedImageUrlFeed ||
+    (isCarousel ? carouselSlides[0]?.url : undefined) ||
+    (isStory ? storyFrames[0]?.url : undefined) ||
+    null;
 
   const charCount = (opt.caption ?? "").length;
   const tagCount = (opt.hashtags ?? []).length;
@@ -733,18 +738,56 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
     a.click();
   };
 
-  const handleAction = async (action: "draft" | "approve" | "schedule") => {
-    const labels: Record<string, string> = {
-      draft: "Saved as draft",
-      approve: "Approved",
-      schedule: "Approved & ready to schedule",
-    };
+  const handleAction = async (action: "draft" | "approve") => {
     try {
       await api.post(`/content/${contentItem.id}/select-option`, { optionIndex: activeVariant });
-      setActionDone(labels[action]);
-      toast.success(labels[action]);
+      if (action === "draft") {
+        await api.patch(`/content/${contentItem.id}/reject`);
+        setActionDone("Saved as draft");
+        toast.success("Saved as draft");
+      } else {
+        await api.patch(`/content/${contentItem.id}/approve`);
+        setActionDone("Approved");
+        toast.success("Approved");
+      }
     } catch {
       toast.error("Action failed. Try again.");
+    }
+  };
+
+  const handleScheduleSubmit = async () => {
+    if (!scheduleDateTime) return;
+    setScheduling(true);
+    try {
+      await api.post(`/content/${contentItem.id}/select-option`, { optionIndex: activeVariant });
+      await api.patch(`/content/${contentItem.id}/approve`);
+
+      const accountsRes = await api.get('/social-accounts');
+      const accounts: any[] = accountsRes.data?.data ?? accountsRes.data ?? [];
+      const connected = accounts.find((a: any) => a.status === 'connected');
+
+      const postFormat = isCarousel ? 'carousel' : isStory ? 'story' : isReel ? 'reel' : 'feed';
+
+      if (connected) {
+        await api.post('/schedule', {
+          contentItemId: contentItem.id,
+          socialAccountId: connected.id,
+          platform: connected.platform,
+          postFormat,
+          scheduledFor: new Date(scheduleDateTime).toISOString(),
+        });
+        const label = new Date(scheduleDateTime).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+        toast.success(`Scheduled for ${label}`);
+        setActionDone(`Scheduled · ${label}`);
+      } else {
+        toast.success("Approved — connect a social account in Settings to publish");
+        setActionDone("Approved — no account connected");
+      }
+      setShowScheduleModal(false);
+    } catch {
+      toast.error("Schedule failed. Try again.");
+    } finally {
+      setScheduling(false);
     }
   };
 
@@ -1317,13 +1360,52 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
             Approve
           </button>
           <button
-            onClick={() => handleAction("schedule")}
+            onClick={() => setShowScheduleModal(true)}
             className="bg-foreground text-offwhite px-5 py-2.5 text-[10px] uppercase tracking-widest hover:bg-taupe transition-colors"
           >
             Approve & schedule
           </button>
         </div>
       </div>
+
+      {/* Schedule modal */}
+      {showScheduleModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-card border hairline p-8 w-full max-w-sm shadow-xl">
+            <p className="eyebrow mb-2">Schedule post</p>
+            <p className="text-sm text-taupe mb-6 leading-relaxed">
+              Pick a date and time to publish. The post will be approved and added to your calendar.
+            </p>
+
+            <div className="space-y-1 mb-6">
+              <label className="text-[10px] uppercase tracking-widest text-taupe block mb-1">Date & Time</label>
+              <input
+                type="datetime-local"
+                value={scheduleDateTime}
+                onChange={e => setScheduleDateTime(e.target.value)}
+                min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                className="w-full bg-transparent border-b hairline py-2 text-sm outline-none focus:border-foreground text-foreground"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShowScheduleModal(false); setScheduleDateTime(''); }}
+                className="flex-1 border hairline px-4 py-3 text-[10px] uppercase tracking-widest text-taupe hover:text-foreground hover:border-foreground transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleScheduleSubmit}
+                disabled={!scheduleDateTime || scheduling}
+                className="flex-1 bg-foreground text-offwhite px-4 py-3 text-[10px] uppercase tracking-widest hover:bg-taupe transition-colors disabled:opacity-50"
+              >
+                {scheduling ? "Scheduling..." : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
