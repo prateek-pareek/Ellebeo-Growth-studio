@@ -693,8 +693,12 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
   const opt = variants[activeVariant] ?? variants[0];
   const isCarousel = contentItem.platformVariants?.type === 'carousel';
   const isStory = contentItem.platformVariants?.type === 'story';
+  const isReel = contentItem.platformVariants?.type === 'reel';
   const carouselSlides: any[] = isCarousel ? (contentItem.platformVariants?.slides ?? []) : [];
   const storyFrames: any[] = isStory ? (contentItem.platformVariants?.frames ?? []) : [];
+  const reelShots: any[] = isReel ? (contentItem.platformVariants?.shots ?? []) : [];
+  const reelPostingTime: string = isReel ? (contentItem.platformVariants?.suggestedPostingTime ?? '') : '';
+  const reelHookOverlay: string = isReel ? (contentItem.platformVariants?.hookOverlayText ?? '') : '';
   const safeSlide = Math.min(activeSlide, Math.max(0, carouselSlides.length - 1));
   const safeFrame = Math.min(activeSlide, Math.max(0, storyFrames.length - 1));
 
@@ -724,7 +728,7 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
     if (!url) return;
     const a = document.createElement("a");
     a.href = url;
-    a.download = `ellebeo-${isStory ? `frame-${safeFrame + 1}` : isCarousel ? `slide-${safeSlide + 1}` : 'content'}-${contentItem.id ?? Date.now()}.jpg`;
+    a.download = `ellebeo-${isStory ? `frame-${safeFrame + 1}` : isCarousel ? `slide-${safeSlide + 1}` : isReel ? 'reel-preview' : 'content'}-${contentItem.id ?? Date.now()}.jpg`;
     a.target = "_blank";
     a.click();
   };
@@ -805,7 +809,7 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
             <p className="text-[10px] uppercase tracking-widest text-offwhite">Draft preview</p>
           </div>
           <p className="text-[10px] uppercase tracking-widest text-nude">
-            {isCarousel ? `Carousel · ${carouselSlides.length} slides` : isStory ? `4-Frame Story · 9:16 · Auto-advance` : `Option ${activeVariant + 1}`}
+            {isCarousel ? `Carousel · ${carouselSlides.length} slides` : isStory ? `4-Frame Story · 9:16 · Auto-advance` : isReel ? `TikTok / Reel · ${reelShots.length} shots` : `Option ${activeVariant + 1}`}
           </p>
         </div>
 
@@ -915,6 +919,133 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
               )}
 
               {/* Hashtags */}
+              {opt.hashtags?.length > 0 && (
+                <div className="px-5 py-4">
+                  <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Suggested hashtags</p>
+                  <div className="flex flex-wrap gap-2">
+                    {opt.hashtags.map((h: string) => (
+                      <span key={h} className="text-[10px] uppercase tracking-widest border hairline px-2 py-1 text-taupe">#{h}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : isReel && reelShots.length > 0 ? (
+          /* ── REEL / TIKTOK LAYOUT ────────────────────────────────────── */
+          <div className="grid grid-cols-1 lg:grid-cols-2">
+
+            {/* LEFT — simulated 9:16 preview + shot strip */}
+            <div className="bg-[#0a0a0a] flex flex-col">
+
+              {/* Simulated 9:16 video frame */}
+              <div className="relative w-full" style={{ aspectRatio: '9/16', maxHeight: 340, overflow: 'hidden' }}>
+                {singleImageUrl ? (
+                  <img src={singleImageUrl} alt="Reel preview" className="absolute inset-0 w-full h-full object-cover opacity-70" />
+                ) : (
+                  <div className="absolute inset-0 bg-gradient-to-b from-[#111] to-[#0a0a0a]" />
+                )}
+
+                {/* Dark vignette */}
+                <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/70" />
+
+                {/* SIMULATED badge */}
+                <div className="absolute top-3 left-3 bg-black/60 border border-white/20 px-2 py-0.5">
+                  <p className="text-[8px] uppercase tracking-widest text-white/60">Simulated</p>
+                </div>
+
+                {/* Play button */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="size-14 rounded-full bg-white/10 border border-white/30 flex items-center justify-center backdrop-blur-sm">
+                    <svg width="18" height="20" viewBox="0 0 18 20" fill="none">
+                      <path d="M2 2l14 8-14 8V2z" fill="white" fillOpacity="0.9"/>
+                    </svg>
+                  </div>
+                </div>
+
+                {/* Hook text overlay bottom */}
+                {reelHookOverlay && (
+                  <div className="absolute bottom-0 left-0 right-0 px-3 pb-3">
+                    <p className="text-[8px] uppercase tracking-widest text-white/50 mb-1">Hook · Shot 1</p>
+                    <p className="text-xs font-medium text-white leading-snug drop-shadow">{reelHookOverlay}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Shot storyboard strip */}
+              <div className="flex gap-1 overflow-x-auto p-2 bg-[#111] border-t border-white/10">
+                {reelShots.map((shot: any, i: number) => (
+                  <div key={i} className="shrink-0 flex flex-col gap-0.5" style={{ width: 64 }}>
+                    <div className="relative bg-[#1a1a1a] border border-white/10 flex items-center justify-center" style={{ height: 44 }}>
+                      <p className="text-[8px] text-white/30 tabular-nums font-mono">{shot.timestamp}</p>
+                      {i === 0 && (
+                        <div className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-white/40" />
+                      )}
+                    </div>
+                    <p className="text-[7px] text-white/40 leading-tight px-0.5 truncate" title={shot.description}>
+                      {shot.description}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Bottom label row */}
+              <div className="flex items-center justify-between px-3 py-2 bg-[#0d0d0d] border-t border-white/10">
+                <p className="text-[8px] uppercase tracking-widest text-white/40">TikTok / Reel</p>
+                <button onClick={downloadImage} className="text-[8px] uppercase tracking-widest text-white/40 hover:text-white/80 flex items-center gap-1 transition-colors">
+                  <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M5 1v6M2 7l3 2 3-2M1 9h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  Download
+                </button>
+              </div>
+            </div>
+
+            {/* RIGHT — reel script + metadata */}
+            <div className="flex flex-col divide-y divide-border">
+
+              {/* Caption */}
+              <div className="p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-[10px] uppercase tracking-widest text-taupe">Caption</p>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[9px] text-taupe">{charCount} chars · {tagCount} tags</span>
+                    <button onClick={copyCaption} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
+                      {captionCopied ? "Copied!" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+                <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{opt.caption}</p>
+              </div>
+
+              {/* Reel script */}
+              <div className="p-5">
+                <p className="text-[10px] uppercase tracking-widest text-taupe mb-3">Reel script</p>
+                <div className="space-y-px bg-border">
+                  {reelShots.map((shot: any, i: number) => (
+                    <div key={i} className="flex items-start gap-3 bg-card px-4 py-3">
+                      <span className="text-[9px] tabular-nums font-mono text-taupe shrink-0 mt-px">{shot.timestamp}</span>
+                      <span className="text-xs text-foreground leading-snug">{shot.description}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* CTA */}
+              {opt.callToAction && (
+                <div className="px-5 py-4">
+                  <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Call to action</p>
+                  <p className="text-sm text-foreground">{opt.callToAction}</p>
+                </div>
+              )}
+
+              {/* Suggested posting time */}
+              {reelPostingTime && (
+                <div className="px-5 py-4">
+                  <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Suggested posting time</p>
+                  <p className="text-sm text-foreground">{reelPostingTime}</p>
+                </div>
+              )}
+
+              {/* Hashtags as pills */}
               {opt.hashtags?.length > 0 && (
                 <div className="px-5 py-4">
                   <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Suggested hashtags</p>

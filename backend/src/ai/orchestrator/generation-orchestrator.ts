@@ -19,6 +19,7 @@ import { CarouselPipelineService, type CarouselSlides } from '../services/carous
 import { CarouselConceptChain } from '../chains/carousel-concept.chain';
 import { StoryFrameChain } from '../chains/story-frame.chain';
 import { StoryPipelineService, type StoryOutput } from '../services/story-pipeline.service';
+import { ReelShotChain, type ReelShotResult } from '../chains/reel-shot.chain';
 import { ElevenLabsService } from '../services/elevenlabs.service';
 import { OpenAiTtsService } from '../services/openai-tts.service';
 import type { GenerationJobPayload } from '../types/job-payload.types';
@@ -43,6 +44,7 @@ export class GenerationOrchestrator {
   private readonly carouselConceptChain: CarouselConceptChain;
   private readonly storyFrameChain: StoryFrameChain;
   private readonly storyPipeline: StoryPipelineService;
+  private readonly reelShotChain: ReelShotChain;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -66,6 +68,7 @@ export class GenerationOrchestrator {
     this.carouselConceptChain = new CarouselConceptChain();
     this.storyFrameChain = new StoryFrameChain();
     this.storyPipeline = new StoryPipelineService();
+    this.reelShotChain = new ReelShotChain();
   }
 
   // --------------------------------------------------------------------------
@@ -365,6 +368,25 @@ export class GenerationOrchestrator {
       }
     }
 
+    // ── Step 5.66: Reel Shot Storyboard (conditional) ────────────────────────
+    let reelShotResult: ReelShotResult | null = null;
+    const isReel = (generationOptions.outputFormats as string[]).includes('reel');
+    if (isReel && captionResult) {
+      try {
+        reelShotResult = await this.reelShotChain.generate({
+          hookSentence: captionResult.hookSentence || captionResult.caption.slice(0, 80),
+          callToAction: captionResult.callToAction || 'Book your appointment today',
+          serviceName: appointment?.serviceName ?? 'Beauty treatment',
+          clientFirstName: appointment?.client?.firstName ?? undefined,
+          businessGoal: payload.businessGoal,
+          brandName: brandDNA.businessName,
+        });
+        console.log(`[Orchestrator] Reel storyboard: ${reelShotResult.shots.length} shots for job ${jobId}`);
+      } catch (err) {
+        console.error(`[Orchestrator] Reel shot generation failed for job ${jobId}:`, err);
+      }
+    }
+
     // ── Step 5.7: Voiceover (conditional) ────────────────────────────────────
     let voiceoverResult: VoiceoverResult | null = null;
     if (reelScriptResult && generationOptions.outputFormats.includes('reel')) {
@@ -406,6 +428,7 @@ export class GenerationOrchestrator {
       voiceoverResult,
       carouselSlides,
       storyOutput,
+      reelShotResult,
     });
 
     // ── Step 7: Final State Transition ────────────────────────────────────────
@@ -471,6 +494,7 @@ export class GenerationOrchestrator {
     voiceoverResult: VoiceoverResult | null;
     carouselSlides: CarouselSlides | null;
     storyOutput: StoryOutput | null;
+    reelShotResult: ReelShotResult | null;
   }): Promise<string> {
     const { payload, captionResult, platformVariants, reelScriptResult, componentStatus, generationOptionsResult } = params;
     const { v4: uuidv4 } = await import('uuid');
@@ -497,9 +521,11 @@ export class GenerationOrchestrator {
           ? (params.carouselSlides as unknown as Prisma.InputJsonValue)
           : params.storyOutput
             ? (params.storyOutput as unknown as Prisma.InputJsonValue)
-            : platformVariants
-              ? (platformVariants as unknown as Prisma.InputJsonValue)
-              : Prisma.JsonNull,
+            : params.reelShotResult
+              ? (params.reelShotResult as unknown as Prisma.InputJsonValue)
+              : platformVariants
+                ? (platformVariants as unknown as Prisma.InputJsonValue)
+                : Prisma.JsonNull,
         reelScript: reelScriptResult?.script ?? null,
         completedAt: new Date(),
       },
