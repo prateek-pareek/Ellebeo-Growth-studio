@@ -3,7 +3,6 @@ import { useState } from "react";
 import { useAppointments, type Appointment } from "@/lib/providers/appointments-provider";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
-import axios from "axios";
 
 export const Route = createFileRoute("/appointments")({
   head: () => ({
@@ -29,28 +28,12 @@ function AppointmentsPage() {
   const [afterFile, setAfterFile] = useState<File | null>(null);
 
   const uploadFile = async (appointmentId: string, file: File, isBefore: boolean) => {
-    try {
-      const urlRes = await api.post(`/appointments/${appointmentId}/images/upload-url`, {
-        filename: file.name,
-        contentType: file.type,
-        isBeforePhoto: isBefore
-      });
-      const { uploadUrl, storagePath } = urlRes.data.data;
-
-      await axios.put(uploadUrl, file, {
-        headers: { 'Content-Type': file.type }
-      });
-
-      await api.post(`/appointments/${appointmentId}/images/confirm-upload`, {
-        storagePath,
-        fileHash: `hash-${Date.now()}`,
-        fileSizeBytes: file.size,
-        isBeforePhoto: isBefore
-      });
-    } catch (e) {
-      console.error("Upload failed", e);
-      throw e;
-    }
+    const form = new FormData();
+    form.append('file', file);
+    form.append('isBeforePhoto', String(isBefore));
+    await api.post(`/appointments/${appointmentId}/images/upload`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
   };
 
   const handleAddAppointment = async (e: React.FormEvent) => {

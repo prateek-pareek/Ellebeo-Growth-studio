@@ -32,17 +32,44 @@ export class AppointmentService {
       take: safePageSize,
       include: {
         client: { select: { firstName: true, lastName: true } },
-        consentRecord: { select: { status: true } },
         imageAssets: {
           where: { deletedAt: null },
           select: { id: true, rawUrl: true, isBeforePhoto: true, isAfterPhoto: true },
         },
       },
     });
+
+    // Resolve consent status via appointment.consentRecordId (direct FK),
+    // falling back to the client's current consent record if no direct link exists.
+    const consentIds = rows.map((r) => r.consentRecordId).filter(Boolean) as string[];
+    const clientIds = rows.map((r) => r.clientId).filter(Boolean) as string[];
+
+    const [linkedConsents, currentConsents] = await Promise.all([
+      consentIds.length > 0
+        ? this.prisma.consentRecord.findMany({
+            where: { id: { in: consentIds }, tenantId },
+            select: { id: true, status: true },
+          })
+        : Promise.resolve([]),
+      clientIds.length > 0
+        ? this.prisma.consentRecord.findMany({
+            where: { clientId: { in: clientIds }, tenantId, isCurrent: true },
+            select: { clientId: true, status: true },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const linkedMap = new Map(linkedConsents.map((c) => [c.id, c.status]));
+    const clientMap = new Map(currentConsents.map((c) => [c.clientId, c.status]));
+
     return rows.map((a) => ({
       ...a,
       clientName: a.client ? `${a.client.firstName} ${a.client.lastName}` : 'Client',
-      consentStatus: a.consentRecord?.status ?? 'not_requested',
+      consentStatus: (
+        a.consentRecordId
+          ? (linkedMap.get(a.consentRecordId) ?? clientMap.get(a.clientId))
+          : clientMap.get(a.clientId)
+      ) ?? 'not_requested',
       beforePhotoUrl: a.imageAssets.find((i) => i.isBeforePhoto)?.rawUrl ?? null,
       afterPhotoUrl: a.imageAssets.find((i) => i.isAfterPhoto)?.rawUrl ?? null,
     }));
@@ -53,7 +80,18 @@ export class AppointmentService {
       where: { id },
       include: {
         client: { select: { id: true, firstName: true, lastName: true } },
-        consentRecord: {
+        imageAssets: {
+          where: { deletedAt: null },
+          select: { rawUrl: true, isBeforePhoto: true, isAfterPhoto: true },
+        },
+      },
+    });
+    if (!apt || apt.tenantId !== tenantId || apt.deletedAt) throw new NotFoundException('Appointment not found');
+
+    // Resolve consent via direct consentRecordId link, or fall back to client's current record
+    const consentRecord = apt.consentRecordId
+      ? await this.prisma.consentRecord.findUnique({
+          where: { id: apt.consentRecordId },
           select: {
             status: true,
             allowShowFace: true,
@@ -63,19 +101,26 @@ export class AppointmentService {
             allowInternalUse: true,
             allowMarketingContent: true,
           },
-        },
-        imageAssets: {
-          where: { deletedAt: null },
-          select: { rawUrl: true, isBeforePhoto: true, isAfterPhoto: true },
-        },
-      },
-    });
-    if (!apt || apt.tenantId !== tenantId || apt.deletedAt) throw new NotFoundException('Appointment not found');
+        })
+      : await this.prisma.consentRecord.findFirst({
+          where: { clientId: apt.clientId, tenantId, isCurrent: true },
+          select: {
+            status: true,
+            allowShowFace: true,
+            allowUseName: true,
+            allowTagSocial: true,
+            allowPlatformPromotion: true,
+            allowInternalUse: true,
+            allowMarketingContent: true,
+          },
+        });
+
     return {
       ...apt,
       clientId: apt.client?.id ?? null,
       clientName: apt.client ? `${apt.client.firstName} ${apt.client.lastName}` : 'Client',
-      consentStatus: apt.consentRecord?.status ?? 'not_requested',
+      consentRecord,
+      consentStatus: consentRecord?.status ?? 'not_requested',
       beforePhotoUrl: apt.imageAssets?.find((i) => i.isBeforePhoto)?.rawUrl ?? null,
       afterPhotoUrl: apt.imageAssets?.find((i) => i.isAfterPhoto)?.rawUrl ?? null,
     };
@@ -204,6 +249,38 @@ export class AppointmentService {
       imageId: asset.id,
       rawUrl,
     };
+  }
+
+  async uploadImageDirect(tenantId: string, appointmentId: string, file: Express.Multer.File, isBeforePhoto: boolean) {
+    await this.getAppointment(tenantId, appointmentId);
+    if (!this.bucket) throw new BadRequestException('Firebase Storage is not configured');
+
+    const photoType = isBeforePhoto ? 'before' : 'after';
+    const path = `tenants/${tenantId}/appointments/${appointmentId}/${photoType}/${uuidv4()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+
+    await this.bucket.file(path).save(file.buffer, {
+      metadata: { contentType: file.mimetype },
+    });
+
+    const bucketName = this.configService.get<string>('FIREBASE_STORAGE_BUCKET') || '';
+    const rawUrl = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodeURIComponent(path)}?alt=media`;
+
+    const asset = await this.prisma.imageAsset.create({
+      data: {
+        tenantId,
+        appointmentId,
+        rawUrl,
+        s3Key: path,
+        s3Bucket: bucketName,
+        s3ObjectHash: `direct-${Date.now()}`,
+        fileSizeBytes: file.size,
+        isBeforePhoto,
+        isAfterPhoto: !isBeforePhoto,
+        uploadValidated: true,
+      },
+    });
+
+    return { imageId: asset.id, rawUrl };
   }
 
   async deleteImage(tenantId: string, appointmentId: string, imageId: string) {
