@@ -252,6 +252,7 @@ function GeneratePage() {
                   generating={generating}
                   jobStatus={jobStatus}
                   backendVariants={backendVariants}
+                  onChangeStep={(s: Step) => setStep(s)}
                 />
               )}
             </div>
@@ -644,9 +645,23 @@ const STATUS_LABELS: Record<string, string> = {
   generating_reel: "Assembling reel...",
 };
 
-function ReviewStep({ generating, jobStatus, backendVariants }: any) {
-  const [copied, setCopied] = useState<number | null>(null);
+const REFINE_OPTIONS = [
+  "Make more premium",
+  "Make more educational",
+  "Make more direct",
+  "Make softer",
+  "Remove emojis",
+  "Shorten",
+  "+ Create alternate version",
+];
+
+const OPTION_STYLES = ["Editorial · considered", "Balanced · on-brand", "Direct · booking-led"];
+
+function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: any) {
   const [activeVariant, setActiveVariant] = useState(0);
+  const [captionCopied, setCaptionCopied] = useState(false);
+  const [actionDone, setActionDone] = useState<string | null>(null);
+  const [refining, setRefining] = useState<string | null>(null);
 
   if (generating) {
     return (
@@ -672,143 +687,268 @@ function ReviewStep({ generating, jobStatus, backendVariants }: any) {
   const contentItem = backendVariants[0];
   const variants: any[] = Array.isArray(contentItem.generationOptions) && contentItem.generationOptions.length > 0
     ? contentItem.generationOptions
-    : [{ caption: contentItem.caption, hashtags: contentItem.hashtags, hookSentence: contentItem.hookSentence }];
+    : [{ caption: contentItem.caption, hashtags: contentItem.hashtags, hookSentence: contentItem.hookSentence, callToAction: contentItem.callToAction }];
 
   const opt = variants[activeVariant] ?? variants[0];
   const isCarousel = contentItem.platformVariants?.type === 'carousel';
-  const hasImage = isCarousel || !!contentItem.processedImageUrlFeed;
+  const imageUrl = contentItem.processedImageUrlFeed ?? contentItem.platformVariants?.slides?.[0] ?? null;
 
-  const copyToClipboard = (idx: number) => {
-    const o = variants[idx];
-    const text = [o.hookSentence, o.caption, (o.hashtags ?? []).map((h: string) => `#${h}`).join(" ")]
+  const charCount = (opt.caption ?? "").length;
+  const tagCount = (opt.hashtags ?? []).length;
+
+  const copyCaption = () => {
+    const text = [opt.hookSentence, opt.caption, (opt.hashtags ?? []).map((h: string) => `#${h}`).join(" ")]
       .filter(Boolean).join("\n\n");
     navigator.clipboard.writeText(text).then(() => {
-      setCopied(idx);
-      setTimeout(() => setCopied(null), 2000);
+      setCaptionCopied(true);
+      setTimeout(() => setCaptionCopied(false), 2000);
     });
   };
 
+  const downloadImage = async () => {
+    if (!imageUrl) return;
+    const a = document.createElement("a");
+    a.href = imageUrl;
+    a.download = `ellebeo-content-${contentItem.id ?? Date.now()}.jpg`;
+    a.target = "_blank";
+    a.click();
+  };
+
+  const handleAction = async (action: "draft" | "approve" | "schedule") => {
+    try {
+      if (action === "draft") {
+        await api.post(`/content/${contentItem.id}/select-option`, { optionIndex: activeVariant });
+        setActionDone("Saved as draft");
+      } else if (action === "approve") {
+        await api.post(`/content/${contentItem.id}/select-option`, { optionIndex: activeVariant });
+        setActionDone("Approved");
+      } else {
+        await api.post(`/content/${contentItem.id}/select-option`, { optionIndex: activeVariant });
+        setActionDone("Approved & ready to schedule");
+      }
+      toast.success(actionDone || "Saved");
+    } catch {
+      toast.error("Action failed. Try again.");
+    }
+  };
+
+  const handleRefine = async (refinement: string) => {
+    if (!contentItem.id) return;
+    setRefining(refinement);
+    try {
+      await api.post("/generation/tweak", {
+        contentItemId: contentItem.id,
+        instruction: refinement,
+      });
+      toast.success("Refining in background — check Content for the updated version.");
+    } catch {
+      toast.error("Refine failed.");
+    } finally {
+      setRefining(null);
+    }
+  };
+
   return (
-    <div className="space-y-6">
-      {/* Header row */}
-      <div className="flex items-center justify-between">
-        <p className="eyebrow">{variants.length} variant{variants.length > 1 ? "s" : ""} generated</p>
-        <a
-          href="/content"
-          className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground border-b border-taupe pb-0.5"
+    <div className="space-y-5">
+
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="eyebrow mb-1">Content Studio · {variants.length} draft{variants.length > 1 ? "s" : ""}</p>
+          <p className="text-xs text-taupe">Shaped by your Brand DNA. Compare, refine, then schedule.</p>
+        </div>
+        <button
+          onClick={() => onChangeStep?.("format")}
+          className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground whitespace-nowrap"
         >
-          View all in Content →
-        </a>
+          ← Change goal or format
+        </button>
       </div>
 
-      {/* Two-column post preview */}
-      <div className={`artifact overflow-hidden grid ${hasImage ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1"}`}>
+      {/* Option tabs */}
+      {variants.length > 1 && (
+        <div className="grid gap-px bg-border border hairline" style={{ gridTemplateColumns: `repeat(${variants.length}, 1fr)` }}>
+          {variants.map((_: any, i: number) => (
+            <button
+              key={i}
+              onClick={() => setActiveVariant(i)}
+              className={"p-4 text-left transition-colors " + (i === activeVariant ? "bg-foreground text-offwhite" : "bg-card hover:bg-nude/20")}
+            >
+              <p className={"text-[9px] uppercase tracking-widest mb-1 " + (i === activeVariant ? "text-nude" : "text-taupe")}>
+                Option {i + 1}
+              </p>
+              <p className="text-xs font-medium">{OPTION_STYLES[i] ?? `Option ${i + 1}`}</p>
+            </button>
+          ))}
+        </div>
+      )}
 
-        {/* LEFT — image / carousel */}
-        {hasImage && (
-          <div className="bg-nude/20 flex flex-col">
-            {isCarousel ? (
+      {/* Draft preview card */}
+      <div className="border hairline overflow-hidden">
+
+        {/* Card header */}
+        <div className="flex items-center justify-between bg-foreground px-5 py-3">
+          <div className="flex items-center gap-2">
+            <span className="size-1.5 rounded-full bg-nude shrink-0" />
+            <p className="text-[10px] uppercase tracking-widest text-offwhite">Draft preview</p>
+          </div>
+          <p className="text-[10px] uppercase tracking-widest text-nude">
+            Option {activeVariant + 1}
+          </p>
+        </div>
+
+        {/* Two-column body */}
+        <div className="grid grid-cols-1 lg:grid-cols-2">
+
+          {/* LEFT — image */}
+          <div className="relative bg-nude/10 flex flex-col">
+            {imageUrl ? (
               <>
-                <p className="text-[10px] uppercase tracking-widest text-taupe px-5 pt-4 pb-2">
-                  Carousel · {contentItem.platformVariants.slides.length} slides
-                </p>
-                <div className="flex gap-2 overflow-x-auto px-5 pb-5 flex-1">
-                  {contentItem.platformVariants.slides.map((url: string, i: number) => (
-                    <div key={i} className="shrink-0">
-                      <img
-                        src={url}
-                        alt={`Slide ${i + 1}`}
-                        className="w-44 h-44 object-cover"
-                      />
-                      <p className="text-[9px] text-taupe text-center mt-1 uppercase tracking-widest">
-                        {['Hook', 'Result', 'CTA'][i] ?? `Slide ${i + 1}`}
-                      </p>
-                    </div>
-                  ))}
+                {isCarousel ? (
+                  <div className="flex gap-2 overflow-x-auto p-4 flex-1">
+                    {contentItem.platformVariants.slides.map((url: string, i: number) => (
+                      <div key={i} className="shrink-0">
+                        <img src={url} alt={`Slide ${i + 1}`} className="w-40 h-40 object-cover" />
+                        <p className="text-[9px] text-taupe text-center mt-1 uppercase tracking-widest">
+                          {['Hook', 'Result', 'CTA'][i] ?? `Slide ${i + 1}`}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <img
+                      src={imageUrl}
+                      alt="Generated content"
+                      className="w-full object-cover max-h-[400px]"
+                    />
+                    {opt.hookSentence && (
+                      <div className="absolute bottom-0 left-0 right-0 bg-foreground/80 px-4 py-3">
+                        <p className="text-[9px] uppercase tracking-widest text-nude mb-1">On-image text</p>
+                        <p className="text-xs text-offwhite italic leading-snug">"{opt.hookSentence}"</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* Image actions */}
+                <div className="flex items-center justify-between px-4 py-3 border-t hairline bg-card">
+                  <p className="text-[9px] uppercase tracking-widest text-taupe">
+                    {isCarousel ? "Carousel" : "Caption"} · {contentItem.serviceCategory ?? "Post"}
+                  </p>
+                  <button
+                    onClick={downloadImage}
+                    className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground flex items-center gap-1.5 transition-colors"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                      <path d="M5 1v6M2 7l3 2 3-2M1 9h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    Download image
+                  </button>
                 </div>
               </>
             ) : (
-              <img
-                src={contentItem.processedImageUrlFeed}
-                alt="Processed service photo"
-                className="w-full h-full object-cover min-h-[280px] max-h-[480px]"
-              />
+              <div className="flex-1 flex items-center justify-center min-h-[200px]">
+                <p className="text-xs text-taupe italic">No image generated</p>
+              </div>
             )}
           </div>
-        )}
 
-        {/* RIGHT — caption panel */}
-        <div className="p-6 sm:p-8 flex flex-col gap-5">
+          {/* RIGHT — caption details */}
+          <div className="flex flex-col divide-y divide-border">
 
-          {/* Variant tabs (if multiple) */}
-          {variants.length > 1 && (
-            <div className="flex gap-1">
-              {variants.map((_: any, i: number) => (
-                <button
-                  key={i}
-                  onClick={() => setActiveVariant(i)}
-                  className={
-                    "px-3 py-1 text-[10px] uppercase tracking-widest border hairline transition-colors " +
-                    (i === activeVariant ? "bg-foreground text-offwhite border-foreground" : "text-taupe hover:text-foreground")
-                  }
-                >
-                  Option {i + 1}
-                </button>
-              ))}
+            {/* Caption */}
+            <div className="p-5 flex-1">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[10px] uppercase tracking-widest text-taupe">Caption</p>
+                <div className="flex items-center gap-3">
+                  <span className="text-[9px] text-taupe">{charCount} chars · {tagCount} tags</span>
+                  <button
+                    onClick={copyCaption}
+                    className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors"
+                  >
+                    {captionCopied ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+              </div>
+              <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{opt.caption}</p>
             </div>
-          )}
 
-          {/* Hook */}
-          {opt.hookSentence && (
-            <div className="pb-4 border-b hairline">
-              <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Hook</p>
-              <p className="text-base font-medium leading-snug">{opt.hookSentence}</p>
-            </div>
-          )}
+            {/* CTA */}
+            {opt.callToAction && (
+              <div className="px-5 py-4">
+                <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Call to action</p>
+                <p className="text-sm text-foreground">{opt.callToAction}</p>
+              </div>
+            )}
 
-          {/* Caption */}
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Caption</p>
-            <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground">{opt.caption}</p>
+            {/* Hashtags */}
+            {opt.hashtags && opt.hashtags.length > 0 && (
+              <div className="px-5 py-4">
+                <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Suggested hashtags</p>
+                <p className="text-xs text-taupe leading-relaxed">
+                  {opt.hashtags.map((h: string) => `#${h}`).join("  ")}
+                </p>
+              </div>
+            )}
           </div>
+        </div>
+      </div>
 
-          {/* Hashtags */}
-          {opt.hashtags && opt.hashtags.length > 0 && (
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Hashtags</p>
-              <p className="text-xs text-taupe leading-relaxed">
-                {opt.hashtags.map((h: string) => `#${h}`).join(" ")}
-              </p>
-            </div>
-          )}
+      {/* Refine this option */}
+      <div>
+        <p className="text-[10px] uppercase tracking-widest text-taupe mb-3">Refine this option</p>
+        <div className="flex flex-wrap gap-2">
+          {REFINE_OPTIONS.map((r) => (
+            <button
+              key={r}
+              onClick={() => handleRefine(r)}
+              disabled={!!refining}
+              className={
+                "px-3 py-1.5 text-[10px] uppercase tracking-widest border hairline transition-colors " +
+                (refining === r
+                  ? "bg-foreground text-offwhite border-foreground"
+                  : "bg-card text-taupe hover:text-foreground hover:border-foreground disabled:opacity-40")
+              }
+            >
+              {refining === r ? "Refining..." : r}
+            </button>
+          ))}
+        </div>
+      </div>
 
-          {/* Actions */}
-          <div className="flex flex-wrap gap-3 mt-auto pt-2">
-            <button
-              onClick={async () => {
-                try {
-                  await api.post(`/content/${contentItem.id}/select-option`, { optionIndex: activeVariant });
-                  toast.success("Saved to Content.");
-                } catch {
-                  toast.error("Failed to save.");
-                }
-              }}
-              className="bg-foreground text-offwhite px-5 py-2.5 text-[10px] uppercase tracking-widest hover:bg-taupe transition-colors"
-            >
-              Use This Version
-            </button>
-            <button
-              onClick={() => copyToClipboard(activeVariant)}
-              className="border hairline px-5 py-2.5 text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors"
-            >
-              {copied === activeVariant ? "Copied!" : "Copy Text"}
-            </button>
-          </div>
+      {/* Bottom action bar */}
+      <div className="flex items-center justify-between border-t hairline pt-5 flex-wrap gap-3">
+        <div className="flex items-center gap-2">
+          <span className="size-1.5 rounded-full bg-sage shrink-0" />
+          <span className="text-[10px] uppercase tracking-widest text-taupe">
+            {actionDone ?? "Ready to schedule"}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => handleAction("draft")}
+            className="border hairline px-5 py-2.5 text-[10px] uppercase tracking-widest text-taupe hover:text-foreground hover:border-foreground transition-colors"
+          >
+            Save as draft
+          </button>
+          <button
+            onClick={() => handleAction("approve")}
+            className="border hairline px-5 py-2.5 text-[10px] uppercase tracking-widest text-foreground hover:bg-nude/20 transition-colors"
+          >
+            Approve
+          </button>
+          <button
+            onClick={() => handleAction("schedule")}
+            className="bg-foreground text-offwhite px-5 py-2.5 text-[10px] uppercase tracking-widest hover:bg-taupe transition-colors"
+          >
+            Approve & schedule
+          </button>
         </div>
       </div>
     </div>
   );
 }
+
 
 function BrandDNAInfluence({ brandDna }: any) {
   return (
