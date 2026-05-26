@@ -84,16 +84,15 @@ export class SharpImagePipelineService {
       throw new SharpPipelineError('Firebase Storage not configured.');
     }
 
-    const storagePath = `images/${tenantId}/${randomUUID()}-${variant}.jpg`;
+    const storagePath = `tenants/${tenantId}/images/${randomUUID()}-${variant}.jpg`;
     const bucket = firebaseStorage.bucket();
     const file = bucket.file(storagePath);
 
     await file.save(buffer, {
       metadata: { contentType: 'image/jpeg' },
-      public: true,
     });
 
-    return `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
+    return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(storagePath)}?alt=media`;
   }
 }
 

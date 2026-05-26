@@ -180,25 +180,9 @@ export class AppointmentService {
       throw new BadRequestException('Image already exists (duplicate hash)');
     }
 
-    // Make file publicly readable and build its URL
-    let rawUrl: string | undefined;
-    try {
-      await file.makePublic();
-      const bucketName = this.configService.get<string>('FIREBASE_STORAGE_BUCKET') || '';
-      rawUrl = `https://storage.googleapis.com/${bucketName}/${dto.storagePath}`;
-    } catch {
-      // Bucket may have uniform access — fall back to signed read URL (1 year)
-      try {
-        const [signedUrl] = await file.getSignedUrl({
-          version: 'v4',
-          action: 'read',
-          expires: Date.now() + 365 * 24 * 60 * 60 * 1000,
-        });
-        rawUrl = signedUrl;
-      } catch {
-        // Store storage path; image display won't work until bucket policy is fixed
-      }
-    }
+    // Build Firebase Storage public download URL (rules allow read: true for tenant paths)
+    const bucketName = this.configService.get<string>('FIREBASE_STORAGE_BUCKET') || '';
+    const rawUrl = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodeURIComponent(dto.storagePath)}?alt=media`;
 
     const asset = await this.prisma.imageAsset.create({
       data: {
