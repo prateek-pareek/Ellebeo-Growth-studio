@@ -831,7 +831,7 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
                     <img
                       src={frame.url}
                       alt={frame.label}
-                      className="w-full aspect-[9/16] object-cover"
+                      className="w-full aspect-[9/16] object-contain bg-black"
                     />
                     <p className="text-[7px] uppercase tracking-widest text-center py-0.5 bg-card text-taupe truncate px-0.5">
                       {i + 1}.{frame.title?.split('·')[1]?.trim() ?? frame.label}
@@ -841,11 +841,11 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
               </div>
 
               {/* Active frame + label */}
-              <div className="relative flex-1">
+              <div className="relative h-80 overflow-hidden bg-black flex items-center justify-center">
                 <img
                   src={storyFrames[safeFrame]?.url}
                   alt={storyFrames[safeFrame]?.label}
-                  className="w-full object-cover max-h-[320px]"
+                  className="h-full w-auto object-contain"
                 />
                 <div className="absolute top-2 left-2 bg-foreground/80 px-2 py-1">
                   <p className="text-[9px] uppercase tracking-widest text-offwhite tabular-nums">
@@ -935,64 +935,65 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
           /* ── REEL / TIKTOK LAYOUT ────────────────────────────────────── */
           <div className="grid grid-cols-1 lg:grid-cols-2">
 
-            {/* LEFT — simulated 9:16 preview + shot strip */}
-            <div className="bg-[#0a0a0a] flex flex-col">
+            {/* LEFT — full-width image preview + storyboard strip */}
+            <div className="bg-[#0d0d0d] flex flex-col">
 
-              {/* Simulated 9:16 video frame */}
-              <div className="relative w-full" style={{ aspectRatio: '9/16', maxHeight: 340, overflow: 'hidden' }}>
+              {/* Main image — full column width, portrait height */}
+              <div className="relative h-80 overflow-hidden">
                 {singleImageUrl ? (
-                  <img src={singleImageUrl} alt="Reel preview" className="absolute inset-0 w-full h-full object-cover opacity-70" />
+                  <img src={singleImageUrl} alt="Reel preview" className="absolute inset-0 w-full h-full object-cover object-center" />
                 ) : (
-                  <div className="absolute inset-0 bg-gradient-to-b from-[#111] to-[#0a0a0a]" />
+                  <div className="absolute inset-0 bg-gradient-to-b from-[#1a1a1a] to-[#0a0a0a]" />
                 )}
 
-                {/* Dark vignette */}
-                <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/70" />
+                {/* Dark overlay */}
+                <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60" />
 
-                {/* SIMULATED badge */}
-                <div className="absolute top-3 left-3 bg-black/60 border border-white/20 px-2 py-0.5">
-                  <p className="text-[8px] uppercase tracking-widest text-white/60">Simulated</p>
+                {/* SIMULATED badge — top right */}
+                <div className="absolute top-3 right-3 bg-black/70 border border-white/20 px-2 py-0.5">
+                  <p className="text-[8px] uppercase tracking-widest text-white/70">Simulated</p>
                 </div>
 
-                {/* Play button */}
+                {/* Play button — centre */}
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="size-14 rounded-full bg-white/10 border border-white/30 flex items-center justify-center backdrop-blur-sm">
-                    <svg width="18" height="20" viewBox="0 0 18 20" fill="none">
+                  <div className="size-12 rounded-full bg-white/15 border border-white/40 flex items-center justify-center backdrop-blur-sm">
+                    <svg width="14" height="16" viewBox="0 0 18 20" fill="none">
                       <path d="M2 2l14 8-14 8V2z" fill="white" fillOpacity="0.9"/>
                     </svg>
                   </div>
                 </div>
 
-                {/* Hook text overlay bottom */}
-                {reelHookOverlay && (
-                  <div className="absolute bottom-0 left-0 right-0 px-3 pb-3">
-                    <p className="text-[8px] uppercase tracking-widest text-white/50 mb-1">Hook · Shot 1</p>
-                    <p className="text-xs font-medium text-white leading-snug drop-shadow">{reelHookOverlay}</p>
-                  </div>
-                )}
+                {/* Hook overlay — bottom */}
+                <div className="absolute bottom-0 left-0 right-0 px-4 pb-4">
+                  <p className="text-[8px] uppercase tracking-widest text-white/50 mb-1">Hook · Shot 1</p>
+                  {reelHookOverlay && (
+                    <p className="text-xs font-medium text-white leading-snug italic">"{reelHookOverlay}"</p>
+                  )}
+                </div>
               </div>
 
-              {/* Shot storyboard strip */}
-              <div className="flex gap-1 overflow-x-auto p-2 bg-[#111] border-t border-white/10">
-                {reelShots.map((shot: any, i: number) => (
-                  <div key={i} className="shrink-0 flex flex-col gap-0.5" style={{ width: 64 }}>
-                    <div className="relative bg-[#1a1a1a] border border-white/10 flex items-center justify-center" style={{ height: 44 }}>
-                      <p className="text-[8px] text-white/30 tabular-nums font-mono">{shot.timestamp}</p>
-                      {i === 0 && (
-                        <div className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-white/40" />
-                      )}
+              {/* Storyboard strip */}
+              <div className="px-3 pt-3 pb-1">
+                <p className="text-[8px] uppercase tracking-widest text-white/30 mb-2">Storyboard · {reelShots.length} shots</p>
+                <div className="flex gap-1.5 overflow-x-auto pb-2">
+                  {reelShots.map((shot: any, i: number) => (
+                    <div key={i} className="shrink-0 flex flex-col gap-1" style={{ width: 60 }}>
+                      <div className="relative bg-[#1c1c1c] border border-white/10 flex flex-col items-center justify-center gap-0.5 px-1 py-2">
+                        <p className="text-[9px] text-white/60 tabular-nums font-mono">{shot.timestamp}</p>
+                        {i === 0 && <div className="absolute top-1 right-1 size-1.5 rounded-full bg-white/50" />}
+                      </div>
+                      <p className="text-[7px] text-white/40 leading-tight truncate" title={shot.description}>
+                        {shot.description}
+                      </p>
                     </div>
-                    <p className="text-[7px] text-white/40 leading-tight px-0.5 truncate" title={shot.description}>
-                      {shot.description}
-                    </p>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
 
-              {/* Bottom label row */}
-              <div className="flex items-center justify-between px-3 py-2 bg-[#0d0d0d] border-t border-white/10">
-                <p className="text-[8px] uppercase tracking-widest text-white/40">TikTok / Reel</p>
-                <button onClick={downloadImage} className="text-[8px] uppercase tracking-widest text-white/40 hover:text-white/80 flex items-center gap-1 transition-colors">
+              {/* Bottom bar */}
+              <div className="flex items-center justify-between px-3 py-2 border-t border-white/10 mt-1">
+                <p className="text-[8px] uppercase tracking-widest text-white/30">TikTok · Reel</p>
+                <button onClick={downloadImage} className="text-[8px] uppercase tracking-widest text-white/30 hover:text-white/70 flex items-center gap-1 transition-colors">
                   <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M5 1v6M2 7l3 2 3-2M1 9h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   Download
                 </button>
