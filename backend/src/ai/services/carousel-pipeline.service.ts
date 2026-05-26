@@ -1,10 +1,11 @@
 // ============================================================================
 // carousel-pipeline.service.ts — Generates carousel slide URLs via Cloudinary
-// Produces 3 slides: hook slide, clean result slide, CTA slide.
-// No extra API calls — all transformations are Cloudinary URL-based.
+// Accepts AI-generated slide concepts (3–5) and produces one Cloudinary URL
+// per slide with appropriate text overlays.
 // ============================================================================
 
 import { v2 as cloudinary } from 'cloudinary';
+import type { CarouselSlideConcept } from '../chains/carousel-concept.chain';
 
 cloudinary.config({
   cloud_name: process.env['CLOUDINARY_CLOUD_NAME'],
@@ -13,88 +14,121 @@ cloudinary.config({
   secure: true,
 });
 
+export interface CarouselSlide {
+  url: string;
+  title: string;  // e.g. "01 · The result revealed" — shown in slide list
+  label: string;  // e.g. "SLIDE 01" — shown as overlay badge
+}
+
 export interface CarouselSlides {
   type: 'carousel';
-  slides: string[];     // Cloudinary URLs, ordered Slide 1 → N
+  slides: CarouselSlide[];
 }
 
 export class CarouselPipelineService {
 
   generate(params: {
     cloudinaryPublicId: string;
-    hookText: string;
-    ctaText: string;
-    brandColour: string;   // hex with or without #
+    brandColour: string;
+    concepts: CarouselSlideConcept[];
   }): CarouselSlides {
-    const { cloudinaryPublicId, hookText, ctaText, brandColour } = params;
+    const { cloudinaryPublicId, brandColour, concepts } = params;
     const hex = brandColour.replace('#', '') || '1a1a1a';
 
     // Strip characters Cloudinary rejects in text overlays
     const safe = (text: string, max: number) =>
-      text.slice(0, max)
-        .replace(/[,\/\\]/g, ' ')   // commas & slashes break Cloudinary URL syntax
+      text
+        .slice(0, max)
+        .replace(/[,\/\\]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
 
-    // ── Slide 1: Hook ─────────────────────────────────────────────────────────
-    // Dark overlay + bold hook sentence at the bottom to grab attention
-    const slide1 = cloudinary.url(cloudinaryPublicId, {
-      transformation: [
-        { width: 1080, height: 1080, crop: 'fill', gravity: 'auto' },
-        { effect: 'brightness:-50' },
-        {
-          overlay: {
-            font_family: 'Montserrat',
-            font_size: 58,
-            font_weight: 'bold',
-            text_align: 'center',
-            text: safe(hookText, 60),
-          },
-          color: '#ffffff',
-          gravity: 'south',
-          y: 120,
-          width: 900,
-          crop: 'fit',
-        },
-        { quality: 'auto', fetch_format: 'auto' },
-      ],
-      secure: true,
+    const slides: CarouselSlide[] = concepts.map((concept, i) => {
+      const isFirst = i === 0;
+      const isLast  = i === concepts.length - 1;
+
+      let url: string;
+
+      if (isFirst) {
+        // Cover slide: dark overlay + bold hook at bottom
+        url = cloudinary.url(cloudinaryPublicId, {
+          transformation: [
+            { width: 1080, height: 1080, crop: 'fill', gravity: 'auto' },
+            { effect: 'brightness:-50' },
+            {
+              overlay: {
+                font_family: 'Montserrat',
+                font_size: 56,
+                font_weight: 'bold',
+                text_align: 'center',
+                text: safe(concept.overlayText, 55),
+              },
+              color: '#ffffff',
+              gravity: 'south',
+              y: 120,
+              width: 900,
+              crop: 'fit',
+            },
+            { quality: 'auto', fetch_format: 'auto' },
+          ],
+          secure: true,
+        });
+      } else if (isLast) {
+        // CTA slide: branded colour text centred
+        url = cloudinary.url(cloudinaryPublicId, {
+          transformation: [
+            { width: 1080, height: 1080, crop: 'fill', gravity: 'auto' },
+            { effect: 'brightness:-35' },
+            {
+              overlay: {
+                font_family: 'Montserrat',
+                font_size: 52,
+                font_weight: 'bold',
+                text_align: 'center',
+                text: safe(concept.overlayText, 55),
+              },
+              color: `#${hex}`,
+              gravity: 'center',
+              width: 900,
+              crop: 'fit',
+            },
+            { quality: 'auto', fetch_format: 'auto' },
+          ],
+          secure: true,
+        });
+      } else {
+        // Body slides: lighter overlay, text at bottom
+        url = cloudinary.url(cloudinaryPublicId, {
+          transformation: [
+            { width: 1080, height: 1080, crop: 'fill', gravity: 'auto' },
+            { effect: 'brightness:-20' },
+            {
+              overlay: {
+                font_family: 'Montserrat',
+                font_size: 46,
+                font_weight: 'bold',
+                text_align: 'center',
+                text: safe(concept.overlayText, 55),
+              },
+              color: '#ffffff',
+              gravity: 'south',
+              y: 80,
+              width: 900,
+              crop: 'fit',
+            },
+            { quality: 'auto', fetch_format: 'auto' },
+          ],
+          secure: true,
+        });
+      }
+
+      return {
+        url,
+        title: concept.title,
+        label: `SLIDE ${String(concept.index).padStart(2, '0')}`,
+      };
     });
 
-    // ── Slide 2: Result ───────────────────────────────────────────────────────
-    // Clean after-photo — let the result speak for itself
-    const slide2 = cloudinary.url(cloudinaryPublicId, {
-      transformation: [
-        { width: 1080, height: 1080, crop: 'fill', gravity: 'auto' },
-        { quality: 'auto', fetch_format: 'auto' },
-      ],
-      secure: true,
-    });
-
-    // ── Slide 3: CTA ──────────────────────────────────────────────────────────
-    // Image + brand-coloured text overlay in centre → drive bookings
-    const slide3 = cloudinary.url(cloudinaryPublicId, {
-      transformation: [
-        { width: 1080, height: 1080, crop: 'fill', gravity: 'auto' },
-        { effect: 'brightness:-30' },
-        {
-          overlay: {
-            font_family: 'Montserrat',
-            font_size: 50,
-            font_weight: 'bold',
-            text_align: 'center',
-            text: safe(ctaText, 55),
-          },
-          color: `#${hex}`,
-          gravity: 'center',
-          width: 900,
-          crop: 'fit',
-        },
-        { quality: 'auto', fetch_format: 'auto' },
-      ],
-      secure: true,
-    });
-
-    return { type: 'carousel', slides: [slide1, slide2, slide3] };
+    return { type: 'carousel', slides };
   }
 }

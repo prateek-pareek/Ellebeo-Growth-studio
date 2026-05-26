@@ -16,6 +16,7 @@ import { JobProgressEmitter } from '../emitters/job-progress.emitter';
 import { ImagePipelineService } from '../services/image-pipeline.service';
 import { SharpImagePipelineService } from '../services/sharp-image-pipeline.service';
 import { CarouselPipelineService, type CarouselSlides } from '../services/carousel-pipeline.service';
+import { CarouselConceptChain } from '../chains/carousel-concept.chain';
 import { ElevenLabsService } from '../services/elevenlabs.service';
 import { OpenAiTtsService } from '../services/openai-tts.service';
 import type { GenerationJobPayload } from '../types/job-payload.types';
@@ -37,6 +38,7 @@ export class GenerationOrchestrator {
   private readonly carouselPipeline: CarouselPipelineService;
   private readonly elevenLabsService: ElevenLabsService;
   private readonly openAiTtsService: OpenAiTtsService;
+  private readonly carouselConceptChain: CarouselConceptChain;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -57,6 +59,7 @@ export class GenerationOrchestrator {
     this.carouselPipeline = new CarouselPipelineService();
     this.elevenLabsService = new ElevenLabsService();
     this.openAiTtsService = new OpenAiTtsService();
+    this.carouselConceptChain = new CarouselConceptChain();
   }
 
   // --------------------------------------------------------------------------
@@ -310,13 +313,23 @@ export class GenerationOrchestrator {
     const isCarousel = (generationOptions.outputFormats as string[]).includes('carousel');
     if (isCarousel && imageResult?.cloudinaryPublicId && captionResult) {
       try {
+        // Generate AI slide concepts first (3–5 named slides)
+        const conceptResult = await this.carouselConceptChain.generate({
+          hookSentence: captionResult.hookSentence || captionResult.caption.slice(0, 80),
+          callToAction: captionResult.callToAction || 'Book your appointment today',
+          serviceName: appointment?.serviceName ?? 'Beauty treatment',
+          clientFirstName: appointment?.client?.firstName ?? undefined,
+          businessGoal: payload.businessGoal,
+          brandName: brandDNA.businessName,
+          slideCount: 4,
+        });
+
         carouselSlides = this.carouselPipeline.generate({
           cloudinaryPublicId: imageResult.cloudinaryPublicId,
-          hookText: captionResult.hookSentence || captionResult.caption.slice(0, 60),
-          ctaText: captionResult.callToAction || 'Book your appointment today',
-          brandColour: brandDNA.primaryColour ?? '#1a1a1a',
+          brandColour: brandDNA.primaryColour ?? brandDNA.primaryBrandColor ?? '#1a1a1a',
+          concepts: conceptResult.concepts,
         });
-        console.log(`[Orchestrator] Carousel slides generated for job ${jobId}`);
+        console.log(`[Orchestrator] Carousel: ${conceptResult.concepts.length} slides generated for job ${jobId}`);
       } catch (err) {
         console.error(`[Orchestrator] Carousel slide generation failed for job ${jobId}:`, err);
       }

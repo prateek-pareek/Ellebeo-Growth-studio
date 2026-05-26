@@ -659,6 +659,7 @@ const OPTION_STYLES = ["Editorial · considered", "Balanced · on-brand", "Direc
 
 function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: any) {
   const [activeVariant, setActiveVariant] = useState(0);
+  const [activeSlide, setActiveSlide] = useState(0);
   const [captionCopied, setCaptionCopied] = useState(false);
   const [actionDone, setActionDone] = useState<string | null>(null);
   const [refining, setRefining] = useState<string | null>(null);
@@ -691,7 +692,12 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
 
   const opt = variants[activeVariant] ?? variants[0];
   const isCarousel = contentItem.platformVariants?.type === 'carousel';
-  const imageUrl = contentItem.processedImageUrlFeed ?? contentItem.platformVariants?.slides?.[0] ?? null;
+  const carouselSlides: any[] = isCarousel ? (contentItem.platformVariants?.slides ?? []) : [];
+  const safeSlide = Math.min(activeSlide, Math.max(0, carouselSlides.length - 1));
+
+  // For single-image posts: primary processed image or first carousel slide url
+  const singleImageUrl = contentItem.processedImageUrlFeed
+    ?? (isCarousel ? (carouselSlides[0]?.url ?? null) : null);
 
   const charCount = (opt.caption ?? "").length;
   const tagCount = (opt.hashtags ?? []).length;
@@ -706,27 +712,25 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
   };
 
   const downloadImage = async () => {
-    if (!imageUrl) return;
+    const url = isCarousel ? (carouselSlides[safeSlide]?.url ?? null) : singleImageUrl;
+    if (!url) return;
     const a = document.createElement("a");
-    a.href = imageUrl;
-    a.download = `ellebeo-content-${contentItem.id ?? Date.now()}.jpg`;
+    a.href = url;
+    a.download = `ellebeo-slide-${safeSlide + 1}-${contentItem.id ?? Date.now()}.jpg`;
     a.target = "_blank";
     a.click();
   };
 
   const handleAction = async (action: "draft" | "approve" | "schedule") => {
+    const labels: Record<string, string> = {
+      draft: "Saved as draft",
+      approve: "Approved",
+      schedule: "Approved & ready to schedule",
+    };
     try {
-      if (action === "draft") {
-        await api.post(`/content/${contentItem.id}/select-option`, { optionIndex: activeVariant });
-        setActionDone("Saved as draft");
-      } else if (action === "approve") {
-        await api.post(`/content/${contentItem.id}/select-option`, { optionIndex: activeVariant });
-        setActionDone("Approved");
-      } else {
-        await api.post(`/content/${contentItem.id}/select-option`, { optionIndex: activeVariant });
-        setActionDone("Approved & ready to schedule");
-      }
-      toast.success(actionDone || "Saved");
+      await api.post(`/content/${contentItem.id}/select-option`, { optionIndex: activeVariant });
+      setActionDone(labels[action]);
+      toast.success(labels[action]);
     } catch {
       toast.error("Action failed. Try again.");
     }
@@ -793,32 +797,159 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
             <p className="text-[10px] uppercase tracking-widest text-offwhite">Draft preview</p>
           </div>
           <p className="text-[10px] uppercase tracking-widest text-nude">
-            Option {activeVariant + 1}
+            {isCarousel ? `Carousel · ${carouselSlides.length} slides` : `Option ${activeVariant + 1}`}
           </p>
         </div>
 
-        {/* Two-column body */}
-        <div className="grid grid-cols-1 lg:grid-cols-2">
+        {isCarousel && carouselSlides.length > 0 ? (
+          /* ── CAROUSEL LAYOUT ─────────────────────────────────────────── */
+          <div className="grid grid-cols-1 lg:grid-cols-2">
 
-          {/* LEFT — image */}
-          <div className="relative bg-nude/10 flex flex-col">
-            {imageUrl ? (
-              <>
-                {isCarousel ? (
-                  <div className="flex gap-2 overflow-x-auto p-4 flex-1">
-                    {contentItem.platformVariants.slides.map((url: string, i: number) => (
-                      <div key={i} className="shrink-0">
-                        <img src={url} alt={`Slide ${i + 1}`} className="w-40 h-40 object-cover" />
-                        <p className="text-[9px] text-taupe text-center mt-1 uppercase tracking-widest">
-                          {['Hook', 'Result', 'CTA'][i] ?? `Slide ${i + 1}`}
-                        </p>
-                      </div>
-                    ))}
+            {/* LEFT — main slide viewer + thumbnail strip */}
+            <div className="bg-nude/10 flex flex-col">
+
+              {/* Main slide */}
+              <div className="relative">
+                <img
+                  src={carouselSlides[safeSlide]?.url}
+                  alt={carouselSlides[safeSlide]?.label ?? `Slide ${safeSlide + 1}`}
+                  className="w-full object-cover max-h-[360px]"
+                />
+
+                {/* Slide counter badge */}
+                <div className="absolute top-3 left-3 bg-foreground/80 px-2 py-1">
+                  <p className="text-[9px] uppercase tracking-widest text-offwhite tabular-nums">
+                    {safeSlide + 1}/{carouselSlides.length}
+                  </p>
+                </div>
+
+                {/* Slide label badge */}
+                <div className="absolute top-3 right-3 bg-foreground/80 px-2 py-1">
+                  <p className="text-[9px] uppercase tracking-widest text-nude">
+                    {carouselSlides[safeSlide]?.label ?? `SLIDE ${safeSlide + 1}`}
+                  </p>
+                </div>
+
+                {/* Prev / Next arrows */}
+                {safeSlide > 0 && (
+                  <button
+                    onClick={() => setActiveSlide(safeSlide - 1)}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 size-8 flex items-center justify-center bg-foreground/70 hover:bg-foreground transition-colors"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                      <path d="M6.5 2L3.5 5l3 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                )}
+                {safeSlide < carouselSlides.length - 1 && (
+                  <button
+                    onClick={() => setActiveSlide(safeSlide + 1)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 size-8 flex items-center justify-center bg-foreground/70 hover:bg-foreground transition-colors"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                      <path d="M3.5 2L6.5 5l-3 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              {/* Thumbnail strip */}
+              <div className="flex gap-1.5 overflow-x-auto p-3 bg-card border-t hairline">
+                {carouselSlides.map((slide: any, i: number) => (
+                  <button
+                    key={i}
+                    onClick={() => setActiveSlide(i)}
+                    className={"shrink-0 relative overflow-hidden transition-all " + (i === safeSlide ? "ring-2 ring-foreground" : "opacity-60 hover:opacity-90")}
+                  >
+                    <img
+                      src={slide.url}
+                      alt={slide.label ?? `Slide ${i + 1}`}
+                      className="w-14 h-14 object-cover"
+                    />
+                    <p className="text-[7px] uppercase tracking-widest text-center py-0.5 bg-card text-taupe">
+                      {String(i + 1).padStart(2, '0')}
+                    </p>
+                  </button>
+                ))}
+              </div>
+
+              {/* Image actions */}
+              <div className="flex items-center justify-between px-4 py-3 border-t hairline bg-card">
+                <p className="text-[9px] uppercase tracking-widest text-taupe">
+                  Carousel · {carouselSlides.length} slides
+                </p>
+                <button
+                  onClick={downloadImage}
+                  className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground flex items-center gap-1.5 transition-colors"
+                >
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                    <path d="M5 1v6M2 7l3 2 3-2M1 9h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  Download slide
+                </button>
+              </div>
+            </div>
+
+            {/* RIGHT — slide list + caption */}
+            <div className="flex flex-col divide-y divide-border">
+
+              {/* Carousel slide list */}
+              <div className="p-5">
+                <p className="text-[10px] uppercase tracking-widest text-taupe mb-3">Carousel slides</p>
+                <div className="space-y-px bg-border">
+                  {carouselSlides.map((slide: any, i: number) => (
+                    <button
+                      key={i}
+                      onClick={() => setActiveSlide(i)}
+                      className={"w-full text-left px-4 py-3 flex items-center gap-3 transition-colors " + (i === safeSlide ? "bg-foreground text-offwhite" : "bg-card hover:bg-nude/20")}
+                    >
+                      <span className={"text-[9px] tabular-nums shrink-0 " + (i === safeSlide ? "text-nude" : "text-taupe")}>
+                        {String(i + 1).padStart(2, '0')}
+                      </span>
+                      <span className="text-xs font-medium truncate">
+                        {slide.title ?? slide.label ?? `Slide ${i + 1}`}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Caption */}
+              <div className="p-5 flex-1">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-[10px] uppercase tracking-widest text-taupe">Caption</p>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[9px] text-taupe">{charCount} chars · {tagCount} tags</span>
+                    <button onClick={copyCaption} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
+                      {captionCopied ? "Copied!" : "Copy"}
+                    </button>
                   </div>
-                ) : (
+                </div>
+                <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{opt.caption}</p>
+              </div>
+
+              {/* Hashtags */}
+              {opt.hashtags && opt.hashtags.length > 0 && (
+                <div className="px-5 py-4">
+                  <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Suggested hashtags</p>
+                  <p className="text-xs text-taupe leading-relaxed">
+                    {opt.hashtags.map((h: string) => `#${h}`).join("  ")}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* ── SINGLE IMAGE LAYOUT ─────────────────────────────────────── */
+          <div className="grid grid-cols-1 lg:grid-cols-2">
+
+            {/* LEFT — image */}
+            <div className="relative bg-nude/10 flex flex-col">
+              {singleImageUrl ? (
+                <>
                   <div className="relative">
                     <img
-                      src={imageUrl}
+                      src={singleImageUrl}
                       alt="Generated content"
                       className="w-full object-cover max-h-[400px]"
                     />
@@ -829,69 +960,59 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
                       </div>
                     )}
                   </div>
-                )}
-                {/* Image actions */}
-                <div className="flex items-center justify-between px-4 py-3 border-t hairline bg-card">
-                  <p className="text-[9px] uppercase tracking-widest text-taupe">
-                    {isCarousel ? "Carousel" : "Caption"} · {contentItem.serviceCategory ?? "Post"}
-                  </p>
-                  <button
-                    onClick={downloadImage}
-                    className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground flex items-center gap-1.5 transition-colors"
-                  >
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                      <path d="M5 1v6M2 7l3 2 3-2M1 9h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                    Download image
-                  </button>
+                  <div className="flex items-center justify-between px-4 py-3 border-t hairline bg-card">
+                    <p className="text-[9px] uppercase tracking-widest text-taupe">
+                      Caption · {contentItem.serviceCategory ?? "Post"}
+                    </p>
+                    <button
+                      onClick={downloadImage}
+                      className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground flex items-center gap-1.5 transition-colors"
+                    >
+                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                        <path d="M5 1v6M2 7l3 2 3-2M1 9h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      Download image
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="flex-1 flex items-center justify-center min-h-[200px]">
+                  <p className="text-xs text-taupe italic">No image generated</p>
                 </div>
-              </>
-            ) : (
-              <div className="flex-1 flex items-center justify-center min-h-[200px]">
-                <p className="text-xs text-taupe italic">No image generated</p>
-              </div>
-            )}
-          </div>
-
-          {/* RIGHT — caption details */}
-          <div className="flex flex-col divide-y divide-border">
-
-            {/* Caption */}
-            <div className="p-5 flex-1">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-[10px] uppercase tracking-widest text-taupe">Caption</p>
-                <div className="flex items-center gap-3">
-                  <span className="text-[9px] text-taupe">{charCount} chars · {tagCount} tags</span>
-                  <button
-                    onClick={copyCaption}
-                    className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors"
-                  >
-                    {captionCopied ? "Copied!" : "Copy"}
-                  </button>
-                </div>
-              </div>
-              <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{opt.caption}</p>
+              )}
             </div>
 
-            {/* CTA */}
-            {opt.callToAction && (
-              <div className="px-5 py-4">
-                <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Call to action</p>
-                <p className="text-sm text-foreground">{opt.callToAction}</p>
+            {/* RIGHT — caption details */}
+            <div className="flex flex-col divide-y divide-border">
+              <div className="p-5 flex-1">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-[10px] uppercase tracking-widest text-taupe">Caption</p>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[9px] text-taupe">{charCount} chars · {tagCount} tags</span>
+                    <button onClick={copyCaption} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
+                      {captionCopied ? "Copied!" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+                <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{opt.caption}</p>
               </div>
-            )}
-
-            {/* Hashtags */}
-            {opt.hashtags && opt.hashtags.length > 0 && (
-              <div className="px-5 py-4">
-                <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Suggested hashtags</p>
-                <p className="text-xs text-taupe leading-relaxed">
-                  {opt.hashtags.map((h: string) => `#${h}`).join("  ")}
-                </p>
-              </div>
-            )}
+              {opt.callToAction && (
+                <div className="px-5 py-4">
+                  <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Call to action</p>
+                  <p className="text-sm text-foreground">{opt.callToAction}</p>
+                </div>
+              )}
+              {opt.hashtags && opt.hashtags.length > 0 && (
+                <div className="px-5 py-4">
+                  <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Suggested hashtags</p>
+                  <p className="text-xs text-taupe leading-relaxed">
+                    {opt.hashtags.map((h: string) => `#${h}`).join("  ")}
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Refine this option */}
