@@ -297,7 +297,7 @@ function AppointmentRow({ a }: { a: Appointment }) {
             Request consent
           </Link>
         ) : (
-          <span className="text-[10px] uppercase tracking-widest text-taupe">No content allowed</span>
+          <span className="text-[10px] uppercase tracking-widest text-destructive">Consent declined</span>
         )}
         {a.contentReady > 0 && (
           <Link to="/content" className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground">
