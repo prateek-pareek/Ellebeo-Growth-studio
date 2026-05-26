@@ -13,6 +13,7 @@ export type ConsentPermissions = {
 export type ConsentView = {
   appointment: {
     id: string;
+    clientId: string | null;
     clientName: string;
     service: string;
     date: string;
@@ -54,6 +55,7 @@ async function fetchCloudConsent(id: string): Promise<
       data: {
         appointment: {
           id: appt.id,
+          clientId: appt.clientId ?? appt.client?.id ?? null,
           clientName: appt.clientName || appt.client?.firstName || "Client",
           service: appt.serviceName,
           date: formatDate(appt.appointmentDate),

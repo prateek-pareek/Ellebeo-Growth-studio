@@ -157,12 +157,20 @@ function RequestView({ data }: { data: NonNullable<ReturnType<typeof useConsentR
   const [sent, setSent] = useState(false);
 
   const handleGrant = async () => {
+    if (!appointment.clientId) {
+      toast.error("Client ID not found. Please refresh and try again.");
+      return;
+    }
     setSending(true);
     try {
-      await api.post(`/clients/${appointment.id}/consent`, {
-        ...perms,
+      await api.post(`/clients/${appointment.clientId}/consent`, {
+        allowShowFace: perms.allowShowFace,
+        allowUseName: perms.allowUseName,
+        allowTagSocial: perms.allowTagSocial,
+        allowPlatformPromotion: perms.allowPlatformPromotion,
+        allowInternalUse: perms.allowInternalUse,
+        allowMarketingContent: perms.allowMarketingContent,
         consentMethod: "manual",
-        appointmentId: appointment.id,
       });
       setSent(true);
       toast.success("Consent granted for " + appointment.clientName);

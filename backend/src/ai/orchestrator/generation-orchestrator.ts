@@ -128,10 +128,14 @@ export class GenerationOrchestrator {
     await this.transitionState(jobId, 'processing_vision', 'building_prompt');
     await this.progressEmitter.emit(jobId, tenantId, 'building_prompt');
 
-    // Fetch appointment to determine service category mapping
+    // Fetch appointment to determine service category mapping + context for prompt
     const appointment = await this.prisma.appointment.findUnique({
       where: { id: payload.appointmentId },
-      select: { serviceCategory: true }
+      select: {
+        serviceCategory: true,
+        serviceName: true,
+        client: { select: { firstName: true } },
+      },
     });
 
     const isMedical = appointment?.serviceCategory === 'injectables_cosmetic' || 
@@ -154,6 +158,11 @@ export class GenerationOrchestrator {
       serviceCategory: appointment?.serviceCategory as import('../config/service-guardrails').ServiceCategory | undefined,
       masterPromptText: masterPrompt?.systemPrompt,
       consentRestrictions: consentCheck.activeRestrictions,
+      appointmentContext: {
+        serviceName: appointment?.serviceName ?? undefined,
+        clientFirstName: appointment?.client?.firstName ?? undefined,
+        serviceCategory: appointment?.serviceCategory ?? undefined,
+      },
     });
 
     // ── Step 3: Caption Generation ───────────────────────────────────────────

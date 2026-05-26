@@ -52,7 +52,7 @@ export class AppointmentService {
     const apt = await this.prisma.appointment.findUnique({
       where: { id },
       include: {
-        client: { select: { firstName: true, lastName: true } },
+        client: { select: { id: true, firstName: true, lastName: true } },
         consentRecord: {
           select: {
             status: true,
@@ -73,6 +73,7 @@ export class AppointmentService {
     if (!apt || apt.tenantId !== tenantId || apt.deletedAt) throw new NotFoundException('Appointment not found');
     return {
       ...apt,
+      clientId: apt.client?.id ?? null,
       clientName: apt.client ? `${apt.client.firstName} ${apt.client.lastName}` : 'Client',
       consentStatus: apt.consentRecord?.status ?? 'not_requested',
       beforePhotoUrl: apt.imageAssets?.find((i) => i.isBeforePhoto)?.rawUrl ?? null,

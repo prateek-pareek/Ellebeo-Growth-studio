@@ -26,7 +26,7 @@ const GOAL_FRAMING: Record<BusinessGoalType, string> = {
 };
 
 const PLATFORM_RULES: Record<SocialPlatform, string> = {
-  instagram: `FORMAT RULES FOR INSTAGRAM:\n- First sentence IS the hook — must stop the scroll\n- Hashtags: 15-25 hashtags\n- Include one clear CTA (book, DM, link in bio)`,
+  instagram: `FORMAT RULES FOR INSTAGRAM:\n- First sentence IS the hook — must stop the scroll\n- Hashtags: 5-10 hashtags only (relevant, not spammy)\n- Include one clear CTA (book, DM, link in bio)`,
   facebook: `FORMAT RULES FOR FACEBOOK:\n- Longer, more conversational (200-400 words)\n- Hashtags: 3-5 maximum\n- No hashtag spam`,
   tiktok: `FORMAT RULES FOR TIKTOK:\n- Hook MUST be in first 2-3 WORDS\n- Short energetic sentences\n- Hashtags: 3-5 only`,
 };
@@ -49,8 +49,13 @@ export class PromptBuilder {
     serviceCategory?: ServiceCategory;
     masterPromptText?: string;
     consentRestrictions?: ConsentRestrictions;
+    appointmentContext?: {
+      serviceName?: string;
+      clientFirstName?: string;
+      serviceCategory?: string;
+    };
   }): Promise<AssembledPrompt> {
-    const { brandDNA, visionResult, businessGoal, goldenExamples, platform, serviceCategory = 'general', masterPromptText, consentRestrictions } = params;
+    const { brandDNA, visionResult, businessGoal, goldenExamples, platform, serviceCategory = 'general', masterPromptText, consentRestrictions, appointmentContext } = params;
 
     const { brandDNAFragment, brandDNACacheHit } = await this.getBrandDNAFragment(brandDNA);
     const { goldenExamplesFragment, goldenExamplesCacheHit } =
@@ -68,9 +73,14 @@ export class PromptBuilder {
 
     const consentSection = this.buildConsentRestrictionsSection(consentRestrictions);
 
+    const appointmentSection = this.buildAppointmentSection(appointmentContext, consentRestrictions);
+
     const userPrompt = [
-      '## APPOINTMENT ANALYSIS',
-      visionSection || '(No image — generate based on appointment context only)',
+      '## APPOINTMENT CONTEXT',
+      appointmentSection,
+      '',
+      '## IMAGE ANALYSIS',
+      visionSection || '(No image provided — generate based on appointment context only)',
       '',
       '## YOUR BUSINESS GOAL THIS WEEK',
       goalSection,
@@ -201,6 +211,20 @@ CRITICAL RULES:
       `**Example ${i + 1} (${ex.platform}, quality: ${ex.qualityScore.toFixed(1)}/1.0):**\n"${ex.captionText}"\nHashtags: ${ex.hashtags.slice(0, 5).join(' ')}...`
     ).join('\n\n');
     return `Study these real examples of this technician's best content. Your output must match this style:\n\n${exampleText}`;
+  }
+
+  private buildAppointmentSection(
+    ctx?: { serviceName?: string; clientFirstName?: string; serviceCategory?: string },
+    consent?: ConsentRestrictions,
+  ): string {
+    if (!ctx) return '(No appointment context provided)';
+    const lines: string[] = [];
+    if (ctx.serviceName) lines.push(`**Service performed:** ${ctx.serviceName}`);
+    if (ctx.serviceCategory) lines.push(`**Service category:** ${ctx.serviceCategory}`);
+    if (ctx.clientFirstName && consent?.use_name !== false) {
+      lines.push(`**Client first name:** ${ctx.clientFirstName} (consent granted to use their name)`);
+    }
+    return lines.length > 0 ? lines.join('\n') : '(No specific appointment details available)';
   }
 
   private buildVisionSection(vision: VisionAnalysisResult): string {
