@@ -15,6 +15,7 @@ enum SubscriptionTier {
   free
   standard
   premium
+
   @@schema("platform")
 }
 
@@ -23,6 +24,7 @@ enum TenantStatus {
   restricted
   suspended
   churned
+
   @@schema("platform")
 }
 
@@ -31,13 +33,14 @@ enum ConsentStatus {
   pending
   declined
   withdrawn
+
   @@schema("platform")
 }
-
 
 enum PromptCategory {
   general
   medical_aesthetics
+
   @@schema("platform")
 }
 
@@ -47,6 +50,7 @@ enum BusinessGoalType {
   promote_high_margin_service
   build_brand_authority
   client_retention
+
   @@schema("platform")
 }
 
@@ -62,6 +66,7 @@ enum ContentStatus {
   flagged
   archived
   failed
+
   @@schema("platform")
 }
 
@@ -78,6 +83,7 @@ enum JobState {
   retrying
   blocked
   dead_letter
+
   @@schema("platform")
 }
 
@@ -86,6 +92,7 @@ enum SocialAccountStatus {
   disconnected
   token_expired
   error
+
   @@schema("platform")
 }
 
@@ -94,6 +101,7 @@ enum PublishStatus {
   published
   failed
   cancelled
+
   @@schema("platform")
 }
 
@@ -101,6 +109,7 @@ enum ToneRating {
   sounds_like_me
   close_but_not_quite
   doesnt_sound_like_me
+
   @@schema("platform")
 }
 
@@ -110,6 +119,7 @@ enum BrandAesthetic {
   bright_playful
   soft_feminine
   bold_luxury
+
   @@schema("platform")
 }
 
@@ -117,6 +127,7 @@ enum BrandTier {
   luxury
   mainstream
   accessible
+
   @@schema("platform")
 }
 
@@ -211,37 +222,37 @@ model MasterPrompt {
 }
 
 model BrandDNA {
-  id                       String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId                 String          @map("tenant_id") @db.Uuid
-  version                  Int             @default(1)
-  isCurrent                Boolean         @default(true) @map("is_current")
-  businessName             String          @map("business_name") @db.VarChar(255)
-  oneLiner                 String?         @map("one_liner") @db.Text
-  uniqueSellingProposition String?         @map("unique_selling_proposition") @db.Text
-  signatureOutcome         String?         @map("signature_outcome") @db.VarChar(500)
-  primaryPersona           String?         @map("primary_persona") @db.VarChar(255)
-  secondaryPersona         String?         @map("secondary_persona") @db.VarChar(255)
-  clientPainPoints         String[]        @map("client_pain_points")
-  primaryTone              String?         @map("primary_tone") @db.VarChar(100)
-  secondaryTone            String?         @map("secondary_tone") @db.VarChar(100)
-  emojiPolicy              String          @default("minimal") @map("emoji_policy") @db.VarChar(50)
-  vocabularyBlacklist      String[]        @map("vocabulary_blacklist")
-  vocabularyPreferred      String[]        @map("vocabulary_preferred")
-  doNotSay                 String[]        @map("do_not_say")
-  formattingStyle          String?         @map("formatting_style") @db.Text
-  aestheticDirection       String?         @map("aesthetic_direction") @db.Text
-  moodTag                  String?         @map("mood_tag") @db.VarChar(100)
-  primaryBrandColor        String?         @map("primary_brand_color") @db.VarChar(50)
-  secondaryBrandColor      String?         @map("secondary_brand_color") @db.VarChar(50)
-  brandFont                String?         @map("brand_font") @db.VarChar(100)
-  locationCity             String?         @map("location_city") @db.VarChar(255)
-  brandTier                BrandTier       @default(mainstream) @map("brand_tier")
-  captionLengthPreference  String          @default("medium") @map("caption_length_preference") @db.VarChar(50)
-  emojiStyle               String          @default("minimal") @map("emoji_style") @db.VarChar(50)
-  averageConfidenceScore   Float           @default(0.5) @map("average_confidence_score")
-  preferredModelOverride   String?         @map("preferred_model_override") @db.VarChar(100)
-  lastUpdatedAt            DateTime        @default(now()) @map("last_updated_at") @db.Timestamptz
-  autoPopulated            Boolean         @default(false) @map("auto_populated")
+  id                       String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                 String        @map("tenant_id") @db.Uuid
+  version                  Int           @default(1)
+  isCurrent                Boolean       @default(true) @map("is_current")
+  businessName             String        @map("business_name") @db.VarChar(255)
+  oneLiner                 String?       @map("one_liner") @db.Text
+  uniqueSellingProposition String?       @map("unique_selling_proposition") @db.Text
+  signatureOutcome         String?       @map("signature_outcome") @db.VarChar(500)
+  primaryPersona           String?       @map("primary_persona") @db.VarChar(255)
+  secondaryPersona         String?       @map("secondary_persona") @db.VarChar(255)
+  clientPainPoints         String[]      @map("client_pain_points")
+  primaryTone              String?       @map("primary_tone") @db.VarChar(100)
+  secondaryTone            String?       @map("secondary_tone") @db.VarChar(100)
+  emojiPolicy              String        @default("minimal") @map("emoji_policy") @db.VarChar(50)
+  vocabularyBlacklist      String[]      @map("vocabulary_blacklist")
+  vocabularyPreferred      String[]      @map("vocabulary_preferred")
+  doNotSay                 String[]      @map("do_not_say")
+  formattingStyle          String?       @map("formatting_style") @db.Text
+  aestheticDirection       String?       @map("aesthetic_direction") @db.Text
+  moodTag                  String?       @map("mood_tag") @db.VarChar(100)
+  primaryBrandColor        String?       @map("primary_brand_color") @db.VarChar(50)
+  secondaryBrandColor      String?       @map("secondary_brand_color") @db.VarChar(50)
+  brandFont                String?       @map("brand_font") @db.VarChar(100)
+  locationCity             String?       @map("location_city") @db.VarChar(255)
+  brandTier                BrandTier     @default(mainstream) @map("brand_tier")
+  captionLengthPreference  String        @default("medium") @map("caption_length_preference") @db.VarChar(50)
+  emojiStyle               String        @default("minimal") @map("emoji_style") @db.VarChar(50)
+  averageConfidenceScore   Float         @default(0.5) @map("average_confidence_score")
+  preferredModelOverride   String?       @map("preferred_model_override") @db.VarChar(100)
+  lastUpdatedAt            DateTime      @default(now()) @map("last_updated_at") @db.Timestamptz
+  autoPopulated            Boolean       @default(false) @map("auto_populated")
   pillars                  BrandPillar[]
   goals                    BrandGoal[]
 
@@ -263,9 +274,9 @@ model BrandPillar {
   sortOrder   Int?     @map("sort_order")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  brandDNAId  String   @map("brand_dna_id") @db.Uuid
-  tenant      Tenant   @relation(fields: [tenantId], references: [id])
-  brandDNA    BrandDNA @relation(fields: [brandDNAId], references: [id])
+  brandDNAId String   @map("brand_dna_id") @db.Uuid
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  brandDNA   BrandDNA @relation(fields: [brandDNAId], references: [id])
 
   @@index([tenantId])
   @@map("brand_pillars")
@@ -273,17 +284,17 @@ model BrandPillar {
 }
 
 model BrandGoal {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId    String   @map("tenant_id") @db.Uuid
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
   label        String   @db.VarChar(255)
   description  String?  @db.Text
   targetMetric String?  @map("target_metric") @db.VarChar(255)
   isActive     Boolean  @default(true) @map("is_active")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  brandDNAId  String   @map("brand_dna_id") @db.Uuid
-  tenant      Tenant   @relation(fields: [tenantId], references: [id])
-  brandDNA    BrandDNA @relation(fields: [brandDNAId], references: [id])
+  brandDNAId String   @map("brand_dna_id") @db.Uuid
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  brandDNA   BrandDNA @relation(fields: [brandDNAId], references: [id])
 
   @@index([tenantId])
   @@map("brand_goals")
@@ -291,23 +302,23 @@ model BrandGoal {
 }
 
 model Client {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId    String   @map("tenant_id") @db.Uuid
-  firstName   String   @map("first_name") @db.VarChar(255)
-  lastName    String   @map("last_name") @db.VarChar(255)
-  email       String?  @db.VarChar(320)
-  phone       String?  @db.VarChar(50)
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  firstName   String    @map("first_name") @db.VarChar(255)
+  lastName    String    @map("last_name") @db.VarChar(255)
+  email       String?   @db.VarChar(320)
+  phone       String?   @db.VarChar(50)
   lastVisitAt DateTime? @map("last_visit_at") @db.Timestamptz
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
-  appointments    Appointment[]
-  consentRecords  ConsentRecord[]
-  generationJobs  GenerationJob[]
+  appointments   Appointment[]
+  consentRecords ConsentRecord[]
+  generationJobs GenerationJob[]
 
   @@index([tenantId])
   @@index([email])
@@ -339,10 +350,10 @@ model ConsentRecord {
   supersededAt           DateTime?     @map("superseded_at") @db.Timestamptz
   crmBookingId           String?       @map("crm_booking_id") @db.Uuid
 
-  tenant      Tenant       @relation(fields: [tenantId], references: [id])
-  client      Client       @relation(fields: [clientId], references: [id])
-  appointment Appointment? @relation(fields: [appointmentId], references: [id])
-  supersededBy ConsentRecord? @relation("SupersededBy", fields: [supersededById], references: [id])
+  tenant            Tenant          @relation(fields: [tenantId], references: [id])
+  client            Client          @relation(fields: [clientId], references: [id])
+  appointment       Appointment?    @relation(fields: [appointmentId], references: [id])
+  supersededBy      ConsentRecord?  @relation("SupersededBy", fields: [supersededById], references: [id])
   supersededRecords ConsentRecord[] @relation("SupersededBy")
 
   @@index([tenantId])
@@ -353,35 +364,35 @@ model ConsentRecord {
 }
 
 model Appointment {
-  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId        String          @map("tenant_id") @db.Uuid
-  clientId        String          @map("client_id") @db.Uuid
-  consentRecordId String?         @unique @map("consent_record_id") @db.Uuid
-  serviceCategory String          @map("service_category") @db.VarChar(100)
-  serviceName     String          @map("service_name") @db.VarChar(255)
-  appointmentDate DateTime        @map("appointment_date") @db.Timestamptz
-  appointmentTime DateTime?       @map("appointment_time") @db.Timestamptz
-  durationMinutes Int?            @map("duration_minutes")
-  externalId      String?         @map("external_id") @db.VarChar(255)
-  source          String          @default("manual") @db.VarChar(50)
-  notes           String?         @db.Text
-  serviceDescription String?      @map("service_description") @db.Text
-  isCancelled     Boolean         @default(false) @map("is_cancelled")
-  cancellationReason String?      @map("cancellation_reason") @db.Text
-  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt       DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  deletedAt       DateTime?       @map("deleted_at") @db.Timestamptz
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String    @map("tenant_id") @db.Uuid
+  clientId           String    @map("client_id") @db.Uuid
+  consentRecordId    String?   @unique @map("consent_record_id") @db.Uuid
+  serviceCategory    String    @map("service_category") @db.VarChar(100)
+  serviceName        String    @map("service_name") @db.VarChar(255)
+  appointmentDate    DateTime  @map("appointment_date") @db.Timestamptz
+  appointmentTime    DateTime? @map("appointment_time") @db.Timestamptz
+  durationMinutes    Int?      @map("duration_minutes")
+  externalId         String?   @map("external_id") @db.VarChar(255)
+  source             String    @default("manual") @db.VarChar(50)
+  notes              String?   @db.Text
+  serviceDescription String?   @map("service_description") @db.Text
+  isCancelled        Boolean   @default(false) @map("is_cancelled")
+  cancellationReason String?   @map("cancellation_reason") @db.Text
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt          DateTime? @map("deleted_at") @db.Timestamptz
 
-  crmBookingId    String?         @map("crm_booking_id") @db.Uuid
+  crmBookingId String? @map("crm_booking_id") @db.Uuid
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
   client Client @relation(fields: [clientId], references: [id])
 
-  consentRecord                ConsentRecord?
-  generationJobs               GenerationJob[]
-  contentItems                 ContentItem[]
-  imageAssets                  ImageAsset[]
-  questionnaireResponses       AppointmentQuestionnaireResponse[]
+  consentRecord          ConsentRecord?
+  generationJobs         GenerationJob[]
+  contentItems           ContentItem[]
+  imageAssets            ImageAsset[]
+  questionnaireResponses AppointmentQuestionnaireResponse[]
 
   @@index([tenantId, appointmentDate])
   @@index([clientId])
@@ -411,7 +422,7 @@ model ImageAsset {
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz
   deletedAt          DateTime? @map("deleted_at") @db.Timestamptz
 
-  tenant      Tenant      @relation(fields: [tenantId], references: [id])
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
   appointment Appointment? @relation(fields: [appointmentId], references: [id])
   contentItem ContentItem? @relation(fields: [contentItemId], references: [id])
 
@@ -422,15 +433,15 @@ model ImageAsset {
 }
 
 model GoldenExample {
-  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId     String       @map("tenant_id") @db.Uuid
-  captionText  String       @map("caption_text") @db.Text
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  captionText  String    @map("caption_text") @db.Text
   hashtags     String[]
-  qualityScore Float        @default(1.0) @map("quality_score")
-  isApproved   Boolean      @default(true) @map("is_approved")
-  isPending    Boolean      @default(false) @map("is_pending")
-  approvedAt   DateTime?    @map("approved_at") @db.Timestamptz
-  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  qualityScore Float     @default(1.0) @map("quality_score")
+  isApproved   Boolean   @default(true) @map("is_approved")
+  isPending    Boolean   @default(false) @map("is_pending")
+  approvedAt   DateTime? @map("approved_at") @db.Timestamptz
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
@@ -459,19 +470,19 @@ model BusinessGoal {
 }
 
 model GenerationJob {
-  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId         String   @map("tenant_id") @db.Uuid
-  appointmentId    String   @map("appointment_id") @db.Uuid
-  clientId         String   @map("client_id") @db.Uuid
-  state            JobState @default(created)
-  jobPayload       Json     @map("job_payload")
-  consentSnapshot  Json     @map("consent_snapshot")
-  brandDnaSnapshot Json     @map("brand_dna_snapshot")
-  brandDnaVersion  Int      @map("brand_dna_version")
-  outputFormats    String[] @map("output_formats")
-  platforms        String[] @map("platforms")
-  includeVoiceover Boolean  @default(false) @map("include_voiceover")
-  includeMusic     Boolean  @default(false) @map("include_music")
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String    @map("tenant_id") @db.Uuid
+  appointmentId    String    @map("appointment_id") @db.Uuid
+  clientId         String    @map("client_id") @db.Uuid
+  state            JobState  @default(created)
+  jobPayload       Json      @map("job_payload")
+  consentSnapshot  Json      @map("consent_snapshot")
+  brandDnaSnapshot Json      @map("brand_dna_snapshot")
+  brandDnaVersion  Int       @map("brand_dna_version")
+  outputFormats    String[]  @map("output_formats")
+  platforms        String[]  @map("platforms")
+  includeVoiceover Boolean   @default(false) @map("include_voiceover")
+  includeMusic     Boolean   @default(false) @map("include_music")
   errorCode        String?   @map("error_code") @db.VarChar(100)
   errorMessage     String?   @map("error_message") @db.Text
   modelUsed        String?   @map("model_used") @db.VarChar(100)
@@ -480,15 +491,15 @@ model GenerationJob {
   processingMs     Int?      @map("processing_ms")
   estimatedCostUsd Float?    @map("estimated_cost_usd")
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   completedAt      DateTime? @map("completed_at") @db.Timestamptz
 
   tenant      Tenant      @relation(fields: [tenantId], references: [id])
   appointment Appointment @relation(fields: [appointmentId], references: [id])
   client      Client      @relation(fields: [clientId], references: [id])
 
-  auditLogs   GenerationAuditLog[]
-  failedJobs  FailedJob[]
+  auditLogs    GenerationAuditLog[]
+  failedJobs   FailedJob[]
   contentItems ContentItem[]
 
   @@index([tenantId, state])
@@ -498,23 +509,23 @@ model GenerationJob {
 }
 
 model ContentItem {
-  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId        String        @map("tenant_id") @db.Uuid
-  appointmentId   String        @map("appointment_id") @db.Uuid
-  generationJobId String?       @map("generation_job_id") @db.Uuid
-  status          ContentStatus @default(draft)
-  captionStatus   ContentStatus @default(draft) @map("caption_status")
-  imageStatus     ContentStatus @default(draft) @map("image_status")
-  reelStatus      ContentStatus @default(draft) @map("reel_status")
-  hookSentence    String?       @map("hook_sentence") @db.Text
-  caption         String?       @db.Text
-  reelScript      String?       @map("reel_script") @db.Text
-  altText         String?       @map("alt_text") @db.Text
-  estimatedReadTime Int?        @map("estimated_read_time")
-  confidenceScore Float?        @map("confidence_score")
-  platformVariants Json?        @map("platform_variants")
-  generationOptions Json[]      @default([]) @map("generation_options")
-  selectedModel   String?       @map("selected_model") @db.VarChar(100)
+  id                    String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId              String        @map("tenant_id") @db.Uuid
+  appointmentId         String        @map("appointment_id") @db.Uuid
+  generationJobId       String?       @map("generation_job_id") @db.Uuid
+  status                ContentStatus @default(draft)
+  captionStatus         ContentStatus @default(draft) @map("caption_status")
+  imageStatus           ContentStatus @default(draft) @map("image_status")
+  reelStatus            ContentStatus @default(draft) @map("reel_status")
+  hookSentence          String?       @map("hook_sentence") @db.Text
+  caption               String?       @db.Text
+  reelScript            String?       @map("reel_script") @db.Text
+  altText               String?       @map("alt_text") @db.Text
+  estimatedReadTime     Int?          @map("estimated_read_time")
+  confidenceScore       Float?        @map("confidence_score")
+  platformVariants      Json?         @map("platform_variants")
+  generationOptions     Json[]        @default([]) @map("generation_options")
+  selectedModel         String?       @map("selected_model") @db.VarChar(100)
   hashtags              String[]
   callToAction          String?       @map("call_to_action") @db.Text
   voiceoverUrl          String?       @map("voiceover_url") @db.VarChar(2000)
@@ -530,20 +541,20 @@ model ContentItem {
   flaggedReason         String?       @map("flagged_reason") @db.Text
   blockedReason         String?       @map("blocked_reason") @db.Text
   toneRating            ToneRating?   @map("tone_rating")
-  approvedAt      DateTime?     @map("approved_at") @db.Timestamptz
-  approvedById    String?       @map("approved_by") @db.Uuid
-  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt       DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  completedAt     DateTime?     @map("completed_at") @db.Timestamptz
-  deletedAt       DateTime?     @map("deleted_at") @db.Timestamptz
+  approvedAt            DateTime?     @map("approved_at") @db.Timestamptz
+  approvedById          String?       @map("approved_by") @db.Uuid
+  createdAt             DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  completedAt           DateTime?     @map("completed_at") @db.Timestamptz
+  deletedAt             DateTime?     @map("deleted_at") @db.Timestamptz
 
-  tenant        Tenant          @relation(fields: [tenantId], references: [id])
-  appointment   Appointment     @relation(fields: [appointmentId], references: [id])
+  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+  appointment   Appointment    @relation(fields: [appointmentId], references: [id])
   generationJob GenerationJob? @relation(fields: [generationJobId], references: [id])
-  approvedBy    User?           @relation("ApprovedBy", fields: [approvedById], references: [id])
+  approvedBy    User?          @relation("ApprovedBy", fields: [approvedById], references: [id])
 
-  imageAssets         ImageAsset[]
-  scheduledPosts      ScheduledPost[]
+  imageAssets            ImageAsset[]
+  scheduledPosts         ScheduledPost[]
   generationFingerprints GenerationFingerprint[]
 
   @@index([tenantId, status])
@@ -583,29 +594,29 @@ model SocialAccount {
 }
 
 model ScheduledPost {
-  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId        String        @map("tenant_id") @db.Uuid
-  contentItemId   String        @map("content_item_id") @db.Uuid
-  socialAccountId String        @map("social_account_id") @db.Uuid
-  campaignId      String?       @map("campaign_id") @db.Uuid
-  platform        String
-  postFormat      String        @map("post_format")
-  captionOverride String?       @map("caption_override") @db.Text
-  hashtagsOverride String[]     @map("hashtags_override")
-  scheduledFor    DateTime      @map("scheduled_for") @db.Timestamptz
-  publishStatus   PublishStatus @default(pending) @map("publish_status")
-  publishedAt     DateTime?     @map("published_at") @db.Timestamptz
-  platformPostId  String?       @map("platform_post_id") @db.VarChar(500)
-  platformPostUrl String?       @map("platform_post_url") @db.VarChar(2000)
-  failedAt        DateTime?     @map("failed_at") @db.Timestamptz
-  failureReason   String?       @map("failure_reason") @db.Text
-  retryCount      Int           @default(0) @map("retry_count")
-  lastRetryAt     DateTime?     @map("last_retry_at") @db.Timestamptz
-  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt       DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  deletedAt       DateTime?     @map("deleted_at") @db.Timestamptz
+  id               String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String        @map("tenant_id") @db.Uuid
+  contentItemId    String        @map("content_item_id") @db.Uuid
+  socialAccountId  String        @map("social_account_id") @db.Uuid
+  campaignId       String?       @map("campaign_id") @db.Uuid
+  platform         String
+  postFormat       String        @map("post_format")
+  captionOverride  String?       @map("caption_override") @db.Text
+  hashtagsOverride String[]      @map("hashtags_override")
+  scheduledFor     DateTime      @map("scheduled_for") @db.Timestamptz
+  publishStatus    PublishStatus @default(pending) @map("publish_status")
+  publishedAt      DateTime?     @map("published_at") @db.Timestamptz
+  platformPostId   String?       @map("platform_post_id") @db.VarChar(500)
+  platformPostUrl  String?       @map("platform_post_url") @db.VarChar(2000)
+  failedAt         DateTime?     @map("failed_at") @db.Timestamptz
+  failureReason    String?       @map("failure_reason") @db.Text
+  retryCount       Int           @default(0) @map("retry_count")
+  lastRetryAt      DateTime?     @map("last_retry_at") @db.Timestamptz
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt        DateTime?     @map("deleted_at") @db.Timestamptz
 
-  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+  tenant        Tenant        @relation(fields: [tenantId], references: [id])
   contentItem   ContentItem   @relation(fields: [contentItemId], references: [id])
   socialAccount SocialAccount @relation(fields: [socialAccountId], references: [id])
   campaign      Campaign?     @relation(fields: [campaignId], references: [id])
@@ -619,20 +630,20 @@ model ScheduledPost {
 }
 
 model Campaign {
-  id                  String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId            String           @map("tenant_id") @db.Uuid
-  name                String           @db.VarChar(500)
-  description         String?          @db.Text
+  id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String            @map("tenant_id") @db.Uuid
+  name                String            @db.VarChar(500)
+  description         String?           @db.Text
   goalType            BusinessGoalType? @map("goal_type")
-  startDate           DateTime?        @map("start_date") @db.Date
-  endDate             DateTime?        @map("end_date") @db.Date
-  totalPostsPlanned   Int              @default(0) @map("total_posts_planned")
-  totalPostsApproved  Int              @default(0) @map("total_posts_approved")
-  totalPostsPublished Int              @default(0) @map("total_posts_published")
-  isActive            Boolean          @default(true) @map("is_active")
-  createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt           DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  deletedAt           DateTime?        @map("deleted_at") @db.Timestamptz
+  startDate           DateTime?         @map("start_date") @db.Date
+  endDate             DateTime?         @map("end_date") @db.Date
+  totalPostsPlanned   Int               @default(0) @map("total_posts_planned")
+  totalPostsApproved  Int               @default(0) @map("total_posts_approved")
+  totalPostsPublished Int               @default(0) @map("total_posts_published")
+  isActive            Boolean           @default(true) @map("is_active")
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt           DateTime?         @map("deleted_at") @db.Timestamptz
 
   tenant         Tenant          @relation(fields: [tenantId], references: [id])
   scheduledPosts ScheduledPost[]
@@ -643,21 +654,21 @@ model Campaign {
 }
 
 model GenerationAuditLog {
-  id                      String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId                String           @map("tenant_id") @db.Uuid
-  jobId                   String?          @map("job_id") @db.Uuid
-  timestamp               DateTime         @default(now()) @db.Timestamptz
-  inputInstruction        String?          @map("input_instruction") @db.Text
-  sanitisationPassed      Boolean          @map("sanitisation_passed")
-  sanitisationFlagReason  String?          @map("sanitisation_flag_reason") @db.VarChar(100)
-  outputValidationPassed  Boolean?         @map("output_validation_passed")
-  outputHardFailures      String[]         @map("output_hard_failures")
-  outputAutoCorrections   String[]         @map("output_auto_corrections")
-  modelUsed               String?          @map("model_used") @db.VarChar(100)
-  serviceCategory         String?          @map("service_category") @db.VarChar(100)
-  flagTriggered           Boolean          @default(false) @map("flag_triggered")
-  flagReasons             String[]         @map("flag_reasons")
-  requiredRegeneration    Boolean          @default(false) @map("required_regeneration")
+  id                     String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId               String   @map("tenant_id") @db.Uuid
+  jobId                  String?  @map("job_id") @db.Uuid
+  timestamp              DateTime @default(now()) @db.Timestamptz
+  inputInstruction       String?  @map("input_instruction") @db.Text
+  sanitisationPassed     Boolean  @map("sanitisation_passed")
+  sanitisationFlagReason String?  @map("sanitisation_flag_reason") @db.VarChar(100)
+  outputValidationPassed Boolean? @map("output_validation_passed")
+  outputHardFailures     String[] @map("output_hard_failures")
+  outputAutoCorrections  String[] @map("output_auto_corrections")
+  modelUsed              String?  @map("model_used") @db.VarChar(100)
+  serviceCategory        String?  @map("service_category") @db.VarChar(100)
+  flagTriggered          Boolean  @default(false) @map("flag_triggered")
+  flagReasons            String[] @map("flag_reasons")
+  requiredRegeneration   Boolean  @default(false) @map("required_regeneration")
 
   tenant Tenant         @relation(fields: [tenantId], references: [id])
   job    GenerationJob? @relation(fields: [jobId], references: [id])
@@ -685,19 +696,19 @@ model GenerationFingerprint {
 }
 
 model FailedJob {
-  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  originalJobId    String    @map("original_job_id") @db.Uuid
-  tenantId         String    @map("tenant_id") @db.Uuid
-  jobPayload       Json      @map("job_payload")
-  errorMessage     String    @map("error_message") @db.Text
-  errorStack       String?   @map("error_stack") @db.Text
-  failedAtStep     String?   @map("failed_at_step") @db.VarChar(100)
-  retryCount       Int       @default(0) @map("retry_count")
-  isResolved       Boolean   @default(false) @map("is_resolved")
-  resolvedAt       DateTime? @map("resolved_at") @db.Timestamptz
-  resolvedById     String?   @map("resolved_by") @db.Uuid
-  resolutionNotes  String?   @map("resolution_notes") @db.Text
-  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  originalJobId   String    @map("original_job_id") @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  jobPayload      Json      @map("job_payload")
+  errorMessage    String    @map("error_message") @db.Text
+  errorStack      String?   @map("error_stack") @db.Text
+  failedAtStep    String?   @map("failed_at_step") @db.VarChar(100)
+  retryCount      Int       @default(0) @map("retry_count")
+  isResolved      Boolean   @default(false) @map("is_resolved")
+  resolvedAt      DateTime? @map("resolved_at") @db.Timestamptz
+  resolvedById    String?   @map("resolved_by") @db.Uuid
+  resolutionNotes String?   @map("resolution_notes") @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
   originalJob GenerationJob @relation(fields: [originalJobId], references: [id])
   tenant      Tenant        @relation(fields: [tenantId], references: [id])
@@ -709,14 +720,14 @@ model FailedJob {
 }
 
 model AppointmentQuestionnaireResponse {
-  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  appointmentId  String      @map("appointment_id") @db.Uuid
-  crmBookingId   String      @map("crm_booking_id") @db.Uuid
-  questionKey    String      @map("question_key") @db.Text
-  questionLabel  String?     @map("question_label") @db.Text
-  answer         String?     @db.Text
-  answeredAt     DateTime?   @map("answered_at") @db.Timestamptz
-  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  appointmentId String    @map("appointment_id") @db.Uuid
+  crmBookingId  String    @map("crm_booking_id") @db.Uuid
+  questionKey   String    @map("question_key") @db.Text
+  questionLabel String?   @map("question_label") @db.Text
+  answer        String?   @db.Text
+  answeredAt    DateTime? @map("answered_at") @db.Timestamptz
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
   appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
 
@@ -727,15 +738,15 @@ model AppointmentQuestionnaireResponse {
 }
 
 model CrmIntegrationConfig {
-  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId             String    @unique @map("tenant_id") @db.Uuid
-  crmSyncEnabled       Boolean   @default(false) @map("crm_sync_enabled")
-  autoImportBookings   Boolean   @default(false) @map("auto_import_bookings")
-  autoMapMedia         Boolean   @default(true) @map("auto_map_media")
-  webhookSecret        String?   @map("webhook_secret") @db.VarChar(255)
-  lastSyncedAt         DateTime? @map("last_synced_at") @db.Timestamptz
-  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String    @unique @map("tenant_id") @db.Uuid
+  crmSyncEnabled     Boolean   @default(false) @map("crm_sync_enabled")
+  autoImportBookings Boolean   @default(false) @map("auto_import_bookings")
+  autoMapMedia       Boolean   @default(true) @map("auto_map_media")
+  webhookSecret      String?   @map("webhook_secret") @db.VarChar(255)
+  lastSyncedAt       DateTime? @map("last_synced_at") @db.Timestamptz
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -744,14 +755,14 @@ model CrmIntegrationConfig {
 }
 
 model RefreshToken {
-  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId      String    @map("user_id") @db.Uuid
-  tokenHash   String    @unique @map("token_hash") @db.VarChar(255)
-  expiresAt   DateTime  @map("expires_at") @db.Timestamptz
-  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz
-  ipAddress   String?   @map("ip_address") @db.Inet
-  userAgent   String?   @map("user_agent") @db.Text
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz
+  ipAddress String?   @map("ip_address") @db.Inet
+  userAgent String?   @map("user_agent") @db.Text
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id])
 

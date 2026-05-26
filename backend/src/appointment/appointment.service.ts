@@ -50,10 +50,34 @@ export class AppointmentService {
 
   async getAppointment(tenantId: string, id: string) {
     const apt = await this.prisma.appointment.findUnique({
-      where: { id }
+      where: { id },
+      include: {
+        client: { select: { firstName: true, lastName: true } },
+        consentRecord: {
+          select: {
+            status: true,
+            allowShowFace: true,
+            allowUseName: true,
+            allowTagSocial: true,
+            allowPlatformPromotion: true,
+            allowInternalUse: true,
+            allowMarketingContent: true,
+          },
+        },
+        imageAssets: {
+          where: { deletedAt: null },
+          select: { rawUrl: true, isBeforePhoto: true, isAfterPhoto: true },
+        },
+      },
     });
     if (!apt || apt.tenantId !== tenantId || apt.deletedAt) throw new NotFoundException('Appointment not found');
-    return apt;
+    return {
+      ...apt,
+      clientName: apt.client ? `${apt.client.firstName} ${apt.client.lastName}` : 'Client',
+      consentStatus: apt.consentRecord?.status ?? 'not_requested',
+      beforePhotoUrl: apt.imageAssets?.find((i) => i.isBeforePhoto)?.rawUrl ?? null,
+      afterPhotoUrl: apt.imageAssets?.find((i) => i.isAfterPhoto)?.rawUrl ?? null,
+    };
   }
 
   async createAppointment(tenantId: string, dto: CreateAppointmentDto) {
@@ -156,11 +180,32 @@ export class AppointmentService {
       throw new BadRequestException('Image already exists (duplicate hash)');
     }
 
+    // Make file publicly readable and build its URL
+    let rawUrl: string | undefined;
+    try {
+      await file.makePublic();
+      const bucketName = this.configService.get<string>('FIREBASE_STORAGE_BUCKET') || '';
+      rawUrl = `https://storage.googleapis.com/${bucketName}/${dto.storagePath}`;
+    } catch {
+      // Bucket may have uniform access — fall back to signed read URL (1 year)
+      try {
+        const [signedUrl] = await file.getSignedUrl({
+          version: 'v4',
+          action: 'read',
+          expires: Date.now() + 365 * 24 * 60 * 60 * 1000,
+        });
+        rawUrl = signedUrl;
+      } catch {
+        // Store storage path; image display won't work until bucket policy is fixed
+      }
+    }
+
     const asset = await this.prisma.imageAsset.create({
       data: {
         tenantId,
         appointmentId,
-        s3Key: dto.storagePath, // Legacy column name; stores Firebase storage path
+        rawUrl,
+        s3Key: dto.storagePath,
         s3Bucket: this.configService.get<string>('FIREBASE_STORAGE_BUCKET') || '',
         s3ObjectHash: dto.fileHash,
         fileSizeBytes: Number(metadata.size || dto.fileSizeBytes || 0),
@@ -170,12 +215,9 @@ export class AppointmentService {
       }
     });
 
-    // Here we would push a job to BullMQ for validation/Cloudinary processing
-    const validationJobId = uuidv4(); // Placeholder for actual BullMQ job ID
-
     return {
       imageId: asset.id,
-      validationJobId,
+      rawUrl,
     };
   }
 

@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 
+export type ConsentPermissions = {
+  allowShowFace: boolean;
+  allowUseName: boolean;
+  allowTagSocial: boolean;
+  allowPlatformPromotion: boolean;
+  allowMarketingContent: boolean;
+  allowInternalUse: boolean;
+};
+
 export type ConsentView = {
   appointment: {
     id: string;
@@ -8,8 +17,11 @@ export type ConsentView = {
     service: string;
     date: string;
     afterImage?: string;
+    beforePhotoUrl?: string | null;
+    afterPhotoUrl?: string | null;
   };
   status: "granted" | "pending" | "declined" | "not_requested";
+  permissions: ConsentPermissions;
 };
 
 export type UseConsentRequestResult = {
@@ -36,16 +48,27 @@ async function fetchCloudConsent(id: string): Promise<
     const appt = res.data.data;
     if (!appt) return { kind: "not_found" };
 
+    const cr = appt.consentRecord;
     return {
       kind: "ok",
       data: {
         appointment: {
           id: appt.id,
-          clientName: appt.client?.firstName || "Client",
+          clientName: appt.clientName || appt.client?.firstName || "Client",
           service: appt.serviceName,
           date: formatDate(appt.appointmentDate),
+          beforePhotoUrl: appt.beforePhotoUrl ?? null,
+          afterPhotoUrl: appt.afterPhotoUrl ?? null,
         },
         status: (appt.consentStatus || "not_requested") as any,
+        permissions: {
+          allowShowFace: cr?.allowShowFace ?? false,
+          allowUseName: cr?.allowUseName ?? false,
+          allowTagSocial: cr?.allowTagSocial ?? false,
+          allowPlatformPromotion: cr?.allowPlatformPromotion ?? false,
+          allowMarketingContent: cr?.allowMarketingContent ?? false,
+          allowInternalUse: cr?.allowInternalUse ?? false,
+        },
       },
     };
   } catch (error: any) {
