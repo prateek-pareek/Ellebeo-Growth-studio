@@ -17,6 +17,8 @@ import { ImagePipelineService } from '../services/image-pipeline.service';
 import { SharpImagePipelineService } from '../services/sharp-image-pipeline.service';
 import { CarouselPipelineService, type CarouselSlides } from '../services/carousel-pipeline.service';
 import { CarouselConceptChain } from '../chains/carousel-concept.chain';
+import { StoryFrameChain } from '../chains/story-frame.chain';
+import { StoryPipelineService, type StoryOutput } from '../services/story-pipeline.service';
 import { ElevenLabsService } from '../services/elevenlabs.service';
 import { OpenAiTtsService } from '../services/openai-tts.service';
 import type { GenerationJobPayload } from '../types/job-payload.types';
@@ -39,6 +41,8 @@ export class GenerationOrchestrator {
   private readonly elevenLabsService: ElevenLabsService;
   private readonly openAiTtsService: OpenAiTtsService;
   private readonly carouselConceptChain: CarouselConceptChain;
+  private readonly storyFrameChain: StoryFrameChain;
+  private readonly storyPipeline: StoryPipelineService;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -60,6 +64,8 @@ export class GenerationOrchestrator {
     this.elevenLabsService = new ElevenLabsService();
     this.openAiTtsService = new OpenAiTtsService();
     this.carouselConceptChain = new CarouselConceptChain();
+    this.storyFrameChain = new StoryFrameChain();
+    this.storyPipeline = new StoryPipelineService();
   }
 
   // --------------------------------------------------------------------------
@@ -335,6 +341,30 @@ export class GenerationOrchestrator {
       }
     }
 
+    // ── Step 5.65: Story Frames (conditional) ────────────────────────────────
+    let storyOutput: StoryOutput | null = null;
+    const isStory = (generationOptions.outputFormats as string[]).includes('story');
+    if (isStory && imageResult?.cloudinaryPublicId && captionResult) {
+      try {
+        const storyFrames = await this.storyFrameChain.generate({
+          hookSentence: captionResult.hookSentence || captionResult.caption.slice(0, 80),
+          callToAction: captionResult.callToAction || 'Book your appointment today',
+          serviceName: appointment?.serviceName ?? 'Beauty treatment',
+          clientFirstName: appointment?.client?.firstName ?? undefined,
+          businessGoal: payload.businessGoal,
+          brandName: brandDNA.businessName,
+        });
+        storyOutput = this.storyPipeline.generate({
+          cloudinaryPublicId: imageResult.cloudinaryPublicId,
+          brandColour: brandDNA.primaryColour ?? brandDNA.primaryBrandColor ?? '#1a1a1a',
+          concepts: storyFrames.frames,
+        });
+        console.log(`[Orchestrator] Story: 4 frames generated for job ${jobId}`);
+      } catch (err) {
+        console.error(`[Orchestrator] Story frame generation failed for job ${jobId}:`, err);
+      }
+    }
+
     // ── Step 5.7: Voiceover (conditional) ────────────────────────────────────
     let voiceoverResult: VoiceoverResult | null = null;
     if (reelScriptResult && generationOptions.outputFormats.includes('reel')) {
@@ -375,6 +405,7 @@ export class GenerationOrchestrator {
       imageResult,
       voiceoverResult,
       carouselSlides,
+      storyOutput,
     });
 
     // ── Step 7: Final State Transition ────────────────────────────────────────
@@ -439,6 +470,7 @@ export class GenerationOrchestrator {
     imageResult: ImageProcessingResult | null;
     voiceoverResult: VoiceoverResult | null;
     carouselSlides: CarouselSlides | null;
+    storyOutput: StoryOutput | null;
   }): Promise<string> {
     const { payload, captionResult, platformVariants, reelScriptResult, componentStatus, generationOptionsResult } = params;
     const { v4: uuidv4 } = await import('uuid');
@@ -463,9 +495,11 @@ export class GenerationOrchestrator {
         generationOptions: (Array.isArray(generationOptionsResult) ? generationOptionsResult : [generationOptionsResult]) as unknown as Prisma.InputJsonValue[],
         platformVariants: params.carouselSlides
           ? (params.carouselSlides as unknown as Prisma.InputJsonValue)
-          : platformVariants
-            ? (platformVariants as unknown as Prisma.InputJsonValue)
-            : Prisma.JsonNull,
+          : params.storyOutput
+            ? (params.storyOutput as unknown as Prisma.InputJsonValue)
+            : platformVariants
+              ? (platformVariants as unknown as Prisma.InputJsonValue)
+              : Prisma.JsonNull,
         reelScript: reelScriptResult?.script ?? null,
         completedAt: new Date(),
       },

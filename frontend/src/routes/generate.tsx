@@ -692,12 +692,16 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
 
   const opt = variants[activeVariant] ?? variants[0];
   const isCarousel = contentItem.platformVariants?.type === 'carousel';
+  const isStory = contentItem.platformVariants?.type === 'story';
   const carouselSlides: any[] = isCarousel ? (contentItem.platformVariants?.slides ?? []) : [];
+  const storyFrames: any[] = isStory ? (contentItem.platformVariants?.frames ?? []) : [];
   const safeSlide = Math.min(activeSlide, Math.max(0, carouselSlides.length - 1));
+  const safeFrame = Math.min(activeSlide, Math.max(0, storyFrames.length - 1));
 
-  // For single-image posts: primary processed image or first carousel slide url
+  // For single-image posts: primary processed image or first frame url
   const singleImageUrl = contentItem.processedImageUrlFeed
-    ?? (isCarousel ? (carouselSlides[0]?.url ?? null) : null);
+    ?? (isCarousel ? (carouselSlides[0]?.url ?? null) : null)
+    ?? (isStory ? (storyFrames[0]?.url ?? null) : null);
 
   const charCount = (opt.caption ?? "").length;
   const tagCount = (opt.hashtags ?? []).length;
@@ -712,11 +716,15 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
   };
 
   const downloadImage = async () => {
-    const url = isCarousel ? (carouselSlides[safeSlide]?.url ?? null) : singleImageUrl;
+    const url = isCarousel
+      ? (carouselSlides[safeSlide]?.url ?? null)
+      : isStory
+        ? (storyFrames[safeFrame]?.url ?? null)
+        : singleImageUrl;
     if (!url) return;
     const a = document.createElement("a");
     a.href = url;
-    a.download = `ellebeo-slide-${safeSlide + 1}-${contentItem.id ?? Date.now()}.jpg`;
+    a.download = `ellebeo-${isStory ? `frame-${safeFrame + 1}` : isCarousel ? `slide-${safeSlide + 1}` : 'content'}-${contentItem.id ?? Date.now()}.jpg`;
     a.target = "_blank";
     a.click();
   };
@@ -797,11 +805,129 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
             <p className="text-[10px] uppercase tracking-widest text-offwhite">Draft preview</p>
           </div>
           <p className="text-[10px] uppercase tracking-widest text-nude">
-            {isCarousel ? `Carousel · ${carouselSlides.length} slides` : `Option ${activeVariant + 1}`}
+            {isCarousel ? `Carousel · ${carouselSlides.length} slides` : isStory ? `4-Frame Story · 9:16 · Auto-advance` : `Option ${activeVariant + 1}`}
           </p>
         </div>
 
-        {isCarousel && carouselSlides.length > 0 ? (
+        {isStory && storyFrames.length > 0 ? (
+          /* ── STORY LAYOUT ────────────────────────────────────────────── */
+          <div className="grid grid-cols-1 lg:grid-cols-2">
+
+            {/* LEFT — story frame strip + active frame */}
+            <div className="bg-nude/10 flex flex-col">
+
+              {/* 4 frame thumbnails in a row */}
+              <div className="grid grid-cols-4 gap-1 p-3 bg-card border-b hairline">
+                {storyFrames.map((frame: any, i: number) => (
+                  <button
+                    key={i}
+                    onClick={() => setActiveSlide(i)}
+                    className={"relative overflow-hidden flex flex-col " + (i === safeFrame ? "ring-2 ring-foreground" : "opacity-60 hover:opacity-90")}
+                  >
+                    <img
+                      src={frame.url}
+                      alt={frame.label}
+                      className="w-full aspect-[9/16] object-cover"
+                    />
+                    <p className="text-[7px] uppercase tracking-widest text-center py-0.5 bg-card text-taupe truncate px-0.5">
+                      {i + 1}.{frame.title?.split('·')[1]?.trim() ?? frame.label}
+                    </p>
+                  </button>
+                ))}
+              </div>
+
+              {/* Active frame + label */}
+              <div className="relative flex-1">
+                <img
+                  src={storyFrames[safeFrame]?.url}
+                  alt={storyFrames[safeFrame]?.label}
+                  className="w-full object-cover max-h-[320px]"
+                />
+                <div className="absolute top-2 left-2 bg-foreground/80 px-2 py-1">
+                  <p className="text-[9px] uppercase tracking-widest text-offwhite tabular-nums">
+                    {safeFrame + 1} / {storyFrames.length}
+                  </p>
+                </div>
+                <div className="absolute top-2 right-2 bg-foreground/80 px-2 py-1">
+                  <p className="text-[9px] uppercase tracking-widest text-nude">
+                    {storyFrames[safeFrame]?.label ?? `FRAME ${safeFrame + 1}`}
+                  </p>
+                </div>
+              </div>
+
+              {/* Nav + download */}
+              <div className="flex items-center justify-between px-4 py-3 border-t hairline bg-card">
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setActiveSlide(Math.max(0, safeFrame - 1))} disabled={safeFrame === 0} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground disabled:opacity-30">← Prev</button>
+                  <button onClick={() => setActiveSlide(Math.min(storyFrames.length - 1, safeFrame + 1))} disabled={safeFrame === storyFrames.length - 1} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground disabled:opacity-30">Next →</button>
+                </div>
+                <button onClick={downloadImage} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground flex items-center gap-1.5 transition-colors">
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 1v6M2 7l3 2 3-2M1 9h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  Download frame
+                </button>
+              </div>
+            </div>
+
+            {/* RIGHT — story sequence + caption */}
+            <div className="flex flex-col divide-y divide-border">
+
+              {/* Story sequence */}
+              <div className="p-5">
+                <p className="text-[10px] uppercase tracking-widest text-taupe mb-3">Story sequence</p>
+                <div className="space-y-px bg-border">
+                  {storyFrames.map((frame: any, i: number) => (
+                    <button
+                      key={i}
+                      onClick={() => setActiveSlide(i)}
+                      className={"w-full text-left px-4 py-3 flex items-center gap-3 transition-colors " + (i === safeFrame ? "bg-foreground text-offwhite" : "bg-card hover:bg-nude/20")}
+                    >
+                      <span className={"text-[9px] tabular-nums shrink-0 " + (i === safeFrame ? "text-nude" : "text-taupe")}>
+                        {String(i + 1).padStart(2, '0')}
+                      </span>
+                      <span className="text-xs font-medium truncate">
+                        {frame.title ?? frame.label ?? `Frame ${i + 1}`}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Caption */}
+              <div className="p-5 flex-1">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-[10px] uppercase tracking-widest text-taupe">Caption</p>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[9px] text-taupe">{charCount} chars · {tagCount} tags</span>
+                    <button onClick={copyCaption} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
+                      {captionCopied ? "Copied!" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+                <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{opt.caption}</p>
+              </div>
+
+              {/* CTA */}
+              {opt.callToAction && (
+                <div className="px-5 py-4">
+                  <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Call to action</p>
+                  <p className="text-sm text-foreground">{opt.callToAction}</p>
+                </div>
+              )}
+
+              {/* Hashtags */}
+              {opt.hashtags?.length > 0 && (
+                <div className="px-5 py-4">
+                  <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Suggested hashtags</p>
+                  <div className="flex flex-wrap gap-2">
+                    {opt.hashtags.map((h: string) => (
+                      <span key={h} className="text-[10px] uppercase tracking-widest border hairline px-2 py-1 text-taupe">#{h}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : isCarousel && carouselSlides.length > 0 ? (
           /* ── CAROUSEL LAYOUT ─────────────────────────────────────────── */
           <div className="grid grid-cols-1 lg:grid-cols-2">
 

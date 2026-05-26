@@ -14,14 +14,21 @@ export class GenerationService {
   async generate(tenantId: string, clientId: string, dto: GenerateContentDto) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id: dto.appointmentId },
-      include: { client: true, consentRecord: true }
+      include: { client: true }
     });
 
     if (!appointment || appointment.tenantId !== tenantId) {
       throw new NotFoundException('Appointment not found');
     }
 
-    if (!appointment.consentRecord || appointment.consentRecord.status !== 'granted') {
+    // Resolve consent via appointment.consentRecordId (direct FK) or client's current record
+    const consentRecord = appointment.consentRecordId
+      ? await this.prisma.consentRecord.findUnique({ where: { id: appointment.consentRecordId } })
+      : await this.prisma.consentRecord.findFirst({
+          where: { clientId: appointment.clientId, tenantId, isCurrent: true },
+        });
+
+    if (!consentRecord || consentRecord.status !== 'granted') {
       throw new BadRequestException('Valid consent record is required for generation');
     }
 
@@ -48,7 +55,7 @@ export class GenerationService {
         appointmentId: appointment.id,
         clientId: appointment.clientId,
         jobPayload: dto as any,
-        consentSnapshot: appointment.consentRecord as any,
+        consentSnapshot: consentRecord as any,
         brandDnaSnapshot: brandDna as any,
         brandDnaVersion: brandDna.version,
         outputFormats: dto.outputFormats,
@@ -92,7 +99,7 @@ export class GenerationService {
         tenantId,
         appointmentId: appointment.id,
         clientId: appointment.clientId,
-        consentSnapshot: appointment.consentRecord,
+        consentSnapshot: consentRecord,
         brandDNA: brandDna,
         businessGoal: (dto.goal as any) || 'build_brand_authority',
         imageAssets,
