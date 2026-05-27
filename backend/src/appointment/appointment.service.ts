@@ -258,12 +258,14 @@ export class AppointmentService {
     const photoType = isBeforePhoto ? 'before' : 'after';
     const path = `tenants/${tenantId}/appointments/${appointmentId}/${photoType}/${uuidv4()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
 
-    await this.bucket.file(path).save(file.buffer, {
+    const fileRef = this.bucket.file(path);
+    await fileRef.save(file.buffer, {
       metadata: { contentType: file.mimetype },
     });
+    await fileRef.makePublic();
 
     const bucketName = this.configService.get<string>('FIREBASE_STORAGE_BUCKET') || '';
-    const rawUrl = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodeURIComponent(path)}?alt=media`;
+    const rawUrl = `https://storage.googleapis.com/${bucketName}/${path}`;
 
     const asset = await this.prisma.imageAsset.create({
       data: {

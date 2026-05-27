@@ -1,6 +1,5 @@
 import { createFileRoute, Link, Outlet, useLocation } from "@tanstack/react-router";
 import { useBrandDna } from "@/lib/providers/brand-dna-provider";
-import { useProfile } from "@/lib/providers/profile-provider";
 
 export const Route = createFileRoute("/brand")({
   head: () => ({
@@ -15,7 +14,6 @@ export const Route = createFileRoute("/brand")({
 
 function BrandPage() {
   const { data: brandDNA, loading, isEmpty, error } = useBrandDna();
-  const { technician } = useProfile();
   const location = useLocation();
 
   // If we are on a sub-route (like /brand/onboarding), just render the Outlet
@@ -90,10 +88,14 @@ function BrandPage() {
           <h2 className="eyebrow mb-6">Visual identity</h2>
           <div className="artifact p-8 mb-10">
             <p className="text-[10px] uppercase tracking-widest text-taupe mb-3">Colours</p>
-            <div className="grid grid-cols-5 gap-2 mb-6">
-              {brandDNA.palette.map((c) => (
-                <div key={c} className="aspect-square rounded-sm" style={{ backgroundColor: c }} />
-              ))}
+            <div className="flex gap-2 mb-6">
+              {brandDNA.palette.length > 0 ? (
+                brandDNA.palette.map((c) => (
+                  <div key={c} className="size-12 rounded-sm ring-1 ring-border flex-shrink-0" style={{ backgroundColor: c }} title={c} />
+                ))
+              ) : (
+                <p className="text-xs text-taupe italic">No colours set — add them in Brand DNA settings.</p>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-6 pt-6 border-t hairline">
               <div>
@@ -176,20 +178,24 @@ function BrandPage() {
             <Goal label="Focus services" value={`${brandDNA.goals.focusServices.length}`} />
           </div>
 
-          <h2 className="eyebrow mb-6">Moodboard</h2>
-          <div className="grid grid-cols-3 gap-2">
-            {brandDNA.moodboard.map((src, i) => (
-              <div
-                key={i}
-                className={
-                  "overflow-hidden ring-1 ring-border " +
-                  (i % 5 === 0 ? "aspect-[3/4] col-span-2 row-span-2" : "aspect-square")
-                }
-              >
-                <img src={src} alt="moodboard" className="w-full h-full object-cover" loading="lazy" />
+          {brandDNA.moodboard.length > 0 && (
+            <>
+              <h2 className="eyebrow mb-6">Moodboard</h2>
+              <div className="grid grid-cols-3 gap-2">
+                {brandDNA.moodboard.map((src, i) => (
+                  <div
+                    key={i}
+                    className={
+                      "overflow-hidden ring-1 ring-border " +
+                      (i % 5 === 0 ? "aspect-[3/4] col-span-2 row-span-2" : "aspect-square")
+                    }
+                  >
+                    <img src={src} alt="moodboard" className="w-full h-full object-cover" loading="lazy" />
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          )}
         </section>
 
         {/* Ideal client */}
@@ -206,9 +212,9 @@ function BrandPage() {
               <p className="text-base leading-relaxed">{brandDNA.idealClient.looksFor || "Not defined"}</p>
             </div>
             <div>
-              <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Technician</p>
-              <p className="font-serif text-xl mb-2">{technician.name}</p>
-              <p className="text-sm text-taupe">{technician.handle}</p>
+              <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Your niche</p>
+              <p className="font-serif text-xl mb-2">{brandDNA.category}</p>
+              <p className="text-sm text-taupe">{brandDNA.oneLiner}</p>
             </div>
           </div>
         </section>

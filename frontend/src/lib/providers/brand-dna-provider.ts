@@ -54,7 +54,7 @@ function mapCloudRow(dna: any): BrandDnaView {
 
   const goalByLabel = new Map(goals.map((g: any) => [g.label.toLowerCase(), g.targetMetric || ""]));
   const num = (key: string) => {
-    const v = parseInt(goalByLabel.get(key) || "", 10);
+    const v = parseInt(String(goalByLabel.get(key) ?? ""), 10);
     return Number.isFinite(v) ? v : 0;
   };
 
@@ -63,7 +63,7 @@ function mapCloudRow(dna: any): BrandDnaView {
     archetype: dna.brandTier || dna.aestheticDirection || "Not set",
     oneLiner: dna.oneLiner || "",
     category: dna.businessName || "",
-    powers: [], // Remove hardcoded powers, should come from business rules or DB if added later
+    powers: ["Caption tone and word choice", "Template recommendations", "Campaign goals and CTAs", "Calendar pacing and pillar mix", "Profile bio and service descriptions"],
     palette: [
       dna.primaryBrandColor,
       dna.secondaryBrandColor
@@ -76,9 +76,9 @@ function mapCloudRow(dna: any): BrandDnaView {
       dont: dna.doNotSay || [],
     },
     idealClient: {
-      age: dna.primaryPersona || "",
+      age: dna.secondaryPersona || "",
       cities: dna.locationCity || "",
-      looksFor: dna.uniqueSellingProposition || "",
+      looksFor: dna.primaryPersona || "",
       painPoints: dna.clientPainPoints || [],
       aspirations: [],
     },

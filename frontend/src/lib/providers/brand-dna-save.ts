@@ -4,11 +4,17 @@ export type OnboardingPayload = {
   displayName: string;
   niche: string;
   city: string;
+  primaryColor: string;
+  secondaryColor: string;
   signatureService: string;
   otherServices: string;
+  aestheticDirection: string;
+  brandTier: string;
   voiceWords: string;
   alwaysDo: string;
   neverDo: string;
+  emojiPolicy: string;
+  captionLength: string;
   ageRange: string;
   cities: string;
   idealClient: string;
@@ -28,8 +34,8 @@ export async function saveBrandDna(
   try {
     const pillars = payload.pillars.split(',').map(s => s.trim()).filter(Boolean);
     const goals = [];
-    if (payload.bookingsPerWeek) goals.push({ label: 'bookings per week', targetMetric: payload.bookingsPerWeek });
-    if (payload.postsPerWeek) goals.push({ label: 'posts per week', targetMetric: payload.postsPerWeek });
+    if (payload.bookingsPerWeek) goals.push({ label: 'bookings per week', target: payload.bookingsPerWeek });
+    if (payload.postsPerWeek) goals.push({ label: 'posts per week', target: payload.postsPerWeek });
 
     await api.post('/brand-dna', {
       businessName: payload.displayName,
@@ -37,10 +43,16 @@ export async function saveBrandDna(
       uniqueSellingProposition: payload.signatureService,
       primaryPersona: payload.idealClient,
       personaAge: payload.ageRange,
-      personaLocation: payload.cities,
+      personaLocation: payload.cities || payload.city,
       primaryTone: payload.voiceWords,
       voiceDo: payload.alwaysDo.split('\n').filter(Boolean),
       voiceDont: payload.neverDo.split('\n').filter(Boolean),
+      aestheticDirection: payload.aestheticDirection || undefined,
+      brandTier: payload.brandTier || undefined,
+      primaryBrandColor: payload.primaryColor || undefined,
+      secondaryBrandColor: payload.secondaryColor || undefined,
+      emojiPolicy: payload.emojiPolicy || 'minimal',
+      captionLengthPreference: payload.captionLength || 'medium',
       pillars,
       goals
     });
@@ -63,17 +75,23 @@ export async function fetchBrandDnaForEditing(): Promise<OnboardingPayload | nul
     return {
       displayName: dna.businessName || "",
       niche: dna.oneLiner || "",
-      city: dna.personaLocation || "",
+      city: dna.locationCity || "",
+      primaryColor: dna.primaryBrandColor || "",
+      secondaryColor: dna.secondaryBrandColor || "",
       signatureService: dna.uniqueSellingProposition || "",
       otherServices: "",
+      aestheticDirection: dna.aestheticDirection || "",
+      brandTier: dna.brandTier || "",
       voiceWords: dna.primaryTone || "",
-      alwaysDo: (dna.voiceDo || []).join('\n'),
-      neverDo: (dna.voiceDont || []).join('\n'),
-      ageRange: dna.personaAge || "",
-      cities: dna.personaLocation || "",
+      alwaysDo: (dna.vocabularyPreferred || []).join('\n'),
+      neverDo: (dna.doNotSay || []).join('\n'),
+      emojiPolicy: dna.emojiPolicy || "minimal",
+      captionLength: dna.captionLengthPreference || "medium",
+      ageRange: dna.secondaryPersona || "",
+      cities: dna.locationCity || "",
       idealClient: dna.primaryPersona || "",
-      bookingsPerWeek: goalMap.get('bookings per week') || "",
-      postsPerWeek: goalMap.get('posts per week') || "",
+      bookingsPerWeek: String(goalMap.get('bookings per week') ?? ""),
+      postsPerWeek: String(goalMap.get('posts per week') ?? ""),
       pillars: (dna.pillars || []).map((p: any) => p.label).join(', '),
     };
   } catch {

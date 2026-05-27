@@ -49,22 +49,9 @@ function AppointmentsPage() {
       const clientRes = await api.post('/clients', { firstName, lastName });
       const clientId = clientRes.data.data.id;
 
-      // 2. Grant consent (technician-confirmed in person)
-      const consentRes = await api.post(`/clients/${clientId}/consent`, {
-        allowShowFace: true,
-        allowUseName: true,
-        allowTagSocial: true,
-        allowPlatformPromotion: true,
-        allowInternalUse: true,
-        allowMarketingContent: true,
-        consentMethod: 'manual',
-      });
-      const consentRecordId = consentRes.data.data.id;
-
-      // 3. Create appointment linked to client + consent
+      // 2. Create appointment — no consent yet, starts as not_requested
       const res = await api.post('/appointments', {
         clientId,
-        consentRecordId,
         serviceCategory: category,
         serviceName,
         appointmentDate: new Date().toISOString(),
