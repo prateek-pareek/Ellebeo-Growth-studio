@@ -103,15 +103,18 @@ function ProfilePage() {
                 <p className="text-sm flex-1">{s.label}</p>
                 <span
                   className={
-                    "text-[10px] uppercase tracking-widest " +
+                    "text-[10px] uppercase tracking-widest flex-shrink-0 " +
                     (s.impact === "High" ? "text-foreground" : s.impact === "Medium" ? "text-taupe" : "text-taupe/60")
                   }
                 >
                   {s.impact} impact
                 </span>
-                <button className="text-[10px] uppercase tracking-widest border hairline px-3 py-2 hover:bg-nude/30">
+                <Link
+                  to={s.link as any}
+                  className="text-[10px] uppercase tracking-widest border hairline px-3 py-2 hover:bg-nude/30 flex-shrink-0"
+                >
                   Fix
-                </button>
+                </Link>
               </div>
             ))}
           </div>
