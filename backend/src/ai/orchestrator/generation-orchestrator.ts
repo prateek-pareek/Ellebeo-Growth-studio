@@ -121,8 +121,9 @@ export class GenerationOrchestrator {
                                primaryImage.rawStoragePath.startsWith('http://127.');
 
       if (!isLocalVisionUrl) try {
-        const imageUrl = process.env['CLOUDINARY_CLOUD_NAME']
-          ? `https://res.cloudinary.com/${process.env['CLOUDINARY_CLOUD_NAME']}/image/upload/${primaryImage.cloudinaryPublicId ?? primaryImage.rawStoragePath}`
+        // Only use Cloudinary URL if we have an actual cloudinaryPublicId — otherwise fall back to rawStoragePath
+        const imageUrl = (process.env['CLOUDINARY_CLOUD_NAME'] && primaryImage.cloudinaryPublicId)
+          ? `https://res.cloudinary.com/${process.env['CLOUDINARY_CLOUD_NAME']}/image/upload/${primaryImage.cloudinaryPublicId}`
           : primaryImage.rawStoragePath;
         const visionAnalysis = await this.visionChain.analyse({
           imageUrl,
@@ -201,7 +202,7 @@ export class GenerationOrchestrator {
       const validation = await this.outputValidator.validate(
         captionResult.caption,
         payload.consentSnapshot,
-        'general',
+        (appointment?.serviceCategory as any) || 'general',
         tenantId
       );
       if (validation.correctedOutput) captionResult.caption = validation.correctedOutput;
@@ -213,7 +214,7 @@ export class GenerationOrchestrator {
         captionResult = await this.captionChain.generate({
           assembledPrompt: retryPrompt,
           llmConfig,
-          brandDNABlacklist: brandDNA.blacklistedWords,
+          brandDNABlacklist: brandDNA.vocabularyBlacklist ?? [],
           allowRetry: false,
         });
         const secondPass = await this.outputValidator.validate(
