@@ -20,11 +20,14 @@ export class ModelRouter {
     const cfg = AI_CONFIG.models;
     const thresholds = AI_CONFIG.routing;
 
+    // Route to Claude only when Anthropic key is configured and credited
+    const anthropicConfigured = !!process.env['ANTHROPIC_API_KEY'] && process.env['USE_ANTHROPIC'] === 'true';
     const useClaude =
-      context.userTier === 'premium' ||
-      context.brandDNAComplexityScore > thresholds.complexityScoreThreshold ||
-      (context.previousConfidenceScore !== undefined &&
-        context.previousConfidenceScore < thresholds.brandVoiceConfidenceRetryThreshold);
+      anthropicConfigured &&
+      (context.userTier === 'premium' ||
+        context.brandDNAComplexityScore > thresholds.complexityScoreThreshold ||
+        (context.previousConfidenceScore !== undefined &&
+          context.previousConfidenceScore < thresholds.brandVoiceConfidenceRetryThreshold));
 
     if (useClaude) {
       return {

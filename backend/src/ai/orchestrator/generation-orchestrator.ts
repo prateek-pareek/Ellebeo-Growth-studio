@@ -13,9 +13,18 @@ import { ReelScriptChain } from '../chains/reel-script.chain';
 import { PlatformVariantChain } from '../chains/platform-variant.chain';
 import { OutputValidator } from '../guards/output-validator';
 import { JobProgressEmitter } from '../emitters/job-progress.emitter';
+import { ImagePipelineService } from '../services/image-pipeline.service';
+import { SharpImagePipelineService } from '../services/sharp-image-pipeline.service';
+import { CarouselPipelineService, type CarouselSlides } from '../services/carousel-pipeline.service';
+import { CarouselConceptChain } from '../chains/carousel-concept.chain';
+import { StoryFrameChain } from '../chains/story-frame.chain';
+import { StoryPipelineService, type StoryOutput } from '../services/story-pipeline.service';
+import { ReelShotChain, type ReelShotResult } from '../chains/reel-shot.chain';
+import { ElevenLabsService } from '../services/elevenlabs.service';
+import { OpenAiTtsService } from '../services/openai-tts.service';
 import type { GenerationJobPayload } from '../types/job-payload.types';
 import type { GenerationResult, ComponentStatus } from '../types/generation-result.types';
-import type { VisionAnalysisResult, CaptionGenerationResult, ReelScriptResult, PlatformVariantResult } from '../types/chain-output.types';
+import type { VisionAnalysisResult, CaptionGenerationResult, ReelScriptResult, PlatformVariantResult, ImageProcessingResult, VoiceoverResult } from '../types/chain-output.types';
 import { validateStateTransition } from '../types/job-payload.types';
 import type { JobState } from '../types/job-payload.types';
 
@@ -27,6 +36,15 @@ export class GenerationOrchestrator {
   private readonly reelScriptChain: ReelScriptChain;
   private readonly platformVariantChain: PlatformVariantChain;
   private readonly outputValidator: OutputValidator;
+  private readonly imagePipeline: ImagePipelineService;
+  private readonly sharpPipeline: SharpImagePipelineService;
+  private readonly carouselPipeline: CarouselPipelineService;
+  private readonly elevenLabsService: ElevenLabsService;
+  private readonly openAiTtsService: OpenAiTtsService;
+  private readonly carouselConceptChain: CarouselConceptChain;
+  private readonly storyFrameChain: StoryFrameChain;
+  private readonly storyPipeline: StoryPipelineService;
+  private readonly reelShotChain: ReelShotChain;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -42,6 +60,15 @@ export class GenerationOrchestrator {
     this.reelScriptChain = new ReelScriptChain(modelRouter);
     this.platformVariantChain = new PlatformVariantChain(modelRouter);
     this.outputValidator = new OutputValidator();
+    this.imagePipeline = new ImagePipelineService(prisma);
+    this.sharpPipeline = new SharpImagePipelineService();
+    this.carouselPipeline = new CarouselPipelineService();
+    this.elevenLabsService = new ElevenLabsService();
+    this.openAiTtsService = new OpenAiTtsService();
+    this.carouselConceptChain = new CarouselConceptChain();
+    this.storyFrameChain = new StoryFrameChain();
+    this.storyPipeline = new StoryPipelineService();
+    this.reelShotChain = new ReelShotChain();
   }
 
   // --------------------------------------------------------------------------
@@ -83,14 +110,23 @@ export class GenerationOrchestrator {
     await this.transitionState(jobId, 'queued', 'processing_image');
     await this.progressEmitter.emit(jobId, tenantId, 'processing_image');
 
+    // Always advance through processing_vision — required by state machine regardless of whether images exist
+    await this.transitionState(jobId, 'processing_image', 'processing_vision');
+
     if (payload.imageAssets.length > 0) {
-      await this.transitionState(jobId, 'processing_image', 'processing_vision');
       await this.progressEmitter.emit(jobId, tenantId, 'processing_vision');
 
-      try {
-        const primaryImage = payload.imageAssets[0]!;
+      const primaryImage = payload.imageAssets[0]!;
+      const isLocalVisionUrl = primaryImage.rawStoragePath.startsWith('http://localhost') ||
+                               primaryImage.rawStoragePath.startsWith('http://127.');
+
+      if (!isLocalVisionUrl) try {
+        // Only use Cloudinary URL if we have an actual cloudinaryPublicId — otherwise fall back to rawStoragePath
+        const imageUrl = (process.env['CLOUDINARY_CLOUD_NAME'] && primaryImage.cloudinaryPublicId)
+          ? `https://res.cloudinary.com/${process.env['CLOUDINARY_CLOUD_NAME']}/image/upload/${primaryImage.cloudinaryPublicId}`
+          : primaryImage.rawStoragePath;
         const visionAnalysis = await this.visionChain.analyse({
-          imageUrl: `https://res.cloudinary.com/${process.env['CLOUDINARY_CLOUD_NAME']}/image/upload/${primaryImage.cloudinaryPublicId ?? primaryImage.rawStoragePath}`,
+          imageUrl,
           storagePath: primaryImage.rawStoragePath,
           cachedResult: primaryImage.visionAnalysisCache,
         });
@@ -105,10 +141,14 @@ export class GenerationOrchestrator {
     await this.transitionState(jobId, 'processing_vision', 'building_prompt');
     await this.progressEmitter.emit(jobId, tenantId, 'building_prompt');
 
-    // Fetch appointment to determine service category mapping
+    // Fetch appointment to determine service category mapping + context for prompt
     const appointment = await this.prisma.appointment.findUnique({
       where: { id: payload.appointmentId },
-      select: { serviceCategory: true }
+      select: {
+        serviceCategory: true,
+        serviceName: true,
+        client: { select: { firstName: true } },
+      },
     });
 
     const isMedical = appointment?.serviceCategory === 'injectables_cosmetic' || 
@@ -128,8 +168,14 @@ export class GenerationOrchestrator {
       businessGoal: payload.businessGoal,
       goldenExamples: payload.goldenExamples,
       platform: primaryPlatform,
-      serviceCategory: appointment?.serviceCategory,
+      serviceCategory: appointment?.serviceCategory as import('../config/service-guardrails').ServiceCategory | undefined,
       masterPromptText: masterPrompt?.systemPrompt,
+      consentRestrictions: consentCheck.activeRestrictions,
+      appointmentContext: {
+        serviceName: appointment?.serviceName ?? undefined,
+        clientFirstName: appointment?.client?.firstName ?? undefined,
+        serviceCategory: appointment?.serviceCategory ?? undefined,
+      },
     });
 
     // ── Step 3: Caption Generation ───────────────────────────────────────────
@@ -138,7 +184,7 @@ export class GenerationOrchestrator {
 
     const routingContext = {
       userTier: generationOptions.userTier,
-      brandDNAComplexityScore: brandDNA.complexityScore,
+      brandDNAComplexityScore: brandDNA.averageConfidenceScore ?? 0,
     };
     const llmConfig = this.modelRouter.selectTextModel(routingContext);
     modelUsed = `${llmConfig.provider}/${llmConfig.modelId}`;
@@ -146,7 +192,7 @@ export class GenerationOrchestrator {
     try {
       const multiResult = await this.captionChain.generateMultipleOptions({
         assembledPrompt,
-        brandDNABlacklist: brandDNA.blacklistedWords,
+        brandDNABlacklist: brandDNA.vocabularyBlacklist ?? brandDNA.blacklistedWords ?? [],
         allowRetry: true,
       });
       captionResult = multiResult.primary;
@@ -156,7 +202,7 @@ export class GenerationOrchestrator {
       const validation = await this.outputValidator.validate(
         captionResult.caption,
         payload.consentSnapshot,
-        'general',
+        (appointment?.serviceCategory as any) || 'general',
         tenantId
       );
       if (validation.correctedOutput) captionResult.caption = validation.correctedOutput;
@@ -168,7 +214,7 @@ export class GenerationOrchestrator {
         captionResult = await this.captionChain.generate({
           assembledPrompt: retryPrompt,
           llmConfig,
-          brandDNABlacklist: brandDNA.blacklistedWords,
+          brandDNABlacklist: brandDNA.vocabularyBlacklist ?? [],
           allowRetry: false,
         });
         const secondPass = await this.outputValidator.validate(
@@ -207,20 +253,161 @@ export class GenerationOrchestrator {
     }
 
     // ── Step 5: Reel Script (conditional) ────────────────────────────────────
-    if (
-      captionResult &&
-      generationOptions.includeVoiceover &&
-      generationOptions.outputFormats.includes('reel')
-    ) {
+    if (captionResult && generationOptions.outputFormats.includes('reel')) {
       try {
         reelScriptResult = await this.reelScriptChain.generate({
           caption: captionResult,
           visionResult,
           brandDNA,
         });
+        componentStatus.reel = 'completed';
       } catch (err) {
+        componentStatus.reel = 'failed';
         console.error(`[Orchestrator] Reel script generation failed for job ${jobId}:`, err);
-        // Non-fatal
+      }
+    }
+
+    // ── Step 5.5: Image Processing ────────────────────────────────────────────
+    let imageResult: ImageProcessingResult | null = null;
+    if (payload.imageAssets.length > 0) {
+      const primaryAsset = payload.imageAssets[0]!;
+      const consentShowFace = !!(consentCheck.activeRestrictions as any)?.show_face;
+
+      // Localhost URLs can't be reached by Cloudinary/OpenAI — use Sharp instead
+      const isLocalUrl = primaryAsset.rawStoragePath.startsWith('http://localhost') ||
+                         primaryAsset.rawStoragePath.startsWith('http://127.');
+      const useCloudinary = !!process.env['CLOUDINARY_CLOUD_NAME'] && !isLocalUrl;
+
+      try {
+        if (useCloudinary) {
+          imageResult = await this.imagePipeline.process({
+            rawStoragePath: primaryAsset.rawStoragePath,
+            existingCloudinaryId: primaryAsset.cloudinaryPublicId,
+            consentShowFace,
+            brandPrimaryColour: brandDNA.primaryBrandColor ?? '#000000',
+            brandSecondaryColour: brandDNA.secondaryBrandColor ?? '#ffffff',
+            outputFormats: ['feed', 'story', 'reel'],
+            contentItemId: 'deferred',
+            tenantId,
+          });
+        } else {
+          // Sharp handles localhost + no-Cloudinary cases
+          imageResult = await this.sharpPipeline.process({
+            rawImageUrl: primaryAsset.rawStoragePath,
+            consentShowFace,
+            outputFormats: ['feed', 'story', 'reel'],
+            contentItemId: 'deferred',
+            tenantId,
+          });
+
+          // If Cloudinary is configured, upload the Sharp-processed Firebase image
+          // so carousel slides can be generated using Cloudinary text overlays
+          if (process.env['CLOUDINARY_CLOUD_NAME'] && imageResult) {
+            try {
+              const cloudinaryId = await this.imagePipeline.uploadUrl(imageResult.variants.feedUrl, tenantId);
+              imageResult = { ...imageResult, cloudinaryPublicId: cloudinaryId };
+            } catch (err) {
+              console.error(`[Orchestrator] Cloudinary re-upload failed for job ${jobId}:`, err);
+            }
+          }
+        }
+        componentStatus.image = 'completed';
+      } catch (err) {
+        componentStatus.image = 'failed';
+        console.error(`[Orchestrator] Image processing failed for job ${jobId}:`, err);
+      }
+    }
+
+    // ── Step 5.6: Carousel Slides (conditional) ───────────────────────────────
+    let carouselSlides: CarouselSlides | null = null;
+    const isCarousel = (generationOptions.outputFormats as string[]).includes('carousel');
+    if (isCarousel && imageResult?.cloudinaryPublicId && captionResult) {
+      try {
+        // Generate AI slide concepts first (3–5 named slides)
+        const conceptResult = await this.carouselConceptChain.generate({
+          hookSentence: captionResult.hookSentence || captionResult.caption.slice(0, 80),
+          callToAction: captionResult.callToAction || 'Book your appointment today',
+          serviceName: appointment?.serviceName ?? 'Beauty treatment',
+          clientFirstName: appointment?.client?.firstName ?? undefined,
+          businessGoal: payload.businessGoal,
+          brandName: brandDNA.businessName,
+          slideCount: 4,
+        });
+
+        carouselSlides = this.carouselPipeline.generate({
+          cloudinaryPublicId: imageResult.cloudinaryPublicId,
+          brandColour: brandDNA.primaryColour ?? brandDNA.primaryBrandColor ?? '#1a1a1a',
+          concepts: conceptResult.concepts,
+        });
+        console.log(`[Orchestrator] Carousel: ${conceptResult.concepts.length} slides generated for job ${jobId}`);
+      } catch (err) {
+        console.error(`[Orchestrator] Carousel slide generation failed for job ${jobId}:`, err);
+      }
+    }
+
+    // ── Step 5.65: Story Frames (conditional) ────────────────────────────────
+    let storyOutput: StoryOutput | null = null;
+    const isStory = (generationOptions.outputFormats as string[]).includes('story');
+    if (isStory && imageResult?.cloudinaryPublicId && captionResult) {
+      try {
+        const storyFrames = await this.storyFrameChain.generate({
+          hookSentence: captionResult.hookSentence || captionResult.caption.slice(0, 80),
+          callToAction: captionResult.callToAction || 'Book your appointment today',
+          serviceName: appointment?.serviceName ?? 'Beauty treatment',
+          clientFirstName: appointment?.client?.firstName ?? undefined,
+          businessGoal: payload.businessGoal,
+          brandName: brandDNA.businessName,
+        });
+        storyOutput = this.storyPipeline.generate({
+          cloudinaryPublicId: imageResult.cloudinaryPublicId,
+          brandColour: brandDNA.primaryColour ?? brandDNA.primaryBrandColor ?? '#1a1a1a',
+          concepts: storyFrames.frames,
+        });
+        console.log(`[Orchestrator] Story: 4 frames generated for job ${jobId}`);
+      } catch (err) {
+        console.error(`[Orchestrator] Story frame generation failed for job ${jobId}:`, err);
+      }
+    }
+
+    // ── Step 5.66: Reel Shot Storyboard (conditional) ────────────────────────
+    let reelShotResult: ReelShotResult | null = null;
+    const isReel = (generationOptions.outputFormats as string[]).includes('reel');
+    if (isReel && captionResult) {
+      try {
+        reelShotResult = await this.reelShotChain.generate({
+          hookSentence: captionResult.hookSentence || captionResult.caption.slice(0, 80),
+          callToAction: captionResult.callToAction || 'Book your appointment today',
+          serviceName: appointment?.serviceName ?? 'Beauty treatment',
+          clientFirstName: appointment?.client?.firstName ?? undefined,
+          businessGoal: payload.businessGoal,
+          brandName: brandDNA.businessName,
+        });
+        console.log(`[Orchestrator] Reel storyboard: ${reelShotResult.shots.length} shots for job ${jobId}`);
+      } catch (err) {
+        console.error(`[Orchestrator] Reel shot generation failed for job ${jobId}:`, err);
+      }
+    }
+
+    // ── Step 5.7: Voiceover (conditional) ────────────────────────────────────
+    let voiceoverResult: VoiceoverResult | null = null;
+    if (reelScriptResult && generationOptions.outputFormats.includes('reel')) {
+      try {
+        if (process.env['ELEVENLABS_API_KEY']) {
+          const voice = reelScriptResult.elevenLabsVoiceSettings;
+          voiceoverResult = await this.elevenLabsService.generateVoiceover({
+            script: reelScriptResult.script,
+            voiceId: voice.voiceId,
+            stability: voice.stability,
+            similarityBoost: voice.similarityBoost,
+            style: voice.style,
+          });
+        } else {
+          voiceoverResult = await this.openAiTtsService.generateVoiceover({
+            script: reelScriptResult.script,
+          });
+        }
+      } catch (err) {
+        console.error(`[Orchestrator] Voiceover generation failed for job ${jobId}:`, err);
       }
     }
 
@@ -238,6 +425,11 @@ export class GenerationOrchestrator {
       totalTokensOut,
       processingMs,
       generationOptionsResult,
+      imageResult,
+      voiceoverResult,
+      carouselSlides,
+      storyOutput,
+      reelShotResult,
     });
 
     // ── Step 7: Final State Transition ────────────────────────────────────────
@@ -299,6 +491,11 @@ export class GenerationOrchestrator {
     totalTokensOut: number;
     processingMs: number;
     generationOptionsResult: (CaptionGenerationResult & { generatedBy: string })[];
+    imageResult: ImageProcessingResult | null;
+    voiceoverResult: VoiceoverResult | null;
+    carouselSlides: CarouselSlides | null;
+    storyOutput: StoryOutput | null;
+    reelShotResult: ReelShotResult | null;
   }): Promise<string> {
     const { payload, captionResult, platformVariants, reelScriptResult, componentStatus, generationOptionsResult } = params;
     const { v4: uuidv4 } = await import('uuid');
@@ -320,14 +517,41 @@ export class GenerationOrchestrator {
         altText: captionResult?.altText ?? null,
         estimatedReadTime: captionResult?.estimatedReadTime ?? null,
         confidenceScore: captionResult?.brandVoiceConfidenceScore ?? null,
-        generationOptions: generationOptionsResult as unknown as Prisma.InputJsonValue,
-        platformVariants: platformVariants
-          ? (platformVariants as unknown as Prisma.InputJsonValue)
-          : Prisma.JsonNull,
+        generationOptions: (Array.isArray(generationOptionsResult) ? generationOptionsResult : [generationOptionsResult]) as unknown as Prisma.InputJsonValue[],
+        platformVariants: params.carouselSlides
+          ? (params.carouselSlides as unknown as Prisma.InputJsonValue)
+          : params.storyOutput
+            ? (params.storyOutput as unknown as Prisma.InputJsonValue)
+            : params.reelShotResult
+              ? (params.reelShotResult as unknown as Prisma.InputJsonValue)
+              : platformVariants
+                ? (platformVariants as unknown as Prisma.InputJsonValue)
+                : Prisma.JsonNull,
         reelScript: reelScriptResult?.script ?? null,
         completedAt: new Date(),
       },
     });
+
+    // Persist image URL if available (column not in Prisma model — use raw SQL)
+    if (params.imageResult) {
+      await this.prisma.$executeRaw`
+        UPDATE platform.content_items
+        SET processed_image_url_feed = ${params.imageResult.variants.feedUrl},
+            image_status             = 'completed',
+            updated_at               = NOW()
+        WHERE id = ${contentItemId}::uuid
+      `;
+    }
+
+    // Persist voiceover URL if available
+    if (params.voiceoverResult) {
+      await this.prisma.$executeRaw`
+        UPDATE platform.content_items
+        SET voiceover_url = ${params.voiceoverResult.audioCdnUrl},
+            updated_at    = NOW()
+        WHERE id = ${contentItemId}::uuid
+      `;
+    }
 
     // Update generation_jobs with cost metadata
     await this.prisma.generationJob.update({

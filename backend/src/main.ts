@@ -6,14 +6,28 @@ import cookieParser from 'cookie-parser';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
+import { startContentGenerationWorker } from './ai/workers/content-generation.worker';
+import { GenerationGateway } from './generation/generation.gateway';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // Security Middleware
   app.use(helmet());
+  const allowedOrigins = [
+    process.env.FRONTEND_URL || 'http://localhost:5173',
+    process.env.ADMIN_PORTAL_URL || 'http://localhost:3000',
+  ].filter(Boolean);
+
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+      // Allow server-to-server requests (no origin) and listed origins
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS: origin ${origin} not allowed`));
+      }
+    },
     credentials: true,
   });
   
@@ -42,6 +56,11 @@ async function bootstrap() {
   const port = process.env.PORT || 8080;
   await app.listen(port);
   console.log(`Growth Studio API is running on port ${port}`);
+
+  // Start BullMQ workers after server is live
+  const gateway = app.get(GenerationGateway);
+  startContentGenerationWorker(gateway.server);
+  console.log('Content generation worker started');
 }
 
 bootstrap();

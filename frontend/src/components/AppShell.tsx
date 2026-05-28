@@ -6,13 +6,14 @@ import {
   CalendarRange,
   Layers,
   UserCircle2,
+  BookOpen,
 } from "lucide-react";
 
 const NAV: Array<{ to: string; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { to: "/", label: "Home", icon: Home },
   { to: "/appointments", label: "Appointments", icon: Layers },
+  { to: "/crm", label: "Bookings", icon: BookOpen },
   { to: "/content", label: "Content", icon: Sparkles },
-  { to: "/calendar", label: "Calendar", icon: CalendarRange },
   { to: "/profile", label: "Profile", icon: UserCircle2 },
 ];
 
@@ -20,6 +21,7 @@ const DESKTOP_NAV: Array<{ to: string; label: string }> = [
   { to: "/", label: "Home" },
   { to: "/brand", label: "Brand" },
   { to: "/appointments", label: "Appointments" },
+  { to: "/crm", label: "Bookings" },
   { to: "/content", label: "Content" },
   { to: "/calendar", label: "Calendar" },
   { to: "/templates", label: "Templates" },
@@ -27,10 +29,16 @@ const DESKTOP_NAV: Array<{ to: string; label: string }> = [
   { to: "/profile", label: "Profile" },
 ];
 
+const AUTH_ROUTES = ['/login', '/signup', '/auth'];
+
 export function AppShell() {
   const { pathname } = useLocation();
   const { user } = useAuth();
-  
+
+  if (AUTH_ROUTES.includes(pathname)) {
+    return <Outlet />;
+  }
+
   return (
     <div className="min-h-dvh bg-background text-foreground">
       <header className="px-6 lg:px-12 pt-8 pb-6">
@@ -68,7 +76,7 @@ export function AppShell() {
                   <span className="text-[10px] text-taupe">{user?.email}</span>
                 </div>
                 <Link to="/profile" className="size-10 rounded-full bg-nude overflow-hidden ring-1 ring-border flex items-center justify-center">
-                  <span className="text-sm font-serif italic">{user.email[0].toUpperCase()}</span>
+                  <span className="text-sm font-serif italic">{(user.email?.[0] ?? '?').toUpperCase()}</span>
                 </Link>
               </>
             ) : (

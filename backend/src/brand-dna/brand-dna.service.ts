@@ -33,13 +33,18 @@ export class BrandDnaService {
           businessName: dto.businessName,
           oneLiner: dto.oneLiner,
           uniqueSellingProposition: dto.uniqueSellingProposition,
-          primaryPersona: dto.primaryPersona || dto.personaAge, // Map age to persona if primary is empty
+          primaryPersona: dto.primaryPersona,
+          secondaryPersona: dto.personaAge,
           locationCity: dto.personaLocation,
           primaryTone: dto.primaryTone,
           vocabularyPreferred: dto.voiceDo || [],
           doNotSay: dto.voiceDont || [],
           aestheticDirection: dto.aestheticDirection as any,
           brandTier: dto.brandTier as any,
+          primaryBrandColor: dto.primaryBrandColor,
+          secondaryBrandColor: dto.secondaryBrandColor,
+          emojiPolicy: dto.emojiPolicy || 'minimal',
+          captionLengthPreference: dto.captionLengthPreference || 'medium',
           pillars: {
             create: dto.pillars?.map((label, i) => ({ 
               label, 

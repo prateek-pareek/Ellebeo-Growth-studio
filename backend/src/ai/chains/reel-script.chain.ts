@@ -46,17 +46,24 @@ function parseReelScriptOutput(raw: string, brandTone: string): ReelScriptResult
 }
 
 export class ReelScriptChain {
-  private readonly model: ChatOpenAI;
+  private model: ChatOpenAI | null = null;
+  private readonly cfg: ReturnType<ModelRouter['selectReelScriptModel']>;
 
   constructor(modelRouter: ModelRouter) {
-    const cfg = modelRouter.selectReelScriptModel();
-    this.model = new ChatOpenAI({
-      modelName: cfg.modelId,
-      temperature: cfg.temperature,
-      maxTokens: cfg.maxTokens,
-      timeout: cfg.timeoutMs,
-      openAIApiKey: process.env['OPENAI_API_KEY'],
-    });
+    this.cfg = modelRouter.selectReelScriptModel();
+  }
+
+  private getModel(): ChatOpenAI {
+    if (!this.model) {
+      this.model = new ChatOpenAI({
+        modelName: this.cfg.modelId,
+        temperature: this.cfg.temperature,
+        maxTokens: this.cfg.maxTokens,
+        timeout: this.cfg.timeoutMs,
+        openAIApiKey: process.env['OPENAI_API_KEY'] ?? '',
+      });
+    }
+    return this.model;
   }
 
   async generate(params: {
@@ -69,9 +76,9 @@ export class ReelScriptChain {
 
     const systemPrompt = `You are writing a voiceover script for a social media Reel for ${brandDNA.businessName}.
 The voiceover must sound EXACTLY like this person when they speak:
-- Tone: ${brandDNA.primaryTone.replace(/_/g, ' ')}
-- They call their clients: "${brandDNA.clientTerminology}"
-- Their personality: ${brandDNA.personaDescription}
+- Tone: ${brandDNA.primaryTone?.replace(/_/g, ' ') ?? 'warm and friendly'}
+- They refer to their clients as: "${brandDNA.clientTerminology ?? 'clients'}"
+- Their target client: ${brandDNA.primaryPersona ?? brandDNA.oneLiner ?? 'beauty lovers who value quality'}
 
 STRICT RULES:
 - Maximum ${maxWords} words (spoken at natural pace = 15 seconds maximum)
@@ -98,7 +105,7 @@ Set stability (0.0-1.0), similarityBoost (0.0-1.0), and style (0.0-1.0) based on
 Higher stability = more consistent/controlled delivery. Higher style = more expressive.
 For ${brandDNA.primaryTone.replace(/_/g, ' ')} tone: choose appropriate values.`;
 
-    const response = await this.model.invoke([
+    const response = await this.getModel().invoke([
       new SystemMessage(wrapSystemPrompt(systemPrompt)),
       new HumanMessage(userPrompt),
     ]);

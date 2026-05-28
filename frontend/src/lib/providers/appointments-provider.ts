@@ -19,9 +19,11 @@ export type Appointment = {
   date: string;
   hasBefore: boolean;
   hasAfter: boolean;
+  beforePhotoUrl: string | null;
+  afterPhotoUrl: string | null;
   consent: "granted" | "pending" | "declined" | "not_requested";
   notes?: string;
-  contentReady: number; // 0–100
+  contentReady: number;
 };
 
 export type UseAppointmentsResult = {
@@ -69,8 +71,10 @@ async function fetchCloudAppointments(): Promise<
         service: row.serviceName,
         category: CATEGORY_MAP[row.serviceCategory] || "Skin therapist",
         date: formatDate(row.appointmentDate),
-        hasBefore: false,
-        hasAfter: false,
+        hasBefore: !!row.beforePhotoUrl,
+        hasAfter: !!row.afterPhotoUrl,
+        beforePhotoUrl: row.beforePhotoUrl ?? null,
+        afterPhotoUrl: row.afterPhotoUrl ?? null,
         consent: row.consentStatus || "not_requested",
         notes: row.notes,
         contentReady: 0,

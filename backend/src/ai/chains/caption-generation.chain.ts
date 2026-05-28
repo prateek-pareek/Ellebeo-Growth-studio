@@ -94,7 +94,10 @@ export class CaptionGenerationChain {
     const modelConfigs: LLMConfig[] = [
       { provider: 'openai', modelId: 'gpt-4o-mini', temperature: 0.75, maxTokens: 1024, timeoutMs: 30000, systemPromptCacheKey: null },
       { provider: 'openai', modelId: 'gpt-4o', temperature: 0.7, maxTokens: 1024, timeoutMs: 45000, systemPromptCacheKey: null },
-      { provider: 'anthropic', modelId: 'claude-3-5-sonnet-20241022', temperature: 0.72, maxTokens: 1024, timeoutMs: 45000, systemPromptCacheKey: null }
+      // Claude only when Anthropic key is explicitly enabled
+      ...(process.env['USE_ANTHROPIC'] === 'true'
+        ? [{ provider: 'anthropic' as const, modelId: 'claude-3-5-sonnet-20241022', temperature: 0.72, maxTokens: 1024, timeoutMs: 45000, systemPromptCacheKey: null }]
+        : []),
     ];
 
     const promises = modelConfigs.map(config => 

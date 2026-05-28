@@ -11,7 +11,7 @@ export type ProfileData = {
   servicesRecommended: number;
   photosCount: number;
   photosRecommended: number;
-  suggestions: Array<{ label: string; impact: string }>;
+  suggestions: Array<{ label: string; impact: string; link: string }>;
 };
 
 export type TechnicianData = {
@@ -52,23 +52,28 @@ const DEFAULT_TECH: TechnicianData = {
 async function fetchProfile(): Promise<{ profile: ProfileData, technician: TechnicianData }> {
   try {
     const res = await api.get("/auth/me");
-    const user = res.data.data;
-    
+    const u = res.data.data;
+
     return {
       profile: {
-        ...DEFAULT_PROFILE,
-        completion: user.profileCompletion || 0,
-        servicesListed: user.servicesCount || 0,
-        photosCount: user.photosCount || 0,
-        suggestions: [] // Remove hardcoded suggestions
+        completion: u.profileCompletion ?? 0,
+        averageRating: u.averageRating ?? 0,
+        reviewsCount: u.reviewsCount ?? 0,
+        responseTimeHours: u.responseTimeHours ?? 0,
+        bioStrength: u.bioStrength ?? "Weak",
+        servicesListed: u.servicesCount ?? 0,
+        servicesRecommended: u.servicesRecommended ?? 10,
+        photosCount: u.photosCount ?? 0,
+        photosRecommended: u.photosRecommended ?? 20,
+        suggestions: u.suggestions ?? [],
       },
       technician: {
-        name: user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : (user.tenant?.businessName || "Technician"),
-        handle: user.firstName ? `@${String(user.firstName).toLowerCase()}` : (user.tenant?.businessName ? `@${user.tenant.businessName.toLowerCase().replace(/\s+/g, '')}` : "@technician"),
-        city: user.tenant?.timezone || "Unknown",
-        avatar: user.avatarUrl || DEFAULT_TECH.avatar,
-        hasGrowthStudioAccess: user.tenant?.hasGrowthStudioAccess || false,
-      }
+        name: u.displayName || u.tenant?.businessName || "Technician",
+        handle: u.handle || "@technician",
+        city: u.city || "Unknown",
+        avatar: u.avatarUrl || DEFAULT_TECH.avatar,
+        hasGrowthStudioAccess: u.tenant?.hasGrowthStudioAccess || false,
+      },
     };
   } catch (error) {
     return { profile: DEFAULT_PROFILE, technician: DEFAULT_TECH };

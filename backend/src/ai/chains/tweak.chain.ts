@@ -33,17 +33,21 @@ function parseTweakOutput(raw: string): Omit<TweakResult, 'contentItemId' | 'tok
 }
 
 export class TweakChain {
-  // Tweaks always use gpt-4o-mini — cost controlled by architecture
-  private readonly model: ChatOpenAI;
+  private model: ChatOpenAI | null = null;
 
-  constructor(private readonly promptBuilder: PromptBuilder) {
-    this.model = new ChatOpenAI({
-      modelName: AI_CONFIG.models.standardText.modelId,
-      temperature: 0.6,           // Slightly lower temp for focused edits
-      maxTokens: 512,             // Tweaks need far fewer tokens than full generation
-      timeout: AI_CONFIG.timeouts.openaiMini,
-      openAIApiKey: process.env['OPENAI_API_KEY'],
-    });
+  constructor(private readonly promptBuilder: PromptBuilder) {}
+
+  private getModel(): ChatOpenAI {
+    if (!this.model) {
+      this.model = new ChatOpenAI({
+        modelName: AI_CONFIG.models.standardText.modelId,
+        temperature: 0.6,
+        maxTokens: 512,
+        timeout: AI_CONFIG.timeouts.openaiMini,
+        openAIApiKey: process.env['OPENAI_API_KEY'] ?? '',
+      });
+    }
+    return this.model;
   }
 
   async tweak(params: {
@@ -61,7 +65,7 @@ export class TweakChain {
       platform: request.platform ?? 'instagram',
     });
 
-    const response = await this.model.invoke([
+    const response = await this.getModel().invoke([
       new SystemMessage(wrapSystemPrompt(systemPrompt)),
       new HumanMessage(userPrompt),
     ]);

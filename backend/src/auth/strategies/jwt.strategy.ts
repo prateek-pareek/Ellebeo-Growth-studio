@@ -9,11 +9,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_SECRET') || 'fallback_secret_for_dev_only',
+      secretOrKey: configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
     });
   }
 
   async validate(payload: any) {
-    return { userId: payload.sub, role: payload.role, tenantId: payload.tenantId };
+    // Main admin portal issues { roles: string[] }; Growth Studio issues { role: string }
+    const role = payload.role ?? (Array.isArray(payload.roles) ? payload.roles[0] : undefined);
+    return { userId: payload.sub, role, tenantId: payload.tenantId };
   }
 }

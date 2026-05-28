@@ -47,38 +47,51 @@ export type UseContentItemsResult = {
 const CLOUD_PLACEHOLDER_IMAGE =
   "https://images.unsplash.com/photo-1522335789203-aaa1f9436cae?w=800&h=1000&fit=crop";
 
+function mapStatus(status: string): string {
+  if (status === 'draft') return 'Needs review';
+  if (status === 'approved') return 'Approved';
+  if (status === 'scheduled') return 'Scheduled';
+  if (status === 'published') return 'Published';
+  return 'Needs review';
+}
+
 function mapRow(row: any): { item: ContentItem; appointment: Appointment | null } {
+  const apt = row.appointment;
+  const clientName = apt?.client
+    ? `${apt.client.firstName || ''} ${apt.client.lastName || ''}`.trim() || 'Client'
+    : 'Client';
+
   const item: ContentItem = {
     id: row.id,
-    title: row.caption ? row.caption.split('.')[0] : "New Content",
-    type: (row.postFormat || "Caption") as any,
-    pillar: "General",
-    category: row.category || "Skin therapist",
-    status: row.status === 'draft' ? 'Needs review' : (row.status === 'scheduled' ? 'Scheduled' : 'Published'),
-    state: row.status as any,
-    goal: row.goal || "showcase",
+    title: row.caption ? row.caption.slice(0, 60).split(/[.!?]/)[0] || 'New Content' : 'New Content',
+    type: (row.postFormat || apt?.serviceCategory || 'Caption') as any,
+    pillar: 'General',
+    category: apt?.serviceCategory || 'general',
+    status: mapStatus(row.status),
+    state: row.status || 'draft',
+    goal: row.goal || 'showcase',
     image: row.processedImageUrlFeed || CLOUD_PLACEHOLDER_IMAGE,
-    caption: row.caption || "",
-    cta: row.callToAction || "",
+    caption: row.caption || '',
+    cta: row.callToAction || '',
     hashtags: row.hashtags || [],
     scheduledFor: row.scheduledAt,
     postedAt: row.publishedAt,
-    qualityScore: row.qualityScore,
+    qualityScore: row.confidenceScore,
     sourceAppointmentId: row.appointmentId,
-    updatedAt: "Just now",
+    updatedAt: row.updatedAt ? new Date(row.updatedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'Recently',
   };
 
   let appointment: Appointment | null = null;
-  if (row.appointment) {
+  if (apt) {
     appointment = {
-      id: row.appointment.id,
-      clientName: row.appointment.client?.firstName || "Client",
-      service: row.appointment.serviceName,
-      category: row.appointment.serviceCategory as any,
-      date: row.appointment.appointmentDate,
+      id: row.appointmentId,
+      clientName,
+      service: apt.serviceName || '',
+      category: apt.serviceCategory || 'general',
+      date: apt.appointmentDate,
       hasBefore: false,
       hasAfter: false,
-      consent: "granted",
+      consent: 'granted',
       contentReady: 0,
     };
   }
@@ -94,9 +107,11 @@ async function fetchCloudContent(): Promise<
 > {
   try {
     const res = await api.get('/content');
-    const data = res.data.data;
-    
-    if (!data || data.length === 0) return { kind: "empty" };
+    // Backend returns array directly; ResponseInterceptor wraps it as res.data.data
+    const raw = res.data.data;
+    const data: any[] = Array.isArray(raw) ? raw : (raw?.data ?? []);
+
+    if (data.length === 0) return { kind: "empty" };
 
     const appointmentsById = new Map<string, Appointment>();
     const items: ContentItem[] = [];

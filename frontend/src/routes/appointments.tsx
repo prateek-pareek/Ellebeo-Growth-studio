@@ -3,7 +3,6 @@ import { useState } from "react";
 import { useAppointments, type Appointment } from "@/lib/providers/appointments-provider";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
-import axios from "axios";
 
 export const Route = createFileRoute("/appointments")({
   head: () => ({
@@ -29,45 +28,43 @@ function AppointmentsPage() {
   const [afterFile, setAfterFile] = useState<File | null>(null);
 
   const uploadFile = async (appointmentId: string, file: File, isBefore: boolean) => {
-    try {
-      const urlRes = await api.post(`/appointments/${appointmentId}/images/upload-url`, {
-        filename: file.name,
-        contentType: file.type,
-        isBeforePhoto: isBefore
-      });
-      const { uploadUrl, storagePath } = urlRes.data.data;
-
-      await axios.put(uploadUrl, file, {
-        headers: { 'Content-Type': file.type }
-      });
-
-      await api.post(`/appointments/${appointmentId}/images/confirm-upload`, {
-        storagePath,
-        fileHash: `hash-${Date.now()}`,
-        fileSizeBytes: file.size,
-        isBeforePhoto: isBefore
-      });
-    } catch (e) {
-      console.error("Upload failed", e);
-      throw e;
-    }
+    const form = new FormData();
+    form.append('file', file);
+    form.append('isBeforePhoto', String(isBefore));
+    await api.post(`/appointments/${appointmentId}/images/upload`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
   };
 
   const handleAddAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsAdding(true);
     try {
+      // Split "Sarah J." → firstName="Sarah", lastName="J."
+      const parts = clientName.trim().split(/\s+/);
+      const firstName = parts[0] || clientName;
+      const lastName = parts.slice(1).join(' ') || 'Client';
+
+      // 1. Create the client
+      const clientRes = await api.post('/clients', { firstName, lastName });
+      const clientId = clientRes.data.data.id;
+
+      // 2. Create appointment — no consent yet, starts as not_requested
       const res = await api.post('/appointments', {
-        clientId: 'default-client',
+        clientId,
         serviceCategory: category,
         serviceName,
-        appointmentDate: new Date().toISOString()
+        appointmentDate: new Date().toISOString(),
       });
-      
       const appt = res.data.data;
-      
-      if (beforeFile) await uploadFile(appt.id, beforeFile, true);
-      if (afterFile) await uploadFile(appt.id, afterFile, false);
+
+      // 4. Upload photos (non-fatal if Firebase not configured)
+      if (beforeFile) {
+        try { await uploadFile(appt.id, beforeFile, true); } catch {}
+      }
+      if (afterFile) {
+        try { await uploadFile(appt.id, afterFile, false); } catch {}
+      }
 
       toast.success("Appointment created successfully");
       setClientName("");
@@ -234,8 +231,19 @@ function AppointmentRow({ a }: { a: Appointment }) {
   return (
     <div className="bg-card p-5 sm:p-6 grid grid-cols-1 sm:grid-cols-12 gap-5 items-center">
       <div className="sm:col-span-2 flex gap-2">
-        <div className="size-20 bg-nude/20 ring-1 ring-border flex items-center justify-center text-[9px] uppercase tracking-widest text-taupe">
-          Real Data
+        <div className="size-20 bg-nude/20 ring-1 ring-border overflow-hidden flex-shrink-0">
+          {a.beforePhotoUrl ? (
+            <img src={a.beforePhotoUrl} alt="Before" className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-[9px] uppercase tracking-widest text-taupe">Before</div>
+          )}
+        </div>
+        <div className="size-20 bg-nude/20 ring-1 ring-border overflow-hidden flex-shrink-0">
+          {a.afterPhotoUrl ? (
+            <img src={a.afterPhotoUrl} alt="After" className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-[9px] uppercase tracking-widest text-taupe">After</div>
+          )}
         </div>
       </div>
 
@@ -276,7 +284,7 @@ function AppointmentRow({ a }: { a: Appointment }) {
             Request consent
           </Link>
         ) : (
-          <span className="text-[10px] uppercase tracking-widest text-taupe">No content allowed</span>
+          <span className="text-[10px] uppercase tracking-widest text-destructive">Consent declined</span>
         )}
         {a.contentReady > 0 && (
           <Link to="/content" className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground">
