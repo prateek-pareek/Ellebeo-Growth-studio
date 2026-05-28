@@ -1,10 +1,10 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    // Tenant image assets are publicly readable (they will be published to social media)
     match /tenants/{tenantId}/{allPaths=**} {
-      allow read: if request.auth != null
-        && request.auth.token.tenantId == tenantId;
-      allow write: if false;
+      allow read: if true;
+      allow write: if false; // Only backend Admin SDK can write
     }
 
     match /{allPaths=**} {

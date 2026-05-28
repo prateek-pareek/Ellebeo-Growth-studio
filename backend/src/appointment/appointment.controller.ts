@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Req, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Req, UseGuards, Query, UploadedFile, UseInterceptors, ParseFilePipe, MaxFileSizeValidator } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { AppointmentService } from './appointment.service';
 import { CreateAppointmentDto, UpdateAppointmentDto, CancelAppointmentDto, UploadUrlRequestDto, ConfirmUploadDto, PaginationQueryDto } from './dto/appointment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -52,6 +53,17 @@ export class AppointmentController {
   @Post(':id/images/confirm-upload')
   confirmUpload(@Req() req: any, @Param('id') id: string, @Body() dto: ConfirmUploadDto) {
     return this.appointmentService.confirmUpload(req.user.tenantId, id, dto, dto.isBeforePhoto ?? false);
+  }
+
+  @Post(':id/images/upload')
+  @UseInterceptors(FileInterceptor('file'))
+  uploadImage(
+    @Req() req: any,
+    @Param('id') id: string,
+    @UploadedFile(new ParseFilePipe({ validators: [new MaxFileSizeValidator({ maxSize: 20 * 1024 * 1024 })] })) file: Express.Multer.File,
+    @Body('isBeforePhoto') isBeforePhoto: string,
+  ) {
+    return this.appointmentService.uploadImageDirect(req.user.tenantId, id, file, isBeforePhoto === 'true');
   }
 
   @Delete(':id/images/:imageId')

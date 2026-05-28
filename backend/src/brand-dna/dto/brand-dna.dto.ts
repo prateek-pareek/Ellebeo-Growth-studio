@@ -36,6 +36,10 @@ export class CreateBrandDnaDto {
 
   @IsString()
   @IsOptional()
+  secondaryPersona?: string;
+
+  @IsString()
+  @IsOptional()
   personaLocation?: string;
 
   @IsString()
@@ -57,6 +61,22 @@ export class CreateBrandDnaDto {
   @IsEnum(BrandTier)
   @IsOptional()
   brandTier?: BrandTier;
+
+  @IsString()
+  @IsOptional()
+  primaryBrandColor?: string;
+
+  @IsString()
+  @IsOptional()
+  secondaryBrandColor?: string;
+
+  @IsString()
+  @IsOptional()
+  emojiPolicy?: string;
+
+  @IsString()
+  @IsOptional()
+  captionLengthPreference?: string;
 
   @IsArray()
   @IsOptional()

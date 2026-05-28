@@ -24,18 +24,42 @@ export class ContentService {
       if (query.dateTo) whereClause.createdAt.lte = new Date(query.dateTo);
     }
 
-    const [data, total] = await Promise.all([
+    const [rows, total] = await Promise.all([
       this.prisma.contentItem.findMany({
         where: whereClause,
-        include: { appointment: { select: { serviceCategory: true } } },
+        include: {
+          appointment: {
+            select: {
+              serviceCategory: true,
+              serviceName: true,
+              appointmentDate: true,
+              client: { select: { firstName: true, lastName: true } },
+            },
+          },
+        },
         skip,
         take: pageSize,
-        orderBy: { createdAt: 'desc' }
+        orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.contentItem.count({ where: whereClause })
+      this.prisma.contentItem.count({ where: whereClause }),
     ]);
 
-    return { data, meta: { total, page, pageSize } };
+    // Fetch processedImageUrlFeed via raw SQL (column exists in DB but not in Prisma model)
+    const ids = rows.map(r => r.id);
+    let imageUrlMap: Record<string, string> = {};
+    if (ids.length > 0) {
+      const imageRows = await this.prisma.$queryRaw<Array<{ id: string; processed_image_url_feed: string | null }>>`
+        SELECT id::text, processed_image_url_feed
+        FROM platform.content_items
+        WHERE id = ANY(${ids}::uuid[])
+      `;
+      for (const r of imageRows) {
+        if (r.processed_image_url_feed) imageUrlMap[r.id] = r.processed_image_url_feed;
+      }
+    }
+
+    const data = rows.map(r => ({ ...r, processedImageUrlFeed: imageUrlMap[r.id] ?? null }));
+    return data;
   }
 
   async getContentItem(tenantId: string, id: string) {

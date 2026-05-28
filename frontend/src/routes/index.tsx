@@ -41,7 +41,7 @@ function HomePage() {
       <section className="mt-6 lg:mt-10 mb-10 max-w-[68ch]">
         <p className="eyebrow mb-5">{new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</p>
         <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight text-balance">
-          Good morning, <span className="italic">{technician.firstName || "there"}.</span>
+          Good morning, <span className="italic">{technician.name.split(' ')[0] || "there"}.</span>
         </h1>
         <p className="mt-6 text-base sm:text-lg text-taupe font-light leading-relaxed">
           You have <span className="text-foreground font-medium">{todayAppointments.length} appointments today</span>,{" "}

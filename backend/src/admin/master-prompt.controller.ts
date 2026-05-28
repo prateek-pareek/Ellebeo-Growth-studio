@@ -14,7 +14,8 @@ import { CreateMasterPromptDto, UpdateMasterPromptDto } from './dto/master-promp
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { UserRole, PromptCategory } from '@prisma/client';
+import { PromptCategory } from '@prisma/client';
+import { UserRole } from '../auth/enums/user-role.enum';
 
 @Controller('admin/master-prompts')
 @UseGuards(JwtAuthGuard, RolesGuard)

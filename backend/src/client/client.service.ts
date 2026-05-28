@@ -75,7 +75,7 @@ export class ClientService {
         });
       }
 
-      return tx.consentRecord.create({
+      const newConsent = await tx.consentRecord.create({
         data: {
           ...dto,
           tenantId,
@@ -83,9 +83,16 @@ export class ClientService {
           status: 'granted',
           grantedAt: new Date(),
           isCurrent: true,
-          supersededById: current ? current.id : undefined, // This would require schema adjustment if strictly mapped, ignoring for now or using supersededById string
         }
       });
+
+      // Link all active appointments for this client to the new consent record
+      await tx.appointment.updateMany({
+        where: { clientId: id, tenantId, deletedAt: null },
+        data: { consentRecordId: newConsent.id },
+      });
+
+      return newConsent;
     });
   }
 

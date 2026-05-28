@@ -54,17 +54,24 @@ function parsePlatformVariantOutput(
 }
 
 export class PlatformVariantChain {
-  private readonly model: ChatOpenAI;
+  private model: ChatOpenAI | null = null;
+  private readonly cfg: ReturnType<ModelRouter['selectReelScriptModel']>;
 
   constructor(modelRouter: ModelRouter) {
-    const cfg = modelRouter.selectReelScriptModel(); // Same model as reel script (gpt-4o-mini)
-    this.model = new ChatOpenAI({
-      modelName: cfg.modelId,
-      temperature: cfg.temperature,
-      maxTokens: 800,  // Variants can be longer than reel scripts
-      timeout: cfg.timeoutMs,
-      openAIApiKey: process.env['OPENAI_API_KEY'],
-    });
+    this.cfg = modelRouter.selectReelScriptModel();
+  }
+
+  private getModel(): ChatOpenAI {
+    if (!this.model) {
+      this.model = new ChatOpenAI({
+        modelName: this.cfg.modelId,
+        temperature: this.cfg.temperature,
+        maxTokens: 800,
+        timeout: this.cfg.timeoutMs,
+        openAIApiKey: process.env['OPENAI_API_KEY'] ?? '',
+      });
+    }
+    return this.model;
   }
 
   async generateVariants(params: {
@@ -118,7 +125,7 @@ Return ONLY this JSON:
   "callToAction": "Platform-specific CTA"
 }`;
 
-    const response = await this.model.invoke([
+    const response = await this.getModel().invoke([
       new SystemMessage(wrapSystemPrompt(systemPrompt)),
       new HumanMessage(userPrompt),
     ]);

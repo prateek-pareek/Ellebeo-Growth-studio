@@ -52,20 +52,30 @@ function validateImageQuality(
 // ---------------------------------------------------------------------------
 
 export class VisionAnalysisChain {
-  private readonly model: ChatOpenAI;
+  private model: ChatOpenAI | null = null;
+  private readonly cfg: ReturnType<ModelRouter['selectVisionModel']>;
 
   constructor(
     private readonly prisma: PrismaClient,
     modelRouter: ModelRouter
   ) {
-    const cfg = modelRouter.selectVisionModel();
-    this.model = new ChatOpenAI({
-      modelName: cfg.modelId,
-      temperature: cfg.temperature,
-      maxTokens: cfg.maxTokens,
-      timeout: cfg.timeoutMs,
-      openAIApiKey: process.env['OPENAI_API_KEY'],
-    });
+    this.cfg = modelRouter.selectVisionModel();
+  }
+
+  private getModel(): ChatOpenAI {
+    if (!this.model) {
+      if (!process.env['OPENAI_API_KEY']) {
+        throw new Error('OPENAI_API_KEY is required for vision analysis (image processing)');
+      }
+      this.model = new ChatOpenAI({
+        modelName: this.cfg.modelId,
+        temperature: this.cfg.temperature,
+        maxTokens: this.cfg.maxTokens,
+        timeout: this.cfg.timeoutMs,
+        openAIApiKey: process.env['OPENAI_API_KEY'],
+      });
+    }
+    return this.model;
   }
 
   // --------------------------------------------------------------------------
@@ -136,7 +146,7 @@ Return ONLY valid JSON with no markdown, no explanation.`;
       ],
     });
 
-    const response = await this.model.invoke([new SystemMessage(wrapSystemPrompt(systemPrompt)), humanMessage]);
+    const response = await this.getModel().invoke([new SystemMessage(wrapSystemPrompt(systemPrompt)), humanMessage]);
     const content = typeof response.content === 'string'
       ? response.content
       : JSON.stringify(response.content);
@@ -148,36 +158,17 @@ Return ONLY valid JSON with no markdown, no explanation.`;
   // PostgreSQL Cache Read/Write
   // --------------------------------------------------------------------------
 
-  private async checkDBCache(storageHash: string): Promise<VisionAnalysisResult | null> {
-    const records = await this.prisma.$queryRaw<
-      Array<{ vision_result: unknown }>
-    >`
-      SELECT vision_result
-      FROM image_vision_cache
-      WHERE storage_object_hash = ${storageHash}
-      LIMIT 1
-    `;
-
-    if (!records[0]) return null;
-
-    const raw = records[0].vision_result;
-    if (typeof raw === 'object' && raw !== null) {
-      return raw as VisionAnalysisResult;
-    }
+  private async checkDBCache(_storageHash: string): Promise<VisionAnalysisResult | null> {
+    // image_vision_cache table not yet provisioned — skip cache lookup
     return null;
   }
 
   private async saveToDBCache(
-    storageHash: string,
-    storagePath: string,
-    result: VisionAnalysisResult
+    _storageHash: string,
+    _storagePath: string,
+    _result: VisionAnalysisResult
   ): Promise<void> {
-    const modelVersion = AI_CONFIG.models.vision.modelId;
-    await this.prisma.$executeRaw`
-      INSERT INTO image_vision_cache (storage_object_hash, storage_path, vision_result, model_version)
-      VALUES (${storageHash}, ${storagePath}, ${JSON.stringify(result)}::jsonb, ${modelVersion})
-      ON CONFLICT (storage_object_hash) DO NOTHING
-    `;
+    // image_vision_cache table not yet provisioned — skip cache write
   }
 }
 

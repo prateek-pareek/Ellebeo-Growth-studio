@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, HttpException, HttpStatus } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GenerateContentDto, TweakContentDto } from './dto/generation.dto';
 import { GenerationGateway } from './generation.gateway';
@@ -6,19 +6,29 @@ import { contentGenerationQueue } from '../ai/queues/queue.definitions';
 
 @Injectable()
 export class GenerationService {
-  constructor(private prisma: PrismaService, private generationGateway: GenerationGateway) {}
+  constructor(
+    private prisma: PrismaService,
+    private generationGateway: GenerationGateway,
+  ) {}
 
   async generate(tenantId: string, clientId: string, dto: GenerateContentDto) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id: dto.appointmentId },
-      include: { client: true, consentRecord: true }
+      include: { client: true }
     });
 
     if (!appointment || appointment.tenantId !== tenantId) {
       throw new NotFoundException('Appointment not found');
     }
 
-    if (!appointment.consentRecord || appointment.consentRecord.status !== 'granted') {
+    // Resolve consent via appointment.consentRecordId (direct FK) or client's current record
+    const consentRecord = appointment.consentRecordId
+      ? await this.prisma.consentRecord.findUnique({ where: { id: appointment.consentRecordId } })
+      : await this.prisma.consentRecord.findFirst({
+          where: { clientId: appointment.clientId, tenantId, isCurrent: true },
+        });
+
+    if (!consentRecord || consentRecord.status !== 'granted') {
       throw new BadRequestException('Valid consent record is required for generation');
     }
 
@@ -30,7 +40,13 @@ export class GenerationService {
       throw new BadRequestException('Brand DNA must be configured before generation');
     }
 
-    // Input Sanitisation would happen here before saving the job payload
+    // Enforce rate limits before creating job
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    const limits = this.getTierLimits(tenant?.subscriptionTier ?? 'free');
+    const usage = await this.getTodayUsage(tenantId);
+
+    // Rate limit enforcement disabled for demo
+    const isReel = (dto.outputFormats as string[]).some(f => f === 'reel');
 
     // Create the generation job
     const job = await this.prisma.generationJob.create({
@@ -39,7 +55,7 @@ export class GenerationService {
         appointmentId: appointment.id,
         clientId: appointment.clientId,
         jobPayload: dto as any,
-        consentSnapshot: appointment.consentRecord as any,
+        consentSnapshot: consentRecord as any,
         brandDnaSnapshot: brandDna as any,
         brandDnaVersion: brandDna.version,
         outputFormats: dto.outputFormats,
@@ -50,6 +66,32 @@ export class GenerationService {
       }
     });
 
+    // Check Growth Studio's own image_assets table first
+    const imageAssetRecords = await this.prisma.imageAsset.findMany({
+      where: { tenantId, appointmentId: appointment.id, deletedAt: null },
+      orderBy: [{ isAfterPhoto: 'desc' }, { createdAt: 'asc' }],
+      select: { rawUrl: true, cloudinaryPublicId: true, visionAnalysis: true },
+    });
+
+    let imageAssets = imageAssetRecords
+      .filter(a => a.rawUrl)
+      .map(a => ({
+        rawStoragePath: a.rawUrl!,
+        cloudinaryPublicId: a.cloudinaryPublicId ?? undefined,
+        visionAnalysisCache: a.visionAnalysis ? JSON.stringify(a.visionAnalysis) : undefined,
+      }));
+
+    // Fall back to the CRM booking's after-photo if no Growth Studio image assets exist
+    if (imageAssets.length === 0 && appointment.crmBookingId) {
+      const rows = await this.prisma.$queryRaw<Array<{ recipientIntakeData: Record<string, unknown> | null }>>`
+        SELECT "recipientIntakeData" FROM public."Booking" WHERE id = ${appointment.crmBookingId}::uuid LIMIT 1
+      `;
+      const afterPhotoUrl = rows[0]?.recipientIntakeData?.['afterPhotoUrl'] as string | undefined;
+      if (afterPhotoUrl) {
+        imageAssets = [{ rawStoragePath: afterPhotoUrl, cloudinaryPublicId: undefined, visionAnalysisCache: undefined }];
+      }
+    }
+
     await contentGenerationQueue.add(
       `generation:${job.id}`,
       {
@@ -57,10 +99,10 @@ export class GenerationService {
         tenantId,
         appointmentId: appointment.id,
         clientId: appointment.clientId,
-        consentSnapshot: appointment.consentRecord,
+        consentSnapshot: consentRecord,
         brandDNA: brandDna,
-        businessGoal: 'build_brand_authority',
-        imageAssets: [],
+        businessGoal: (dto.goal as any) || 'build_brand_authority',
+        imageAssets,
         generationOptions: {
           outputFormats: dto.outputFormats as any,
           includeVoiceover: dto.includeVoiceover,
@@ -75,8 +117,7 @@ export class GenerationService {
       { jobId: job.id },
     );
 
-    // Assuming a simple calculation for estimated seconds based on formats
-    const estimatedSeconds = dto.outputFormats.includes('REEL' as any) ? 120 : 30;
+    const estimatedSeconds = isReel ? 120 : 30;
 
     this.generationGateway.emitJobUpdate(job.id, job.state as any);
 
@@ -84,8 +125,11 @@ export class GenerationService {
       jobId: job.id,
       estimatedSeconds,
       rateLimitRemaining: {
-        generationsToday: 50, // mock
-        reelsToday: 10,       // mock
+        generationsRemaining: Math.max(0, limits.generations - usage.generations - 1),
+        reelsRemaining: isReel ? Math.max(0, limits.reels - usage.reels - 1) : Math.max(0, limits.reels - usage.reels),
+        generationsLimit: limits.generations,
+        reelsLimit: limits.reels,
+        resetsAt: this.getNextMidnightUTC(),
       }
     };
   }
@@ -134,14 +178,55 @@ export class GenerationService {
   }
 
   async getRateLimitStatus(tenantId: string) {
-    // Determine limits based on subscription tier
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
-    
-    // Compute current usage from DB (count jobs created today)
-    // Mocking response for now
+
+    const limits = this.getTierLimits(tenant?.subscriptionTier ?? 'free');
+    const usage = await this.getTodayUsage(tenantId);
+
     return {
-      generationsToday: 50,
-      reelsToday: 10,
+      generationsLimit: limits.generations,
+      generationsUsed: usage.generations,
+      generationsRemaining: Math.max(0, limits.generations - usage.generations),
+      reelsLimit: limits.reels,
+      reelsUsed: usage.reels,
+      reelsRemaining: Math.max(0, limits.reels - usage.reels),
+      resetsAt: this.getNextMidnightUTC(),
     };
+  }
+
+  private getTierLimits(tier: string): { generations: number; reels: number } {
+    const LIMITS: Record<string, { generations: number; reels: number }> = {
+      free:     { generations: 5,   reels: 2   },
+      standard: { generations: 50,  reels: 10  },
+      premium:  { generations: 999, reels: 999 },
+    };
+    return LIMITS[tier] ?? LIMITS['free'];
+  }
+
+  private async getTodayUsage(tenantId: string): Promise<{ generations: number; reels: number }> {
+    const startOfDay = new Date();
+    startOfDay.setUTCHours(0, 0, 0, 0);
+
+    const jobs = await this.prisma.generationJob.findMany({
+      where: {
+        tenantId,
+        createdAt: { gte: startOfDay },
+        state: { notIn: ['failed', 'dead_letter', 'blocked'] },
+      },
+      select: { outputFormats: true },
+    });
+
+    const reels = jobs.filter(j =>
+      (j.outputFormats as string[]).some(f => f === 'reel')
+    ).length;
+
+    return { generations: jobs.length, reels };
+  }
+
+  private getNextMidnightUTC(): string {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() + 1);
+    d.setUTCHours(0, 0, 0, 0);
+    return d.toISOString();
   }
 }

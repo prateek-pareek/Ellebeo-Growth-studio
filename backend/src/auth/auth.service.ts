@@ -143,6 +143,150 @@ export class AuthService {
     }
   }
 
+  async getProfile(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { tenant: true },
+    });
+    if (!user) throw new UnauthorizedException('User not found');
+
+    const tenantId = user.tenant?.id;
+
+    // Compute real stats from DB
+    const [brandDna, photoCount, appointmentCount, contentCount] = await Promise.all([
+      tenantId
+        ? this.prisma.brandDNA.findUnique({
+            where: { unique_current_brand_dna: { tenantId, isCurrent: true } },
+            include: { pillars: true },
+          })
+        : null,
+      tenantId
+        ? this.prisma.imageAsset.count({ where: { tenantId, deletedAt: null } })
+        : 0,
+      tenantId
+        ? this.prisma.appointment.count({ where: { tenantId, deletedAt: null } })
+        : 0,
+      tenantId
+        ? this.prisma.contentItem.count({ where: { tenantId, deletedAt: null } })
+        : 0,
+    ]);
+
+    // Count distinct services from appointments
+    const serviceRows = tenantId
+      ? await this.prisma.appointment.findMany({
+          where: { tenantId, deletedAt: null, serviceName: { not: undefined } },
+          select: { serviceName: true },
+          distinct: ['serviceName'],
+        })
+      : [];
+    const servicesListed = serviceRows.length;
+
+    // Profile completion (0–100)
+    let completion = 0;
+    if (brandDna) completion += 30;
+    if (brandDna?.primaryTone) completion += 10;
+    if (brandDna?.primaryBrandColor) completion += 10;
+    if ((brandDna?.pillars?.length ?? 0) > 0) completion += 10;
+    if (appointmentCount > 0) completion += 15;
+    if (photoCount > 0) completion += 15;
+    if (contentCount > 0) completion += 10;
+
+    // Bio strength
+    let bioStrength = 'Weak';
+    if (brandDna) {
+      const fields = [brandDna.primaryTone, brandDna.oneLiner, brandDna.uniqueSellingProposition, brandDna.primaryPersona].filter(Boolean).length;
+      if (fields >= 4) bioStrength = 'Strong';
+      else if (fields >= 2) bioStrength = 'Good';
+      else bioStrength = 'Fair';
+    }
+
+    // Fetch appointments without photos and unapproved content
+    const [appointmentsWithoutPhotos, draftContent, scheduledContent] = await Promise.all([
+      tenantId
+        ? this.prisma.appointment.count({
+            where: { tenantId, deletedAt: null, imageAssets: { none: { deletedAt: null } } },
+          })
+        : 0,
+      tenantId
+        ? this.prisma.contentItem.count({ where: { tenantId, deletedAt: null, status: 'draft' } })
+        : 0,
+      tenantId
+        ? this.prisma.contentItem.count({ where: { tenantId, deletedAt: null, status: 'scheduled' } })
+        : 0,
+    ]);
+
+    // Dynamic suggestions — always show actionable items
+    const suggestions: Array<{ label: string; impact: string; link: string }> = [];
+
+    // Brand DNA gaps
+    if (!brandDna) {
+      suggestions.push({ label: 'Set up your Brand DNA to power AI-generated content', impact: 'High', link: '/brand/onboarding' });
+    } else {
+      if (!brandDna.primaryBrandColor) suggestions.push({ label: 'Add brand colours to your Brand DNA', impact: 'High', link: '/brand/onboarding' });
+      if ((brandDna.pillars?.length ?? 0) < 3) suggestions.push({ label: 'Define at least 3 content pillars in Brand DNA', impact: 'High', link: '/brand/onboarding' });
+      if (!brandDna.uniqueSellingProposition) suggestions.push({ label: 'Describe your signature service in Brand DNA', impact: 'Medium', link: '/brand/onboarding' });
+      if (bioStrength !== 'Strong') suggestions.push({ label: "Complete your brand voice — add tone words and do/don't rules", impact: 'Medium', link: '/brand/onboarding' });
+    }
+
+    // Photo gaps
+    if (appointmentCount === 0) {
+      suggestions.push({ label: 'Add your first appointment to start generating content', impact: 'High', link: '/appointments' });
+    } else if (appointmentsWithoutPhotos > 0) {
+      suggestions.push({ label: `Add before/after photos to ${appointmentsWithoutPhotos} appointment${appointmentsWithoutPhotos > 1 ? 's' : ''} without photos`, impact: 'High', link: '/appointments' });
+    }
+    if (photoCount < 5 && photoCount > 0) {
+      suggestions.push({ label: `Upload ${5 - photoCount} more photos — aim for at least 5 across your appointments`, impact: 'Medium', link: '/appointments' });
+    }
+
+    // Content gaps
+    if (contentCount === 0 && appointmentCount > 0) {
+      suggestions.push({ label: 'Generate your first post from an existing appointment', impact: 'High', link: '/generate' });
+    }
+    if (draftContent > 0) {
+      suggestions.push({ label: `Review and approve ${draftContent} draft${draftContent > 1 ? 's' : ''} waiting in your content library`, impact: 'Medium', link: '/content' });
+    }
+    if (scheduledContent === 0 && contentCount > 0) {
+      suggestions.push({ label: 'Schedule at least one approved post to your social account', impact: 'Low', link: '/content' });
+    }
+
+    // City: prefer Brand DNA location, fall back to tenant timezone
+    const city = brandDna?.locationCity || user.tenant?.timezone || 'Unknown';
+
+    // Display name: businessName (no firstName/lastName in User model)
+    const displayName = user.tenant?.businessName || 'Technician';
+    const handle = `@${displayName.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')}`;
+
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      displayName,
+      handle,
+      city,
+      avatarUrl: null,
+      profileCompletion: completion,
+      servicesCount: servicesListed,
+      servicesRecommended: 8,
+      photosCount: photoCount,
+      photosRecommended: 18,
+      bioStrength,
+      suggestions,
+      // CRM-sourced stats (not available in Growth Studio DB — shown as 0)
+      averageRating: 0,
+      reviewsCount: 0,
+      responseTimeHours: 0,
+      tenant: user.tenant
+        ? {
+            id: user.tenant.id,
+            businessName: user.tenant.businessName,
+            hasGrowthStudioAccess: user.tenant.hasGrowthStudioAccess,
+            subscriptionTier: user.tenant.subscriptionTier,
+            status: user.tenant.status,
+          }
+        : null,
+    };
+  }
+
   private async generateTokens(userId: string, role: string, tenantId?: string, ipAddress?: string, userAgent?: string) {
     const payload = { sub: userId, role, tenantId };
 

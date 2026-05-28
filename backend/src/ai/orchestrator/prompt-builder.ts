@@ -8,6 +8,7 @@ import type {
   GoldenExample,
   BusinessGoalType,
   SocialPlatform,
+  ConsentRestrictions,
 } from '../types/job-payload.types';
 import type { VisionAnalysisResult, AssembledPrompt } from '../types/chain-output.types';
 import { PromptCache } from './prompt-cache';
@@ -25,7 +26,7 @@ const GOAL_FRAMING: Record<BusinessGoalType, string> = {
 };
 
 const PLATFORM_RULES: Record<SocialPlatform, string> = {
-  instagram: `FORMAT RULES FOR INSTAGRAM:\n- First sentence IS the hook — must stop the scroll\n- Hashtags: 15-25 hashtags\n- Include one clear CTA (book, DM, link in bio)`,
+  instagram: `FORMAT RULES FOR INSTAGRAM:\n- First sentence IS the hook — must stop the scroll\n- Hashtags: 5-10 hashtags only (relevant, not spammy)\n- Include one clear CTA (book, DM, link in bio)`,
   facebook: `FORMAT RULES FOR FACEBOOK:\n- Longer, more conversational (200-400 words)\n- Hashtags: 3-5 maximum\n- No hashtag spam`,
   tiktok: `FORMAT RULES FOR TIKTOK:\n- Hook MUST be in first 2-3 WORDS\n- Short energetic sentences\n- Hashtags: 3-5 only`,
 };
@@ -47,8 +48,14 @@ export class PromptBuilder {
     platform: SocialPlatform;
     serviceCategory?: ServiceCategory;
     masterPromptText?: string;
+    consentRestrictions?: ConsentRestrictions;
+    appointmentContext?: {
+      serviceName?: string;
+      clientFirstName?: string;
+      serviceCategory?: string;
+    };
   }): Promise<AssembledPrompt> {
-    const { brandDNA, visionResult, businessGoal, goldenExamples, platform, serviceCategory = 'general', masterPromptText } = params;
+    const { brandDNA, visionResult, businessGoal, goldenExamples, platform, serviceCategory = 'general', masterPromptText, consentRestrictions, appointmentContext } = params;
 
     const { brandDNAFragment, brandDNACacheHit } = await this.getBrandDNAFragment(brandDNA);
     const { goldenExamplesFragment, goldenExamplesCacheHit } =
@@ -64,9 +71,16 @@ export class PromptBuilder {
     const lengthTarget = (CAPTION_LENGTH_TARGETS as any)[brandDNA.captionLengthPreference] || CAPTION_LENGTH_TARGETS.medium;
     const lengthSection = `Caption body should be ${lengthTarget.minWords}–${lengthTarget.maxWords} words (excluding hashtags).`;
 
+    const consentSection = this.buildConsentRestrictionsSection(consentRestrictions);
+
+    const appointmentSection = this.buildAppointmentSection(appointmentContext, consentRestrictions);
+
     const userPrompt = [
-      '## APPOINTMENT ANALYSIS',
-      visionSection || '(No image — generate based on appointment context only)',
+      '## APPOINTMENT CONTEXT',
+      appointmentSection,
+      '',
+      '## IMAGE ANALYSIS',
+      visionSection || '(No image provided — generate based on appointment context only)',
       '',
       '## YOUR BUSINESS GOAL THIS WEEK',
       goalSection,
@@ -77,6 +91,9 @@ export class PromptBuilder {
       '## LENGTH REQUIREMENT',
       lengthSection,
       '',
+      consentSection ? '## CLIENT CONSENT RESTRICTIONS' : '',
+      consentSection,
+      consentSection ? '' : '',
       '## SAFETY GUARDRAILS',
       getGuardrailsForService(serviceCategory),
       '',
@@ -162,7 +179,30 @@ CRITICAL RULES:
   }
 
   private buildBrandDNAFragment(dna: BrandDNARecord): string {
-    return `## YOUR BRAND DNA\n**Business:** ${dna.businessName} — ${dna.locationCity}\n**Persona:** ${dna.personaDescription}\n**Primary Tone:** ${dna.primaryTone.replace(/_/g, ' ')}\n${dna.secondaryTone ? `**Secondary Tone:** ${dna.secondaryTone.replace(/_/g, ' ')}\n` : ''}**You call your clients:** "${dna.clientTerminology}"\n**Target Audience:** ${dna.targetAudience}\n**What makes you different:** ${dna.uniqueSellingPoint}\n**Hero Services:** ${dna.heroServices.join(', ')}\n\n**Vocabulary you love:** ${dna.preferredVocabulary.join(', ')}\n**BLACKLISTED WORDS (NEVER USE):** ${dna.blacklistedWords.join(', ')}\n\n**Emojis:** ${dna.useEmojis ? `Yes, ${dna.emojiStyle} use` : 'No emojis'}\n**Your CTA style:** ${dna.preferredCTAStyle}`;
+    const arr = (v: unknown) => (Array.isArray(v) ? v : []);
+    const str = (v: unknown, fallback = '') => (v != null ? String(v) : fallback);
+    const tone = (v: unknown) => str(v).replace(/_/g, ' ');
+
+    const preferred = arr(dna.vocabularyPreferred ?? dna.preferredVocabulary);
+    const blacklist = arr(dna.vocabularyBlacklist ?? dna.blacklistedWords);
+    const doNotSay = arr(dna.doNotSay);
+    const painPoints = arr(dna.clientPainPoints);
+
+    return [
+      `## YOUR BRAND DNA`,
+      `**Business:** ${str(dna.businessName)}${dna.locationCity ? ` — ${str(dna.locationCity)}` : ''}`,
+      dna.primaryPersona ? `**Target client:** ${str(dna.primaryPersona)}` : '',
+      painPoints.length ? `**Client pain points:** ${painPoints.join(', ')}` : '',
+      dna.primaryTone ? `**Primary Tone:** ${tone(dna.primaryTone)}` : '',
+      dna.secondaryTone ? `**Secondary Tone:** ${tone(dna.secondaryTone)}` : '',
+      dna.uniqueSellingProposition ? `**What makes you different:** ${str(dna.uniqueSellingProposition)}` : '',
+      dna.signatureOutcome ? `**Signature result:** ${str(dna.signatureOutcome)}` : '',
+      dna.oneLiner ? `**One-liner:** ${str(dna.oneLiner)}` : '',
+      preferred.length ? `**Vocabulary you love:** ${preferred.join(', ')}` : '',
+      blacklist.length ? `**BLACKLISTED WORDS (NEVER USE):** ${blacklist.join(', ')}` : '',
+      doNotSay.length ? `**Never say:** ${doNotSay.join(', ')}` : '',
+      `**Emojis:** ${str(dna.emojiPolicy, 'minimal')} use`,
+    ].filter(Boolean).join('\n');
   }
 
   private buildGoldenExamplesFragment(examples: GoldenExample[]): string {
@@ -173,8 +213,34 @@ CRITICAL RULES:
     return `Study these real examples of this technician's best content. Your output must match this style:\n\n${exampleText}`;
   }
 
+  private buildAppointmentSection(
+    ctx?: { serviceName?: string; clientFirstName?: string; serviceCategory?: string },
+    consent?: ConsentRestrictions,
+  ): string {
+    if (!ctx) return '(No appointment context provided)';
+    const lines: string[] = [];
+    if (ctx.serviceName) lines.push(`**Service performed:** ${ctx.serviceName}`);
+    if (ctx.serviceCategory) lines.push(`**Service category:** ${ctx.serviceCategory}`);
+    if (ctx.clientFirstName && consent?.use_name !== false) {
+      lines.push(`**Client first name:** ${ctx.clientFirstName} (consent granted to use their name)`);
+    }
+    return lines.length > 0 ? lines.join('\n') : '(No specific appointment details available)';
+  }
+
   private buildVisionSection(vision: VisionAnalysisResult): string {
     return `**Service Performed:** ${vision.servicePerformed}\n**Technical Details:** ${vision.technicalDetails}\n**Transformation:** ${vision.transformationDescription}\n**Service Tags:** ${vision.serviceTags.join(', ')}\n**Setting:** ${vision.settingDetected}\n**Image Quality:** ${vision.imageQuality}\n**Faces Visible:** ${vision.facesDetected ? 'Yes' : 'No'}`;
+  }
+
+  private buildConsentRestrictionsSection(restrictions?: ConsentRestrictions): string {
+    if (!restrictions) return '';
+    const lines: string[] = [];
+    if (!restrictions.use_name) lines.push('- **Client name: NOT allowed** — do not reference the client by name, e.g. no "Sarah\'s glow-up" or similar');
+    if (!restrictions.allow_tagging) lines.push('- **Social tagging: NOT allowed** — do not suggest tagging the client or use language like "tag a friend who needs this"');
+    if (!restrictions.allow_extended_use) lines.push('- **Platform promotion: NOT allowed** — do not write content framed for showcases, awards, or platform-level promotion');
+    if (!restrictions.allow_before_after) lines.push('- **Before/after references: NOT allowed** — do not reference the before state or describe it as a transformation');
+    if (!restrictions.show_face) lines.push('- **Face references: NOT allowed** — do not describe facial features or imply the client\'s face is visible');
+    if (lines.length === 0) return '';
+    return `You MUST follow these client consent restrictions. Violating them is a serious breach of client trust:\n${lines.join('\n')}`;
   }
 
   private buildOutputFormatSection(): string {

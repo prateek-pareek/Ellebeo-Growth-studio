@@ -312,12 +312,15 @@ function ContentCard({
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+          {!blocked && item.sourceAppointmentId && (
             <Link
-                to="/content"
-                className="text-[10px] uppercase tracking-widest text-foreground border-b border-foreground pb-0.5 hover:text-taupe hover:border-taupe"
+              to="/generate"
+              search={{ appointment: item.sourceAppointmentId }}
+              className="text-[10px] uppercase tracking-widest text-foreground border-b border-foreground pb-0.5 hover:text-taupe hover:border-taupe"
             >
-                View details →
+              View draft →
             </Link>
+          )}
         </div>
       </div>
     </article>

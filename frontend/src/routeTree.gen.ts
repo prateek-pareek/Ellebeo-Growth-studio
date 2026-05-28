@@ -14,6 +14,7 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as GenerateRouteImport } from './routes/generate'
+import { Route as CrmRouteImport } from './routes/crm'
 import { Route as ContentRouteImport } from './routes/content'
 import { Route as CampaignsRouteImport } from './routes/campaigns'
 import { Route as CalendarRouteImport } from './routes/calendar'
@@ -47,6 +48,11 @@ const LoginRoute = LoginRouteImport.update({
 const GenerateRoute = GenerateRouteImport.update({
   id: '/generate',
   path: '/generate',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CrmRoute = CrmRouteImport.update({
+  id: '/crm',
+  path: '/crm',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ContentRoute = ContentRouteImport.update({
@@ -103,6 +109,7 @@ export interface FileRoutesByFullPath {
   '/calendar': typeof CalendarRoute
   '/campaigns': typeof CampaignsRoute
   '/content': typeof ContentRoute
+  '/crm': typeof CrmRoute
   '/generate': typeof GenerateRoute
   '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
@@ -119,6 +126,7 @@ export interface FileRoutesByTo {
   '/calendar': typeof CalendarRoute
   '/campaigns': typeof CampaignsRoute
   '/content': typeof ContentRoute
+  '/crm': typeof CrmRoute
   '/generate': typeof GenerateRoute
   '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
@@ -136,6 +144,7 @@ export interface FileRoutesById {
   '/calendar': typeof CalendarRoute
   '/campaigns': typeof CampaignsRoute
   '/content': typeof ContentRoute
+  '/crm': typeof CrmRoute
   '/generate': typeof GenerateRoute
   '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
@@ -154,6 +163,7 @@ export interface FileRouteTypes {
     | '/calendar'
     | '/campaigns'
     | '/content'
+    | '/crm'
     | '/generate'
     | '/login'
     | '/profile'
@@ -170,6 +180,7 @@ export interface FileRouteTypes {
     | '/calendar'
     | '/campaigns'
     | '/content'
+    | '/crm'
     | '/generate'
     | '/login'
     | '/profile'
@@ -186,6 +197,7 @@ export interface FileRouteTypes {
     | '/calendar'
     | '/campaigns'
     | '/content'
+    | '/crm'
     | '/generate'
     | '/login'
     | '/profile'
@@ -203,6 +215,7 @@ export interface RootRouteChildren {
   CalendarRoute: typeof CalendarRoute
   CampaignsRoute: typeof CampaignsRoute
   ContentRoute: typeof ContentRoute
+  CrmRoute: typeof CrmRoute
   GenerateRoute: typeof GenerateRoute
   LoginRoute: typeof LoginRoute
   ProfileRoute: typeof ProfileRoute
@@ -246,6 +259,13 @@ declare module '@tanstack/react-router' {
       path: '/generate'
       fullPath: '/generate'
       preLoaderRoute: typeof GenerateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/crm': {
+      id: '/crm'
+      path: '/crm'
+      fullPath: '/crm'
+      preLoaderRoute: typeof CrmRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/content': {
@@ -332,6 +352,7 @@ const rootRouteChildren: RootRouteChildren = {
   CalendarRoute: CalendarRoute,
   CampaignsRoute: CampaignsRoute,
   ContentRoute: ContentRoute,
+  CrmRoute: CrmRoute,
   GenerateRoute: GenerateRoute,
   LoginRoute: LoginRoute,
   ProfileRoute: ProfileRoute,

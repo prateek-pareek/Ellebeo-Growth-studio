@@ -15,9 +15,9 @@ export const Route = createFileRoute("/brand/onboarding")({
 });
 
 const STEPS = [
-  { id: 1, name: "About you", help: "Your name, niche and where you work." },
-  { id: 2, name: "Services", help: "What you offer and which services you want to grow." },
-  { id: 3, name: "Voice", help: "How you sound — what you always say, what you never say." },
+  { id: 1, name: "About you", help: "Your name, niche, location and brand colours." },
+  { id: 2, name: "Services", help: "What you offer, your aesthetic and market tier." },
+  { id: 3, name: "Voice", help: "How you sound — tone, do's, don'ts and post style." },
   { id: 4, name: "Ideal client", help: "Who you want to attract." },
   { id: 5, name: "Goals", help: "Bookings per week, posting frequency, content pillars." },
 ];
@@ -26,11 +26,17 @@ const EMPTY: OnboardingPayload = {
   displayName: "",
   niche: "",
   city: "",
+  primaryColor: "",
+  secondaryColor: "",
   signatureService: "",
   otherServices: "",
+  aestheticDirection: "",
+  brandTier: "",
   voiceWords: "",
   alwaysDo: "",
   neverDo: "",
+  emojiPolicy: "minimal",
+  captionLength: "medium",
   ageRange: "",
   cities: "",
   idealClient: "",
@@ -70,7 +76,7 @@ function OnboardingPage() {
     }
     setSaving(true);
     const res = await saveBrandDna(form);
-    setSaving(true); // Keep UI in saving state until result is handled
+    setSaving(false);
     if (res.kind === "ok") {
       setSaved(true);
     } else if (res.kind === "anon") {
@@ -78,7 +84,6 @@ function OnboardingPage() {
     } else {
       setError(res.message);
     }
-    setSaving(false);
   }
 
   if (loading) {
@@ -169,12 +174,38 @@ function OnboardingPage() {
                   <Field label="Your name" placeholder="Von Glass" value={form.displayName} onChange={fieldSetter("displayName")} />
                   <Field label="Your niche" placeholder="Holistic facialist" value={form.niche} onChange={fieldSetter("niche")} />
                   <Field label="City" placeholder="Paris 3e" value={form.city} onChange={fieldSetter("city")} />
+                  <ColorField label="Primary brand colour" value={form.primaryColor} onChange={fieldSetter("primaryColor")} />
+                  <ColorField label="Secondary brand colour" value={form.secondaryColor} onChange={fieldSetter("secondaryColor")} />
                 </>
               )}
               {step === 2 && (
                 <>
                   <Field label="Service you want to grow" placeholder="6-week pigmentation protocol" value={form.signatureService} onChange={fieldSetter("signatureService")} />
                   <Field label="Other services you offer" placeholder="Signature facial, botanical peel" textarea value={form.otherServices} onChange={fieldSetter("otherServices")} />
+                  <SelectField
+                    label="Brand aesthetic"
+                    value={form.aestheticDirection}
+                    onChange={fieldSetter("aestheticDirection")}
+                    options={[
+                      { value: "", label: "Select…" },
+                      { value: "minimalist_clean", label: "Minimalist & Clean" },
+                      { value: "moody_editorial", label: "Moody Editorial" },
+                      { value: "bright_playful", label: "Bright & Playful" },
+                      { value: "soft_feminine", label: "Soft & Feminine" },
+                      { value: "bold_luxury", label: "Bold Luxury" },
+                    ]}
+                  />
+                  <SelectField
+                    label="Market tier"
+                    value={form.brandTier}
+                    onChange={fieldSetter("brandTier")}
+                    options={[
+                      { value: "", label: "Select…" },
+                      { value: "luxury", label: "Luxury" },
+                      { value: "mainstream", label: "Mainstream" },
+                      { value: "accessible", label: "Accessible" },
+                    ]}
+                  />
                 </>
               )}
               {step === 3 && (
@@ -182,6 +213,27 @@ function OnboardingPage() {
                   <Field label="Three words that describe how you speak" placeholder="Calm · Expert · Warm" value={form.voiceWords} onChange={fieldSetter("voiceWords")} />
                   <Field label="What you always do in a post" placeholder="Lead with the result the client felt" textarea value={form.alwaysDo} onChange={fieldSetter("alwaysDo")} />
                   <Field label="What you never do (one per line)" placeholder="use emojis&#10;mention discounts&#10;use slang" textarea value={form.neverDo} onChange={fieldSetter("neverDo")} />
+                  <SelectField
+                    label="Emoji usage"
+                    value={form.emojiPolicy}
+                    onChange={fieldSetter("emojiPolicy")}
+                    options={[
+                      { value: "none", label: "None — never use emojis" },
+                      { value: "minimal", label: "Minimal — 1–2 max" },
+                      { value: "moderate", label: "Moderate — occasional" },
+                      { value: "expressive", label: "Expressive — use freely" },
+                    ]}
+                  />
+                  <SelectField
+                    label="Caption length preference"
+                    value={form.captionLength}
+                    onChange={fieldSetter("captionLength")}
+                    options={[
+                      { value: "short", label: "Short (50–80 words)" },
+                      { value: "medium", label: "Medium (80–130 words)" },
+                      { value: "long", label: "Long (130–200 words)" },
+                    ]}
+                  />
                 </>
               )}
               {step === 4 && (
@@ -238,6 +290,7 @@ function OnboardingPage() {
           <h3 className="eyebrow mb-4">Why this matters</h3>
           <div className="artifact p-6 text-sm text-taupe leading-relaxed space-y-4">
             <p>Your Brand DNA is what makes AI-generated posts sound like <em className="not-italic text-foreground">you</em> instead of a generic template.</p>
+            <p>Your brand colours appear on your Brand DNA page and may be used in future visual templates.</p>
             <p>You can edit any of these answers later from the Brand DNA page.</p>
           </div>
         </aside>
@@ -279,6 +332,84 @@ function Field({
           className="w-full bg-transparent border-b hairline text-base py-2 outline-none focus:border-foreground transition-colors"
         />
       )}
+    </div>
+  );
+}
+
+function ColorField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const displayHex = value || "#888888";
+  return (
+    <div>
+      <label className="text-[10px] uppercase tracking-widest text-taupe block mb-2">{label}</label>
+      <div className="flex items-center gap-3">
+        <label className="relative cursor-pointer flex-shrink-0">
+          <div
+            className="w-10 h-10 border hairline"
+            style={{ backgroundColor: value || "transparent" }}
+          />
+          <input
+            type="color"
+            value={displayHex}
+            onChange={(e) => onChange(e.target.value)}
+            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+          />
+        </label>
+        <input
+          type="text"
+          placeholder="#c4a882"
+          value={value}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v === "" || /^#[0-9a-fA-F]{0,6}$/.test(v)) onChange(v);
+          }}
+          className="flex-1 bg-transparent border-b hairline text-base py-2 outline-none focus:border-foreground transition-colors"
+          maxLength={7}
+        />
+        {value && (
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground flex-shrink-0"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: Array<{ value: string; label: string }>;
+}) {
+  return (
+    <div>
+      <label className="text-[10px] uppercase tracking-widest text-taupe block mb-2">{label}</label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full bg-transparent border-b hairline text-base py-2 outline-none focus:border-foreground transition-colors appearance-none cursor-pointer"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
     </div>
   );
 }
