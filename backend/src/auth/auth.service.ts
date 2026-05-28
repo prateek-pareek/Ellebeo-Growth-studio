@@ -50,6 +50,7 @@ export class AuthService {
           businessName,
           timezone,
           subscriptionTier: 'free',
+          hasGrowthStudioAccess: true,
         },
       });
 
