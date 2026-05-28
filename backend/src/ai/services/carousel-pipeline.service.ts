@@ -50,31 +50,25 @@ export class CarouselPipelineService {
       let url: string;
 
       if (isFirst) {
-        // Cover: natural image + semi-transparent white bar at bottom + bold dark text
+        // Cover: natural image + bold white text with dark padding box at bottom
         url = cloudinary.url(cloudinaryPublicId, {
           transformation: [
             { width: 1080, height: 1080, crop: 'fill', gravity: 'auto' },
-            // White bar at bottom — no color filter on the image
-            {
-              overlay: { fetch_format: 'auto', public_id: 'white_bar' } as any,
-              width: 1080, height: 180,
-              gravity: 'south', y: 0,
-              opacity: 88,
-              flags: 'layer_apply',
-            },
             {
               overlay: {
                 font_family: 'Montserrat',
-                font_size: 52,
+                font_size: 54,
                 font_weight: 'bold',
                 text_align: 'center',
                 text: safe(concept.overlayText, 45),
               },
-              color: '#1a1a1a',
+              color: '#ffffff',
+              background: 'rgb:000000b0',
               gravity: 'south',
-              y: 55,
-              width: 960,
+              y: 60,
+              width: 1080,
               crop: 'fit',
+              flags: 'text_no_trim',
             },
             { quality: 'auto', fetch_format: 'auto' },
           ],

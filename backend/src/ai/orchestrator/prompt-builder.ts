@@ -201,7 +201,13 @@ CRITICAL RULES:
       preferred.length ? `**Vocabulary you love:** ${preferred.join(', ')}` : '',
       blacklist.length ? `**BLACKLISTED WORDS (NEVER USE):** ${blacklist.join(', ')}` : '',
       doNotSay.length ? `**Never say:** ${doNotSay.join(', ')}` : '',
-      `**Emojis:** ${str(dna.emojiPolicy, 'minimal')} use`,
+      dna.emojiPolicy === 'none'
+        ? '**Emojis:** NEVER use emojis — not even one.'
+        : dna.emojiPolicy === 'frequent'
+          ? '**Emojis:** Use emojis freely — 3–5 relevant emojis in the caption and hashtags.'
+          : dna.emojiPolicy === 'moderate'
+            ? '**Emojis:** Use 1–2 emojis in the caption where they feel natural.'
+            : '**Emojis:** Minimal — at most 1 emoji, only if it genuinely fits.',
     ].filter(Boolean).join('\n');
   }
 
