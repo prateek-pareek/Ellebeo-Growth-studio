@@ -20,6 +20,8 @@ export class BrandDnaService {
         where: { unique_current_brand_dna: { tenantId, isCurrent: true } }
       });
 
+      const nextVersion = current ? current.version + 1 : 1;
+
       if (current) {
         await tx.brandDNA.update({
           where: { id: current.id },
@@ -30,6 +32,7 @@ export class BrandDnaService {
       return tx.brandDNA.create({
         data: {
           tenantId,
+          version: nextVersion,
           businessName: dto.businessName,
           oneLiner: dto.oneLiner,
           uniqueSellingProposition: dto.uniqueSellingProposition,

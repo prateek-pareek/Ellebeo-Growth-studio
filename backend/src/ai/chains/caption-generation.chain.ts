@@ -29,7 +29,7 @@ function parseCaptionOutput(raw: string): CaptionGenerationResult {
     caption: String(obj['caption'] ?? ''),
     hookSentence: String(obj['hookSentence'] ?? ''),
     callToAction: String(obj['callToAction'] ?? ''),
-    hashtags: Array.isArray(obj['hashtags']) ? (obj['hashtags'] as string[]) : [],
+    hashtags: Array.isArray(obj['hashtags']) ? (obj['hashtags'] as string[]).map(h => String(h).replace(/^#+/, '')) : [],
     altText: String(obj['altText'] ?? ''),
     estimatedReadTime: Number(obj['estimatedReadTime'] ?? 10),
     brandVoiceConfidenceScore: Math.min(1, Math.max(0, Number(obj['brandVoiceConfidenceScore'] ?? 0.5))),

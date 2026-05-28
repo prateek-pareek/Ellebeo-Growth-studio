@@ -50,23 +50,30 @@ export class CarouselPipelineService {
       let url: string;
 
       if (isFirst) {
-        // Cover slide: dark overlay + bold hook at bottom
+        // Cover: natural image + semi-transparent white bar at bottom + bold dark text
         url = cloudinary.url(cloudinaryPublicId, {
           transformation: [
             { width: 1080, height: 1080, crop: 'fill', gravity: 'auto' },
-            { effect: 'brightness:-50' },
+            // White bar at bottom — no color filter on the image
+            {
+              overlay: { fetch_format: 'auto', public_id: 'white_bar' } as any,
+              width: 1080, height: 180,
+              gravity: 'south', y: 0,
+              opacity: 88,
+              flags: 'layer_apply',
+            },
             {
               overlay: {
                 font_family: 'Montserrat',
-                font_size: 56,
+                font_size: 52,
                 font_weight: 'bold',
                 text_align: 'center',
-                text: safe(concept.overlayText, 55),
+                text: safe(concept.overlayText, 45),
               },
-              color: '#ffffff',
+              color: '#1a1a1a',
               gravity: 'south',
-              y: 120,
-              width: 900,
+              y: 55,
+              width: 960,
               crop: 'fit',
             },
             { quality: 'auto', fetch_format: 'auto' },
@@ -74,21 +81,22 @@ export class CarouselPipelineService {
           secure: true,
         });
       } else if (isLast) {
-        // CTA slide: branded colour text centred
+        // CTA: natural image + brand colour bar + white text
         url = cloudinary.url(cloudinaryPublicId, {
           transformation: [
             { width: 1080, height: 1080, crop: 'fill', gravity: 'auto' },
-            { effect: 'brightness:-35' },
+            { effect: 'brightness:-10' },
             {
               overlay: {
                 font_family: 'Montserrat',
-                font_size: 52,
+                font_size: 48,
                 font_weight: 'bold',
                 text_align: 'center',
-                text: safe(concept.overlayText, 55),
+                text: safe(concept.overlayText, 45),
               },
               color: `#${hex}`,
               gravity: 'center',
+              y: 0,
               width: 900,
               crop: 'fit',
             },
@@ -97,24 +105,25 @@ export class CarouselPipelineService {
           secure: true,
         });
       } else {
-        // Body slides: lighter overlay, text at bottom
+        // Body slides: natural image, minimal darkening, clean white text bar at bottom
         url = cloudinary.url(cloudinaryPublicId, {
           transformation: [
             { width: 1080, height: 1080, crop: 'fill', gravity: 'auto' },
-            { effect: 'brightness:-20' },
             {
               overlay: {
                 font_family: 'Montserrat',
-                font_size: 46,
+                font_size: 44,
                 font_weight: 'bold',
                 text_align: 'center',
-                text: safe(concept.overlayText, 55),
+                text: safe(concept.overlayText, 50),
               },
               color: '#ffffff',
               gravity: 'south',
-              y: 80,
+              y: 60,
               width: 900,
               crop: 'fit',
+              background: 'rgb:00000066',
+              flags: 'text_no_trim',
             },
             { quality: 'auto', fetch_format: 'auto' },
           ],
