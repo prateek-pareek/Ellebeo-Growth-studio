@@ -843,7 +843,7 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
       )}
 
       {/* Draft preview card */}
-      <div className="border hairline overflow-hidden">
+      <div className="border hairline">
 
         {/* Card header */}
         <div className="flex items-center justify-between bg-foreground px-5 py-3">
@@ -860,55 +860,47 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
           /* ── STORY LAYOUT ────────────────────────────────────────────── */
           <div className="grid grid-cols-1 lg:grid-cols-2">
 
-            {/* LEFT — story frame strip + active frame */}
-            <div className="bg-nude/10 flex flex-col">
+            {/* LEFT — story preview */}
+            <div className="flex flex-col bg-card">
 
-              {/* 4 frame thumbnails in a row */}
-              <div className="grid grid-cols-4 gap-1 p-3 bg-card border-b hairline">
+              {/* Thumbnail strip */}
+              <div className="grid grid-cols-4 gap-1.5 p-3 border-b hairline">
                 {storyFrames.map((frame: any, i: number) => (
                   <button
                     key={i}
                     onClick={() => setActiveSlide(i)}
-                    className={"relative overflow-hidden flex flex-col " + (i === safeFrame ? "ring-2 ring-foreground" : "opacity-60 hover:opacity-90")}
+                    className={"overflow-hidden border transition-all " +
+                      (i === safeFrame ? "border-foreground" : "border-transparent opacity-50 hover:opacity-80")}
                   >
-                    <img
-                      src={frame.url}
-                      alt={frame.label}
-                      className="w-full aspect-[9/16] object-contain bg-black"
-                    />
-                    <p className="text-[7px] uppercase tracking-widest text-center py-0.5 bg-card text-taupe truncate px-0.5">
-                      {i + 1}.{frame.title?.split('·')[1]?.trim() ?? frame.label}
-                    </p>
+                    <img src={frame.url} alt={frame.label} className="w-full aspect-[9/16] object-cover" />
                   </button>
                 ))}
               </div>
 
-              {/* Active frame + label */}
-              <div className="relative h-80 overflow-hidden bg-black flex items-center justify-center">
-                <img
-                  src={storyFrames[safeFrame]?.url}
-                  alt={storyFrames[safeFrame]?.label}
-                  className="h-full w-auto object-contain"
-                />
-                <div className="absolute top-2 left-2 bg-foreground/80 px-2 py-1">
-                  <p className="text-[9px] uppercase tracking-widest text-offwhite tabular-nums">
-                    {safeFrame + 1} / {storyFrames.length}
-                  </p>
-                </div>
-                <div className="absolute top-2 right-2 bg-foreground/80 px-2 py-1">
-                  <p className="text-[9px] uppercase tracking-widest text-nude">
-                    {storyFrames[safeFrame]?.label ?? `FRAME ${safeFrame + 1}`}
-                  </p>
+              {/* Main image — fills rectangle completely */}
+              <div className="relative flex-1 flex items-center justify-center bg-nude/10 p-4">
+                <div className="relative w-full overflow-hidden shadow-lg" style={{ maxWidth: '420px' }}>
+                  <img
+                    src={storyFrames[safeFrame]?.url}
+                    alt={storyFrames[safeFrame]?.label}
+                    className="w-full h-auto block"
+                  />
+                  <div className="absolute top-2 left-2 bg-foreground/70 px-2 py-0.5">
+                    <p className="text-[9px] uppercase tracking-widest text-offwhite">{safeFrame + 1} / {storyFrames.length}</p>
+                  </div>
+                  <div className="absolute top-2 right-2 bg-foreground/70 px-2 py-0.5">
+                    <p className="text-[9px] uppercase tracking-widest text-nude">{storyFrames[safeFrame]?.label}</p>
+                  </div>
                 </div>
               </div>
 
               {/* Nav + download */}
-              <div className="flex items-center justify-between px-4 py-3 border-t hairline bg-card">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between px-4 py-3 border-t hairline">
+                <div className="flex items-center gap-3">
                   <button onClick={() => setActiveSlide(Math.max(0, safeFrame - 1))} disabled={safeFrame === 0} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground disabled:opacity-30">← Prev</button>
                   <button onClick={() => setActiveSlide(Math.min(storyFrames.length - 1, safeFrame + 1))} disabled={safeFrame === storyFrames.length - 1} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground disabled:opacity-30">Next →</button>
                 </div>
-                <button onClick={downloadImage} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground flex items-center gap-1.5 transition-colors">
+                <button onClick={downloadImage} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground flex items-center gap-1.5">
                   <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 1v6M2 7l3 2 3-2M1 9h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   Download frame
                 </button>
