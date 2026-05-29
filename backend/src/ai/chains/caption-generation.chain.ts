@@ -59,23 +59,22 @@ export class CaptionGenerationChain {
   }): Promise<CaptionGenerationResult> {
     const { assembledPrompt, llmConfig, brandDNABlacklist, allowRetry = true } = params;
 
-    let model: BaseChatModel;
+    let activeModel: BaseChatModel;
     let result: CaptionGenerationResult;
 
     try {
-      model = this.buildModel(llmConfig);
-      result = await this.callModel(model, assembledPrompt);
+      activeModel = this.buildModel(llmConfig);
+      result = await this.callModel(activeModel, assembledPrompt);
     } catch (primaryErr) {
-      // Fallback to Gemini if OpenAI/Anthropic fails
       if (process.env['GEMINI_API_KEY']) {
         console.warn('[CaptionChain] Primary model failed, falling back to Gemini:', (primaryErr as Error).message);
-        const gemini = new ChatGoogleGenerativeAI({
+        activeModel = new ChatGoogleGenerativeAI({
           model: 'gemini-1.5-flash',
           apiKey: process.env['GEMINI_API_KEY'],
           temperature: 0.75,
           maxOutputTokens: 1024,
-        });
-        result = await this.callModel(gemini as any, assembledPrompt);
+        }) as any;
+        result = await this.callModel(activeModel, assembledPrompt);
       } else {
         throw primaryErr;
       }
@@ -90,7 +89,7 @@ export class CaptionGenerationChain {
       result.brandVoiceConfidenceScore < AI_CONFIG.routing.brandVoiceConfidenceRetryThreshold
     ) {
       const amplifiedPrompt = this.amplifyBrandVoice(assembledPrompt, result);
-      const retryResult = await this.callModel(model, amplifiedPrompt);
+      const retryResult = await this.callModel(activeModel, amplifiedPrompt);
       // Return whichever has higher confidence
       return retryResult.brandVoiceConfidenceScore >= result.brandVoiceConfidenceScore
         ? retryResult
