@@ -27,7 +27,7 @@ export class AppointmentService {
     const safePageSize = Number.isFinite(pageSize) ? Math.min(100, Math.max(1, Number(pageSize))) : 20;
     const rows = await this.prisma.appointment.findMany({
       where: { tenantId, deletedAt: null },
-      orderBy: { appointmentDate: 'desc' },
+      orderBy: { createdAt: 'desc' },
       skip: (safePage - 1) * safePageSize,
       take: safePageSize,
       include: {
