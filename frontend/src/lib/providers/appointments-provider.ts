@@ -93,7 +93,7 @@ async function fetchCloudAppointments(): Promise<
         afterPhotoUrl: row.afterPhotoUrl ?? null,
         consent: row.consentStatus || "not_requested",
         notes: row.notes,
-        contentReady: 0,
+        contentReady: row.contentCount ?? 0,
       })),
     };
   } catch (error: any) {
