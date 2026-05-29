@@ -75,11 +75,10 @@ export class CarouselPipelineService {
           secure: true,
         });
       } else if (isLast) {
-        // CTA: natural image + brand colour bar + white text
+        // CTA: natural image + brand colour text with white pill background
         url = cloudinary.url(cloudinaryPublicId, {
           transformation: [
             { width: 1080, height: 1080, crop: 'fill', gravity: 'auto' },
-            { effect: 'brightness:-10' },
             {
               overlay: {
                 font_family: 'Montserrat',
@@ -89,10 +88,12 @@ export class CarouselPipelineService {
                 text: safe(concept.overlayText, 45),
               },
               color: `#${hex}`,
+              background: 'rgb:ffffffdd',
               gravity: 'center',
               y: 0,
-              width: 900,
+              width: 1080,
               crop: 'fit',
+              flags: 'text_no_trim',
             },
             { quality: 'auto', fetch_format: 'auto' },
           ],

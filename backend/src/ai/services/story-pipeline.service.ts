@@ -43,13 +43,14 @@ export class StoryPipelineService {
         ? cloudinary.url(cloudinaryPublicId, {
             transformation: [
               { width: 1080, height: 1920, crop: 'fill', gravity: 'auto' },
-              { effect: 'brightness:-35' },
               {
                 overlay: { font_family: 'Montserrat', font_size: 54, font_weight: 'bold', text_align: 'center', text: safe(concept.overlayText, 50) },
                 color: `#${hex}`,
+                background: 'rgb:ffffffcc',
                 gravity: 'center',
-                width: 900,
+                width: 1080,
                 crop: 'fit',
+                flags: 'text_no_trim',
               },
               { quality: 'auto', fetch_format: 'auto' },
             ],
@@ -58,14 +59,15 @@ export class StoryPipelineService {
         : cloudinary.url(cloudinaryPublicId, {
             transformation: [
               { width: 1080, height: 1920, crop: 'fill', gravity: 'auto' },
-              { effect: `brightness:${i === 0 ? -50 : -20}` },
               {
                 overlay: { font_family: 'Montserrat', font_size: 48, font_weight: 'bold', text_align: 'center', text: safe(concept.overlayText, 50) },
                 color: '#ffffff',
+                background: 'rgb:000000b0',
                 gravity: 'south',
                 y: 140,
-                width: 900,
+                width: 1080,
                 crop: 'fit',
+                flags: 'text_no_trim',
               },
               { quality: 'auto', fetch_format: 'auto' },
             ],
