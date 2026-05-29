@@ -321,6 +321,66 @@ export class GenerationOrchestrator {
       }
     }
 
+    // ── Step 5.55: AI-designed feed image (gpt-image-1) ─────────────────────
+    const feedPhotoUrl = payload.imageAssets.find(a => a.isAfterPhoto)?.rawStoragePath
+      ?? payload.imageAssets[0]?.rawStoragePath;
+
+    if (feedPhotoUrl && captionResult && imageResult) {
+      try {
+        const feedPrompt = `Transform this beauty photo into a professional Instagram feed post for "${brandDNA.businessName}".
+Brand colors: ${brandDNA.primaryBrandColor ?? '#1a1a1a'} and ${brandDNA.secondaryBrandColor ?? '#f5f0eb'}.
+Aesthetic: ${brandDNA.aestheticDirection ?? 'minimal editorial premium beauty'}.
+Caption hook: "${captionResult.hookSentence || captionResult.caption.slice(0, 80)}"
+Requirements:
+- Keep the real photo as the main visual — preserve the person/hair authentically
+- Add subtle brand-matched design: clean typography, brand color accents
+- Minimal overlay — let the photo shine
+- Professional beauty industry aesthetic
+- Square format, Instagram-ready`;
+
+        const imageBuffer = await (async () => {
+          const https = await import('https');
+          const http = await import('http');
+          return new Promise<Buffer>((resolve, reject) => {
+            const protocol = feedPhotoUrl.startsWith('https') ? https : http;
+            (protocol as any).get(feedPhotoUrl, (res: any) => {
+              const chunks: Buffer[] = [];
+              res.on('data', (c: Buffer) => chunks.push(c));
+              res.on('end', () => resolve(Buffer.concat(chunks)));
+              res.on('error', reject);
+            }).on('error', reject);
+          });
+        })();
+
+        const OpenAI = (await import('openai')).default;
+        const openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
+        const imageFile = new File([imageBuffer], 'photo.jpg', { type: 'image/jpeg' });
+        const response = await openai.images.edit({
+          model: 'gpt-image-1',
+          image: imageFile,
+          prompt: feedPrompt,
+          size: '1024x1024',
+        });
+
+        const base64 = response.data?.[0]?.b64_json;
+        if (base64) {
+          const { firebaseStorage } = await import('../../config/firebase.client');
+          if (firebaseStorage) {
+            const buffer = Buffer.from(base64, 'base64');
+            const bucket = firebaseStorage.bucket();
+            const filePath = `generated/${tenantId}/feed_${Date.now()}.png`;
+            const file = bucket.file(filePath);
+            await file.save(buffer, { contentType: 'image/png', public: true });
+            const aiFeedUrl = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
+            imageResult = { ...imageResult, variants: { ...imageResult.variants, feedUrl: aiFeedUrl } };
+            console.log(`[Orchestrator] AI feed image generated for job ${jobId}`);
+          }
+        }
+      } catch (err) {
+        console.warn(`[Orchestrator] AI feed image failed, using original:`, (err as Error).message);
+      }
+    }
+
     // ── Step 5.6: Carousel Slides (conditional) ───────────────────────────────
     // Upload before photo to Cloudinary for before/after alternation
     let beforeCloudinaryId: string | undefined;
