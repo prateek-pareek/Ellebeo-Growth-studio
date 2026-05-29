@@ -50,22 +50,22 @@ export class CarouselPipelineService {
       let url: string;
 
       if (isFirst) {
-        // Cover: natural image + bold white text with dark padding box at bottom
+        // Cover: natural image + bold white text with dark bar — well inside bottom edge
         url = cloudinary.url(cloudinaryPublicId, {
           transformation: [
             { width: 1080, height: 1080, crop: 'fill', gravity: 'auto' },
             {
               overlay: {
                 font_family: 'Montserrat',
-                font_size: 54,
+                font_size: 44,
                 font_weight: 'bold',
                 text_align: 'center',
-                text: safe(concept.overlayText, 45),
+                text: safe(concept.overlayText, 35),
               },
               color: '#ffffff',
               background: 'rgb:000000b0',
               gravity: 'south',
-              y: 60,
+              y: 140,
               width: 1080,
               crop: 'fit',
               flags: 'text_no_trim',
@@ -75,17 +75,17 @@ export class CarouselPipelineService {
           secure: true,
         });
       } else if (isLast) {
-        // CTA: natural image + brand colour text with white pill background
+        // CTA: natural image + brand colour text centred with white background
         url = cloudinary.url(cloudinaryPublicId, {
           transformation: [
             { width: 1080, height: 1080, crop: 'fill', gravity: 'auto' },
             {
               overlay: {
                 font_family: 'Montserrat',
-                font_size: 48,
+                font_size: 42,
                 font_weight: 'bold',
                 text_align: 'center',
-                text: safe(concept.overlayText, 45),
+                text: safe(concept.overlayText, 35),
               },
               color: `#${hex}`,
               background: 'rgb:ffffffdd',
@@ -100,24 +100,24 @@ export class CarouselPipelineService {
           secure: true,
         });
       } else {
-        // Body slides: natural image, minimal darkening, clean white text bar at bottom
+        // Body slides: natural image + white text bar well above bottom edge
         url = cloudinary.url(cloudinaryPublicId, {
           transformation: [
             { width: 1080, height: 1080, crop: 'fill', gravity: 'auto' },
             {
               overlay: {
                 font_family: 'Montserrat',
-                font_size: 44,
+                font_size: 38,
                 font_weight: 'bold',
                 text_align: 'center',
-                text: safe(concept.overlayText, 50),
+                text: safe(concept.overlayText, 40),
               },
               color: '#ffffff',
+              background: 'rgb:00000099',
               gravity: 'south',
-              y: 60,
-              width: 900,
+              y: 140,
+              width: 1080,
               crop: 'fit',
-              background: 'rgb:00000066',
               flags: 'text_no_trim',
             },
             { quality: 'auto', fetch_format: 'auto' },
