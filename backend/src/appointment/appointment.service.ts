@@ -27,7 +27,7 @@ export class AppointmentService {
     const safePageSize = Number.isFinite(pageSize) ? Math.min(100, Math.max(1, Number(pageSize))) : 20;
     const rows = await this.prisma.appointment.findMany({
       where: { tenantId, deletedAt: null },
-      orderBy: { appointmentDate: 'desc' },
+      orderBy: { createdAt: 'desc' },
       skip: (safePage - 1) * safePageSize,
       take: safePageSize,
       include: {
@@ -36,6 +36,7 @@ export class AppointmentService {
           where: { deletedAt: null },
           select: { id: true, rawUrl: true, isBeforePhoto: true, isAfterPhoto: true },
         },
+        _count: { select: { contentItems: { where: { deletedAt: null } } } },
       },
     });
 
@@ -72,6 +73,7 @@ export class AppointmentService {
       ) ?? 'not_requested',
       beforePhotoUrl: a.imageAssets.find((i) => i.isBeforePhoto)?.rawUrl ?? null,
       afterPhotoUrl: a.imageAssets.find((i) => i.isAfterPhoto)?.rawUrl ?? null,
+      contentCount: (a as any)._count?.contentItems ?? 0,
     }));
   }
 

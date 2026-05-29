@@ -90,6 +90,8 @@ export interface ImageAsset {
   rawStoragePath: string;
   cloudinaryPublicId?: string;
   visionAnalysisCache?: string;
+  isBeforePhoto?: boolean;
+  isAfterPhoto?: boolean;
 }
 
 // ---------------------------------------------------------------------------

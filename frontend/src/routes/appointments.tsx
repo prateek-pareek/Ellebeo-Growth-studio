@@ -22,7 +22,7 @@ function AppointmentsPage() {
   // Form state
   const [clientName, setClientName] = useState("");
   const [serviceName, setServiceName] = useState("");
-  const [category, setCategory] = useState("general");
+  const [category, setCategory] = useState("hair_cut_style");
   const [isAdding, setIsAdding] = useState(false);
   const [beforeFile, setBeforeFile] = useState<File | null>(null);
   const [afterFile, setAfterFile] = useState<File | null>(null);
@@ -120,13 +120,45 @@ function AppointmentsPage() {
               </div>
               <div className="space-y-1">
                 <label className="text-[10px] uppercase tracking-widest text-taupe">Service</label>
-                <input 
-                  value={serviceName} 
-                  onChange={e => setServiceName(e.target.value)} 
+                <input
+                  value={serviceName}
+                  onChange={e => setServiceName(e.target.value)}
                   placeholder="e.g. Signature Glow Facial"
                   className="w-full bg-transparent border-b hairline py-1 outline-none focus:border-foreground"
                   required
                 />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase tracking-widest text-taupe">Category</label>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { value: "hair_colour", label: "Colour" },
+                    { value: "hair_cut_style", label: "Cut & Style" },
+                    { value: "hair_extensions", label: "Extensions" },
+                    { value: "skin_treatments", label: "Skin" },
+                    { value: "laser_treatments", label: "Laser" },
+                    { value: "injectables_cosmetic", label: "Medical Aesthetics" },
+                    { value: "nail_services", label: "Nails" },
+                    { value: "lashes_brows", label: "Lash & Brow" },
+                    { value: "makeup", label: "Makeup" },
+                    { value: "massage_body", label: "Body" },
+                    { value: "general", label: "General" },
+                  ].map((c) => (
+                    <button
+                      key={c.value}
+                      type="button"
+                      onClick={() => setCategory(c.value)}
+                      className={
+                        "text-[10px] uppercase tracking-widest px-3 py-1.5 border hairline transition-colors " +
+                        (category === c.value
+                          ? "bg-foreground text-offwhite border-foreground"
+                          : "text-taupe hover:text-foreground hover:border-foreground")
+                      }
+                    >
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>

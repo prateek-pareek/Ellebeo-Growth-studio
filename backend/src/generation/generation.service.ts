@@ -70,7 +70,7 @@ export class GenerationService {
     const imageAssetRecords = await this.prisma.imageAsset.findMany({
       where: { tenantId, appointmentId: appointment.id, deletedAt: null },
       orderBy: [{ isAfterPhoto: 'desc' }, { createdAt: 'asc' }],
-      select: { rawUrl: true, cloudinaryPublicId: true, visionAnalysis: true },
+      select: { rawUrl: true, cloudinaryPublicId: true, visionAnalysis: true, isBeforePhoto: true, isAfterPhoto: true },
     });
 
     let imageAssets = imageAssetRecords
@@ -79,6 +79,8 @@ export class GenerationService {
         rawStoragePath: a.rawUrl!,
         cloudinaryPublicId: a.cloudinaryPublicId ?? undefined,
         visionAnalysisCache: a.visionAnalysis ? JSON.stringify(a.visionAnalysis) : undefined,
+        isBeforePhoto: a.isBeforePhoto,
+        isAfterPhoto: a.isAfterPhoto,
       }));
 
     // Fall back to the CRM booking's after-photo if no Growth Studio image assets exist
@@ -88,7 +90,7 @@ export class GenerationService {
       `;
       const afterPhotoUrl = rows[0]?.recipientIntakeData?.['afterPhotoUrl'] as string | undefined;
       if (afterPhotoUrl) {
-        imageAssets = [{ rawStoragePath: afterPhotoUrl, cloudinaryPublicId: undefined, visionAnalysisCache: undefined }];
+        imageAssets = [{ rawStoragePath: afterPhotoUrl, cloudinaryPublicId: undefined, visionAnalysisCache: undefined, isBeforePhoto: false, isAfterPhoto: true }];
       }
     }
 

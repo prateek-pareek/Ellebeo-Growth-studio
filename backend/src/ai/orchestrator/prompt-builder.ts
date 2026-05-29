@@ -31,10 +31,10 @@ const PLATFORM_RULES: Record<SocialPlatform, string> = {
   tiktok: `FORMAT RULES FOR TIKTOK:\n- Hook MUST be in first 2-3 WORDS\n- Short energetic sentences\n- Hashtags: 3-5 only`,
 };
 
-const CAPTION_LENGTH_TARGETS = {
-  short: { minWords: 50, maxWords: 80 },
-  medium: { minWords: 80, maxWords: 130 },
-  long: { minWords: 130, maxWords: 200 },
+const CAPTION_LENGTH_TARGETS: Record<string, string> = {
+  short: '1–2 sentences maximum. Under 100 characters. One punchy thought.',
+  medium: '2–3 sentences. 100–200 characters. Hook + result + CTA.',
+  long: '3–4 sentences. 200–300 characters. Hook + context + result + CTA.',
 };
 
 export class PromptBuilder {
@@ -68,8 +68,8 @@ export class PromptBuilder {
     const visionSection = visionResult ? this.buildVisionSection(visionResult) : '';
     const goalSection = GOAL_FRAMING[businessGoal] ?? 'Generate engaging content.';
     const platformSection = PLATFORM_RULES[platform];
-    const lengthTarget = (CAPTION_LENGTH_TARGETS as any)[brandDNA.captionLengthPreference] || CAPTION_LENGTH_TARGETS.medium;
-    const lengthSection = `Caption body should be ${lengthTarget.minWords}–${lengthTarget.maxWords} words (excluding hashtags).`;
+    const lengthTarget = CAPTION_LENGTH_TARGETS[brandDNA.captionLengthPreference] || CAPTION_LENGTH_TARGETS['medium'];
+    const lengthSection = `CAPTION LENGTH: ${lengthTarget} Do NOT write a long essay. Instagram users stop reading after 2–3 lines.`;
 
     const consentSection = this.buildConsentRestrictionsSection(consentRestrictions);
 
@@ -201,7 +201,13 @@ CRITICAL RULES:
       preferred.length ? `**Vocabulary you love:** ${preferred.join(', ')}` : '',
       blacklist.length ? `**BLACKLISTED WORDS (NEVER USE):** ${blacklist.join(', ')}` : '',
       doNotSay.length ? `**Never say:** ${doNotSay.join(', ')}` : '',
-      `**Emojis:** ${str(dna.emojiPolicy, 'minimal')} use`,
+      dna.emojiPolicy === 'none'
+        ? '**Emojis:** NEVER use emojis — not even one.'
+        : dna.emojiPolicy === 'frequent'
+          ? '**Emojis:** Use emojis freely — 3–5 relevant emojis in the caption and hashtags.'
+          : dna.emojiPolicy === 'moderate'
+            ? '**Emojis:** Use 1–2 emojis in the caption where they feel natural.'
+            : '**Emojis:** Minimal — at most 1 emoji, only if it genuinely fits.',
     ].filter(Boolean).join('\n');
   }
 
@@ -244,6 +250,6 @@ CRITICAL RULES:
   }
 
   private buildOutputFormatSection(): string {
-    return `Return ONLY this exact JSON structure — no markdown, no extra fields:\n{\n  "caption": "The full caption text",\n  "hookSentence": "The first sentence optimised for the More cutoff",\n  "callToAction": "The CTA phrase",\n  "hashtags": ["hashtag1", "hashtag2"],\n  "altText": "Accessibility description of the image",\n  "estimatedReadTime": 12,\n  "brandVoiceConfidenceScore": 0.87\n}\n\nThe brandVoiceConfidenceScore must be your honest self-assessment (0.0–1.0) of how well this caption matches the provided Brand DNA.`;
+    return `Return ONLY this exact JSON structure — no markdown, no extra fields:\n{\n  "caption": "The full caption text (2–3 sentences max for Instagram)",\n  "hookSentence": "The first sentence optimised for the More cutoff",\n  "callToAction": "The CTA phrase",\n  "hashtags": ["livedInBlonde", "hairColour", "sydneyhair"],\n  "altText": "Accessibility description of the image",\n  "estimatedReadTime": 12,\n  "brandVoiceConfidenceScore": 0.87\n}\n\nCRITICAL: hashtags must NOT include the # symbol — write the word only (e.g. "hairColour" not "#hairColour"). No double ##.\nThe brandVoiceConfidenceScore must be your honest self-assessment (0.0–1.0) of how well this caption matches the provided Brand DNA.`;
   }
 }

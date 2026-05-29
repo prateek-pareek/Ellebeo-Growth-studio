@@ -19,6 +19,7 @@ import { CarouselPipelineService, type CarouselSlides } from '../services/carous
 import { CarouselConceptChain } from '../chains/carousel-concept.chain';
 import { StoryFrameChain } from '../chains/story-frame.chain';
 import { StoryPipelineService, type StoryOutput } from '../services/story-pipeline.service';
+import { AiImageGenerationService } from '../services/ai-image-generation.service';
 import { ReelShotChain, type ReelShotResult } from '../chains/reel-shot.chain';
 import { ElevenLabsService } from '../services/elevenlabs.service';
 import { OpenAiTtsService } from '../services/openai-tts.service';
@@ -45,6 +46,7 @@ export class GenerationOrchestrator {
   private readonly storyFrameChain: StoryFrameChain;
   private readonly storyPipeline: StoryPipelineService;
   private readonly reelShotChain: ReelShotChain;
+  private readonly aiImageGen: AiImageGenerationService;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -69,6 +71,7 @@ export class GenerationOrchestrator {
     this.storyFrameChain = new StoryFrameChain();
     this.storyPipeline = new StoryPipelineService();
     this.reelShotChain = new ReelShotChain();
+    this.aiImageGen = new AiImageGenerationService();
   }
 
   // --------------------------------------------------------------------------
@@ -318,12 +321,85 @@ export class GenerationOrchestrator {
       }
     }
 
+    // ── Step 5.55: AI-designed feed image (gpt-image-1) ─────────────────────
+    const feedPhotoUrl = payload.imageAssets.find(a => a.isAfterPhoto)?.rawStoragePath
+      ?? payload.imageAssets[0]?.rawStoragePath;
+
+    if (feedPhotoUrl && captionResult && imageResult) {
+      try {
+        const feedPrompt = `Transform this beauty photo into a professional Instagram feed post for "${brandDNA.businessName}".
+Brand colors: ${brandDNA.primaryBrandColor ?? '#1a1a1a'} and ${brandDNA.secondaryBrandColor ?? '#f5f0eb'}.
+Aesthetic: ${brandDNA.aestheticDirection ?? 'minimal editorial premium beauty'}.
+Caption hook: "${captionResult.hookSentence || captionResult.caption.slice(0, 80)}"
+Requirements:
+- Keep the real photo as the main visual — preserve the person/hair authentically
+- Add subtle brand-matched design: clean typography, brand color accents
+- Minimal overlay — let the photo shine
+- Professional beauty industry aesthetic
+- Square format, Instagram-ready`;
+
+        const imageBuffer = await (async () => {
+          const https = await import('https');
+          const http = await import('http');
+          return new Promise<Buffer>((resolve, reject) => {
+            const protocol = feedPhotoUrl.startsWith('https') ? https : http;
+            (protocol as any).get(feedPhotoUrl, (res: any) => {
+              const chunks: Buffer[] = [];
+              res.on('data', (c: Buffer) => chunks.push(c));
+              res.on('end', () => resolve(Buffer.concat(chunks)));
+              res.on('error', reject);
+            }).on('error', reject);
+          });
+        })();
+
+        const OpenAI = (await import('openai')).default;
+        const openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
+        const imageFile = new File([imageBuffer], 'photo.jpg', { type: 'image/jpeg' });
+        const response = await openai.images.edit({
+          model: 'gpt-image-1',
+          image: imageFile,
+          prompt: feedPrompt,
+          size: '1024x1024',
+        });
+
+        const base64 = response.data?.[0]?.b64_json;
+        if (base64) {
+          const { firebaseStorage } = await import('../../config/firebase.client');
+          if (firebaseStorage) {
+            const buffer = Buffer.from(base64, 'base64');
+            const bucket = firebaseStorage.bucket();
+            const filePath = `generated/${tenantId}/feed_${Date.now()}.png`;
+            const file = bucket.file(filePath);
+            await file.save(buffer, { contentType: 'image/png', public: true });
+            const aiFeedUrl = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
+            imageResult = { ...imageResult, variants: { ...imageResult.variants, feedUrl: aiFeedUrl } };
+            console.log(`[Orchestrator] AI feed image generated for job ${jobId}`);
+          }
+        }
+      } catch (err) {
+        console.warn(`[Orchestrator] AI feed image failed, using original:`, (err as Error).message);
+      }
+    }
+
     // ── Step 5.6: Carousel Slides (conditional) ───────────────────────────────
+    // Upload before photo to Cloudinary for before/after alternation
+    let beforeCloudinaryId: string | undefined;
+    const beforeAsset = payload.imageAssets.find(a => a.isBeforePhoto && a.rawStoragePath);
+    if (beforeAsset && process.env['CLOUDINARY_CLOUD_NAME']) {
+      try {
+        beforeCloudinaryId = beforeAsset.cloudinaryPublicId
+          ?? await this.imagePipeline.uploadUrl(beforeAsset.rawStoragePath, tenantId);
+      } catch { /* non-fatal */ }
+    }
+
     let carouselSlides: CarouselSlides | null = null;
     const isCarousel = (generationOptions.outputFormats as string[]).includes('carousel');
-    if (isCarousel && imageResult?.cloudinaryPublicId && captionResult) {
+    const afterPhotoUrl = payload.imageAssets.find(a => a.isAfterPhoto)?.rawStoragePath
+      ?? payload.imageAssets[0]?.rawStoragePath;
+    const beforePhotoUrl = payload.imageAssets.find(a => a.isBeforePhoto)?.rawStoragePath;
+
+    if (isCarousel && afterPhotoUrl && captionResult) {
       try {
-        // Generate AI slide concepts first (3–5 named slides)
         const conceptResult = await this.carouselConceptChain.generate({
           hookSentence: captionResult.hookSentence || captionResult.caption.slice(0, 80),
           callToAction: captionResult.callToAction || 'Book your appointment today',
@@ -334,21 +410,42 @@ export class GenerationOrchestrator {
           slideCount: 4,
         });
 
-        carouselSlides = this.carouselPipeline.generate({
-          cloudinaryPublicId: imageResult.cloudinaryPublicId,
-          brandColour: brandDNA.primaryColour ?? brandDNA.primaryBrandColor ?? '#1a1a1a',
-          concepts: conceptResult.concepts,
-        });
-        console.log(`[Orchestrator] Carousel: ${conceptResult.concepts.length} slides generated for job ${jobId}`);
+        try {
+          // Try AI image generation first
+          const aiSlides = await this.aiImageGen.generateCarousel({
+            afterPhotoUrl,
+            beforePhotoUrl,
+            concepts: conceptResult.concepts,
+            tenantId,
+            businessName: brandDNA.businessName,
+            brandColor: brandDNA.primaryBrandColor ?? '#1a1a1a',
+            secondaryColor: brandDNA.secondaryBrandColor ?? '#f5f0eb',
+            aesthetic: brandDNA.aestheticDirection ?? 'minimal editorial',
+            serviceType: appointment?.serviceCategory ?? 'beauty treatment',
+          });
+          carouselSlides = { type: 'carousel', slides: aiSlides };
+          console.log(`[Orchestrator] Carousel: ${aiSlides.length} AI-generated slides for job ${jobId}`);
+        } catch (aiErr) {
+          // Fallback to Cloudinary if AI generation fails
+          console.warn(`[Orchestrator] AI image gen failed, falling back to Cloudinary:`, aiErr);
+          if (imageResult?.cloudinaryPublicId) {
+            carouselSlides = this.carouselPipeline.generate({
+              cloudinaryPublicId: imageResult.cloudinaryPublicId,
+              beforePublicId: beforeCloudinaryId,
+              brandColour: brandDNA.primaryBrandColor ?? '#1a1a1a',
+              concepts: conceptResult.concepts,
+            });
+          }
+        }
       } catch (err) {
-        console.error(`[Orchestrator] Carousel slide generation failed for job ${jobId}:`, err);
+        console.error(`[Orchestrator] Carousel generation failed for job ${jobId}:`, err);
       }
     }
 
     // ── Step 5.65: Story Frames (conditional) ────────────────────────────────
     let storyOutput: StoryOutput | null = null;
     const isStory = (generationOptions.outputFormats as string[]).includes('story');
-    if (isStory && imageResult?.cloudinaryPublicId && captionResult) {
+    if (isStory && afterPhotoUrl && captionResult) {
       try {
         const storyFrames = await this.storyFrameChain.generate({
           hookSentence: captionResult.hookSentence || captionResult.caption.slice(0, 80),
@@ -358,11 +455,32 @@ export class GenerationOrchestrator {
           businessGoal: payload.businessGoal,
           brandName: brandDNA.businessName,
         });
-        storyOutput = this.storyPipeline.generate({
-          cloudinaryPublicId: imageResult.cloudinaryPublicId,
-          brandColour: brandDNA.primaryColour ?? brandDNA.primaryBrandColor ?? '#1a1a1a',
-          concepts: storyFrames.frames,
-        });
+
+        try {
+          const aiFrames = await this.aiImageGen.generateStory({
+            afterPhotoUrl,
+            beforePhotoUrl,
+            frames: storyFrames.frames,
+            tenantId,
+            businessName: brandDNA.businessName,
+            brandColor: brandDNA.primaryBrandColor ?? '#1a1a1a',
+            secondaryColor: brandDNA.secondaryBrandColor ?? '#f5f0eb',
+            aesthetic: brandDNA.aestheticDirection ?? 'minimal editorial',
+            serviceType: appointment?.serviceCategory ?? 'beauty treatment',
+          });
+          storyOutput = { type: 'story', frames: aiFrames };
+          console.log(`[Orchestrator] Story: ${aiFrames.length} AI-generated frames for job ${jobId}`);
+        } catch (aiErr) {
+          console.warn(`[Orchestrator] AI story gen failed, falling back to Cloudinary:`, aiErr);
+          if (imageResult?.cloudinaryPublicId) {
+            storyOutput = this.storyPipeline.generate({
+              cloudinaryPublicId: imageResult.cloudinaryPublicId,
+              beforePublicId: beforeCloudinaryId,
+              brandColour: brandDNA.primaryBrandColor ?? '#1a1a1a',
+              concepts: storyFrames.frames,
+            });
+          }
+        }
         console.log(`[Orchestrator] Story: 4 frames generated for job ${jobId}`);
       } catch (err) {
         console.error(`[Orchestrator] Story frame generation failed for job ${jobId}:`, err);

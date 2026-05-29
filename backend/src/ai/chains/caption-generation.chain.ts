@@ -29,7 +29,7 @@ function parseCaptionOutput(raw: string): CaptionGenerationResult {
     caption: String(obj['caption'] ?? ''),
     hookSentence: String(obj['hookSentence'] ?? ''),
     callToAction: String(obj['callToAction'] ?? ''),
-    hashtags: Array.isArray(obj['hashtags']) ? (obj['hashtags'] as string[]) : [],
+    hashtags: Array.isArray(obj['hashtags']) ? (obj['hashtags'] as string[]).map(h => String(h).replace(/^#+/, '')) : [],
     altText: String(obj['altText'] ?? ''),
     estimatedReadTime: Number(obj['estimatedReadTime'] ?? 10),
     brandVoiceConfidenceScore: Math.min(1, Math.max(0, Number(obj['brandVoiceConfidenceScore'] ?? 0.5))),
@@ -58,8 +58,8 @@ export class CaptionGenerationChain {
   }): Promise<CaptionGenerationResult> {
     const { assembledPrompt, llmConfig, brandDNABlacklist, allowRetry = true } = params;
 
-    const model = this.buildModel(llmConfig);
-    const result = await this.callModel(model, assembledPrompt);
+    const activeModel = this.buildModel(llmConfig);
+    const result = await this.callModel(activeModel, assembledPrompt);
 
     // Validate no blacklisted words slipped through
     this.checkBlacklist(result.caption, brandDNABlacklist);
@@ -70,7 +70,7 @@ export class CaptionGenerationChain {
       result.brandVoiceConfidenceScore < AI_CONFIG.routing.brandVoiceConfidenceRetryThreshold
     ) {
       const amplifiedPrompt = this.amplifyBrandVoice(assembledPrompt, result);
-      const retryResult = await this.callModel(model, amplifiedPrompt);
+      const retryResult = await this.callModel(activeModel, amplifiedPrompt);
       // Return whichever has higher confidence
       return retryResult.brandVoiceConfidenceScore >= result.brandVoiceConfidenceScore
         ? retryResult

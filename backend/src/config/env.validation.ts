@@ -41,8 +41,8 @@ class EnvironmentVariables {
   @IsOptional()
   REDIS_PORT?: number;
 
-  @IsString() @IsNotEmpty()
-  REDIS_PASSWORD!: string;
+  @IsString() @IsOptional()
+  REDIS_PASSWORD?: string;
 
   @IsOptional() @IsString()
   OPENAI_API_KEY?: string;

@@ -1,10 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateBrandDnaDto, ScanInstagramDto, ScanWebsiteDto } from './dto/brand-dna.dto';
+import { PromptCache } from '../ai/orchestrator/prompt-cache';
+import { getRedisClient } from '../config/redis.client';
 
 @Injectable()
 export class BrandDnaService {
-  constructor(private prisma: PrismaService) {}
+  private readonly promptCache: PromptCache;
+
+  constructor(private prisma: PrismaService) {
+    this.promptCache = new PromptCache(getRedisClient());
+  }
 
   async getCurrentDna(tenantId: string) {
     const dna = await this.prisma.brandDNA.findUnique({
@@ -15,10 +21,13 @@ export class BrandDnaService {
   }
 
   async createOrUpdateDna(tenantId: string, dto: CreateBrandDnaDto) {
+    await this.promptCache.invalidateTenantCache(tenantId);
     return this.prisma.$transaction(async (tx) => {
       const current = await tx.brandDNA.findUnique({
         where: { unique_current_brand_dna: { tenantId, isCurrent: true } }
       });
+
+      const nextVersion = current ? current.version + 1 : 1;
 
       if (current) {
         await tx.brandDNA.update({
@@ -30,6 +39,7 @@ export class BrandDnaService {
       return tx.brandDNA.create({
         data: {
           tenantId,
+          version: nextVersion,
           businessName: dto.businessName,
           oneLiner: dto.oneLiner,
           uniqueSellingProposition: dto.uniqueSellingProposition,

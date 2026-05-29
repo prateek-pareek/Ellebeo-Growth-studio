@@ -27,10 +27,12 @@ export class StoryPipelineService {
 
   generate(params: {
     cloudinaryPublicId: string;
+    beforePublicId?: string;
     brandColour: string;
     concepts: StoryFrameConcept[];
   }): StoryOutput {
-    const { cloudinaryPublicId, brandColour, concepts } = params;
+    const { cloudinaryPublicId, beforePublicId, brandColour, concepts } = params;
+    const afterId = cloudinaryPublicId;
     const hex = brandColour.replace('#', '') || '1a1a1a';
 
     const safe = (text: string, max: number) =>
@@ -38,34 +40,38 @@ export class StoryPipelineService {
 
     const frames: StoryFrame[] = concepts.map((concept, i) => {
       const isLast = i === concepts.length - 1;
+      // First frame = before photo (the journey start); rest = after photo
+      const imageId = (i === 0 && beforePublicId) ? beforePublicId : afterId;
 
       const url = isLast
-        ? cloudinary.url(cloudinaryPublicId, {
+        ? cloudinary.url(imageId, {
             transformation: [
               { width: 1080, height: 1920, crop: 'fill', gravity: 'auto' },
-              { effect: 'brightness:-35' },
               {
                 overlay: { font_family: 'Montserrat', font_size: 54, font_weight: 'bold', text_align: 'center', text: safe(concept.overlayText, 50) },
                 color: `#${hex}`,
+                background: 'rgb:ffffffcc',
                 gravity: 'center',
-                width: 900,
+                width: 1080,
                 crop: 'fit',
+                flags: 'text_no_trim',
               },
               { quality: 'auto', fetch_format: 'auto' },
             ],
             secure: true,
           })
-        : cloudinary.url(cloudinaryPublicId, {
+        : cloudinary.url(imageId, {
             transformation: [
               { width: 1080, height: 1920, crop: 'fill', gravity: 'auto' },
-              { effect: `brightness:${i === 0 ? -50 : -20}` },
               {
                 overlay: { font_family: 'Montserrat', font_size: 48, font_weight: 'bold', text_align: 'center', text: safe(concept.overlayText, 50) },
                 color: '#ffffff',
+                background: 'rgb:000000b0',
                 gravity: 'south',
                 y: 140,
-                width: 900,
+                width: 1080,
                 crop: 'fit',
+                flags: 'text_no_trim',
               },
               { quality: 'auto', fetch_format: 'auto' },
             ],
