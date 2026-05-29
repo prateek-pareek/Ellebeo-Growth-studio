@@ -6,7 +6,6 @@
 
 import { ChatOpenAI } from '@langchain/openai';
 import { ChatAnthropic } from '@langchain/anthropic';
-import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { AI_CONFIG } from '../../config/ai.config';
@@ -59,26 +58,8 @@ export class CaptionGenerationChain {
   }): Promise<CaptionGenerationResult> {
     const { assembledPrompt, llmConfig, brandDNABlacklist, allowRetry = true } = params;
 
-    let activeModel: BaseChatModel;
-    let result: CaptionGenerationResult;
-
-    try {
-      activeModel = this.buildModel(llmConfig);
-      result = await this.callModel(activeModel, assembledPrompt);
-    } catch (primaryErr) {
-      if (process.env['GEMINI_API_KEY']) {
-        console.warn('[CaptionChain] Primary model failed, falling back to Gemini:', (primaryErr as Error).message);
-        activeModel = new ChatGoogleGenerativeAI({
-          model: 'gemini-1.5-flash',
-          apiKey: process.env['GEMINI_API_KEY'],
-          temperature: 0.75,
-          maxOutputTokens: 1024,
-        }) as any;
-        result = await this.callModel(activeModel, assembledPrompt);
-      } else {
-        throw primaryErr;
-      }
-    }
+    const activeModel = this.buildModel(llmConfig);
+    const result = await this.callModel(activeModel, assembledPrompt);
 
     // Validate no blacklisted words slipped through
     this.checkBlacklist(result.caption, brandDNABlacklist);
@@ -180,15 +161,6 @@ export class CaptionGenerationChain {
         maxTokens: config.maxTokens,
         anthropicApiKey: process.env['ANTHROPIC_API_KEY'],
       });
-    }
-
-    if (config.provider === 'google') {
-      return new ChatGoogleGenerativeAI({
-        model: config.modelId,
-        apiKey: process.env['GEMINI_API_KEY'],
-        temperature: config.temperature,
-        maxOutputTokens: config.maxTokens,
-      }) as any;
     }
 
     return new ChatOpenAI({

@@ -84,7 +84,7 @@ export interface TweakResult {
 // ---------------------------------------------------------------------------
 
 export interface LLMConfig {
-  provider: 'openai' | 'anthropic' | 'google';
+  provider: 'openai' | 'anthropic';
   modelId: string;
   temperature: number;
   maxTokens: number;
