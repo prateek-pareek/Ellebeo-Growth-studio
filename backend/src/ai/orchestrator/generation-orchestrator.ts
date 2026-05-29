@@ -19,6 +19,7 @@ import { CarouselPipelineService, type CarouselSlides } from '../services/carous
 import { CarouselConceptChain } from '../chains/carousel-concept.chain';
 import { StoryFrameChain } from '../chains/story-frame.chain';
 import { StoryPipelineService, type StoryOutput } from '../services/story-pipeline.service';
+import { AiImageGenerationService } from '../services/ai-image-generation.service';
 import { ReelShotChain, type ReelShotResult } from '../chains/reel-shot.chain';
 import { ElevenLabsService } from '../services/elevenlabs.service';
 import { OpenAiTtsService } from '../services/openai-tts.service';
@@ -45,6 +46,7 @@ export class GenerationOrchestrator {
   private readonly storyFrameChain: StoryFrameChain;
   private readonly storyPipeline: StoryPipelineService;
   private readonly reelShotChain: ReelShotChain;
+  private readonly aiImageGen: AiImageGenerationService;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -69,6 +71,7 @@ export class GenerationOrchestrator {
     this.storyFrameChain = new StoryFrameChain();
     this.storyPipeline = new StoryPipelineService();
     this.reelShotChain = new ReelShotChain();
+    this.aiImageGen = new AiImageGenerationService();
   }
 
   // --------------------------------------------------------------------------
@@ -331,7 +334,11 @@ export class GenerationOrchestrator {
 
     let carouselSlides: CarouselSlides | null = null;
     const isCarousel = (generationOptions.outputFormats as string[]).includes('carousel');
-    if (isCarousel && imageResult?.cloudinaryPublicId && captionResult) {
+    const afterPhotoUrl = payload.imageAssets.find(a => a.isAfterPhoto)?.rawStoragePath
+      ?? payload.imageAssets[0]?.rawStoragePath;
+    const beforePhotoUrl = payload.imageAssets.find(a => a.isBeforePhoto)?.rawStoragePath;
+
+    if (isCarousel && afterPhotoUrl && captionResult) {
       try {
         const conceptResult = await this.carouselConceptChain.generate({
           hookSentence: captionResult.hookSentence || captionResult.caption.slice(0, 80),
@@ -343,22 +350,42 @@ export class GenerationOrchestrator {
           slideCount: 4,
         });
 
-        carouselSlides = this.carouselPipeline.generate({
-          cloudinaryPublicId: imageResult.cloudinaryPublicId,
-          beforePublicId: beforeCloudinaryId,
-          brandColour: brandDNA.primaryColour ?? brandDNA.primaryBrandColor ?? '#1a1a1a',
-          concepts: conceptResult.concepts,
-        });
-        console.log(`[Orchestrator] Carousel: ${conceptResult.concepts.length} slides generated for job ${jobId}`);
+        try {
+          // Try AI image generation first
+          const aiSlides = await this.aiImageGen.generateCarousel({
+            afterPhotoUrl,
+            beforePhotoUrl,
+            concepts: conceptResult.concepts,
+            tenantId,
+            businessName: brandDNA.businessName,
+            brandColor: brandDNA.primaryBrandColor ?? '#1a1a1a',
+            secondaryColor: brandDNA.secondaryBrandColor ?? '#f5f0eb',
+            aesthetic: brandDNA.aestheticDirection ?? 'minimal editorial',
+            serviceType: appointment?.serviceCategory ?? 'beauty treatment',
+          });
+          carouselSlides = { type: 'carousel', slides: aiSlides };
+          console.log(`[Orchestrator] Carousel: ${aiSlides.length} AI-generated slides for job ${jobId}`);
+        } catch (aiErr) {
+          // Fallback to Cloudinary if AI generation fails
+          console.warn(`[Orchestrator] AI image gen failed, falling back to Cloudinary:`, aiErr);
+          if (imageResult?.cloudinaryPublicId) {
+            carouselSlides = this.carouselPipeline.generate({
+              cloudinaryPublicId: imageResult.cloudinaryPublicId,
+              beforePublicId: beforeCloudinaryId,
+              brandColour: brandDNA.primaryBrandColor ?? '#1a1a1a',
+              concepts: conceptResult.concepts,
+            });
+          }
+        }
       } catch (err) {
-        console.error(`[Orchestrator] Carousel slide generation failed for job ${jobId}:`, err);
+        console.error(`[Orchestrator] Carousel generation failed for job ${jobId}:`, err);
       }
     }
 
     // ── Step 5.65: Story Frames (conditional) ────────────────────────────────
     let storyOutput: StoryOutput | null = null;
     const isStory = (generationOptions.outputFormats as string[]).includes('story');
-    if (isStory && imageResult?.cloudinaryPublicId && captionResult) {
+    if (isStory && afterPhotoUrl && captionResult) {
       try {
         const storyFrames = await this.storyFrameChain.generate({
           hookSentence: captionResult.hookSentence || captionResult.caption.slice(0, 80),
@@ -368,12 +395,32 @@ export class GenerationOrchestrator {
           businessGoal: payload.businessGoal,
           brandName: brandDNA.businessName,
         });
-        storyOutput = this.storyPipeline.generate({
-          cloudinaryPublicId: imageResult.cloudinaryPublicId,
-          beforePublicId: beforeCloudinaryId,
-          brandColour: brandDNA.primaryColour ?? brandDNA.primaryBrandColor ?? '#1a1a1a',
-          concepts: storyFrames.frames,
-        });
+
+        try {
+          const aiFrames = await this.aiImageGen.generateStory({
+            afterPhotoUrl,
+            beforePhotoUrl,
+            frames: storyFrames.frames,
+            tenantId,
+            businessName: brandDNA.businessName,
+            brandColor: brandDNA.primaryBrandColor ?? '#1a1a1a',
+            secondaryColor: brandDNA.secondaryBrandColor ?? '#f5f0eb',
+            aesthetic: brandDNA.aestheticDirection ?? 'minimal editorial',
+            serviceType: appointment?.serviceCategory ?? 'beauty treatment',
+          });
+          storyOutput = { type: 'story', frames: aiFrames };
+          console.log(`[Orchestrator] Story: ${aiFrames.length} AI-generated frames for job ${jobId}`);
+        } catch (aiErr) {
+          console.warn(`[Orchestrator] AI story gen failed, falling back to Cloudinary:`, aiErr);
+          if (imageResult?.cloudinaryPublicId) {
+            storyOutput = this.storyPipeline.generate({
+              cloudinaryPublicId: imageResult.cloudinaryPublicId,
+              beforePublicId: beforeCloudinaryId,
+              brandColour: brandDNA.primaryBrandColor ?? '#1a1a1a',
+              concepts: storyFrames.frames,
+            });
+          }
+        }
         console.log(`[Orchestrator] Story: 4 frames generated for job ${jobId}`);
       } catch (err) {
         console.error(`[Orchestrator] Story frame generation failed for job ${jobId}:`, err);
