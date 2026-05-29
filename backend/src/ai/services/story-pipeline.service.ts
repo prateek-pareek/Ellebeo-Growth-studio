@@ -27,10 +27,12 @@ export class StoryPipelineService {
 
   generate(params: {
     cloudinaryPublicId: string;
+    beforePublicId?: string;
     brandColour: string;
     concepts: StoryFrameConcept[];
   }): StoryOutput {
-    const { cloudinaryPublicId, brandColour, concepts } = params;
+    const { cloudinaryPublicId, beforePublicId, brandColour, concepts } = params;
+    const afterId = cloudinaryPublicId;
     const hex = brandColour.replace('#', '') || '1a1a1a';
 
     const safe = (text: string, max: number) =>
@@ -38,9 +40,11 @@ export class StoryPipelineService {
 
     const frames: StoryFrame[] = concepts.map((concept, i) => {
       const isLast = i === concepts.length - 1;
+      // First frame = before photo (the journey start); rest = after photo
+      const imageId = (i === 0 && beforePublicId) ? beforePublicId : afterId;
 
       const url = isLast
-        ? cloudinary.url(cloudinaryPublicId, {
+        ? cloudinary.url(imageId, {
             transformation: [
               { width: 1080, height: 1920, crop: 'fill', gravity: 'auto' },
               {
@@ -56,7 +60,7 @@ export class StoryPipelineService {
             ],
             secure: true,
           })
-        : cloudinary.url(cloudinaryPublicId, {
+        : cloudinary.url(imageId, {
             transformation: [
               { width: 1080, height: 1920, crop: 'fill', gravity: 'auto' },
               {

@@ -29,10 +29,12 @@ export class CarouselPipelineService {
 
   generate(params: {
     cloudinaryPublicId: string;
+    beforePublicId?: string;
     brandColour: string;
     concepts: CarouselSlideConcept[];
   }): CarouselSlides {
-    const { cloudinaryPublicId, brandColour, concepts } = params;
+    const { cloudinaryPublicId, beforePublicId, brandColour, concepts } = params;
+    const afterId = cloudinaryPublicId;
     const hex = brandColour.replace('#', '') || '1a1a1a';
 
     // Strip characters Cloudinary rejects in text overlays
@@ -47,11 +49,16 @@ export class CarouselPipelineService {
       const isFirst = i === 0;
       const isLast  = i === concepts.length - 1;
 
+      // Cover + CTA use after photo; body slides use before photo (if available)
+      const imageId = (isFirst || isLast || !beforePublicId)
+        ? afterId
+        : beforePublicId;
+
       let url: string;
 
       if (isFirst) {
         // Cover: natural image + bold white text with dark bar — well inside bottom edge
-        url = cloudinary.url(cloudinaryPublicId, {
+        url = cloudinary.url(imageId, {
           transformation: [
             { width: 1080, height: 1080, crop: 'fill', gravity: 'auto' },
             {
@@ -76,7 +83,7 @@ export class CarouselPipelineService {
         });
       } else if (isLast) {
         // CTA: natural image + brand colour text centred with white background
-        url = cloudinary.url(cloudinaryPublicId, {
+        url = cloudinary.url(imageId, {
           transformation: [
             { width: 1080, height: 1080, crop: 'fill', gravity: 'auto' },
             {
@@ -101,7 +108,7 @@ export class CarouselPipelineService {
         });
       } else {
         // Body slides: natural image + white text bar well above bottom edge
-        url = cloudinary.url(cloudinaryPublicId, {
+        url = cloudinary.url(imageId, {
           transformation: [
             { width: 1080, height: 1080, crop: 'fill', gravity: 'auto' },
             {

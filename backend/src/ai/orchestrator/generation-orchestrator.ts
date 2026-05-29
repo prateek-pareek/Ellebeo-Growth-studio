@@ -319,11 +319,20 @@ export class GenerationOrchestrator {
     }
 
     // ── Step 5.6: Carousel Slides (conditional) ───────────────────────────────
+    // Upload before photo to Cloudinary for before/after alternation
+    let beforeCloudinaryId: string | undefined;
+    const beforeAsset = payload.imageAssets.find(a => a.isBeforePhoto && a.rawStoragePath);
+    if (beforeAsset && process.env['CLOUDINARY_CLOUD_NAME']) {
+      try {
+        beforeCloudinaryId = beforeAsset.cloudinaryPublicId
+          ?? await this.imagePipeline.uploadUrl(beforeAsset.rawStoragePath, tenantId);
+      } catch { /* non-fatal */ }
+    }
+
     let carouselSlides: CarouselSlides | null = null;
     const isCarousel = (generationOptions.outputFormats as string[]).includes('carousel');
     if (isCarousel && imageResult?.cloudinaryPublicId && captionResult) {
       try {
-        // Generate AI slide concepts first (3–5 named slides)
         const conceptResult = await this.carouselConceptChain.generate({
           hookSentence: captionResult.hookSentence || captionResult.caption.slice(0, 80),
           callToAction: captionResult.callToAction || 'Book your appointment today',
@@ -336,6 +345,7 @@ export class GenerationOrchestrator {
 
         carouselSlides = this.carouselPipeline.generate({
           cloudinaryPublicId: imageResult.cloudinaryPublicId,
+          beforePublicId: beforeCloudinaryId,
           brandColour: brandDNA.primaryColour ?? brandDNA.primaryBrandColor ?? '#1a1a1a',
           concepts: conceptResult.concepts,
         });
@@ -360,6 +370,7 @@ export class GenerationOrchestrator {
         });
         storyOutput = this.storyPipeline.generate({
           cloudinaryPublicId: imageResult.cloudinaryPublicId,
+          beforePublicId: beforeCloudinaryId,
           brandColour: brandDNA.primaryColour ?? brandDNA.primaryBrandColor ?? '#1a1a1a',
           concepts: storyFrames.frames,
         });
