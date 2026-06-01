@@ -655,7 +655,7 @@ const REFINE_OPTIONS = [
   "+ Create alternate version",
 ];
 
-const OPTION_STYLES = ["Editorial · considered", "Balanced · on-brand", "Direct · booking-led"];
+const OPTION_STYLES = ["ChatGPT · OpenAI", "Gemini · Google", "Direct · booking-led"];
 
 function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: any) {
   const [activeVariant, setActiveVariant] = useState(0);
