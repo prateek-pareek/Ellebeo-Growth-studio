@@ -638,12 +638,32 @@ function FormatStep({
 const STATUS_LABELS: Record<string, string> = {
   created: "Starting job...",
   queued: "Queued...",
-  processing_image: "Analysing image...",
-  processing_vision: "Reading the photo...",
-  building_prompt: "Building your prompt...",
+  processing_image: "Analysing your photo...",
+  processing_vision: "Reading the details in your photo...",
+  building_prompt: "Loading your Brand DNA...",
   generating_text: "Writing your caption...",
   generating_reel: "Assembling reel...",
 };
+
+const STATUS_STEPS = [
+  { key: "processing_vision",  label: "Analysing photo" },
+  { key: "building_prompt",    label: "Loading Brand DNA" },
+  { key: "generating_text",    label: "Writing caption" },
+  { key: "completed",          label: "Designing images" },
+];
+
+const BEAUTY_TIPS = [
+  "Posts with before & after photos get 3× more saves on Instagram.",
+  "Replying to comments within the first hour boosts your reach by up to 30%.",
+  "Reels under 15 seconds have the highest completion rate for beauty content.",
+  "A consistent brand colour palette makes your grid 40% more recognisable.",
+  "Posting behind-the-chair content builds trust faster than any promotion.",
+  "Clients who follow you on Instagram are 2× more likely to rebook.",
+  "Educational posts — 'why I use this technique' — outperform promotional posts every time.",
+  "Your bio is your best SEO tool. Include your suburb and specialty.",
+  "Stories with polls get 20% more profile visits than standard stories.",
+  "Tagging your location on every post puts you in local discovery search.",
+];
 
 const REFINE_OPTIONS = [
   "Make more premium",
@@ -657,6 +677,92 @@ const REFINE_OPTIONS = [
 
 const OPTION_STYLES = ["ChatGPT · OpenAI", "Gemini · Google", "Direct · booking-led"];
 
+function GeneratingScreen({ jobStatus }: { jobStatus: string }) {
+  const [tipIndex, setTipIndex] = useState(0);
+  const [fade, setFade] = useState(true);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setFade(false);
+      setTimeout(() => {
+        setTipIndex(i => (i + 1) % BEAUTY_TIPS.length);
+        setFade(true);
+      }, 400);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const currentStepIndex = STATUS_STEPS.findIndex(s => s.key === jobStatus);
+  const activeStep = currentStepIndex === -1 ? 0 : currentStepIndex;
+
+  return (
+    <div className="artifact p-10 flex flex-col items-center gap-10">
+
+      {/* Top — spinner + current status */}
+      <div className="text-center">
+        <div className="flex justify-center mb-5">
+          <span className="size-8 rounded-full border-2 border-foreground border-t-transparent animate-spin" />
+        </div>
+        <p className="font-serif text-2xl italic mb-1">AI is crafting your content...</p>
+        <p className="text-sm text-taupe">{STATUS_LABELS[jobStatus] ?? "Processing..."}</p>
+      </div>
+
+      {/* Progress steps */}
+      <div className="w-full max-w-md">
+        <div className="flex items-center justify-between relative">
+          {/* connecting line */}
+          <div className="absolute top-3 left-0 right-0 h-px bg-border z-0" />
+          <div
+            className="absolute top-3 left-0 h-px bg-foreground z-0 transition-all duration-700"
+            style={{ width: `${(activeStep / (STATUS_STEPS.length - 1)) * 100}%` }}
+          />
+          {STATUS_STEPS.map((step, i) => (
+            <div key={step.key} className="flex flex-col items-center gap-2 z-10">
+              <div className={
+                "size-6 rounded-full flex items-center justify-center border-2 transition-all duration-500 " +
+                (i < activeStep ? "bg-foreground border-foreground" :
+                 i === activeStep ? "bg-foreground border-foreground animate-pulse" :
+                 "bg-card border-border")
+              }>
+                {i < activeStep && (
+                  <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                    <path d="M1 4l3 3 5-6" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+              </div>
+              <p className={"text-[9px] uppercase tracking-widest text-center max-w-[70px] " +
+                (i <= activeStep ? "text-foreground" : "text-taupe/50")}>
+                {step.label}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Divider */}
+      <div className="w-full max-w-md h-px bg-border" />
+
+      {/* Beauty tip */}
+      <div className="w-full max-w-md text-center">
+        <p className="text-[10px] uppercase tracking-widest text-taupe mb-3">While you wait · Beauty business tip</p>
+        <p
+          className="font-serif text-lg leading-relaxed text-foreground transition-opacity duration-400"
+          style={{ opacity: fade ? 1 : 0 }}
+        >
+          "{BEAUTY_TIPS[tipIndex]}"
+        </p>
+        {/* Tip dots */}
+        <div className="flex justify-center gap-1.5 mt-4">
+          {BEAUTY_TIPS.map((_, i) => (
+            <div key={i} className={"size-1 rounded-full transition-all " + (i === tipIndex ? "bg-foreground" : "bg-border")} />
+          ))}
+        </div>
+      </div>
+
+    </div>
+  );
+}
+
 function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: any) {
   const [activeVariant, setActiveVariant] = useState(0);
   const [activeSlide, setActiveSlide] = useState(0);
@@ -668,15 +774,7 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
   const [scheduling, setScheduling] = useState(false);
 
   if (generating) {
-    return (
-      <div className="artifact p-12 text-center">
-        <div className="flex justify-center mb-6">
-          <span className="size-8 rounded-full border-2 border-foreground border-t-transparent animate-spin" />
-        </div>
-        <p className="font-serif text-2xl mb-2 italic">AI is drafting your posts...</p>
-        <p className="text-sm text-taupe">{STATUS_LABELS[jobStatus] ?? jobStatus ?? "Processing..."}</p>
-      </div>
-    );
+    return <GeneratingScreen jobStatus={jobStatus} />;
   }
 
   if (!backendVariants || backendVariants.length === 0) {
