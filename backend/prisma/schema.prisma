@@ -251,6 +251,8 @@ model BrandDNA {
   emojiStyle               String        @default("minimal") @map("emoji_style") @db.VarChar(50)
   averageConfidenceScore   Float         @default(0.5) @map("average_confidence_score")
   preferredModelOverride   String?       @map("preferred_model_override") @db.VarChar(100)
+  logoUrl                  String?       @map("logo_url") @db.VarChar(2000)
+  logoPosition             String        @default("bottom_right") @map("logo_position") @db.VarChar(20)
   lastUpdatedAt            DateTime      @default(now()) @map("last_updated_at") @db.Timestamptz
   autoPopulated            Boolean       @default(false) @map("auto_populated")
   pillars                  BrandPillar[]

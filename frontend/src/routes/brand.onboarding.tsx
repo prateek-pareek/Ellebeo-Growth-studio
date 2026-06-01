@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFeatureFlag } from "@/lib/feature-flags";
 import { saveBrandDna, fetchBrandDnaForEditing, type OnboardingPayload } from "@/lib/providers/brand-dna-save";
+import { api } from "@/lib/api";
 
 export const Route = createFileRoute("/brand/onboarding")({
   head: () => ({
@@ -43,6 +44,8 @@ const EMPTY: OnboardingPayload = {
   bookingsPerWeek: "",
   postsPerWeek: "",
   pillars: "",
+  logoUrl: "",
+  logoPosition: "bottom_right",
 };
 
 function OnboardingPage() {
@@ -176,6 +179,12 @@ function OnboardingPage() {
                   <Field label="City" placeholder="Paris 3e" value={form.city} onChange={fieldSetter("city")} />
                   <ColorField label="Primary brand colour" value={form.primaryColor} onChange={fieldSetter("primaryColor")} />
                   <ColorField label="Secondary brand colour" value={form.secondaryColor} onChange={fieldSetter("secondaryColor")} />
+                  <LogoUploadField
+                    value={form.logoUrl ?? ""}
+                    position={form.logoPosition ?? "bottom_right"}
+                    onUrlChange={fieldSetter("logoUrl")}
+                    onPositionChange={fieldSetter("logoPosition")}
+                  />
                 </>
               )}
               {step === 2 && (
@@ -410,6 +419,94 @@ function SelectField({
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
       </select>
+    </div>
+  );
+}
+
+function LogoUploadField({
+  value,
+  position,
+  onUrlChange,
+  onPositionChange,
+}: {
+  value: string;
+  position: string;
+  onUrlChange: (v: string) => void;
+  onPositionChange: (v: string) => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('type', 'logo');
+      const res = await api.post('/brand-dna/upload-logo', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      onUrlChange(res.data.data?.url || res.data.url || '');
+    } catch {
+      alert('Upload failed. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div>
+      <label className="text-[10px] uppercase tracking-widest text-taupe block mb-2">
+        Logo <span className="text-taupe/50">(optional — added to every post)</span>
+      </label>
+      <div className="flex items-center gap-4">
+        {value ? (
+          <div className="relative size-16 border hairline bg-nude/20 flex items-center justify-center overflow-hidden flex-shrink-0">
+            <img src={value} alt="Logo" className="max-w-full max-h-full object-contain p-1" />
+            <button
+              type="button"
+              onClick={() => onUrlChange("")}
+              className="absolute top-0.5 right-0.5 text-[9px] bg-foreground text-offwhite px-1"
+            >×</button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            className="size-16 border hairline bg-card flex items-center justify-center text-[9px] uppercase tracking-widest text-taupe hover:bg-nude/20 flex-shrink-0 disabled:opacity-50"
+          >
+            {uploading ? "..." : "Upload"}
+          </button>
+        )}
+        <input ref={fileRef} type="file" accept="image/png,image/svg+xml,image/jpeg" className="hidden" onChange={handleFile} />
+
+        {value && (
+          <div className="flex-1">
+            <p className="text-[9px] uppercase tracking-widest text-taupe mb-1">Position on post</p>
+            <div className="grid grid-cols-2 gap-1">
+              {[
+                { value: "bottom_right", label: "Bottom right" },
+                { value: "bottom_left",  label: "Bottom left" },
+                { value: "top_right",    label: "Top right" },
+                { value: "top_left",     label: "Top left" },
+              ].map((p) => (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => onPositionChange(p.value)}
+                  className={"text-[9px] uppercase tracking-widest px-2 py-1 border hairline transition-colors " +
+                    (position === p.value ? "bg-foreground text-offwhite" : "text-taupe hover:text-foreground")}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

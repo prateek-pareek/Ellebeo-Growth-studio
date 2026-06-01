@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateBrandDnaDto, ScanInstagramDto, ScanWebsiteDto } from './dto/brand-dna.dto';
 import { PromptCache } from '../ai/orchestrator/prompt-cache';
 import { getRedisClient } from '../config/redis.client';
+import { firebaseStorage } from '../config/firebase.client';
 
 @Injectable()
 export class BrandDnaService {
@@ -55,6 +56,8 @@ export class BrandDnaService {
           secondaryBrandColor: dto.secondaryBrandColor,
           emojiPolicy: dto.emojiPolicy || 'minimal',
           captionLengthPreference: dto.captionLengthPreference || 'medium',
+          logoUrl: dto.logoUrl,
+          logoPosition: dto.logoPosition || 'bottom_right',
           pillars: {
             create: dto.pillars?.map((label, i) => ({ 
               label, 
@@ -117,5 +120,16 @@ export class BrandDnaService {
     return this.prisma.goldenExample.delete({
       where: { id: exampleId }
     });
+  }
+
+  async uploadLogo(tenantId: string, file: Express.Multer.File) {
+    if (!firebaseStorage) throw new Error('Firebase storage not configured');
+    const bucket = firebaseStorage.bucket();
+    const ext = file.originalname.split('.').pop() || 'png';
+    const filePath = `logos/${tenantId}/logo_${Date.now()}.${ext}`;
+    const fileRef = bucket.file(filePath);
+    await fileRef.save(file.buffer, { contentType: file.mimetype, public: true });
+    const url = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
+    return { url };
   }
 }

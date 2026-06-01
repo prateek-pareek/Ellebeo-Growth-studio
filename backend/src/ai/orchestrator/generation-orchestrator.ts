@@ -20,6 +20,7 @@ import { CarouselConceptChain } from '../chains/carousel-concept.chain';
 import { StoryFrameChain } from '../chains/story-frame.chain';
 import { StoryPipelineService, type StoryOutput } from '../services/story-pipeline.service';
 import { AiImageGenerationService } from '../services/ai-image-generation.service';
+import { LogoOverlayService } from '../services/logo-overlay.service';
 import { ReelShotChain, type ReelShotResult } from '../chains/reel-shot.chain';
 import { ElevenLabsService } from '../services/elevenlabs.service';
 import { OpenAiTtsService } from '../services/openai-tts.service';
@@ -47,6 +48,7 @@ export class GenerationOrchestrator {
   private readonly storyPipeline: StoryPipelineService;
   private readonly reelShotChain: ReelShotChain;
   private readonly aiImageGen: AiImageGenerationService;
+  private readonly logoOverlay: LogoOverlayService;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -72,6 +74,7 @@ export class GenerationOrchestrator {
     this.storyPipeline = new StoryPipelineService();
     this.reelShotChain = new ReelShotChain();
     this.aiImageGen = new AiImageGenerationService();
+    this.logoOverlay = new LogoOverlayService();
   }
 
   // --------------------------------------------------------------------------
@@ -371,7 +374,11 @@ Requirements:
             const filePath = `generated/${tenantId}/feed_${Date.now()}.png`;
             const file = bucket.file(filePath);
             await file.save(buffer, { contentType: 'image/png', public: true });
-            const aiFeedUrl = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
+            let aiFeedUrl = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
+            // Apply logo overlay if set in Brand DNA
+            if (brandDNA.logoUrl) {
+              aiFeedUrl = await this.logoOverlay.applyLogo({ imageUrl: aiFeedUrl, logoUrl: brandDNA.logoUrl, position: brandDNA.logoPosition, tenantId });
+            }
             imageResult = { ...imageResult, variants: { ...imageResult.variants, feedUrl: aiFeedUrl } };
             console.log(`[Orchestrator] AI feed image generated for job ${jobId}`);
           }
@@ -423,7 +430,11 @@ Requirements:
             aesthetic: brandDNA.aestheticDirection ?? 'minimal editorial',
             serviceType: appointment?.serviceCategory ?? 'beauty treatment',
           });
-          carouselSlides = { type: 'carousel', slides: aiSlides };
+          // Apply logo to each carousel slide
+          const slidesWithLogo = brandDNA.logoUrl
+            ? await Promise.all(aiSlides.map(async s => ({ ...s, url: await this.logoOverlay.applyLogo({ imageUrl: s.url, logoUrl: brandDNA.logoUrl, position: brandDNA.logoPosition, tenantId }) })))
+            : aiSlides;
+          carouselSlides = { type: 'carousel', slides: slidesWithLogo };
           console.log(`[Orchestrator] Carousel: ${aiSlides.length} AI-generated slides for job ${jobId}`);
         } catch (aiErr) {
           // Fallback to Cloudinary if AI generation fails
@@ -468,7 +479,10 @@ Requirements:
             aesthetic: brandDNA.aestheticDirection ?? 'minimal editorial',
             serviceType: appointment?.serviceCategory ?? 'beauty treatment',
           });
-          storyOutput = { type: 'story', frames: aiFrames };
+          const framesWithLogo = brandDNA.logoUrl
+            ? await Promise.all(aiFrames.map(async f => ({ ...f, url: await this.logoOverlay.applyLogo({ imageUrl: f.url, logoUrl: brandDNA.logoUrl, position: brandDNA.logoPosition, tenantId }) })))
+            : aiFrames;
+          storyOutput = { type: 'story', frames: framesWithLogo };
           console.log(`[Orchestrator] Story: ${aiFrames.length} AI-generated frames for job ${jobId}`);
         } catch (aiErr) {
           console.warn(`[Orchestrator] AI story gen failed, falling back to Cloudinary:`, aiErr);

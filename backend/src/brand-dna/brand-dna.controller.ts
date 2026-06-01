@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Req, UseGuards, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { BrandDnaService } from './brand-dna.service';
 import { CreateBrandDnaDto, ScanInstagramDto, ScanWebsiteDto } from './dto/brand-dna.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -8,6 +9,12 @@ import { TenantStatusGuard } from '../common/guards/tenant-status.guard';
 @Controller('brand-dna')
 export class BrandDnaController {
   constructor(private readonly brandDnaService: BrandDnaService) {}
+
+  @Post('upload-logo')
+  @UseInterceptors(FileInterceptor('file'))
+  uploadLogo(@Req() req: any, @UploadedFile() file: Express.Multer.File) {
+    return this.brandDnaService.uploadLogo(req.user.tenantId, file);
+  }
 
   @Get()
   getCurrentDna(@Req() req: any) {
