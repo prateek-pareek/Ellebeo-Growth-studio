@@ -58,7 +58,7 @@ function mapCategory(raw: string, serviceName?: string): Category {
   if (name.match(/facial|hydra|peel|glow|skin|acne|microderm/)) return "Skin therapist";
   if (name.match(/nail|manicure|pedicure|gel/)) return "Nail artist";
   if (name.match(/lash|brow|tint|lift|lamina/)) return "Lash & brow";
-  if (name.match(/botox|filler|inject|lip|anti.age/)) return "Injector";
+  if (name.match(/botox|filler|inject|lip|anti.age/)) return "Medical Aesthetics";
   return "Skin therapist";
 }
 
