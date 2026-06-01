@@ -42,6 +42,7 @@ export type UseContentItemsResult = {
   source: "cloud";
   isEmpty: boolean;
   error: boolean;
+  refresh?: () => void;
 };
 
 const CLOUD_PLACEHOLDER_IMAGE =
@@ -189,5 +190,18 @@ export function useContentItems(): UseContentItemsResult {
       });
   }, []);
 
-  return state;
+  const refresh = () => {
+    const id = ++reqId.current;
+    setState((prev) => ({ ...prev, loading: true }));
+    fetchCloudContent().then((res) => {
+      if (id !== reqId.current) return;
+      if (res.kind === "ok") {
+        setState({ items: res.items, appointmentsById: res.appointmentsById, loading: false, source: "cloud", isEmpty: false, error: false });
+      } else {
+        setState((prev) => ({ ...prev, loading: false }));
+      }
+    }).catch(() => setState((prev) => ({ ...prev, loading: false })));
+  };
+
+  return { ...state, refresh };
 }

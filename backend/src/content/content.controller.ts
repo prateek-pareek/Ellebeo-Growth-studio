@@ -19,6 +19,11 @@ export class ContentController {
     return this.contentService.getContentItem(req.user.tenantId, id);
   }
 
+  @Patch(':id')
+  updateContent(@Req() req: any, @Param('id') id: string, @Body() dto: { caption?: string; callToAction?: string; hashtags?: string[]; hookSentence?: string }) {
+    return this.contentService.updateContent(req.user.tenantId, id, dto);
+  }
+
   @Patch(':id/approve')
   approveContent(@Req() req: any, @Param('id') id: string) {
     return this.contentService.approveContent(req.user.tenantId, id, req.user.userId);

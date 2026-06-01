@@ -71,6 +71,20 @@ export class ContentService {
     return item;
   }
 
+  async updateContent(tenantId: string, id: string, dto: { caption?: string; callToAction?: string; hashtags?: string[]; hookSentence?: string }) {
+    await this.getContentItem(tenantId, id);
+    return this.prisma.contentItem.update({
+      where: { id },
+      data: {
+        ...(dto.caption !== undefined && { caption: dto.caption }),
+        ...(dto.callToAction !== undefined && { callToAction: dto.callToAction }),
+        ...(dto.hashtags !== undefined && { hashtags: dto.hashtags }),
+        ...(dto.hookSentence !== undefined && { hookSentence: dto.hookSentence }),
+        updatedAt: new Date(),
+      },
+    });
+  }
+
   async approveContent(tenantId: string, id: string, userId: string) {
     await this.getContentItem(tenantId, id);
     return this.prisma.contentItem.update({
