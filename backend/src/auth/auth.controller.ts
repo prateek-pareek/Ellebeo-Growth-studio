@@ -60,6 +60,22 @@ export class AuthController {
     return { message: 'Logged out successfully' };
   }
 
+  @Post('google')
+  @HttpCode(HttpStatus.OK)
+  async googleLogin(
+    @Body('firebaseIdToken') firebaseIdToken: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { accessToken, refreshToken } = await this.authService.googleFirebaseLogin(
+      firebaseIdToken,
+      req.ip,
+      req.headers['user-agent'],
+    );
+    this.setRefreshTokenCookie(res, refreshToken);
+    return { accessToken };
+  }
+
   @Post('verify-email')
   async verifyEmail(@Body('token') token: string) {
     return { message: 'Email verified successfully' };
