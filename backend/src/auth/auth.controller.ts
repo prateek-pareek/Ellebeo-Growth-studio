@@ -67,10 +67,22 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const { accessToken, refreshToken } = await this.authService.googleFirebaseLogin(
-      firebaseIdToken,
-      req.ip,
-      req.headers['user-agent'],
+    const { accessToken, refreshToken } = await this.authService.firebaseLogin(
+      firebaseIdToken, req.ip, req.headers['user-agent'],
+    );
+    this.setRefreshTokenCookie(res, refreshToken);
+    return { accessToken };
+  }
+
+  @Post('apple')
+  @HttpCode(HttpStatus.OK)
+  async appleLogin(
+    @Body('firebaseIdToken') firebaseIdToken: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { accessToken, refreshToken } = await this.authService.firebaseLogin(
+      firebaseIdToken, req.ip, req.headers['user-agent'],
     );
     this.setRefreshTokenCookie(res, refreshToken);
     return { accessToken };

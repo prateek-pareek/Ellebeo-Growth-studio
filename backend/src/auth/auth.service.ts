@@ -22,7 +22,7 @@ export class AuthService {
     this.refreshTokenPepper = this.configService.getOrThrow<string>('JWT_REFRESH_SECRET');
   }
 
-  async googleFirebaseLogin(firebaseIdToken: string, ipAddress?: string, userAgent?: string) {
+  async firebaseLogin(firebaseIdToken: string, ipAddress?: string, userAgent?: string) {
     if (!firebaseAuth) throw new UnauthorizedException('Firebase auth not configured');
 
     let decoded: Awaited<ReturnType<typeof firebaseAuth.verifyIdToken>>;
