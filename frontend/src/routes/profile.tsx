@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useCallback } from "react";
+import { InitialsAvatar } from "@/components/InitialsAvatar";
 import { useProfile } from "@/lib/providers/profile-provider";
 import { useAuth } from "@/lib/providers/auth-provider";
 import { Button } from "@/components/ui/button";
@@ -50,9 +51,11 @@ function ProfilePage() {
         </div>
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
-            <div className="size-14 rounded-full bg-nude overflow-hidden ring-1 ring-border">
-              <img src={technician.avatar} alt={technician.name} className="w-full h-full object-cover" />
-            </div>
+            <InitialsAvatar
+              name={technician.name}
+              className="size-14 ring-1 ring-border"
+              textClassName="text-xl"
+            />
             <div>
               <p className="font-serif text-lg leading-tight">{technician.name}</p>
               <p className="text-xs text-taupe">{technician.handle} · {technician.city}</p>
