@@ -7,6 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import { signInWithPopup } from "firebase/auth";
+import { auth, googleProvider, appleProvider } from "@/lib/firebase";
+import { GoogleIcon } from "@/components/GoogleIcon";
+import { AppleIcon } from "@/components/AppleIcon";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -24,6 +28,45 @@ function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  async function handleAppleSignIn() {
+    setGoogleLoading(true);
+    try {
+      const result = await signInWithPopup(auth, appleProvider);
+      const firebaseIdToken = await result.user.getIdToken();
+      const res = await api.post('/auth/apple', { firebaseIdToken });
+      const { accessToken } = res.data.data ?? res.data;
+      login(accessToken);
+      toast.success("Welcome back.");
+      navigate({ to: "/" });
+    } catch (error: any) {
+      if (error.code !== 'auth/popup-closed-by-user') {
+        toast.error(error.response?.data?.message || "Apple sign-in failed. Try again.");
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  }
+
+  async function handleGoogleSignIn() {
+    setGoogleLoading(true);
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const firebaseIdToken = await result.user.getIdToken();
+      const res = await api.post('/auth/google', { firebaseIdToken });
+      const { accessToken } = res.data.data ?? res.data;
+      login(accessToken);
+      toast.success("Welcome back.");
+      navigate({ to: "/" });
+    } catch (error: any) {
+      if (error.code !== 'auth/popup-closed-by-user') {
+        toast.error(error.response?.data?.message || "Google sign-in failed. Try again.");
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  }
 
   useEffect(() => {
     if (user) navigate({ to: "/" });
@@ -127,6 +170,32 @@ function LoginPage() {
               {loading ? "Signing in…" : "Access Dashboard"}
             </Button>
           </form>
+
+          <div className="space-y-4">
+            <div className="relative flex items-center gap-4">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-[10px] uppercase tracking-widest text-taupe">or</span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+            <Button
+              type="button"
+              onClick={handleGoogleSignIn}
+              disabled={googleLoading}
+              className="w-full bg-transparent border hairline text-foreground hover:bg-card py-6 rounded-none text-[11px] uppercase tracking-[0.2em] flex items-center justify-center gap-3"
+            >
+              <GoogleIcon />
+              {googleLoading ? "Signing in…" : "Continue with Google"}
+            </Button>
+            <Button
+              type="button"
+              onClick={handleAppleSignIn}
+              disabled={googleLoading}
+              className="w-full bg-foreground text-offwhite hover:bg-taupe py-6 rounded-none text-[11px] uppercase tracking-[0.2em] flex items-center justify-center gap-3"
+            >
+              <AppleIcon />
+              {googleLoading ? "Signing in…" : "Continue with Apple"}
+            </Button>
+          </div>
 
           <div className="pt-4 border-t hairline flex flex-col gap-4">
             <p className="text-xs text-taupe">
