@@ -29,6 +29,16 @@ function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+
+  function validate() {
+    const e: { email?: string; password?: string } = {};
+    if (!email.trim()) e.email = "Email is required.";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) e.email = "Enter a valid email address.";
+    if (!password) e.password = "Password is required.";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  }
 
   async function handleAppleSignIn() {
     setGoogleLoading(true);
@@ -74,6 +84,7 @@ function LoginPage() {
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
+    if (!validate()) return;
     setLoading(true);
     try {
       const res = await api.post('/auth/login', { email, password });
@@ -138,9 +149,10 @@ function LoginPage() {
                 placeholder="hello@example.com"
                 className="bg-transparent border-t-0 border-x-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-foreground transition-all"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => { setEmail(e.target.value); if (errors.email) setErrors(p => ({ ...p, email: undefined })); }}
                 required
               />
+              {errors.email && <p className="text-[11px] text-destructive mt-1">{errors.email}</p>}
             </div>
 
             <div className="space-y-2">
@@ -157,12 +169,13 @@ function LoginPage() {
                 placeholder="••••••••"
                 className="bg-transparent border-t-0 border-x-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-foreground transition-all"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => { setPassword(e.target.value); if (errors.password) setErrors(p => ({ ...p, password: undefined })); }}
                 required
               />
+              {errors.password && <p className="text-[11px] text-destructive mt-1">{errors.password}</p>}
             </div>
 
-            <Button 
+            <Button
               type="submit" 
               className="w-full bg-foreground text-background hover:bg-taupe transition-colors py-6 rounded-none text-[11px] uppercase tracking-[0.2em]"
               disabled={loading}

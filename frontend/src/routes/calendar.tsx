@@ -332,6 +332,10 @@ function EntryDetailModal({ entry, dayEntries, contentItems, onClose, onMutated 
 
   const handleReschedule = async () => {
     if (!active?.scheduledPostId || !rescheduleTime) return;
+    if (new Date(rescheduleTime) <= new Date()) {
+      toast.error("Please pick a future date and time.");
+      return;
+    }
     setRescheduling(true);
     try {
       await api.patch(`/schedule/${active.scheduledPostId}`, {
@@ -593,6 +597,10 @@ function ScheduleModal({ open, onClose, day, year, monthIndex, contentItems, onS
 
   const handleSubmit = async () => {
     if (!selectedItem || !scheduleTime) return;
+    if (new Date(scheduleTime) <= new Date()) {
+      toast.error("Please pick a future date and time.");
+      return;
+    }
     if (!connected) {
       toast.error("No connected social account. Connect one in Settings.");
       return;
@@ -685,6 +693,10 @@ function ScheduleModal({ open, onClose, day, year, monthIndex, contentItems, onS
               )}
             </div>
           </div>
+
+          {!selectedItemId && (
+            <p className="text-[10px] text-taupe/60">Select a post above to continue.</p>
+          )}
 
           {/* Format */}
           <div>
