@@ -17,6 +17,8 @@ export type Appointment = {
   service: string;
   category: Category;
   date: string;
+  rawDate: string;      // YYYY-MM-DD for filtering
+  timeLabel: string;    // "10:30" for display
   hasBefore: boolean;
   hasAfter: boolean;
   beforePhotoUrl: string | null;
@@ -81,20 +83,27 @@ async function fetchCloudAppointments(): Promise<
 
     return {
       kind: "ok",
-      data: data.map((row: any) => ({
-        id: row.id,
-        clientName: row.clientName || "Client",
-        service: row.serviceName,
-        category: mapCategory(row.serviceCategory, row.serviceName),
-        date: formatDate(row.appointmentDate),
-        hasBefore: !!row.beforePhotoUrl,
-        hasAfter: !!row.afterPhotoUrl,
-        beforePhotoUrl: row.beforePhotoUrl ?? null,
-        afterPhotoUrl: row.afterPhotoUrl ?? null,
-        consent: row.consentStatus || "not_requested",
-        notes: row.notes,
-        contentReady: row.contentCount ?? 0,
-      })),
+      data: data.map((row: any) => {
+        const raw = typeof row.appointmentDate === 'string' ? row.appointmentDate : null;
+        const apptDate = raw ? new Date(raw) : null;
+        const validDate = apptDate && !isNaN(apptDate.getTime()) ? apptDate : null;
+        return {
+          id: row.id,
+          clientName: row.clientName || "Client",
+          service: row.serviceName,
+          category: mapCategory(row.serviceCategory, row.serviceName),
+          date: validDate ? formatDate(raw!) : "Date not set",
+          rawDate: validDate ? validDate.toISOString().slice(0, 10) : "",
+          timeLabel: validDate ? validDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
+          hasBefore: !!row.beforePhotoUrl,
+          hasAfter: !!row.afterPhotoUrl,
+          beforePhotoUrl: row.beforePhotoUrl ?? null,
+          afterPhotoUrl: row.afterPhotoUrl ?? null,
+          consent: row.consentStatus || "not_requested",
+          notes: row.notes,
+          contentReady: row.contentCount ?? 0,
+        };
+      }),
     };
   } catch (error: any) {
     if (error.response?.status === 401) return { kind: "anon" };

@@ -19,6 +19,9 @@ export interface Response<T> {
 @Injectable()
 export class ResponseInterceptor<T> implements NestInterceptor<T, Response<T>> {
   private sanitize(value: unknown): unknown {
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
     if (Array.isArray(value)) {
       return value.map((v) => this.sanitize(v));
     }
