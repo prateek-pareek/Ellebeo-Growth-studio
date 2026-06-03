@@ -5,6 +5,8 @@
 
 import { ChatOpenAI } from '@langchain/openai';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
+import { wrapSystemPrompt } from '../config/platform-system-prompt';
+import { buildBrandVoiceBlock, type BrandVoiceContext } from '../config/brand-voice';
 
 export interface ReelShot {
   timestamp: string;   // e.g. "0:00"
@@ -37,11 +39,14 @@ export class ReelShotChain {
     clientFirstName?: string;
     businessGoal: string;
     brandName: string;
+    brandVoice?: BrandVoiceContext;
   }): Promise<ReelShotResult> {
-    const { hookSentence, callToAction, serviceName, clientFirstName, businessGoal, brandName } = params;
+    const { hookSentence, callToAction, serviceName, clientFirstName, businessGoal, brandName, brandVoice } = params;
+    const voiceBlock = buildBrandVoiceBlock(brandVoice);
 
     const systemPrompt = `You generate TikTok/Reel storyboards for beauty and wellness businesses.
 Each storyboard has exactly 5 shots with timestamps and filming directions.
+Any on-screen text (the hook overlay) must sound like the technician wrote it — on-brand, never generic.
 Return ONLY valid JSON, no markdown.`;
 
     const userPrompt = `Create a 5-shot TikTok/Reel storyboard for this beauty post.
@@ -51,7 +56,7 @@ Service: ${serviceName}${clientFirstName ? `\nClient: ${clientFirstName}` : ''}
 Hook: "${hookSentence}"
 CTA: "${callToAction}"
 Goal: ${businessGoal.replace(/_/g, ' ')}
-
+${voiceBlock ? `\n${voiceBlock}\n` : ''}
 Shots structure:
 - Shot 1 (0:00): The before state / empty chair / anticipation
 - Shot 2 (0:05): Hands at work / technique close-up
@@ -81,7 +86,7 @@ Return:
 
     try {
       const response = await this.model.invoke([
-        new SystemMessage(systemPrompt),
+        new SystemMessage(wrapSystemPrompt(systemPrompt)),
         new HumanMessage(userPrompt),
       ]);
       const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);

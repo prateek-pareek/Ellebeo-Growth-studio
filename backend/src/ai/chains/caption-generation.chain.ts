@@ -92,20 +92,31 @@ export class CaptionGenerationChain {
   }): Promise<{ primary: CaptionGenerationResult; options: (CaptionGenerationResult & { generatedBy: string })[] }> {
     const { assembledPrompt, brandDNABlacklist, allowRetry = true } = params;
 
-    // Run OpenAI and Gemini in parallel
+    // Option 1: GPT-4o-mini (fast, cheap) — always the primary.
     const openAiConfig: LLMConfig = { provider: 'openai', modelId: 'gpt-4o-mini', temperature: 0.75, maxTokens: 1024, timeoutMs: 30000, systemPromptCacheKey: null };
 
     const openAiPromise = this.generate({ assembledPrompt, llmConfig: openAiConfig, brandDNABlacklist, allowRetry })
       .then(result => ({ ...result, generatedBy: 'ChatGPT' }))
       .catch(err => { console.error('[CaptionChain] OpenAI failed:', err); return null; });
 
-    const geminiPromise = process.env['GEMINI_API_KEY']
+    // Option 2: prefer Gemini when a CLASSIC key is configured (AIzaSy...).
+    // Ephemeral AQ.* tokens are browser-only and cannot auth server-side, so we
+    // treat them as "no Gemini" and fall back to GPT-4o — that way the two-option
+    // compare always works on the OpenAI key alone, and Gemini switches on
+    // automatically the moment a real key is present.
+    const geminiKey = process.env['GEMINI_API_KEY'];
+    const geminiUsable = !!geminiKey && !geminiKey.startsWith('AQ.');
+
+    const secondPromise = geminiUsable
       ? this.callGemini(assembledPrompt, brandDNABlacklist)
           .then(result => ({ ...result, generatedBy: 'Gemini' }))
-          .catch(err => { console.error('[CaptionChain] Gemini failed:', err); return null; })
-      : Promise.resolve(null);
+          .catch(err => {
+            console.error('[CaptionChain] Gemini failed, falling back to GPT-4o:', err);
+            return this.generateGpt4oOption(assembledPrompt, brandDNABlacklist, allowRetry);
+          })
+      : this.generateGpt4oOption(assembledPrompt, brandDNABlacklist, allowRetry);
 
-    const results = await Promise.all([openAiPromise, geminiPromise]);
+    const results = await Promise.all([openAiPromise, secondPromise]);
     const validResults = results.filter(r => r !== null) as (CaptionGenerationResult & { generatedBy: string })[];
 
     if (validResults.length === 0) {
@@ -119,15 +130,42 @@ export class CaptionGenerationChain {
   }
 
   // --------------------------------------------------------------------------
+  // GPT-4o fallback option — used as Option 2 when Gemini isn't available.
+  // Higher temperature than gpt-4o-mini so the two options are meaningfully
+  // different to choose between.
+  // --------------------------------------------------------------------------
+
+  private generateGpt4oOption(
+    assembledPrompt: AssembledPrompt,
+    brandDNABlacklist: string[],
+    allowRetry: boolean
+  ): Promise<(CaptionGenerationResult & { generatedBy: string }) | null> {
+    const gpt4oConfig: LLMConfig = { provider: 'openai', modelId: 'gpt-4o', temperature: 0.85, maxTokens: 1024, timeoutMs: 45000, systemPromptCacheKey: null };
+    return this.generate({ assembledPrompt, llmConfig: gpt4oConfig, brandDNABlacklist, allowRetry })
+      .then(result => ({ ...result, generatedBy: 'GPT-4o' }))
+      .catch(err => { console.error('[CaptionChain] GPT-4o fallback failed:', err); return null; });
+  }
+
+  // --------------------------------------------------------------------------
   // Gemini direct call (no LangChain — uses Google SDK directly)
   // --------------------------------------------------------------------------
 
   private async callGemini(prompt: AssembledPrompt, blacklist: string[]): Promise<CaptionGenerationResult> {
     const genAI = new GoogleGenerativeAI(process.env['GEMINI_API_KEY']!);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    // Use the technician's system prompt as a real systemInstruction (not concatenated
+    // into the user turn) so Gemini weights it the same way OpenAI does.
+    const model = genAI.getGenerativeModel({
+      model: process.env['GEMINI_MODEL'] || 'gemini-1.5-pro',
+      systemInstruction: wrapSystemPrompt(prompt.systemPrompt),
+      generationConfig: {
+        // Match the OpenAI standard-text config so the two options compare fairly.
+        temperature: AI_CONFIG.models.standardText.temperature,
+        maxOutputTokens: AI_CONFIG.models.standardText.maxTokens,
+        responseMimeType: 'application/json',
+      },
+    });
 
-    const fullPrompt = `${wrapSystemPrompt(prompt.systemPrompt)}\n\n${prompt.userPrompt}`;
-    const response = await model.generateContent(fullPrompt);
+    const response = await model.generateContent(prompt.userPrompt);
     const raw = response.response.text();
     const result = parseCaptionOutput(raw);
     this.checkBlacklist(result.caption, blacklist);

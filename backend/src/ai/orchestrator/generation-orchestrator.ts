@@ -22,6 +22,7 @@ import { StoryPipelineService, type StoryOutput } from '../services/story-pipeli
 import { AiImageGenerationService } from '../services/ai-image-generation.service';
 import { LogoOverlayService } from '../services/logo-overlay.service';
 import { ReelShotChain, type ReelShotResult } from '../chains/reel-shot.chain';
+import { extractBrandVoice } from '../config/brand-voice';
 import { ElevenLabsService } from '../services/elevenlabs.service';
 import { OpenAiTtsService } from '../services/openai-tts.service';
 import type { GenerationJobPayload } from '../types/job-payload.types';
@@ -415,6 +416,7 @@ Requirements:
           businessGoal: payload.businessGoal,
           brandName: brandDNA.businessName,
           slideCount: 4,
+          brandVoice: extractBrandVoice(brandDNA),
         });
 
         try {
@@ -465,6 +467,7 @@ Requirements:
           clientFirstName: appointment?.client?.firstName ?? undefined,
           businessGoal: payload.businessGoal,
           brandName: brandDNA.businessName,
+          brandVoice: extractBrandVoice(brandDNA),
         });
 
         try {
@@ -513,6 +516,7 @@ Requirements:
           clientFirstName: appointment?.client?.firstName ?? undefined,
           businessGoal: payload.businessGoal,
           brandName: brandDNA.businessName,
+          brandVoice: extractBrandVoice(brandDNA),
         });
         console.log(`[Orchestrator] Reel storyboard: ${reelShotResult.shots.length} shots for job ${jobId}`);
       } catch (err) {

@@ -4,6 +4,8 @@
 
 import { ChatOpenAI } from '@langchain/openai';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
+import { wrapSystemPrompt } from '../config/platform-system-prompt';
+import { buildBrandVoiceBlock, type BrandVoiceContext } from '../config/brand-voice';
 
 export interface StoryFrameConcept {
   index: number;
@@ -34,11 +36,14 @@ export class StoryFrameChain {
     clientFirstName?: string;
     businessGoal: string;
     brandName: string;
+    brandVoice?: BrandVoiceContext;
   }): Promise<StoryFrameResult> {
-    const { hookSentence, callToAction, serviceName, clientFirstName, businessGoal, brandName } = params;
+    const { hookSentence, callToAction, serviceName, clientFirstName, businessGoal, brandName, brandVoice } = params;
+    const voiceBlock = buildBrandVoiceBlock(brandVoice);
 
     const systemPrompt = `You generate Instagram Story frame sequences for beauty and wellness businesses.
 Each story is exactly 4 frames: hook → process → result → CTA.
+Every overlay line must sound like the technician wrote it — on-brand and specific, never generic.
 Return ONLY valid JSON.`;
 
     const userPrompt = `Create a 4-frame story sequence for this beauty appointment.
@@ -48,7 +53,7 @@ Service: ${serviceName}${clientFirstName ? `\nClient: ${clientFirstName}` : ''}
 Hook: "${hookSentence}"
 CTA: "${callToAction}"
 Goal: ${businessGoal.replace(/_/g, ' ')}
-
+${voiceBlock ? `\n${voiceBlock}\n` : ''}
 Frame structure:
 - Frame 1: The before / empty chair / anticipation
 - Frame 2: Mid-process / technique in action
@@ -71,7 +76,7 @@ Return exactly:
 
     try {
       const response = await this.model.invoke([
-        new SystemMessage(systemPrompt),
+        new SystemMessage(wrapSystemPrompt(systemPrompt)),
         new HumanMessage(userPrompt),
       ]);
       const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);

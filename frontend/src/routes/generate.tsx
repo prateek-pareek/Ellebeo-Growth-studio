@@ -675,7 +675,13 @@ const REFINE_OPTIONS = [
   "+ Create alternate version",
 ];
 
-const OPTION_STYLES = ["ChatGPT · OpenAI", "Gemini · Google", "Direct · booking-led"];
+// Maps the backend `generatedBy` tag to a friendly label. Unknown models fall
+// back to the raw tag, so labels always reflect what actually produced the option.
+const MODEL_LABELS: Record<string, string> = {
+  ChatGPT: "ChatGPT · OpenAI",
+  "GPT-4o": "GPT-4o · OpenAI",
+  Gemini: "Gemini · Google",
+};
 
 function GeneratingScreen({ jobStatus }: { jobStatus: string }) {
   const [tipIndex, setTipIndex] = useState(0);
@@ -934,7 +940,7 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
               <p className={"text-[9px] uppercase tracking-widest mb-1 " + (i === activeVariant ? "text-nude" : "text-taupe")}>
                 Option {i + 1}
               </p>
-              <p className="text-xs font-medium">{OPTION_STYLES[i] ?? `Option ${i + 1}`}</p>
+              <p className="text-xs font-medium">{MODEL_LABELS[variants[i]?.generatedBy] ?? variants[i]?.generatedBy ?? `Option ${i + 1}`}</p>
             </button>
           ))}
         </div>
