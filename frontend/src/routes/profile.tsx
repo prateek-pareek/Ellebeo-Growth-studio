@@ -1,10 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { InitialsAvatar } from "@/components/InitialsAvatar";
 import { useProfile } from "@/lib/providers/profile-provider";
 import { useAuth } from "@/lib/providers/auth-provider";
 import { Button } from "@/components/ui/button";
-import { LogOut } from "lucide-react";
+import { LogOut, Camera } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -23,10 +23,38 @@ function ProfilePage() {
   const { profile, technician, loading } = useProfile();
   const { logout } = useAuth();
   const navigate = useNavigate();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string>("");
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    if (!loading) setAvatarUrl(technician.avatar);
+  }, [loading, technician.avatar]);
 
   const handleLogout = async () => {
     await logout();
     navigate({ to: "/login" });
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await api.post("/auth/upload-avatar", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const url = res.data.data?.url || res.data.url || "";
+      setAvatarUrl(url);
+      toast.success("Profile photo updated.");
+    } catch {
+      toast.error("Upload failed. Please try again.");
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
   };
 
   if (loading) {
@@ -51,17 +79,49 @@ function ProfilePage() {
         </div>
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
-            <InitialsAvatar
-              name={technician.name}
-              className="size-14 ring-1 ring-border"
-              textClassName="text-xl"
-            />
+            {/* Avatar with upload overlay */}
+            <div className="relative shrink-0 group">
+              <InitialsAvatar
+                name={technician.name}
+                imageUrl={avatarUrl || undefined}
+                className="size-14 ring-1 ring-border"
+                textClassName="text-xl"
+              />
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading}
+                className="absolute inset-0 rounded-full flex items-center justify-center bg-foreground/0 group-hover:bg-foreground/40 transition-colors disabled:cursor-not-allowed"
+                title="Change profile photo"
+              >
+                {uploading ? (
+                  <span className="text-[9px] text-white opacity-0 group-hover:opacity-100">…</span>
+                ) : (
+                  <Camera className="size-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                )}
+              </button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handleAvatarUpload}
+              />
+            </div>
             <div>
               <p className="font-serif text-lg leading-tight">{technician.name}</p>
               <p className="text-xs text-taupe">{technician.handle} · {technician.city}</p>
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading}
+                className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors mt-0.5 disabled:opacity-50"
+              >
+                {uploading ? "Uploading…" : "Change photo"}
+              </button>
             </div>
           </div>
-          <button 
+          <button
             onClick={handleLogout}
             className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground flex items-center gap-2 border hairline px-4 py-3 transition-colors"
           >

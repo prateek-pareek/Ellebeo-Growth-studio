@@ -13,14 +13,25 @@ function getInitials(name: string): string {
 
 export function InitialsAvatar({
   name,
+  imageUrl,
   className = "size-10",
   textClassName = "text-sm",
 }: {
   name: string;
+  imageUrl?: string;
   className?: string;
   textClassName?: string;
 }) {
   const hue = nameToHue(name);
+
+  if (imageUrl) {
+    return (
+      <div className={`rounded-full overflow-hidden shrink-0 ${className}`}>
+        <img src={imageUrl} alt={name} className="w-full h-full object-cover" />
+      </div>
+    );
+  }
+
   return (
     <div
       className={`rounded-full flex items-center justify-center shrink-0 ${className}`}

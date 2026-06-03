@@ -1,4 +1,5 @@
-import { Controller, Post, Body, Req, Res, Get, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, Req, Res, Get, UseGuards, HttpCode, HttpStatus, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
@@ -113,6 +114,13 @@ export class AuthController {
   @Get('me')
   async getProfile(@Req() req: any) {
     return this.authService.getProfile(req.user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('upload-avatar')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadAvatar(@Req() req: any, @UploadedFile() file: Express.Multer.File) {
+    return this.authService.uploadAvatar(req.user.userId, file);
   }
 
   private setRefreshTokenCookie(res: Response, token: string) {

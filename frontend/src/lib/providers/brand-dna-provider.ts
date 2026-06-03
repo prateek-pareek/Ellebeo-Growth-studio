@@ -6,6 +6,7 @@ export type BrandDnaView = {
   archetype: string;
   oneLiner: string;
   category: string;
+  voiceTones: string[];
   powers: string[];
   palette: string[];
   moodboard: string[];
@@ -58,11 +59,21 @@ function mapCloudRow(dna: any): BrandDnaView {
     return Number.isFinite(v) ? v : 0;
   };
 
+  // Parse voice tone words (stored as "Calm · Expert · Warm" or "calm, expert, warm")
+  const rawTone: string = dna.primaryTone || "";
+  const voiceTones = rawTone
+    .split(/[\s·,]+/)
+    .map((t: string) => t.trim())
+    .filter(Boolean)
+    .slice(0, 4);
+
   return {
     ready: true,
-    archetype: dna.brandTier || dna.aestheticDirection || "Not set",
-    oneLiner: dna.oneLiner || "",
+    // oneLiner is the niche (e.g. "Quiet Luxury Colourist"); uniqueSellingProposition is the service description
+    archetype: dna.oneLiner || dna.businessName || "Your Brand",
+    oneLiner: dna.uniqueSellingProposition || dna.oneLiner || "",
     category: dna.businessName || "",
+    voiceTones,
     powers: ["Caption tone and word choice", "Template recommendations", "Campaign goals and CTAs", "Calendar pacing and pillar mix", "Profile bio and service descriptions"],
     palette: [
       dna.primaryBrandColor,
