@@ -78,7 +78,8 @@ export function AppShell() {
                 </div>
                 <Link to="/profile">
                   <InitialsAvatar
-                    name={user?.tenant?.businessName || user?.displayName || user?.email || "?"}
+                    name={user?.tenant?.businessName || user?.email || "?"}
+                    imageUrl={user?.avatarUrl ?? undefined}
                     className="size-10 ring-1 ring-border"
                   />
                 </Link>

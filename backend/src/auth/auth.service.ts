@@ -7,7 +7,7 @@ import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';
-import { firebaseAuth } from '../config/firebase.client';
+import { firebaseAuth, firebaseStorage } from '../config/firebase.client';
 
 @Injectable()
 export class AuthService {
@@ -311,7 +311,7 @@ export class AuthService {
       displayName,
       handle,
       city,
-      avatarUrl: null,
+      avatarUrl: user.tenant?.avatarUrl ?? null,
       profileCompletion: completion,
       servicesCount: servicesListed,
       servicesRecommended: 8,
@@ -333,6 +333,22 @@ export class AuthService {
           }
         : null,
     };
+  }
+
+  async uploadAvatar(userId: string, file: Express.Multer.File) {
+    if (!firebaseStorage) throw new HttpException('Storage not configured', HttpStatus.SERVICE_UNAVAILABLE);
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, include: { tenant: true } });
+    if (!user?.tenant) throw new UnauthorizedException('Tenant not found');
+
+    const bucket = firebaseStorage.bucket();
+    const ext = file.originalname.split('.').pop() || 'jpg';
+    const filePath = `avatars/${user.tenant.id}/avatar_${Date.now()}.${ext}`;
+    const fileRef = bucket.file(filePath);
+    await fileRef.save(file.buffer, { contentType: file.mimetype, public: true });
+    const url = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
+
+    await this.prisma.tenant.update({ where: { id: user.tenant.id }, data: { avatarUrl: url } });
+    return { url };
   }
 
   private async generateTokens(userId: string, role: string, tenantId?: string, ipAddress?: string, userAgent?: string) {
