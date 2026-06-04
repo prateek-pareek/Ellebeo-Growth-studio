@@ -130,11 +130,11 @@ function GeneratePage() {
     };
 
     const goalMap: Record<Goal, string> = {
-      'showcase': 'build_brand_authority',
-      'educate': 'build_brand_authority',
-      'convert': 'attract_new_clients',
-      'availability': 'fill_quiet_days',
-      'trust': 'retain_existing_clients'
+      'showcase': 'attract_new_clients',       // Lead with transformation → attract via the result
+      'educate': 'build_brand_authority',      // Technique/aftercare → establish expertise
+      'convert': 'promote_high_margin_services', // Direct CTA → position service as premium, worth booking
+      'availability': 'fill_quiet_days',       // Fill open slots → urgency/availability
+      'trust': 'retain_existing_clients'       // Client story/quote → community, loyalty
     };
 
     const platformMap: Record<Format, string[]> = {
