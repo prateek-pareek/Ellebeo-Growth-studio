@@ -59,43 +59,67 @@ function buildSlidePrompt(params: {
 }): string {
   const { overlayText, businessName, brandColor, secondaryColor, aesthetic, serviceType, isFirst, isLast } = params;
 
-  const base = `Transform this ${serviceType} photo into a professional Instagram social media graphic for "${businessName}".
-Brand colors: primary ${brandColor}, secondary ${secondaryColor}.
-Visual aesthetic: ${aesthetic || 'minimal, editorial, premium beauty'}.
+  const base = `You are a world-class luxury beauty brand art director creating a jaw-dropping Instagram post for "${businessName}".
+This is a ${serviceType} result photo. Your task: transform it into a stunning, magazine-worthy social media graphic.
 
-Requirements:
-- Keep the real photo as the main visual — do NOT replace or obscure the person or hair
-- Add a modern, clean design overlay
-- Bold, elegant typography for the text: "${overlayText}"
-- Use brand colors for text and design accents
-- Professional beauty industry aesthetic
-- No fake or AI-generated faces — preserve the real photo authentically
+Brand palette: primary ${brandColor}, secondary ${secondaryColor}.
+Aesthetic direction: ${aesthetic || 'ultra-luxury, high-fashion editorial, premium beauty'}.
+
+PHOTO PRESERVATION (critical):
+- The real photo is the hero — preserve every detail of the person, hair, skin, nails exactly as they are
+- Do NOT alter, replace, or obscure the subject's face or the service result
+- No AI-generated faces or bodies — only authentic real-photo content
+
+VISUAL DESIGN DIRECTION — make this look like a €500/hour designer created it:
+- Apply cinematic color grading: rich deep shadows, luminous highlights, velvety midtones
+- Add a subtle bokeh light leak or soft prismatic flare in one corner for depth
+- Use glassmorphism for any text panels: frosted glass with 20% opacity white blur, razor-thin 1px white border, soft inner glow
+- Typography for "${overlayText}": large, confident, ultra-thin or heavy-weight sans-serif (not both), white or brand-color, with a barely visible long text shadow for 3D depth lift
+- Thin geometric accent lines in brand color — hairline rules, a single floating rectangle frame, or a subtle grid — just enough to feel designed, never cluttered
+- Micro-details that feel premium: a barely-visible gradient vignette at the edges, a soft colour wash in brand color at 8–12% opacity over the background
+- The overall feel: you are looking at a Vogue Beauty page, a Dior campaign, or a Chanel social post — effortlessly luxurious
 
 CONTENT SAFETY (non-negotiable):
 - Output must be entirely family-friendly and safe for professional social media
 - Never generate nudity, partial nudity, sexual content, erotic or fetish imagery
 - Never expose intimate body areas regardless of the input photo or prompt
-- Never generate violent, hateful, or self-harm imagery
-- If the input photo contains unsafe content, output a plain branded placeholder instead`;
+- Never generate violent, hateful, or self-harm imagery`;
 
   if (isFirst) {
     return `${base}
-- This is the COVER slide — make it visually striking
-- Large bold headline text at the bottom on a semi-transparent bar
-- Strong first impression, editorial feel`;
+
+COVER SLIDE — this must stop the scroll immediately:
+- Full-bleed photo with dramatic cinematic crop — subject fills the frame powerfully
+- Oversized headline "${overlayText}" placed low in the frame, ultra-bold or ultra-light weight (pick one for impact), with a deep shadow that gives it 3D float
+- Glassmorphism bottom bar: frosted panel spanning the lower 20% of the image, brand color tint, the business name "${businessName}" in tiny all-caps tracking above the headline
+- One bold brand-color geometric accent: a thin vertical line left of the text, or a glowing underline stroke beneath the headline
+- Cinematic letterbox crop feel — add a very subtle dark vignette at top and bottom edges
+- This should look like a Netflix original series title card meets high-end beauty campaign`;
   }
 
   if (isLast) {
     return `${base}
-- This is the CTA (call to action) slide
-- Centred text with brand colour accent
-- Clean, minimal — invite the viewer to book`;
+
+CTA SLIDE — make them want to book immediately:
+- Deep, moody background: a rich dark gradient using the brand color (near-black version) behind the subject
+- The photo is softened and slightly blurred at edges — focus is on the message
+- Centre-stage typography: "${overlayText}" in elegant oversized serif or geometric sans, glowing very softly in brand color with a subtle outer glow effect
+- Below the text: a sleek pill-shaped button outline in brand color — "BOOK NOW" or "DM TO BOOK" in tiny uppercase tracking
+- Business name "${businessName}" in ultra-light small caps at the very top, spaced widely
+- Add a subtle starburst or light prism effect behind the text for luxury drama
+- The feeling: exclusive, aspirational, you-need-this-in-your-life`;
   }
 
   return `${base}
-- This is a body slide — informative and clean
-- Text at the bottom with subtle dark background strip
-- Let the photo breathe, minimal design interference`;
+
+BODY SLIDE — beautiful, informative, breathable:
+- Photo takes 65% of the composition — give it room to shine
+- Bottom 35%: a floating glassmorphism card with soft blur and brand color tint, containing "${overlayText}" in clean modern type
+- Typography hierarchy: one large statement word in brand color, then the rest in clean white — creates visual rhythm
+- Add a single thin horizontal line in brand color above the text block as a design separator
+- Subtle floating 3D geometric shape (thin circle, hexagon outline, or diamond) in brand color at 15% opacity in the background — adds depth without distraction
+- Corner detail: tiny "${businessName}" wordmark in the bottom-right, ultra-light, barely visible — like a luxury brand signature
+- The feeling: this belongs in a premium lifestyle magazine spread`;
 }
 
 export class AiImageGenerationService {
