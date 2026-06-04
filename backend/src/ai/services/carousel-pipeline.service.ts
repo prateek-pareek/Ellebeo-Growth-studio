@@ -29,10 +29,12 @@ export class CarouselPipelineService {
 
   generate(params: {
     cloudinaryPublicId: string;
+    beforePublicId?: string;
     brandColour: string;
     concepts: CarouselSlideConcept[];
   }): CarouselSlides {
-    const { cloudinaryPublicId, brandColour, concepts } = params;
+    const { cloudinaryPublicId, beforePublicId, brandColour, concepts } = params;
+    const afterId = cloudinaryPublicId;
     const hex = brandColour.replace('#', '') || '1a1a1a';
 
     // Strip characters Cloudinary rejects in text overlays
@@ -47,74 +49,83 @@ export class CarouselPipelineService {
       const isFirst = i === 0;
       const isLast  = i === concepts.length - 1;
 
+      // Cover + CTA use after photo; body slides use before photo (if available)
+      const imageId = (isFirst || isLast || !beforePublicId)
+        ? afterId
+        : beforePublicId;
+
       let url: string;
 
       if (isFirst) {
-        // Cover slide: dark overlay + bold hook at bottom
-        url = cloudinary.url(cloudinaryPublicId, {
+        // Cover: natural image + bold white text with dark bar — well inside bottom edge
+        url = cloudinary.url(imageId, {
           transformation: [
             { width: 1080, height: 1080, crop: 'fill', gravity: 'auto' },
-            { effect: 'brightness:-50' },
             {
               overlay: {
                 font_family: 'Montserrat',
-                font_size: 56,
+                font_size: 44,
                 font_weight: 'bold',
                 text_align: 'center',
-                text: safe(concept.overlayText, 55),
+                text: safe(concept.overlayText, 35),
               },
               color: '#ffffff',
+              background: 'rgb:000000b0',
               gravity: 'south',
-              y: 120,
-              width: 900,
+              y: 140,
+              width: 1080,
               crop: 'fit',
+              flags: 'text_no_trim',
             },
             { quality: 'auto', fetch_format: 'auto' },
           ],
           secure: true,
         });
       } else if (isLast) {
-        // CTA slide: branded colour text centred
-        url = cloudinary.url(cloudinaryPublicId, {
+        // CTA: natural image + brand colour text centred with white background
+        url = cloudinary.url(imageId, {
           transformation: [
             { width: 1080, height: 1080, crop: 'fill', gravity: 'auto' },
-            { effect: 'brightness:-35' },
             {
               overlay: {
                 font_family: 'Montserrat',
-                font_size: 52,
+                font_size: 42,
                 font_weight: 'bold',
                 text_align: 'center',
-                text: safe(concept.overlayText, 55),
+                text: safe(concept.overlayText, 35),
               },
               color: `#${hex}`,
+              background: 'rgb:ffffffdd',
               gravity: 'center',
-              width: 900,
+              y: 0,
+              width: 1080,
               crop: 'fit',
+              flags: 'text_no_trim',
             },
             { quality: 'auto', fetch_format: 'auto' },
           ],
           secure: true,
         });
       } else {
-        // Body slides: lighter overlay, text at bottom
-        url = cloudinary.url(cloudinaryPublicId, {
+        // Body slides: natural image + white text bar well above bottom edge
+        url = cloudinary.url(imageId, {
           transformation: [
             { width: 1080, height: 1080, crop: 'fill', gravity: 'auto' },
-            { effect: 'brightness:-20' },
             {
               overlay: {
                 font_family: 'Montserrat',
-                font_size: 46,
+                font_size: 38,
                 font_weight: 'bold',
                 text_align: 'center',
-                text: safe(concept.overlayText, 55),
+                text: safe(concept.overlayText, 40),
               },
               color: '#ffffff',
+              background: 'rgb:00000099',
               gravity: 'south',
-              y: 80,
-              width: 900,
+              y: 140,
+              width: 1080,
               crop: 'fit',
+              flags: 'text_no_trim',
             },
             { quality: 'auto', fetch_format: 'auto' },
           ],

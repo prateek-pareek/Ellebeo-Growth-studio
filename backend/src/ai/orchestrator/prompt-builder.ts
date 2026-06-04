@@ -31,11 +31,36 @@ const PLATFORM_RULES: Record<SocialPlatform, string> = {
   tiktok: `FORMAT RULES FOR TIKTOK:\n- Hook MUST be in first 2-3 WORDS\n- Short energetic sentences\n- Hashtags: 3-5 only`,
 };
 
-const CAPTION_LENGTH_TARGETS = {
-  short: { minWords: 50, maxWords: 80 },
-  medium: { minWords: 80, maxWords: 130 },
-  long: { minWords: 130, maxWords: 200 },
+const CAPTION_LENGTH_TARGETS: Record<string, string> = {
+  short: '1–2 sentences maximum. Under 100 characters. One punchy thought.',
+  medium: '2–3 sentences. 100–200 characters. Hook + result + CTA.',
+  long: '3–4 sentences. 200–300 characters. Hook + context + result + CTA.',
 };
+
+// Positive craft guidance — what GREAT beauty content does, not just what to avoid.
+// Shared by both the default and master-prompt-driven system prompts.
+const CRAFT_RULES = `HOW TO WRITE (the craft):
+- The hook (first sentence) must be specific to THIS appointment — anchor it in the actual service and the real result from the image analysis, never a generic opener.
+- Show, don't label. Use one concrete sensory or technical detail (a colour, a texture, a technique) instead of adjectives like "beautiful" or "amazing".
+- Write the way this person actually talks. Match their rhythm, their sentence length, their level of polish — copy the cadence of their past examples if provided.
+- One clear call-to-action. Make booking feel like the natural next step, not a hard sell.
+- Earn every word. If a sentence could appear on any salon's page, rewrite it so it could only be theirs.
+
+NEVER DO THIS (instant AI tells):
+- Generic AI filler: "luxurious", "transformative experience", "indulge in", "elevate your look", "self-care journey", "treat yourself", "look no further", "step into", "unlock", "say goodbye to", "we've got you covered".
+- Empty hype adjectives stacked together ("stunning, gorgeous, flawless").
+- Hashtags inside the caption body — hashtags belong ONLY in the hashtags array.
+- Any word from the Blacklisted Words list, in any form.
+
+CONFIDENCE SCORING (brandVoiceConfidenceScore — be honest, not generous):
+- 0.90–1.00: used their exact vocabulary AND matched their tone AND a detail only they could have written.
+- 0.70–0.89: clearly on-brand but slightly generic in places.
+- 0.50–0.69: plausible but could belong to many technicians.
+- below 0.50: off-voice. A low honest score is better than an inflated one — it triggers an automatic rewrite.
+
+OUTPUT:
+- Always write in first person as the technician.
+- Return ONLY valid JSON — no markdown, no explanation, no preamble.`;
 
 export class PromptBuilder {
   constructor(private readonly cache: PromptCache) {}
@@ -68,8 +93,8 @@ export class PromptBuilder {
     const visionSection = visionResult ? this.buildVisionSection(visionResult) : '';
     const goalSection = GOAL_FRAMING[businessGoal] ?? 'Generate engaging content.';
     const platformSection = PLATFORM_RULES[platform];
-    const lengthTarget = (CAPTION_LENGTH_TARGETS as any)[brandDNA.captionLengthPreference] || CAPTION_LENGTH_TARGETS.medium;
-    const lengthSection = `Caption body should be ${lengthTarget.minWords}–${lengthTarget.maxWords} words (excluding hashtags).`;
+    const lengthTarget = CAPTION_LENGTH_TARGETS[brandDNA.captionLengthPreference] || CAPTION_LENGTH_TARGETS['medium'];
+    const lengthSection = `CAPTION LENGTH: ${lengthTarget} Do NOT write a long essay. Instagram users stop reading after 2–3 lines.`;
 
     const consentSection = this.buildConsentRestrictionsSection(consentRestrictions);
 
@@ -155,15 +180,11 @@ Return JSON with the same structure as the original caption.`;
 
   private buildSystemPrompt(brandDNAFragment: string): string {
     return `You are a specialist social media copywriter for beauty and wellness technicians.
-Your ONLY job is to write content that sounds EXACTLY like the specific technician described below.
+Your ONLY job is to write content that sounds EXACTLY like the specific technician described below — as if they wrote it themselves between clients.
 
 ${brandDNAFragment}
 
-CRITICAL RULES:
-- Never write generic AI phrases like "luxurious", "transformative experience", "indulge in"
-- Never use any word from the Blacklisted Words list
-- Always write in first person as the technician
-- Return ONLY valid JSON — no markdown, no explanation, no preamble`;
+${CRAFT_RULES}`;
   }
 
   private buildDynamicSystemPrompt(masterPromptText: string, brandDNAFragment: string): string {
@@ -171,11 +192,7 @@ CRITICAL RULES:
 
 ${brandDNAFragment}
 
-CRITICAL RULES:
-- Never write generic AI phrases like "luxurious", "transformative experience", "indulge in"
-- Never use any word from the Blacklisted Words list
-- Always write in first person as the technician
-- Return ONLY valid JSON — no markdown, no explanation, no preamble`;
+${CRAFT_RULES}`;
   }
 
   private buildBrandDNAFragment(dna: BrandDNARecord): string {
@@ -201,7 +218,13 @@ CRITICAL RULES:
       preferred.length ? `**Vocabulary you love:** ${preferred.join(', ')}` : '',
       blacklist.length ? `**BLACKLISTED WORDS (NEVER USE):** ${blacklist.join(', ')}` : '',
       doNotSay.length ? `**Never say:** ${doNotSay.join(', ')}` : '',
-      `**Emojis:** ${str(dna.emojiPolicy, 'minimal')} use`,
+      dna.emojiPolicy === 'none'
+        ? '**Emojis:** NEVER use emojis — not even one.'
+        : dna.emojiPolicy === 'frequent'
+          ? '**Emojis:** Use emojis freely — 3–5 relevant emojis in the caption and hashtags.'
+          : dna.emojiPolicy === 'moderate'
+            ? '**Emojis:** Use 1–2 emojis in the caption where they feel natural.'
+            : '**Emojis:** Minimal — at most 1 emoji, only if it genuinely fits.',
     ].filter(Boolean).join('\n');
   }
 
@@ -244,6 +267,6 @@ CRITICAL RULES:
   }
 
   private buildOutputFormatSection(): string {
-    return `Return ONLY this exact JSON structure — no markdown, no extra fields:\n{\n  "caption": "The full caption text",\n  "hookSentence": "The first sentence optimised for the More cutoff",\n  "callToAction": "The CTA phrase",\n  "hashtags": ["hashtag1", "hashtag2"],\n  "altText": "Accessibility description of the image",\n  "estimatedReadTime": 12,\n  "brandVoiceConfidenceScore": 0.87\n}\n\nThe brandVoiceConfidenceScore must be your honest self-assessment (0.0–1.0) of how well this caption matches the provided Brand DNA.`;
+    return `Return ONLY this exact JSON structure — no markdown, no extra fields:\n{\n  "caption": "The full caption text — obey the LENGTH REQUIREMENT section above exactly",\n  "hookSentence": "The first sentence optimised for the More cutoff",\n  "callToAction": "The CTA phrase",\n  "hashtags": ["livedInBlonde", "hairColour", "sydneyhair"],\n  "altText": "Accessibility description of the image",\n  "estimatedReadTime": 12,\n  "brandVoiceConfidenceScore": 0.87\n}\n\nCRITICAL: hashtags must NOT include the # symbol — write the word only (e.g. "hairColour" not "#hairColour"). No double ##.\nThe brandVoiceConfidenceScore must be your honest self-assessment (0.0–1.0) of how well this caption matches the provided Brand DNA.`;
   }
 }

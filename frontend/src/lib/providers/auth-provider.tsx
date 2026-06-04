@@ -5,6 +5,7 @@ type User = {
   id: string;
   email: string;
   role: string;
+  avatarUrl?: string | null;
   tenant?: {
     id: string;
     businessName: string;

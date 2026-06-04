@@ -19,7 +19,10 @@ import { CarouselPipelineService, type CarouselSlides } from '../services/carous
 import { CarouselConceptChain } from '../chains/carousel-concept.chain';
 import { StoryFrameChain } from '../chains/story-frame.chain';
 import { StoryPipelineService, type StoryOutput } from '../services/story-pipeline.service';
+import { AiImageGenerationService } from '../services/ai-image-generation.service';
+import { LogoOverlayService } from '../services/logo-overlay.service';
 import { ReelShotChain, type ReelShotResult } from '../chains/reel-shot.chain';
+import { extractBrandVoice } from '../config/brand-voice';
 import { ElevenLabsService } from '../services/elevenlabs.service';
 import { OpenAiTtsService } from '../services/openai-tts.service';
 import type { GenerationJobPayload } from '../types/job-payload.types';
@@ -45,6 +48,8 @@ export class GenerationOrchestrator {
   private readonly storyFrameChain: StoryFrameChain;
   private readonly storyPipeline: StoryPipelineService;
   private readonly reelShotChain: ReelShotChain;
+  private readonly aiImageGen: AiImageGenerationService;
+  private readonly logoOverlay: LogoOverlayService;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -69,6 +74,8 @@ export class GenerationOrchestrator {
     this.storyFrameChain = new StoryFrameChain();
     this.storyPipeline = new StoryPipelineService();
     this.reelShotChain = new ReelShotChain();
+    this.aiImageGen = new AiImageGenerationService();
+    this.logoOverlay = new LogoOverlayService();
   }
 
   // --------------------------------------------------------------------------
@@ -76,6 +83,11 @@ export class GenerationOrchestrator {
   // --------------------------------------------------------------------------
 
   async run(payload: GenerationJobPayload): Promise<GenerationResult> {
+    // Tweak jobs only carry { jobId } in the BullMQ payload — detect and delegate
+    if (!payload.tenantId) {
+      return this.runTweak(payload.jobId);
+    }
+
     const { jobId, tenantId, clientId, consentSnapshot, brandDNA, generationOptions } = payload;
     const jobStart = Date.now();
 
@@ -318,12 +330,89 @@ export class GenerationOrchestrator {
       }
     }
 
+    // ── Step 5.55: AI-designed feed image (gpt-image-1) ─────────────────────
+    const feedPhotoUrl = payload.imageAssets.find(a => a.isAfterPhoto)?.rawStoragePath
+      ?? payload.imageAssets[0]?.rawStoragePath;
+
+    if (feedPhotoUrl && captionResult && imageResult) {
+      try {
+        const feedPrompt = `Transform this beauty photo into a professional Instagram feed post for "${brandDNA.businessName}".
+Brand colors: ${brandDNA.primaryBrandColor ?? '#1a1a1a'} and ${brandDNA.secondaryBrandColor ?? '#f5f0eb'}.
+Aesthetic: ${brandDNA.aestheticDirection ?? 'minimal editorial premium beauty'}.
+Caption hook: "${captionResult.hookSentence || captionResult.caption.slice(0, 80)}"
+Requirements:
+- Keep the real photo as the main visual — preserve the person/hair authentically
+- Add subtle brand-matched design: clean typography, brand color accents
+- Minimal overlay — let the photo shine
+- Professional beauty industry aesthetic
+- Square format, Instagram-ready`;
+
+        const imageBuffer = await (async () => {
+          const https = await import('https');
+          const http = await import('http');
+          return new Promise<Buffer>((resolve, reject) => {
+            const protocol = feedPhotoUrl.startsWith('https') ? https : http;
+            (protocol as any).get(feedPhotoUrl, (res: any) => {
+              const chunks: Buffer[] = [];
+              res.on('data', (c: Buffer) => chunks.push(c));
+              res.on('end', () => resolve(Buffer.concat(chunks)));
+              res.on('error', reject);
+            }).on('error', reject);
+          });
+        })();
+
+        const OpenAI = (await import('openai')).default;
+        const openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
+        const imageFile = new File([imageBuffer], 'photo.jpg', { type: 'image/jpeg' });
+        const response = await openai.images.edit({
+          model: 'gpt-image-1',
+          image: imageFile,
+          prompt: feedPrompt,
+          size: '1024x1024',
+        });
+
+        const base64 = response.data?.[0]?.b64_json;
+        if (base64) {
+          const { firebaseStorage } = await import('../../config/firebase.client');
+          if (firebaseStorage) {
+            const buffer = Buffer.from(base64, 'base64');
+            const bucket = firebaseStorage.bucket();
+            const filePath = `generated/${tenantId}/feed_${Date.now()}.png`;
+            const file = bucket.file(filePath);
+            await file.save(buffer, { contentType: 'image/png', public: true });
+            let aiFeedUrl = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
+            // Apply logo overlay if set in Brand DNA
+            if (brandDNA.logoUrl) {
+              aiFeedUrl = await this.logoOverlay.applyLogo({ imageUrl: aiFeedUrl, logoUrl: brandDNA.logoUrl, position: brandDNA.logoPosition, tenantId });
+            }
+            imageResult = { ...imageResult, variants: { ...imageResult.variants, feedUrl: aiFeedUrl } };
+            console.log(`[Orchestrator] AI feed image generated for job ${jobId}`);
+          }
+        }
+      } catch (err) {
+        console.warn(`[Orchestrator] AI feed image failed, using original:`, (err as Error).message);
+      }
+    }
+
     // ── Step 5.6: Carousel Slides (conditional) ───────────────────────────────
+    // Upload before photo to Cloudinary for before/after alternation
+    let beforeCloudinaryId: string | undefined;
+    const beforeAsset = payload.imageAssets.find(a => a.isBeforePhoto && a.rawStoragePath);
+    if (beforeAsset && process.env['CLOUDINARY_CLOUD_NAME']) {
+      try {
+        beforeCloudinaryId = beforeAsset.cloudinaryPublicId
+          ?? await this.imagePipeline.uploadUrl(beforeAsset.rawStoragePath, tenantId);
+      } catch { /* non-fatal */ }
+    }
+
     let carouselSlides: CarouselSlides | null = null;
     const isCarousel = (generationOptions.outputFormats as string[]).includes('carousel');
-    if (isCarousel && imageResult?.cloudinaryPublicId && captionResult) {
+    const afterPhotoUrl = payload.imageAssets.find(a => a.isAfterPhoto)?.rawStoragePath
+      ?? payload.imageAssets[0]?.rawStoragePath;
+    const beforePhotoUrl = payload.imageAssets.find(a => a.isBeforePhoto)?.rawStoragePath;
+
+    if (isCarousel && afterPhotoUrl && captionResult) {
       try {
-        // Generate AI slide concepts first (3–5 named slides)
         const conceptResult = await this.carouselConceptChain.generate({
           hookSentence: captionResult.hookSentence || captionResult.caption.slice(0, 80),
           callToAction: captionResult.callToAction || 'Book your appointment today',
@@ -332,23 +421,49 @@ export class GenerationOrchestrator {
           businessGoal: payload.businessGoal,
           brandName: brandDNA.businessName,
           slideCount: 4,
+          brandVoice: extractBrandVoice(brandDNA),
         });
 
-        carouselSlides = this.carouselPipeline.generate({
-          cloudinaryPublicId: imageResult.cloudinaryPublicId,
-          brandColour: brandDNA.primaryColour ?? brandDNA.primaryBrandColor ?? '#1a1a1a',
-          concepts: conceptResult.concepts,
-        });
-        console.log(`[Orchestrator] Carousel: ${conceptResult.concepts.length} slides generated for job ${jobId}`);
+        try {
+          // Try AI image generation first
+          const aiSlides = await this.aiImageGen.generateCarousel({
+            afterPhotoUrl,
+            beforePhotoUrl,
+            concepts: conceptResult.concepts,
+            tenantId,
+            businessName: brandDNA.businessName,
+            brandColor: brandDNA.primaryBrandColor ?? '#1a1a1a',
+            secondaryColor: brandDNA.secondaryBrandColor ?? '#f5f0eb',
+            aesthetic: brandDNA.aestheticDirection ?? 'minimal editorial',
+            serviceType: appointment?.serviceCategory ?? 'beauty treatment',
+          });
+          // Apply logo to each carousel slide
+          const slidesWithLogo = brandDNA.logoUrl
+            ? await Promise.all(aiSlides.map(async s => ({ ...s, url: await this.logoOverlay.applyLogo({ imageUrl: s.url, logoUrl: brandDNA.logoUrl, position: brandDNA.logoPosition, tenantId }) })))
+            : aiSlides;
+          carouselSlides = { type: 'carousel', slides: slidesWithLogo };
+          console.log(`[Orchestrator] Carousel: ${aiSlides.length} AI-generated slides for job ${jobId}`);
+        } catch (aiErr) {
+          // Fallback to Cloudinary if AI generation fails
+          console.warn(`[Orchestrator] AI image gen failed, falling back to Cloudinary:`, aiErr);
+          if (imageResult?.cloudinaryPublicId) {
+            carouselSlides = this.carouselPipeline.generate({
+              cloudinaryPublicId: imageResult.cloudinaryPublicId,
+              beforePublicId: beforeCloudinaryId,
+              brandColour: brandDNA.primaryBrandColor ?? '#1a1a1a',
+              concepts: conceptResult.concepts,
+            });
+          }
+        }
       } catch (err) {
-        console.error(`[Orchestrator] Carousel slide generation failed for job ${jobId}:`, err);
+        console.error(`[Orchestrator] Carousel generation failed for job ${jobId}:`, err);
       }
     }
 
     // ── Step 5.65: Story Frames (conditional) ────────────────────────────────
     let storyOutput: StoryOutput | null = null;
     const isStory = (generationOptions.outputFormats as string[]).includes('story');
-    if (isStory && imageResult?.cloudinaryPublicId && captionResult) {
+    if (isStory && afterPhotoUrl && captionResult) {
       try {
         const storyFrames = await this.storyFrameChain.generate({
           hookSentence: captionResult.hookSentence || captionResult.caption.slice(0, 80),
@@ -357,12 +472,37 @@ export class GenerationOrchestrator {
           clientFirstName: appointment?.client?.firstName ?? undefined,
           businessGoal: payload.businessGoal,
           brandName: brandDNA.businessName,
+          brandVoice: extractBrandVoice(brandDNA),
         });
-        storyOutput = this.storyPipeline.generate({
-          cloudinaryPublicId: imageResult.cloudinaryPublicId,
-          brandColour: brandDNA.primaryColour ?? brandDNA.primaryBrandColor ?? '#1a1a1a',
-          concepts: storyFrames.frames,
-        });
+
+        try {
+          const aiFrames = await this.aiImageGen.generateStory({
+            afterPhotoUrl,
+            beforePhotoUrl,
+            frames: storyFrames.frames,
+            tenantId,
+            businessName: brandDNA.businessName,
+            brandColor: brandDNA.primaryBrandColor ?? '#1a1a1a',
+            secondaryColor: brandDNA.secondaryBrandColor ?? '#f5f0eb',
+            aesthetic: brandDNA.aestheticDirection ?? 'minimal editorial',
+            serviceType: appointment?.serviceCategory ?? 'beauty treatment',
+          });
+          const framesWithLogo = brandDNA.logoUrl
+            ? await Promise.all(aiFrames.map(async f => ({ ...f, url: await this.logoOverlay.applyLogo({ imageUrl: f.url, logoUrl: brandDNA.logoUrl, position: brandDNA.logoPosition, tenantId }) })))
+            : aiFrames;
+          storyOutput = { type: 'story', frames: framesWithLogo };
+          console.log(`[Orchestrator] Story: ${aiFrames.length} AI-generated frames for job ${jobId}`);
+        } catch (aiErr) {
+          console.warn(`[Orchestrator] AI story gen failed, falling back to Cloudinary:`, aiErr);
+          if (imageResult?.cloudinaryPublicId) {
+            storyOutput = this.storyPipeline.generate({
+              cloudinaryPublicId: imageResult.cloudinaryPublicId,
+              beforePublicId: beforeCloudinaryId,
+              brandColour: brandDNA.primaryBrandColor ?? '#1a1a1a',
+              concepts: storyFrames.frames,
+            });
+          }
+        }
         console.log(`[Orchestrator] Story: 4 frames generated for job ${jobId}`);
       } catch (err) {
         console.error(`[Orchestrator] Story frame generation failed for job ${jobId}:`, err);
@@ -381,6 +521,7 @@ export class GenerationOrchestrator {
           clientFirstName: appointment?.client?.firstName ?? undefined,
           businessGoal: payload.businessGoal,
           brandName: brandDNA.businessName,
+          brandVoice: extractBrandVoice(brandDNA),
         });
         console.log(`[Orchestrator] Reel storyboard: ${reelShotResult.shots.length} shots for job ${jobId}`);
       } catch (err) {
@@ -465,6 +606,100 @@ export class GenerationOrchestrator {
   // --------------------------------------------------------------------------
   // State Machine Transition + DB Update
   // --------------------------------------------------------------------------
+
+  // --------------------------------------------------------------------------
+  // Tweak Pipeline — lightweight caption-only refinement
+  // --------------------------------------------------------------------------
+
+  private async runTweak(jobId: string): Promise<GenerationResult> {
+    const jobStart = Date.now();
+
+    const job = await this.prisma.generationJob.findUnique({ where: { id: jobId } });
+    if (!job) throw new Error(`Tweak job ${jobId} not found`);
+
+    const tweakDto = job.jobPayload as { contentItemId: string; tweakInstruction: string; component: string };
+    const { tenantId } = job;
+
+    try {
+      await this.prisma.generationJob.update({ where: { id: jobId }, data: { state: 'generating_text' } });
+      await this.progressEmitter.emit(jobId, tenantId, 'generating_text');
+
+      const contentItem = await this.prisma.contentItem.findUnique({ where: { id: tweakDto.contentItemId } });
+      if (!contentItem) throw new Error(`Content item ${tweakDto.contentItemId} not found`);
+
+      const brandDna = await this.prisma.brandDNA.findFirst({
+        where: { tenantId, isCurrent: true },
+        include: { pillars: true },
+      });
+
+      const blacklist: string[] = [
+        ...((brandDna?.vocabularyBlacklist ?? []) as string[]),
+        ...((brandDna?.doNotSay ?? []) as string[]),
+      ];
+
+      const { systemPrompt, userPrompt } = this.promptBuilder.assembleTweakPrompt({
+        previousCaption: contentItem.caption ?? '',
+        previousHashtags: Array.isArray(contentItem.hashtags) ? (contentItem.hashtags as string[]) : [],
+        tweakInstruction: tweakDto.tweakInstruction,
+        brandDNA: {
+          businessName: brandDna?.businessName ?? 'Beauty Business',
+          primaryTone: (brandDna?.primaryTone ?? 'professional_warm') as any,
+          blacklistedWords: blacklist,
+          ...(brandDna ?? {}),
+        } as any,
+        platform: 'instagram',
+      });
+
+      const llmConfig = this.modelRouter.selectTextModel({ userTier: 'standard', brandDNAComplexityScore: 0 });
+
+      const result = await this.captionChain.generate({
+        assembledPrompt: { systemPrompt, userPrompt, cacheHits: { brandDNAFragment: false, goldenExamplesFragment: false } },
+        llmConfig,
+        brandDNABlacklist: blacklist,
+        allowRetry: false,
+      });
+
+      await this.prisma.contentItem.update({
+        where: { id: contentItem.id },
+        data: {
+          caption: result.caption,
+          hashtags: result.hashtags as any,
+          callToAction: result.callToAction,
+          hookSentence: result.hookSentence,
+        },
+      });
+
+      await this.prisma.generationJob.update({ where: { id: jobId }, data: { state: 'completed' } });
+      await this.progressEmitter.emit(jobId, tenantId, 'completed');
+
+      return {
+        jobId,
+        tenantId,
+        appointmentId: job.appointmentId,
+        contentItemId: contentItem.id,
+        captionStatus: 'completed',
+        imageStatus: 'pending',
+        reelStatus: 'pending',
+        caption: result,
+        platformVariants: null,
+        processedImage: null,
+        reel: null,
+        reelScript: null,
+        visionAnalysis: null,
+        modelUsed: `${llmConfig.provider}/${llmConfig.modelId}`,
+        totalTokensInput: 0,
+        totalTokensOutput: 0,
+        estimatedCostUSD: 0,
+        totalProcessingTimeMs: Date.now() - jobStart,
+        brandVoiceConfidenceScore: result.brandVoiceConfidenceScore ?? 0,
+        completedAt: new Date().toISOString(),
+      };
+    } catch (err) {
+      await this.prisma.generationJob.update({ where: { id: jobId }, data: { state: 'failed' } }).catch(() => {});
+      await this.progressEmitter.emit(jobId, tenantId, 'failed');
+      throw err;
+    }
+  }
 
   private async transitionState(
     jobId: string,

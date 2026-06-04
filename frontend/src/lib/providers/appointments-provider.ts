@@ -7,7 +7,7 @@ export type Category =
   | "Bridal makeup"
   | "Lash & brow"
   | "Nail artist"
-  | "Injector"
+  | "Medical Aesthetics"
   | "Skin therapist"
   | "Barber";
 
@@ -17,6 +17,8 @@ export type Appointment = {
   service: string;
   category: Category;
   date: string;
+  rawDate: string;      // YYYY-MM-DD for filtering
+  timeLabel: string;    // "10:30" for display
   hasBefore: boolean;
   hasAfter: boolean;
   beforePhotoUrl: string | null;
@@ -36,15 +38,31 @@ export type UseAppointmentsResult = {
 };
 
 const CATEGORY_MAP: Record<string, Category> = {
-  HAIRDRESSER: "Hairdresser",
-  COLOURIST: "Colourist",
-  BRIDAL_MAKEUP: "Bridal makeup",
-  LASH_BROW: "Lash & brow",
-  NAIL_ARTIST: "Nail artist",
-  INJECTOR: "Injector",
-  SKIN_THERAPIST: "Skin therapist",
-  BARBER: "Barber",
+  hair_colour: "Colourist",
+  hair_cut_style: "Hairdresser",
+  hair_extensions: "Hairdresser",
+  skin_treatments: "Skin therapist",
+  laser_treatments: "Skin therapist",
+  injectables_cosmetic: "Medical Aesthetics",
+  nail_services: "Nail artist",
+  lashes_brows: "Lash & brow",
+  makeup: "Bridal makeup",
+  massage_body: "Skin therapist",
+  general: "Skin therapist",
 };
+
+function mapCategory(raw: string, serviceName?: string): Category {
+  if (!raw && !serviceName) return "Skin therapist";
+  const fromMap = CATEGORY_MAP[raw] ?? CATEGORY_MAP[raw?.toLowerCase()];
+  if (fromMap) return fromMap;
+  const name = (serviceName || "").toLowerCase();
+  if (name.match(/hair|colour|color|cut|blow|balay|toner|highlight/)) return "Hairdresser";
+  if (name.match(/facial|hydra|peel|glow|skin|acne|microderm/)) return "Skin therapist";
+  if (name.match(/nail|manicure|pedicure|gel/)) return "Nail artist";
+  if (name.match(/lash|brow|tint|lift|lamina/)) return "Lash & brow";
+  if (name.match(/botox|filler|inject|lip|anti.age/)) return "Medical Aesthetics";
+  return "Skin therapist";
+}
 
 function formatDate(date: string): string {
   const d = new Date(date);
@@ -65,20 +83,27 @@ async function fetchCloudAppointments(): Promise<
 
     return {
       kind: "ok",
-      data: data.map((row: any) => ({
-        id: row.id,
-        clientName: row.clientName || "Client",
-        service: row.serviceName,
-        category: CATEGORY_MAP[row.serviceCategory] || "Skin therapist",
-        date: formatDate(row.appointmentDate),
-        hasBefore: !!row.beforePhotoUrl,
-        hasAfter: !!row.afterPhotoUrl,
-        beforePhotoUrl: row.beforePhotoUrl ?? null,
-        afterPhotoUrl: row.afterPhotoUrl ?? null,
-        consent: row.consentStatus || "not_requested",
-        notes: row.notes,
-        contentReady: 0,
-      })),
+      data: data.map((row: any) => {
+        const raw = typeof row.appointmentDate === 'string' ? row.appointmentDate : null;
+        const apptDate = raw ? new Date(raw) : null;
+        const validDate = apptDate && !isNaN(apptDate.getTime()) ? apptDate : null;
+        return {
+          id: row.id,
+          clientName: row.clientName || "Client",
+          service: row.serviceName,
+          category: mapCategory(row.serviceCategory, row.serviceName),
+          date: validDate ? formatDate(raw!) : "Date not set",
+          rawDate: validDate ? validDate.toISOString().slice(0, 10) : "",
+          timeLabel: validDate ? validDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
+          hasBefore: !!row.beforePhotoUrl,
+          hasAfter: !!row.afterPhotoUrl,
+          beforePhotoUrl: row.beforePhotoUrl ?? null,
+          afterPhotoUrl: row.afterPhotoUrl ?? null,
+          consent: row.consentStatus || "not_requested",
+          notes: row.notes,
+          contentReady: row.contentCount ?? 0,
+        };
+      }),
     };
   } catch (error: any) {
     if (error.response?.status === 401) return { kind: "anon" };

@@ -7,6 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import { signInWithPopup } from "firebase/auth";
+import { auth, googleProvider, appleProvider } from "@/lib/firebase";
+import { GoogleIcon } from "@/components/GoogleIcon";
+import { AppleIcon } from "@/components/AppleIcon";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -24,6 +28,55 @@ function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+
+  function validate() {
+    const e: { email?: string; password?: string } = {};
+    if (!email.trim()) e.email = "Email is required.";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) e.email = "Enter a valid email address.";
+    if (!password) e.password = "Password is required.";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  }
+
+  async function handleAppleSignIn() {
+    setGoogleLoading(true);
+    try {
+      const result = await signInWithPopup(auth, appleProvider);
+      const firebaseIdToken = await result.user.getIdToken();
+      const res = await api.post('/auth/apple', { firebaseIdToken });
+      const { accessToken } = res.data.data ?? res.data;
+      login(accessToken);
+      toast.success("Welcome back.");
+      navigate({ to: "/" });
+    } catch (error: any) {
+      if (error.code !== 'auth/popup-closed-by-user') {
+        toast.error(error.response?.data?.message || "Apple sign-in failed. Try again.");
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  }
+
+  async function handleGoogleSignIn() {
+    setGoogleLoading(true);
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const firebaseIdToken = await result.user.getIdToken();
+      const res = await api.post('/auth/google', { firebaseIdToken });
+      const { accessToken } = res.data.data ?? res.data;
+      login(accessToken);
+      toast.success("Welcome back.");
+      navigate({ to: "/" });
+    } catch (error: any) {
+      if (error.code !== 'auth/popup-closed-by-user') {
+        toast.error(error.response?.data?.message || "Google sign-in failed. Try again.");
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  }
 
   useEffect(() => {
     if (user) navigate({ to: "/" });
@@ -31,6 +84,7 @@ function LoginPage() {
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
+    if (!validate()) return;
     setLoading(true);
     try {
       const res = await api.post('/auth/login', { email, password });
@@ -95,9 +149,10 @@ function LoginPage() {
                 placeholder="hello@example.com"
                 className="bg-transparent border-t-0 border-x-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-foreground transition-all"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => { setEmail(e.target.value); if (errors.email) setErrors(p => ({ ...p, email: undefined })); }}
                 required
               />
+              {errors.email && <p className="text-[11px] text-destructive mt-1">{errors.email}</p>}
             </div>
 
             <div className="space-y-2">
@@ -114,12 +169,13 @@ function LoginPage() {
                 placeholder="••••••••"
                 className="bg-transparent border-t-0 border-x-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-foreground transition-all"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => { setPassword(e.target.value); if (errors.password) setErrors(p => ({ ...p, password: undefined })); }}
                 required
               />
+              {errors.password && <p className="text-[11px] text-destructive mt-1">{errors.password}</p>}
             </div>
 
-            <Button 
+            <Button
               type="submit" 
               className="w-full bg-foreground text-background hover:bg-taupe transition-colors py-6 rounded-none text-[11px] uppercase tracking-[0.2em]"
               disabled={loading}
@@ -127,6 +183,32 @@ function LoginPage() {
               {loading ? "Signing in…" : "Access Dashboard"}
             </Button>
           </form>
+
+          <div className="space-y-4">
+            <div className="relative flex items-center gap-4">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-[10px] uppercase tracking-widest text-taupe">or</span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+            <Button
+              type="button"
+              onClick={handleGoogleSignIn}
+              disabled={googleLoading}
+              className="w-full bg-transparent border hairline text-foreground hover:bg-card py-6 rounded-none text-[11px] uppercase tracking-[0.2em] flex items-center justify-center gap-3"
+            >
+              <GoogleIcon />
+              {googleLoading ? "Signing in…" : "Continue with Google"}
+            </Button>
+            <Button
+              type="button"
+              onClick={handleAppleSignIn}
+              disabled={googleLoading}
+              className="w-full bg-foreground text-offwhite hover:bg-taupe py-6 rounded-none text-[11px] uppercase tracking-[0.2em] flex items-center justify-center gap-3"
+            >
+              <AppleIcon />
+              {googleLoading ? "Signing in…" : "Continue with Apple"}
+            </Button>
+          </div>
 
           <div className="pt-4 border-t hairline flex flex-col gap-4">
             <p className="text-xs text-taupe">

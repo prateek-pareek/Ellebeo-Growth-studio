@@ -7,6 +7,7 @@ import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';
+import { firebaseAuth, firebaseStorage } from '../config/firebase.client';
 
 @Injectable()
 export class AuthService {
@@ -19,6 +20,52 @@ export class AuthService {
     private readonly configService: ConfigService,
   ) {
     this.refreshTokenPepper = this.configService.getOrThrow<string>('JWT_REFRESH_SECRET');
+  }
+
+  async firebaseLogin(firebaseIdToken: string, ipAddress?: string, userAgent?: string) {
+    if (!firebaseAuth) throw new UnauthorizedException('Firebase auth not configured');
+
+    let decoded: Awaited<ReturnType<typeof firebaseAuth.verifyIdToken>>;
+    try {
+      decoded = await firebaseAuth.verifyIdToken(firebaseIdToken);
+    } catch (err: any) {
+      throw new UnauthorizedException(`Invalid Google token: ${err.message}`);
+    }
+
+    const email = decoded.email;
+    if (!email) throw new UnauthorizedException('Google account has no email address');
+
+    let user = await this.prisma.user.findUnique({ where: { email }, include: { tenant: true } });
+
+    if (!user) {
+      const randomHash = await bcrypt.hash(uuidv4(), this.saltRounds);
+      const displayName = (decoded.name as string | undefined) || email.split('@')[0];
+
+      user = await this.prisma.$transaction(async (tx) => {
+        const newUser = await tx.user.create({
+          data: { email, passwordHash: randomHash, role: 'technician', emailVerified: true },
+        });
+        await tx.tenant.create({
+          data: {
+            userId: newUser.id,
+            businessName: displayName,
+            timezone: 'UTC',
+            subscriptionTier: 'free',
+            hasGrowthStudioAccess: true,
+          },
+        });
+        return tx.user.findUnique({ where: { id: newUser.id }, include: { tenant: true } });
+      });
+    }
+
+    if (!user) throw new UnauthorizedException('Failed to resolve user account');
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date(), failedLoginAttempts: 0, lockedUntil: null },
+    });
+
+    return this.generateTokens(user.id, user.role, user.tenant?.id, ipAddress, userAgent);
   }
 
   private hashRefreshToken(token: string): string {
@@ -50,6 +97,7 @@ export class AuthService {
           businessName,
           timezone,
           subscriptionTier: 'free',
+          hasGrowthStudioAccess: true,
         },
       });
 
@@ -263,7 +311,7 @@ export class AuthService {
       displayName,
       handle,
       city,
-      avatarUrl: null,
+      avatarUrl: user.tenant?.avatarUrl ?? null,
       profileCompletion: completion,
       servicesCount: servicesListed,
       servicesRecommended: 8,
@@ -285,6 +333,22 @@ export class AuthService {
           }
         : null,
     };
+  }
+
+  async uploadAvatar(userId: string, file: Express.Multer.File) {
+    if (!firebaseStorage) throw new HttpException('Storage not configured', HttpStatus.SERVICE_UNAVAILABLE);
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, include: { tenant: true } });
+    if (!user?.tenant) throw new UnauthorizedException('Tenant not found');
+
+    const bucket = firebaseStorage.bucket();
+    const ext = file.originalname.split('.').pop() || 'jpg';
+    const filePath = `avatars/${user.tenant.id}/avatar_${Date.now()}.${ext}`;
+    const fileRef = bucket.file(filePath);
+    await fileRef.save(file.buffer, { contentType: file.mimetype, public: true });
+    const url = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
+
+    await this.prisma.tenant.update({ where: { id: user.tenant.id }, data: { avatarUrl: url } });
+    return { url };
   }
 
   private async generateTokens(userId: string, role: string, tenantId?: string, ipAddress?: string, userAgent?: string) {

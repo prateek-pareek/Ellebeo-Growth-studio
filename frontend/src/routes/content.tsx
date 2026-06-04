@@ -3,6 +3,8 @@ import { useMemo, useState } from "react";
 import { useContentItems, type ContentItem } from "@/lib/providers/content-provider";
 import { useAppointments } from "@/lib/providers/appointments-provider";
 import { useTemplates } from "@/lib/providers/template-provider";
+import { api } from "@/lib/api";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/content")({
   head: () => ({
@@ -43,8 +45,9 @@ function ContentPage() {
   const [formatFilter, setFormatFilter] = useState<string | null>(null);
   const [goalFilter, setGoalFilter] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [editItem, setEditItem] = useState<ContentItem | null>(null);
 
-  const { items, appointmentsById, loading, error } = useContentItems();
+  const { items, appointmentsById, loading, error, refresh } = useContentItems();
   const { data: appts } = useAppointments();
   const { templates } = useTemplates();
 
@@ -227,11 +230,28 @@ function ContentPage() {
                 key={c.id}
                 item={c}
                 appointment={c.sourceAppointmentId ? appointmentsById.get(c.sourceAppointmentId) : undefined}
+                onReview={() => setEditItem(c)}
+                onApprove={async () => {
+                  try {
+                    await api.patch(`/content/${c.id}/approve`);
+                    toast.success("Content approved");
+                    refresh?.();
+                  } catch { toast.error("Failed to approve"); }
+                }}
               />
             ))}
           </div>
         )}
       </section>
+
+      {/* Edit sidebar */}
+      {editItem && (
+        <EditSidebar
+          item={editItem}
+          onClose={() => setEditItem(null)}
+          onSaved={() => { refresh?.(); setEditItem(null); }}
+        />
+      )}
 
       {/* Quick templates */}
       <section>
@@ -260,12 +280,18 @@ function ContentPage() {
 function ContentCard({
   item,
   appointment,
+  onReview,
+  onApprove,
 }: {
   item: ContentItem;
   appointment?: any;
+  onReview?: () => void;
+  onApprove?: () => void;
 }) {
+  const [approving, setApproving] = useState(false);
   const state = item.state.toLowerCase();
   const blocked = state === "blocked";
+  const isDraft = state === "draft" || state === "needs review";
   return (
     <article className="group flex flex-col">
       <div className="aspect-[4/5] overflow-hidden bg-nude/30 mb-4 ring-1 ring-border relative">
@@ -312,18 +338,148 @@ function ContentCard({
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-          {!blocked && item.sourceAppointmentId && (
-            <Link
-              to="/generate"
-              search={{ appointment: item.sourceAppointmentId }}
-              className="text-[10px] uppercase tracking-widest text-foreground border-b border-foreground pb-0.5 hover:text-taupe hover:border-taupe"
-            >
-              View draft →
-            </Link>
+          {!blocked && (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onReview}
+                className="text-[10px] uppercase tracking-widest text-foreground border-b border-foreground pb-0.5 hover:text-taupe hover:border-taupe"
+              >
+                Review
+              </button>
+              {isDraft && (
+                <button
+                  onClick={async () => {
+                    setApproving(true);
+                    await onApprove?.();
+                    setApproving(false);
+                  }}
+                  disabled={approving}
+                  className="text-[10px] uppercase tracking-widest bg-foreground text-offwhite px-3 py-1.5 hover:bg-taupe disabled:opacity-50 transition-colors"
+                >
+                  {approving ? "..." : "Approve"}
+                </button>
+              )}
+              {(state === "approved" || state === "scheduled") && (
+                <span className="text-[10px] uppercase tracking-widest text-sage">{state}</span>
+              )}
+            </div>
           )}
         </div>
       </div>
     </article>
+  );
+}
+
+function EditSidebar({ item, onClose, onSaved }: { item: ContentItem; onClose: () => void; onSaved: () => void }) {
+  const [caption, setCaption] = useState(item.caption);
+  const [cta, setCta] = useState(item.cta ?? "");
+  const [hashtags, setHashtags] = useState((item.hashtags ?? []).join(" "));
+  const [saving, setSaving] = useState(false);
+  const [approving, setApproving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await api.patch(`/content/${item.id}`, {
+        caption,
+        callToAction: cta,
+        hashtags: hashtags.split(/\s+/).map(h => h.replace(/^#/, '')).filter(Boolean),
+      });
+      toast.success("Saved");
+      onSaved();
+    } catch { toast.error("Failed to save"); }
+    finally { setSaving(false); }
+  };
+
+  const handleApprove = async () => {
+    setApproving(true);
+    try {
+      await api.patch(`/content/${item.id}/approve`);
+      toast.success("Approved!");
+      onSaved();
+    } catch { toast.error("Failed to approve"); }
+    finally { setApproving(false); }
+  };
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div className="fixed inset-0 bg-foreground/20 z-40" onClick={onClose} />
+
+      {/* Sidebar */}
+      <div className="fixed top-0 right-0 h-full w-full max-w-md bg-card border-l hairline z-50 flex flex-col shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b hairline">
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-taupe mb-0.5">Edit draft</p>
+            <p className="font-serif text-lg leading-tight">{item.title}</p>
+          </div>
+          <button onClick={onClose} className="text-taupe hover:text-foreground text-xl leading-none">×</button>
+        </div>
+
+        {/* Status */}
+        <div className="px-6 py-3 border-b hairline">
+          <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Status</p>
+          <StatePill state={item.state.toLowerCase()} />
+        </div>
+
+        {/* Form */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+          <div>
+            <label className="text-[10px] uppercase tracking-widest text-taupe block mb-2">Caption</label>
+            <textarea
+              value={caption}
+              onChange={e => setCaption(e.target.value)}
+              rows={6}
+              className="w-full bg-transparent border hairline p-3 text-sm outline-none focus:border-foreground resize-none leading-relaxed"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] uppercase tracking-widest text-taupe block mb-2">Call to action</label>
+            <input
+              value={cta}
+              onChange={e => setCta(e.target.value)}
+              className="w-full bg-transparent border hairline p-3 text-sm outline-none focus:border-foreground"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] uppercase tracking-widest text-taupe block mb-1">Hashtags</label>
+            <p className="text-[9px] text-taupe mb-2">Space-separated. # is optional.</p>
+            <input
+              value={hashtags}
+              onChange={e => setHashtags(e.target.value)}
+              className="w-full bg-transparent border hairline p-3 text-sm outline-none focus:border-foreground"
+              placeholder="#haircolour #sydney"
+            />
+          </div>
+        </div>
+
+        {/* Footer actions */}
+        <div className="px-6 py-4 border-t hairline flex items-center justify-between gap-3">
+          <button onClick={onClose} className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground">
+            Cancel
+          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="text-[10px] uppercase tracking-widest border hairline px-4 py-2 hover:bg-nude/30 disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save"}
+            </button>
+            {(item.state.toLowerCase() === "draft" || item.state.toLowerCase() === "needs review") && (
+              <button
+                onClick={handleApprove}
+                disabled={approving}
+                className="text-[10px] uppercase tracking-widest bg-foreground text-offwhite px-4 py-2 hover:bg-taupe disabled:opacity-50 transition-colors"
+              >
+                {approving ? "Approving..." : "Approve"}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
 

@@ -1,4 +1,5 @@
-import { Controller, Post, Body, Req, Res, Get, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, Req, Res, Get, UseGuards, HttpCode, HttpStatus, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
@@ -60,6 +61,34 @@ export class AuthController {
     return { message: 'Logged out successfully' };
   }
 
+  @Post('google')
+  @HttpCode(HttpStatus.OK)
+  async googleLogin(
+    @Body('firebaseIdToken') firebaseIdToken: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { accessToken, refreshToken } = await this.authService.firebaseLogin(
+      firebaseIdToken, req.ip, req.headers['user-agent'],
+    );
+    this.setRefreshTokenCookie(res, refreshToken);
+    return { accessToken };
+  }
+
+  @Post('apple')
+  @HttpCode(HttpStatus.OK)
+  async appleLogin(
+    @Body('firebaseIdToken') firebaseIdToken: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { accessToken, refreshToken } = await this.authService.firebaseLogin(
+      firebaseIdToken, req.ip, req.headers['user-agent'],
+    );
+    this.setRefreshTokenCookie(res, refreshToken);
+    return { accessToken };
+  }
+
   @Post('verify-email')
   async verifyEmail(@Body('token') token: string) {
     return { message: 'Email verified successfully' };
@@ -85,6 +114,13 @@ export class AuthController {
   @Get('me')
   async getProfile(@Req() req: any) {
     return this.authService.getProfile(req.user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('upload-avatar')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadAvatar(@Req() req: any, @UploadedFile() file: Express.Multer.File) {
+    return this.authService.uploadAvatar(req.user.userId, file);
   }
 
   private setRefreshTokenCookie(res: Response, token: string) {

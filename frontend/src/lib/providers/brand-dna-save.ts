@@ -21,6 +21,8 @@ export type OnboardingPayload = {
   bookingsPerWeek: string;
   postsPerWeek: string;
   pillars: string;
+  logoUrl?: string;
+  logoPosition?: string;
 };
 
 export type SaveResult =
@@ -54,7 +56,9 @@ export async function saveBrandDna(
       emojiPolicy: payload.emojiPolicy || 'minimal',
       captionLengthPreference: payload.captionLength || 'medium',
       pillars,
-      goals
+      goals,
+      logoUrl: payload.logoUrl || undefined,
+      logoPosition: payload.logoPosition || 'bottom_right',
     });
 
     return { kind: "ok" };

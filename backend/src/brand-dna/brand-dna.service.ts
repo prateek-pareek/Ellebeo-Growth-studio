@@ -1,10 +1,17 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateBrandDnaDto, ScanInstagramDto, ScanWebsiteDto } from './dto/brand-dna.dto';
+import { PromptCache } from '../ai/orchestrator/prompt-cache';
+import { getRedisClient } from '../config/redis.client';
+import { firebaseStorage } from '../config/firebase.client';
 
 @Injectable()
 export class BrandDnaService {
-  constructor(private prisma: PrismaService) {}
+  private readonly promptCache: PromptCache;
+
+  constructor(private prisma: PrismaService) {
+    this.promptCache = new PromptCache(getRedisClient());
+  }
 
   async getCurrentDna(tenantId: string) {
     const dna = await this.prisma.brandDNA.findUnique({
@@ -15,10 +22,13 @@ export class BrandDnaService {
   }
 
   async createOrUpdateDna(tenantId: string, dto: CreateBrandDnaDto) {
+    await this.promptCache.invalidateTenantCache(tenantId);
     return this.prisma.$transaction(async (tx) => {
       const current = await tx.brandDNA.findUnique({
         where: { unique_current_brand_dna: { tenantId, isCurrent: true } }
       });
+
+      const nextVersion = current ? current.version + 1 : 1;
 
       if (current) {
         await tx.brandDNA.update({
@@ -30,6 +40,7 @@ export class BrandDnaService {
       return tx.brandDNA.create({
         data: {
           tenantId,
+          version: nextVersion,
           businessName: dto.businessName,
           oneLiner: dto.oneLiner,
           uniqueSellingProposition: dto.uniqueSellingProposition,
@@ -45,6 +56,8 @@ export class BrandDnaService {
           secondaryBrandColor: dto.secondaryBrandColor,
           emojiPolicy: dto.emojiPolicy || 'minimal',
           captionLengthPreference: dto.captionLengthPreference || 'medium',
+          logoUrl: dto.logoUrl,
+          logoPosition: dto.logoPosition || 'bottom_right',
           pillars: {
             create: dto.pillars?.map((label, i) => ({ 
               label, 
@@ -107,5 +120,16 @@ export class BrandDnaService {
     return this.prisma.goldenExample.delete({
       where: { id: exampleId }
     });
+  }
+
+  async uploadLogo(tenantId: string, file: Express.Multer.File) {
+    if (!firebaseStorage) throw new Error('Firebase storage not configured');
+    const bucket = firebaseStorage.bucket();
+    const ext = file.originalname.split('.').pop() || 'png';
+    const filePath = `logos/${tenantId}/logo_${Date.now()}.${ext}`;
+    const fileRef = bucket.file(filePath);
+    await fileRef.save(file.buffer, { contentType: file.mimetype, public: true });
+    const url = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
+    return { url };
   }
 }

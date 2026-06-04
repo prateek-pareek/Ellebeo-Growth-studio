@@ -45,7 +45,7 @@ const DEFAULT_TECH: TechnicianData = {
   name: "Technician",
   handle: "@handle",
   city: "Unknown",
-  avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&h=200&fit=crop",
+  avatar: "",
   hasGrowthStudioAccess: false,
 };
 

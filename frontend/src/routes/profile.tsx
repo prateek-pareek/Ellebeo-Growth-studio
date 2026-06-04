@@ -1,8 +1,12 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { InitialsAvatar } from "@/components/InitialsAvatar";
 import { useProfile } from "@/lib/providers/profile-provider";
 import { useAuth } from "@/lib/providers/auth-provider";
 import { Button } from "@/components/ui/button";
-import { LogOut } from "lucide-react";
+import { LogOut, Camera } from "lucide-react";
+import { api } from "@/lib/api";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
@@ -19,10 +23,38 @@ function ProfilePage() {
   const { profile, technician, loading } = useProfile();
   const { logout } = useAuth();
   const navigate = useNavigate();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string>("");
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    if (!loading) setAvatarUrl(technician.avatar);
+  }, [loading, technician.avatar]);
 
   const handleLogout = async () => {
     await logout();
     navigate({ to: "/login" });
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await api.post("/auth/upload-avatar", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const url = res.data.data?.url || res.data.url || "";
+      setAvatarUrl(url);
+      toast.success("Profile photo updated.");
+    } catch {
+      toast.error("Upload failed. Please try again.");
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
   };
 
   if (loading) {
@@ -47,15 +79,49 @@ function ProfilePage() {
         </div>
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
-            <div className="size-14 rounded-full bg-nude overflow-hidden ring-1 ring-border">
-              <img src={technician.avatar} alt={technician.name} className="w-full h-full object-cover" />
+            {/* Avatar with upload overlay */}
+            <div className="relative shrink-0 group">
+              <InitialsAvatar
+                name={technician.name}
+                imageUrl={avatarUrl || undefined}
+                className="size-14 ring-1 ring-border"
+                textClassName="text-xl"
+              />
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading}
+                className="absolute inset-0 rounded-full flex items-center justify-center bg-foreground/0 group-hover:bg-foreground/40 transition-colors disabled:cursor-not-allowed"
+                title="Change profile photo"
+              >
+                {uploading ? (
+                  <span className="text-[9px] text-white opacity-0 group-hover:opacity-100">…</span>
+                ) : (
+                  <Camera className="size-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                )}
+              </button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handleAvatarUpload}
+              />
             </div>
             <div>
               <p className="font-serif text-lg leading-tight">{technician.name}</p>
               <p className="text-xs text-taupe">{technician.handle} · {technician.city}</p>
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading}
+                className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors mt-0.5 disabled:opacity-50"
+              >
+                {uploading ? "Uploading…" : "Change photo"}
+              </button>
             </div>
           </div>
-          <button 
+          <button
             onClick={handleLogout}
             className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground flex items-center gap-2 border hairline px-4 py-3 transition-colors"
           >
@@ -64,6 +130,8 @@ function ProfilePage() {
           </button>
         </div>
       </header>
+
+      <ConnectedAccounts />
 
       <div className="grid grid-cols-12 gap-8 lg:gap-12">
         {/* Completion */}
@@ -135,6 +203,136 @@ function ProfilePage() {
         </section>
       </div>
     </div>
+  );
+}
+
+const PLATFORMS: { id: "instagram" | "facebook" | "tiktok"; label: string; note: string }[] = [
+  { id: "instagram", label: "Instagram", note: "Feed, Reels & Stories" },
+  { id: "facebook", label: "Facebook", note: "Page posts & Stories" },
+  { id: "tiktok", label: "TikTok", note: "Coming soon", },
+];
+
+function ConnectedAccounts() {
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const fetchAccounts = useCallback(() => {
+    setLoading(true);
+    api.get("/social-accounts")
+      .then((res) => setAccounts(res.data?.data ?? res.data ?? []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { fetchAccounts(); }, [fetchAccounts]);
+
+  const handleConnect = async (platform: "instagram" | "facebook") => {
+    setBusy(platform);
+    try {
+      // Use the OAuth callback with a mock code until real OAuth is wired up
+      await api.get(`/social-accounts/connect/${platform}/callback`, {
+        params: { code: "mock_connect" },
+      });
+      toast.success(`${platform.charAt(0).toUpperCase() + platform.slice(1)} connected`);
+      fetchAccounts();
+    } catch {
+      toast.error("Connection failed. Try again.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleDisconnect = async (id: string, platform: string) => {
+    setBusy(id);
+    try {
+      await api.delete(`/social-accounts/${id}`);
+      toast.success(`${platform} disconnected`);
+      fetchAccounts();
+    } catch {
+      toast.error("Disconnect failed. Try again.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <section className="mb-12">
+      <div className="flex items-baseline justify-between mb-6">
+        <h2 className="eyebrow">Connected accounts</h2>
+        {!loading && accounts.filter((a) => a.status === "connected").length > 0 && (
+          <span className="text-[10px] uppercase tracking-widest text-sage">
+            {accounts.filter((a) => a.status === "connected").length} connected
+          </span>
+        )}
+      </div>
+      <p className="text-sm text-taupe mb-6 max-w-[56ch]">
+        Connect your social accounts to publish content directly from the calendar.
+      </p>
+      <div className="space-y-px bg-border border hairline">
+        {PLATFORMS.map((p) => {
+          const account = accounts.find((a) => a.platform === p.id && a.status === "connected");
+          const isBusy = busy === p.id || busy === account?.id;
+          const isComingSoon = p.id === "tiktok";
+
+          return (
+            <div key={p.id} className="bg-card px-6 py-5 flex items-center gap-5">
+              {/* Platform label */}
+              <div className="w-28 shrink-0">
+                <p className="text-sm font-medium">{p.label}</p>
+                <p className="text-[10px] text-taupe mt-0.5">{p.note}</p>
+              </div>
+
+              {/* Account info */}
+              <div className="flex-1 min-w-0">
+                {account ? (
+                  <div className="flex items-center gap-2">
+                    <span className="size-1.5 rounded-full bg-sage shrink-0" />
+                    <span className="text-sm truncate">{account.accountName}</span>
+                  </div>
+                ) : (
+                  <span className="text-sm text-taupe italic">
+                    {isComingSoon ? "Not available yet" : "Not connected"}
+                  </span>
+                )}
+              </div>
+
+              {/* Status + action */}
+              <div className="flex items-center gap-3 shrink-0">
+                {account ? (
+                  <>
+                    <span className="text-[9px] uppercase tracking-widest text-sage px-2 py-1 bg-sage/10">
+                      Connected
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleDisconnect(account.id, p.label)}
+                      disabled={isBusy}
+                      className="text-[10px] uppercase tracking-widest text-destructive border border-destructive/30 px-3 py-1.5 hover:bg-destructive/5 disabled:opacity-40 transition-colors"
+                    >
+                      {isBusy ? "…" : "Disconnect"}
+                    </button>
+                  </>
+                ) : isComingSoon ? (
+                  <span className="text-[10px] uppercase tracking-widest text-taupe/50 border hairline px-3 py-1.5 opacity-50">
+                    Soon
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleConnect(p.id)}
+                    disabled={isBusy || loading}
+                    className="text-[10px] uppercase tracking-widest bg-foreground text-offwhite px-4 py-1.5 hover:bg-taupe disabled:opacity-40 transition-colors"
+                  >
+                    {isBusy ? "Connecting…" : "Connect"}
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

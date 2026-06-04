@@ -1,5 +1,6 @@
 import { Link, Outlet, useLocation } from "@tanstack/react-router";
 import { useAuth } from "@/lib/providers/auth-provider";
+import { InitialsAvatar } from "@/components/InitialsAvatar";
 import {
   Home,
   Sparkles,
@@ -75,8 +76,12 @@ export function AppShell() {
                   <span className="text-xs font-medium text-foreground">{user?.tenant?.businessName || user?.email}</span>
                   <span className="text-[10px] text-taupe">{user?.email}</span>
                 </div>
-                <Link to="/profile" className="size-10 rounded-full bg-nude overflow-hidden ring-1 ring-border flex items-center justify-center">
-                  <span className="text-sm font-serif italic">{(user.email?.[0] ?? '?').toUpperCase()}</span>
+                <Link to="/profile">
+                  <InitialsAvatar
+                    name={user?.tenant?.businessName || user?.email || "?"}
+                    imageUrl={user?.avatarUrl ?? undefined}
+                    className="size-10 ring-1 ring-border"
+                  />
                 </Link>
               </>
             ) : (

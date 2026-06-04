@@ -7,6 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import { signInWithPopup } from "firebase/auth";
+import { auth, googleProvider, appleProvider } from "@/lib/firebase";
+import { GoogleIcon } from "@/components/GoogleIcon";
+import { AppleIcon } from "@/components/AppleIcon";
 
 export const Route = createFileRoute("/signup")({
   head: () => ({
@@ -25,6 +29,58 @@ function SignupPage() {
   const [password, setPassword] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [errors, setErrors] = useState<{ businessName?: string; email?: string; password?: string }>({});
+
+  function validate() {
+    const e: { businessName?: string; email?: string; password?: string } = {};
+    if (!businessName.trim()) e.businessName = "Business name is required.";
+    else if (businessName.trim().length < 2) e.businessName = "Business name must be at least 2 characters.";
+    if (!email.trim()) e.email = "Email is required.";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) e.email = "Enter a valid email address.";
+    if (!password) e.password = "Password is required.";
+    else if (password.length < 8) e.password = "Password must be at least 8 characters.";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  }
+
+  async function handleAppleSignUp() {
+    setGoogleLoading(true);
+    try {
+      const result = await signInWithPopup(auth, appleProvider);
+      const firebaseIdToken = await result.user.getIdToken();
+      const res = await api.post('/auth/apple', { firebaseIdToken });
+      const { accessToken } = res.data.data ?? res.data;
+      login(accessToken);
+      toast.success("Account created. Welcome to Elle.Be.O.");
+      navigate({ to: "/brand/onboarding" });
+    } catch (error: any) {
+      if (error.code !== 'auth/popup-closed-by-user') {
+        toast.error(error.response?.data?.message || "Apple sign-up failed. Try again.");
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  }
+
+  async function handleGoogleSignUp() {
+    setGoogleLoading(true);
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const firebaseIdToken = await result.user.getIdToken();
+      const res = await api.post('/auth/google', { firebaseIdToken });
+      const { accessToken } = res.data.data ?? res.data;
+      login(accessToken);
+      toast.success("Account created. Welcome to Elle.Be.O.");
+      navigate({ to: "/brand/onboarding" });
+    } catch (error: any) {
+      if (error.code !== 'auth/popup-closed-by-user') {
+        toast.error(error.response?.data?.message || "Google sign-up failed. Try again.");
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  }
   
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
@@ -34,6 +90,7 @@ function SignupPage() {
 
   async function handleSignUp(e: React.FormEvent) {
     e.preventDefault();
+    if (!validate()) return;
     setLoading(true);
     try {
       // Register the user
@@ -107,9 +164,10 @@ function SignupPage() {
                 placeholder="e.g. Noir Aesthetics"
                 className="bg-transparent border-t-0 border-x-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-foreground transition-all"
                 value={businessName}
-                onChange={(e) => setBusinessName(e.target.value)}
+                onChange={(e) => { setBusinessName(e.target.value); if (errors.businessName) setErrors(p => ({ ...p, businessName: undefined })); }}
                 required
               />
+              {errors.businessName && <p className="text-[11px] text-destructive mt-1">{errors.businessName}</p>}
             </div>
 
             <div className="space-y-2">
@@ -121,9 +179,10 @@ function SignupPage() {
                 placeholder="hello@example.com"
                 className="bg-transparent border-t-0 border-x-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-foreground transition-all"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => { setEmail(e.target.value); if (errors.email) setErrors(p => ({ ...p, email: undefined })); }}
                 required
               />
+              {errors.email && <p className="text-[11px] text-destructive mt-1">{errors.email}</p>}
             </div>
 
             <div className="space-y-2">
@@ -135,10 +194,11 @@ function SignupPage() {
                 placeholder="••••••••"
                 className="bg-transparent border-t-0 border-x-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-foreground transition-all"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => { setPassword(e.target.value); if (errors.password) setErrors(p => ({ ...p, password: undefined })); }}
                 required
                 minLength={8}
               />
+              {errors.password && <p className="text-[11px] text-destructive mt-1">{errors.password}</p>}
             </div>
 
             <Button 
@@ -149,6 +209,32 @@ function SignupPage() {
               {loading ? "Creating Account…" : "Get Started"}
             </Button>
           </form>
+
+          <div className="space-y-4">
+            <div className="relative flex items-center gap-4">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-[10px] uppercase tracking-widest text-taupe">or</span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+            <Button
+              type="button"
+              onClick={handleGoogleSignUp}
+              disabled={googleLoading}
+              className="w-full bg-transparent border hairline text-foreground hover:bg-card py-6 rounded-none text-[11px] uppercase tracking-[0.2em] flex items-center justify-center gap-3"
+            >
+              <GoogleIcon />
+              {googleLoading ? "Connecting…" : "Continue with Google"}
+            </Button>
+            <Button
+              type="button"
+              onClick={handleAppleSignUp}
+              disabled={googleLoading}
+              className="w-full bg-foreground text-offwhite hover:bg-taupe py-6 rounded-none text-[11px] uppercase tracking-[0.2em] flex items-center justify-center gap-3"
+            >
+              <AppleIcon />
+              {googleLoading ? "Connecting…" : "Continue with Apple"}
+            </Button>
+          </div>
 
           <div className="pt-4 border-t hairline flex flex-col gap-4">
             <p className="text-xs text-taupe">

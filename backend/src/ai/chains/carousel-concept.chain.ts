@@ -5,6 +5,8 @@
 
 import { ChatOpenAI } from '@langchain/openai';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
+import { wrapSystemPrompt } from '../config/platform-system-prompt';
+import { buildBrandVoiceBlock, type BrandVoiceContext } from '../config/brand-voice';
 
 export interface CarouselSlideConcept {
   index: number;
@@ -36,6 +38,7 @@ export class CarouselConceptChain {
     businessGoal: string;
     brandName: string;
     slideCount?: number;
+    brandVoice?: BrandVoiceContext;
   }): Promise<CarouselConceptResult> {
     const {
       hookSentence,
@@ -45,11 +48,14 @@ export class CarouselConceptChain {
       businessGoal,
       brandName,
       slideCount = 4,
+      brandVoice,
     } = params;
 
     const count = Math.min(5, Math.max(3, slideCount));
+    const voiceBlock = buildBrandVoiceBlock(brandVoice);
 
     const systemPrompt = `You generate Instagram carousel slide concepts for beauty and wellness businesses.
+Every overlay line must sound like the technician wrote it — on-brand, specific, never generic.
 Return ONLY valid JSON, no markdown, no explanation.`;
 
     const userPrompt = `Create ${count} carousel slide concepts for this beauty appointment post.
@@ -59,7 +65,7 @@ Service: ${serviceName}${clientFirstName ? `\nClient first name: ${clientFirstNa
 Hook line: "${hookSentence}"
 CTA: "${callToAction}"
 Goal: ${businessGoal.replace(/_/g, ' ')}
-
+${voiceBlock ? `\n${voiceBlock}\n` : ''}
 Generate exactly ${count} slides:
 - Slide 1: Cover — eye-catching opener using the hook
 - Slides 2 to ${count - 1}: Body slides — service detail, technique, or result context
@@ -81,7 +87,7 @@ Return exactly this JSON shape:
 
     try {
       const response = await this.model.invoke([
-        new SystemMessage(systemPrompt),
+        new SystemMessage(wrapSystemPrompt(systemPrompt)),
         new HumanMessage(userPrompt),
       ]);
       const content =

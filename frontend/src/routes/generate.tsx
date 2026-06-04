@@ -130,11 +130,11 @@ function GeneratePage() {
     };
 
     const goalMap: Record<Goal, string> = {
-      'showcase': 'build_brand_authority',
-      'educate': 'build_brand_authority',
-      'convert': 'attract_new_clients',
-      'availability': 'fill_quiet_days',
-      'trust': 'retain_existing_clients'
+      'showcase': 'attract_new_clients',       // Lead with transformation → attract via the result
+      'educate': 'build_brand_authority',      // Technique/aftercare → establish expertise
+      'convert': 'promote_high_margin_services', // Direct CTA → position service as premium, worth booking
+      'availability': 'fill_quiet_days',       // Fill open slots → urgency/availability
+      'trust': 'retain_existing_clients'       // Client story/quote → community, loyalty
     };
 
     const platformMap: Record<Format, string[]> = {
@@ -253,6 +253,7 @@ function GeneratePage() {
                   jobStatus={jobStatus}
                   backendVariants={backendVariants}
                   onChangeStep={(s: Step) => setStep(s)}
+                  onRefineComplete={(items) => setBackendVariants(items)}
                 />
               )}
             </div>
@@ -638,12 +639,32 @@ function FormatStep({
 const STATUS_LABELS: Record<string, string> = {
   created: "Starting job...",
   queued: "Queued...",
-  processing_image: "Analysing image...",
-  processing_vision: "Reading the photo...",
-  building_prompt: "Building your prompt...",
+  processing_image: "Analysing your photo...",
+  processing_vision: "Reading the details in your photo...",
+  building_prompt: "Loading your Brand DNA...",
   generating_text: "Writing your caption...",
   generating_reel: "Assembling reel...",
 };
+
+const STATUS_STEPS = [
+  { key: "processing_vision",  label: "Analysing photo" },
+  { key: "building_prompt",    label: "Loading Brand DNA" },
+  { key: "generating_text",    label: "Writing caption" },
+  { key: "completed",          label: "Designing images" },
+];
+
+const BEAUTY_TIPS = [
+  "Posts with before & after photos get 3× more saves on Instagram.",
+  "Replying to comments within the first hour boosts your reach by up to 30%.",
+  "Reels under 15 seconds have the highest completion rate for beauty content.",
+  "A consistent brand colour palette makes your grid 40% more recognisable.",
+  "Posting behind-the-chair content builds trust faster than any promotion.",
+  "Clients who follow you on Instagram are 2× more likely to rebook.",
+  "Educational posts — 'why I use this technique' — outperform promotional posts every time.",
+  "Your bio is your best SEO tool. Include your suburb and specialty.",
+  "Stories with polls get 20% more profile visits than standard stories.",
+  "Tagging your location on every post puts you in local discovery search.",
+];
 
 const REFINE_OPTIONS = [
   "Make more premium",
@@ -655,28 +676,114 @@ const REFINE_OPTIONS = [
   "+ Create alternate version",
 ];
 
-const OPTION_STYLES = ["Editorial · considered", "Balanced · on-brand", "Direct · booking-led"];
+// Maps the backend `generatedBy` tag to a friendly label. Unknown models fall
+// back to the raw tag, so labels always reflect what actually produced the option.
+const MODEL_LABELS: Record<string, string> = {
+  ChatGPT: "ChatGPT · OpenAI",
+  "GPT-4o": "GPT-4o · OpenAI",
+  Gemini: "Gemini · Google",
+};
 
-function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: any) {
+function GeneratingScreen({ jobStatus }: { jobStatus: string }) {
+  const [tipIndex, setTipIndex] = useState(0);
+  const [fade, setFade] = useState(true);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setFade(false);
+      setTimeout(() => {
+        setTipIndex(i => (i + 1) % BEAUTY_TIPS.length);
+        setFade(true);
+      }, 400);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const currentStepIndex = STATUS_STEPS.findIndex(s => s.key === jobStatus);
+  const activeStep = currentStepIndex === -1 ? 0 : currentStepIndex;
+
+  return (
+    <div className="artifact p-10 flex flex-col items-center gap-10">
+
+      {/* Top — spinner + current status */}
+      <div className="text-center">
+        <div className="flex justify-center mb-5">
+          <span className="size-8 rounded-full border-2 border-foreground border-t-transparent animate-spin" />
+        </div>
+        <p className="font-serif text-2xl italic mb-1">AI is crafting your content...</p>
+        <p className="text-sm text-taupe">{STATUS_LABELS[jobStatus] ?? "Processing..."}</p>
+      </div>
+
+      {/* Progress steps */}
+      <div className="w-full max-w-md">
+        <div className="flex items-center justify-between relative">
+          {/* connecting line */}
+          <div className="absolute top-3 left-0 right-0 h-px bg-border z-0" />
+          <div
+            className="absolute top-3 left-0 h-px bg-foreground z-0 transition-all duration-700"
+            style={{ width: `${(activeStep / (STATUS_STEPS.length - 1)) * 100}%` }}
+          />
+          {STATUS_STEPS.map((step, i) => (
+            <div key={step.key} className="flex flex-col items-center gap-2 z-10">
+              <div className={
+                "size-6 rounded-full flex items-center justify-center border-2 transition-all duration-500 " +
+                (i < activeStep ? "bg-foreground border-foreground" :
+                 i === activeStep ? "bg-foreground border-foreground animate-pulse" :
+                 "bg-card border-border")
+              }>
+                {i < activeStep && (
+                  <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                    <path d="M1 4l3 3 5-6" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+              </div>
+              <p className={"text-[9px] uppercase tracking-widest text-center max-w-[70px] " +
+                (i <= activeStep ? "text-foreground" : "text-taupe/50")}>
+                {step.label}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Divider */}
+      <div className="w-full max-w-md h-px bg-border" />
+
+      {/* Beauty tip */}
+      <div className="w-full max-w-md text-center">
+        <p className="text-[10px] uppercase tracking-widest text-taupe mb-3">While you wait · Beauty business tip</p>
+        <p
+          className="font-serif text-lg leading-relaxed text-foreground transition-opacity duration-400"
+          style={{ opacity: fade ? 1 : 0 }}
+        >
+          "{BEAUTY_TIPS[tipIndex]}"
+        </p>
+        {/* Tip dots */}
+        <div className="flex justify-center gap-1.5 mt-4">
+          {BEAUTY_TIPS.map((_, i) => (
+            <div key={i} className={"size-1 rounded-full transition-all " + (i === tipIndex ? "bg-foreground" : "bg-border")} />
+          ))}
+        </div>
+      </div>
+
+    </div>
+  );
+}
+
+function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep, onRefineComplete }: any) {
   const [activeVariant, setActiveVariant] = useState(0);
   const [activeSlide, setActiveSlide] = useState(0);
   const [captionCopied, setCaptionCopied] = useState(false);
   const [actionDone, setActionDone] = useState<string | null>(null);
   const [refining, setRefining] = useState<string | null>(null);
+  const [refineStatus, setRefineStatus] = useState<string | null>(null);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [scheduleDateTime, setScheduleDateTime] = useState('');
   const [scheduling, setScheduling] = useState(false);
+  const refinePollRef = useRef<number | null>(null);
 
   if (generating) {
-    return (
-      <div className="artifact p-12 text-center">
-        <div className="flex justify-center mb-6">
-          <span className="size-8 rounded-full border-2 border-foreground border-t-transparent animate-spin" />
-        </div>
-        <p className="font-serif text-2xl mb-2 italic">AI is drafting your posts...</p>
-        <p className="text-sm text-taupe">{STATUS_LABELS[jobStatus] ?? jobStatus ?? "Processing..."}</p>
-      </div>
-    );
+    return <GeneratingScreen jobStatus={jobStatus} />;
   }
 
   if (!backendVariants || backendVariants.length === 0) {
@@ -793,17 +900,65 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
 
   const handleRefine = async (refinement: string) => {
     if (!contentItem.id) return;
+    if (refinePollRef.current) clearInterval(refinePollRef.current);
     setRefining(refinement);
+    setRefineStatus("Starting…");
     try {
-      await api.post("/generation/tweak", {
+      const res = await api.post("/generation/tweak", {
         contentItemId: contentItem.id,
-        instruction: refinement,
+        tweakInstruction: refinement,
+        component: 'all',
       });
-      toast.success("Refining in background — check Content for the updated version.");
+      const refineJobId = res.data.data?.jobId;
+      if (!refineJobId) throw new Error("No job ID returned");
+
+      setRefineStatus("Refining…");
+
+      const timeout = window.setTimeout(() => {
+        clearInterval(refinePollRef.current!);
+        setRefining(null);
+        setRefineStatus(null);
+        toast.info("Refine is taking longer than expected — check Content library for the result.");
+      }, 60_000);
+
+      refinePollRef.current = window.setInterval(async () => {
+        try {
+          const statusRes = await api.get(`/generation/jobs/${refineJobId}`);
+          const state = statusRes.data.data?.state;
+          setRefineStatus(state === 'generating_text' ? "Writing…" : state === 'completed' ? "Done" : "Refining…");
+
+          if (state === 'completed') {
+            clearInterval(refinePollRef.current!);
+            clearTimeout(timeout);
+            const contentRes = await api.get(`/content?jobId=${refineJobId}`);
+            const body = contentRes.data.data;
+            const items = Array.isArray(body) ? body : (body?.data ?? []);
+            if (items.length > 0) {
+              onRefineComplete?.(items);
+              toast.success(`"${refinement}" applied — preview updated.`);
+            } else {
+              toast.success("Refined — check Content library.");
+            }
+            setRefining(null);
+            setRefineStatus(null);
+          } else if (state === 'failed') {
+            clearInterval(refinePollRef.current!);
+            clearTimeout(timeout);
+            setRefining(null);
+            setRefineStatus(null);
+            toast.error("Refine failed. Try again.");
+          }
+        } catch {
+          clearInterval(refinePollRef.current!);
+          clearTimeout(timeout);
+          setRefining(null);
+          setRefineStatus(null);
+        }
+      }, 2000);
     } catch {
-      toast.error("Refine failed.");
-    } finally {
       setRefining(null);
+      setRefineStatus(null);
+      toast.error("Refine failed.");
     }
   };
 
@@ -836,14 +991,14 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
               <p className={"text-[9px] uppercase tracking-widest mb-1 " + (i === activeVariant ? "text-nude" : "text-taupe")}>
                 Option {i + 1}
               </p>
-              <p className="text-xs font-medium">{OPTION_STYLES[i] ?? `Option ${i + 1}`}</p>
+              <p className="text-xs font-medium">{MODEL_LABELS[variants[i]?.generatedBy] ?? variants[i]?.generatedBy ?? `Option ${i + 1}`}</p>
             </button>
           ))}
         </div>
       )}
 
       {/* Draft preview card */}
-      <div className="border hairline overflow-hidden">
+      <div className="border hairline">
 
         {/* Card header */}
         <div className="flex items-center justify-between bg-foreground px-5 py-3">
@@ -860,55 +1015,47 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
           /* ── STORY LAYOUT ────────────────────────────────────────────── */
           <div className="grid grid-cols-1 lg:grid-cols-2">
 
-            {/* LEFT — story frame strip + active frame */}
-            <div className="bg-nude/10 flex flex-col">
+            {/* LEFT — story preview */}
+            <div className="flex flex-col bg-card">
 
-              {/* 4 frame thumbnails in a row */}
-              <div className="grid grid-cols-4 gap-1 p-3 bg-card border-b hairline">
+              {/* Thumbnail strip */}
+              <div className="grid grid-cols-4 gap-1.5 p-3 border-b hairline">
                 {storyFrames.map((frame: any, i: number) => (
                   <button
                     key={i}
                     onClick={() => setActiveSlide(i)}
-                    className={"relative overflow-hidden flex flex-col " + (i === safeFrame ? "ring-2 ring-foreground" : "opacity-60 hover:opacity-90")}
+                    className={"overflow-hidden border transition-all " +
+                      (i === safeFrame ? "border-foreground" : "border-transparent opacity-50 hover:opacity-80")}
                   >
-                    <img
-                      src={frame.url}
-                      alt={frame.label}
-                      className="w-full aspect-[9/16] object-contain bg-black"
-                    />
-                    <p className="text-[7px] uppercase tracking-widest text-center py-0.5 bg-card text-taupe truncate px-0.5">
-                      {i + 1}.{frame.title?.split('·')[1]?.trim() ?? frame.label}
-                    </p>
+                    <img src={frame.url} alt={frame.label} className="w-full aspect-[9/16] object-cover" />
                   </button>
                 ))}
               </div>
 
-              {/* Active frame + label */}
-              <div className="relative h-80 overflow-hidden bg-black flex items-center justify-center">
-                <img
-                  src={storyFrames[safeFrame]?.url}
-                  alt={storyFrames[safeFrame]?.label}
-                  className="h-full w-auto object-contain"
-                />
-                <div className="absolute top-2 left-2 bg-foreground/80 px-2 py-1">
-                  <p className="text-[9px] uppercase tracking-widest text-offwhite tabular-nums">
-                    {safeFrame + 1} / {storyFrames.length}
-                  </p>
-                </div>
-                <div className="absolute top-2 right-2 bg-foreground/80 px-2 py-1">
-                  <p className="text-[9px] uppercase tracking-widest text-nude">
-                    {storyFrames[safeFrame]?.label ?? `FRAME ${safeFrame + 1}`}
-                  </p>
+              {/* Main image — fills rectangle completely */}
+              <div className="relative flex-1 flex items-center justify-center bg-nude/10 p-4">
+                <div className="relative w-full overflow-hidden shadow-lg" style={{ maxWidth: '420px' }}>
+                  <img
+                    src={storyFrames[safeFrame]?.url}
+                    alt={storyFrames[safeFrame]?.label}
+                    className="w-full h-auto block"
+                  />
+                  <div className="absolute top-2 left-2 bg-foreground/70 px-2 py-0.5">
+                    <p className="text-[9px] uppercase tracking-widest text-offwhite">{safeFrame + 1} / {storyFrames.length}</p>
+                  </div>
+                  <div className="absolute top-2 right-2 bg-foreground/70 px-2 py-0.5">
+                    <p className="text-[9px] uppercase tracking-widest text-nude">{storyFrames[safeFrame]?.label}</p>
+                  </div>
                 </div>
               </div>
 
               {/* Nav + download */}
-              <div className="flex items-center justify-between px-4 py-3 border-t hairline bg-card">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between px-4 py-3 border-t hairline">
+                <div className="flex items-center gap-3">
                   <button onClick={() => setActiveSlide(Math.max(0, safeFrame - 1))} disabled={safeFrame === 0} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground disabled:opacity-30">← Prev</button>
                   <button onClick={() => setActiveSlide(Math.min(storyFrames.length - 1, safeFrame + 1))} disabled={safeFrame === storyFrames.length - 1} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground disabled:opacity-30">Next →</button>
                 </div>
-                <button onClick={downloadImage} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground flex items-center gap-1.5 transition-colors">
+                <button onClick={downloadImage} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground flex items-center gap-1.5">
                   <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 1v6M2 7l3 2 3-2M1 9h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   Download frame
                 </button>
@@ -1332,7 +1479,7 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
                   : "bg-card text-taupe hover:text-foreground hover:border-foreground disabled:opacity-40")
               }
             >
-              {refining === r ? "Refining..." : r}
+              {refining === r ? (refineStatus ?? "Refining…") : r}
             </button>
           ))}
         </div>

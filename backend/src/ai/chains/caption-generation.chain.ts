@@ -8,6 +8,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { ChatAnthropic } from '@langchain/anthropic';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AI_CONFIG } from '../../config/ai.config';
 import type { CaptionGenerationResult, LLMConfig, AssembledPrompt } from '../types/chain-output.types';
 import { wrapSystemPrompt } from '../config/platform-system-prompt';
@@ -29,7 +30,7 @@ function parseCaptionOutput(raw: string): CaptionGenerationResult {
     caption: String(obj['caption'] ?? ''),
     hookSentence: String(obj['hookSentence'] ?? ''),
     callToAction: String(obj['callToAction'] ?? ''),
-    hashtags: Array.isArray(obj['hashtags']) ? (obj['hashtags'] as string[]) : [],
+    hashtags: Array.isArray(obj['hashtags']) ? (obj['hashtags'] as string[]).map(h => String(h).replace(/^#+/, '')) : [],
     altText: String(obj['altText'] ?? ''),
     estimatedReadTime: Number(obj['estimatedReadTime'] ?? 10),
     brandVoiceConfidenceScore: Math.min(1, Math.max(0, Number(obj['brandVoiceConfidenceScore'] ?? 0.5))),
@@ -58,8 +59,8 @@ export class CaptionGenerationChain {
   }): Promise<CaptionGenerationResult> {
     const { assembledPrompt, llmConfig, brandDNABlacklist, allowRetry = true } = params;
 
-    const model = this.buildModel(llmConfig);
-    const result = await this.callModel(model, assembledPrompt);
+    const activeModel = this.buildModel(llmConfig);
+    const result = await this.callModel(activeModel, assembledPrompt);
 
     // Validate no blacklisted words slipped through
     this.checkBlacklist(result.caption, brandDNABlacklist);
@@ -70,7 +71,7 @@ export class CaptionGenerationChain {
       result.brandVoiceConfidenceScore < AI_CONFIG.routing.brandVoiceConfidenceRetryThreshold
     ) {
       const amplifiedPrompt = this.amplifyBrandVoice(assembledPrompt, result);
-      const retryResult = await this.callModel(model, amplifiedPrompt);
+      const retryResult = await this.callModel(activeModel, amplifiedPrompt);
       // Return whichever has higher confidence
       return retryResult.brandVoiceConfidenceScore >= result.brandVoiceConfidenceScore
         ? retryResult
@@ -91,25 +92,31 @@ export class CaptionGenerationChain {
   }): Promise<{ primary: CaptionGenerationResult; options: (CaptionGenerationResult & { generatedBy: string })[] }> {
     const { assembledPrompt, brandDNABlacklist, allowRetry = true } = params;
 
-    const modelConfigs: LLMConfig[] = [
-      { provider: 'openai', modelId: 'gpt-4o-mini', temperature: 0.75, maxTokens: 1024, timeoutMs: 30000, systemPromptCacheKey: null },
-      { provider: 'openai', modelId: 'gpt-4o', temperature: 0.7, maxTokens: 1024, timeoutMs: 45000, systemPromptCacheKey: null },
-      // Claude only when Anthropic key is explicitly enabled
-      ...(process.env['USE_ANTHROPIC'] === 'true'
-        ? [{ provider: 'anthropic' as const, modelId: 'claude-3-5-sonnet-20241022', temperature: 0.72, maxTokens: 1024, timeoutMs: 45000, systemPromptCacheKey: null }]
-        : []),
-    ];
+    // Option 1: GPT-4o-mini (fast, cheap) — always the primary.
+    const openAiConfig: LLMConfig = { provider: 'openai', modelId: 'gpt-4o-mini', temperature: 0.75, maxTokens: 1024, timeoutMs: 30000, systemPromptCacheKey: null };
 
-    const promises = modelConfigs.map(config => 
-      this.generate({ assembledPrompt, llmConfig: config, brandDNABlacklist, allowRetry })
-        .then(result => ({ ...result, generatedBy: config.modelId }))
-        .catch(err => {
-          console.error(`[CaptionGenerationChain] Model ${config.modelId} failed:`, err);
-          return null;
-        })
-    );
+    const openAiPromise = this.generate({ assembledPrompt, llmConfig: openAiConfig, brandDNABlacklist, allowRetry })
+      .then(result => ({ ...result, generatedBy: 'ChatGPT' }))
+      .catch(err => { console.error('[CaptionChain] OpenAI failed:', err); return null; });
 
-    const results = await Promise.all(promises);
+    // Option 2: prefer Gemini when a CLASSIC key is configured (AIzaSy...).
+    // Ephemeral AQ.* tokens are browser-only and cannot auth server-side, so we
+    // treat them as "no Gemini" and fall back to GPT-4o — that way the two-option
+    // compare always works on the OpenAI key alone, and Gemini switches on
+    // automatically the moment a real key is present.
+    const geminiKey = process.env['GEMINI_API_KEY'];
+    const geminiUsable = !!geminiKey && !geminiKey.startsWith('AQ.');
+
+    const secondPromise = geminiUsable
+      ? this.callGemini(assembledPrompt, brandDNABlacklist)
+          .then(result => ({ ...result, generatedBy: 'Gemini' }))
+          .catch(err => {
+            console.error('[CaptionChain] Gemini failed, falling back to GPT-4o:', err);
+            return this.generateGpt4oOption(assembledPrompt, brandDNABlacklist, allowRetry);
+          })
+      : this.generateGpt4oOption(assembledPrompt, brandDNABlacklist, allowRetry);
+
+    const results = await Promise.all([openAiPromise, secondPromise]);
     const validResults = results.filter(r => r !== null) as (CaptionGenerationResult & { generatedBy: string })[];
 
     if (validResults.length === 0) {
@@ -120,6 +127,49 @@ export class CaptionGenerationChain {
       primary: validResults[0],
       options: validResults
     };
+  }
+
+  // --------------------------------------------------------------------------
+  // GPT-4o fallback option — used as Option 2 when Gemini isn't available.
+  // Higher temperature than gpt-4o-mini so the two options are meaningfully
+  // different to choose between.
+  // --------------------------------------------------------------------------
+
+  private generateGpt4oOption(
+    assembledPrompt: AssembledPrompt,
+    brandDNABlacklist: string[],
+    allowRetry: boolean
+  ): Promise<(CaptionGenerationResult & { generatedBy: string }) | null> {
+    const gpt4oConfig: LLMConfig = { provider: 'openai', modelId: 'gpt-4o', temperature: 0.85, maxTokens: 1024, timeoutMs: 45000, systemPromptCacheKey: null };
+    return this.generate({ assembledPrompt, llmConfig: gpt4oConfig, brandDNABlacklist, allowRetry })
+      .then(result => ({ ...result, generatedBy: 'GPT-4o' }))
+      .catch(err => { console.error('[CaptionChain] GPT-4o fallback failed:', err); return null; });
+  }
+
+  // --------------------------------------------------------------------------
+  // Gemini direct call (no LangChain — uses Google SDK directly)
+  // --------------------------------------------------------------------------
+
+  private async callGemini(prompt: AssembledPrompt, blacklist: string[]): Promise<CaptionGenerationResult> {
+    const genAI = new GoogleGenerativeAI(process.env['GEMINI_API_KEY']!);
+    // Use the technician's system prompt as a real systemInstruction (not concatenated
+    // into the user turn) so Gemini weights it the same way OpenAI does.
+    const model = genAI.getGenerativeModel({
+      model: process.env['GEMINI_MODEL'] || 'gemini-1.5-pro',
+      systemInstruction: wrapSystemPrompt(prompt.systemPrompt),
+      generationConfig: {
+        // Match the OpenAI standard-text config so the two options compare fairly.
+        temperature: AI_CONFIG.models.standardText.temperature,
+        maxOutputTokens: AI_CONFIG.models.standardText.maxTokens,
+        responseMimeType: 'application/json',
+      },
+    });
+
+    const response = await model.generateContent(prompt.userPrompt);
+    const raw = response.response.text();
+    const result = parseCaptionOutput(raw);
+    this.checkBlacklist(result.caption, blacklist);
+    return result;
   }
 
   // --------------------------------------------------------------------------

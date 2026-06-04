@@ -85,6 +85,14 @@ export class CreateBrandDnaDto {
   @IsArray()
   @IsOptional()
   goals?: Array<{ label: string; target: string }>;
+
+  @IsString()
+  @IsOptional()
+  logoUrl?: string;
+
+  @IsString()
+  @IsOptional()
+  logoPosition?: string;
 }
 
 export class ScanInstagramDto {
