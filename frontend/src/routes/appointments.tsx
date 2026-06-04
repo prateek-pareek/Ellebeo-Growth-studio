@@ -36,10 +36,39 @@ function AppointmentsPage() {
     });
   };
 
+  const checkImageSafety = async (file: File): Promise<boolean> => {
+    const form = new FormData();
+    form.append('file', file);
+    await api.post('/appointments/check-image', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return true;
+  };
+
   const handleAddAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsAdding(true);
     try {
+      // Validate images FIRST — before creating any records
+      if (beforeFile) {
+        try {
+          await checkImageSafety(beforeFile);
+        } catch (err: any) {
+          const msg = err.response?.data?.error?.message || err.response?.data?.message || "Before photo failed safety check";
+          toast.error(msg);
+          return;
+        }
+      }
+      if (afterFile) {
+        try {
+          await checkImageSafety(afterFile);
+        } catch (err: any) {
+          const msg = err.response?.data?.error?.message || err.response?.data?.message || "After photo failed safety check";
+          toast.error(msg);
+          return;
+        }
+      }
+
       // Split "Sarah J." → firstName="Sarah", lastName="J."
       const parts = clientName.trim().split(/\s+/);
       const firstName = parts[0] || clientName;
@@ -58,12 +87,24 @@ function AppointmentsPage() {
       });
       const appt = res.data.data;
 
-      // 4. Upload photos (non-fatal if Firebase not configured)
+      // 4. Upload photos — moderation errors are shown to the user and block completion
       if (beforeFile) {
-        try { await uploadFile(appt.id, beforeFile, true); } catch {}
+        try {
+          await uploadFile(appt.id, beforeFile, true);
+        } catch (uploadErr: any) {
+          const msg = uploadErr.response?.data?.error?.message || uploadErr.response?.data?.message || "Before photo upload failed";
+          toast.error(msg);
+          return;
+        }
       }
       if (afterFile) {
-        try { await uploadFile(appt.id, afterFile, false); } catch {}
+        try {
+          await uploadFile(appt.id, afterFile, false);
+        } catch (uploadErr: any) {
+          const msg = uploadErr.response?.data?.error?.message || uploadErr.response?.data?.message || "After photo upload failed";
+          toast.error(msg);
+          return;
+        }
       }
 
       toast.success("Appointment created successfully");

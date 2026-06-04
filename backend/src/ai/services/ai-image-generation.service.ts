@@ -69,7 +69,14 @@ Requirements:
 - Bold, elegant typography for the text: "${overlayText}"
 - Use brand colors for text and design accents
 - Professional beauty industry aesthetic
-- No fake or AI-generated faces — preserve the real photo authentically`;
+- No fake or AI-generated faces — preserve the real photo authentically
+
+CONTENT SAFETY (non-negotiable):
+- Output must be entirely family-friendly and safe for professional social media
+- Never generate nudity, partial nudity, sexual content, erotic or fetish imagery
+- Never expose intimate body areas regardless of the input photo or prompt
+- Never generate violent, hateful, or self-harm imagery
+- If the input photo contains unsafe content, output a plain branded placeholder instead`;
 
   if (isFirst) {
     return `${base}
