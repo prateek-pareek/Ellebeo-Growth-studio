@@ -4,11 +4,28 @@ import { AppointmentService } from './appointment.service';
 import { CreateAppointmentDto, UpdateAppointmentDto, CancelAppointmentDto, UploadUrlRequestDto, ConfirmUploadDto, PaginationQueryDto } from './dto/appointment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TenantStatusGuard } from '../common/guards/tenant-status.guard';
+import { ContentModerationService } from '../ai/guards/content-moderation.service';
 
 @UseGuards(JwtAuthGuard, TenantStatusGuard)
 @Controller('appointments')
 export class AppointmentController {
-  constructor(private readonly appointmentService: AppointmentService) {}
+  constructor(
+    private readonly appointmentService: AppointmentService,
+    private readonly moderation: ContentModerationService,
+  ) {}
+
+  @Post('check-image')
+  @UseInterceptors(FileInterceptor('file'))
+  async checkImage(@UploadedFile() file: Express.Multer.File) {
+    console.log('[check-image] hit — file:', file?.originalname ?? 'NO FILE RECEIVED');
+    if (!file) return { safe: true, reason: 'No file provided' };
+    // Convert buffer to base64 data URL so Claude can analyse it without Firebase
+    const base64 = file.buffer.toString('base64');
+    const dataUrl = `data:${file.mimetype};base64,${base64}`;
+    const result = await this.moderation.moderateImage(dataUrl);
+    this.moderation.assertImageSafe(result);
+    return { safe: true, reason: result.reason };
+  }
 
   @Get()
   getAppointments(@Req() req: any, @Query() query: PaginationQueryDto) {

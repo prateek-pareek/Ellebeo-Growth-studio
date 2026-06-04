@@ -4,6 +4,7 @@ import { CreateAppointmentDto, UpdateAppointmentDto, CancelAppointmentDto, Uploa
 import { getStorage } from 'firebase-admin/storage';
 import { v4 as uuidv4 } from 'uuid';
 import { ConfigService } from '@nestjs/config';
+import { ContentModerationService } from '../ai/guards/content-moderation.service';
 
 @Injectable()
 export class AppointmentService {
@@ -12,6 +13,7 @@ export class AppointmentService {
   constructor(
     private prisma: PrismaService,
     private configService: ConfigService,
+    private moderation: ContentModerationService,
     @Inject('FIREBASE_ADMIN') private firebaseAdmin: any,
   ) {
     const bucketName = this.configService.get<string>('FIREBASE_STORAGE_BUCKET');
@@ -232,6 +234,13 @@ export class AppointmentService {
     const bucketName = this.configService.get<string>('FIREBASE_STORAGE_BUCKET') || '';
     const rawUrl = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodeURIComponent(dto.storagePath)}?alt=media`;
 
+    // Content safety moderation — reject and delete from Firebase if unsafe
+    const modResult = await this.moderation.moderateImage(rawUrl);
+    if (!modResult.safe) {
+      await file.delete().catch(() => {});
+      this.moderation.assertImageSafe(modResult);
+    }
+
     const asset = await this.prisma.imageAsset.create({
       data: {
         tenantId,
@@ -268,6 +277,13 @@ export class AppointmentService {
 
     const bucketName = this.configService.get<string>('FIREBASE_STORAGE_BUCKET') || '';
     const rawUrl = `https://storage.googleapis.com/${bucketName}/${path}`;
+
+    // Content safety moderation — reject and delete from Firebase if unsafe
+    const modResult = await this.moderation.moderateImage(rawUrl);
+    if (!modResult.safe) {
+      await fileRef.delete().catch(() => {});
+      this.moderation.assertImageSafe(modResult);
+    }
 
     const asset = await this.prisma.imageAsset.create({
       data: {

@@ -130,11 +130,11 @@ function GeneratePage() {
     };
 
     const goalMap: Record<Goal, string> = {
-      'showcase': 'build_brand_authority',
-      'educate': 'build_brand_authority',
-      'convert': 'attract_new_clients',
-      'availability': 'fill_quiet_days',
-      'trust': 'retain_existing_clients'
+      'showcase': 'attract_new_clients',       // Lead with transformation → attract via the result
+      'educate': 'build_brand_authority',      // Technique/aftercare → establish expertise
+      'convert': 'promote_high_margin_services', // Direct CTA → position service as premium, worth booking
+      'availability': 'fill_quiet_days',       // Fill open slots → urgency/availability
+      'trust': 'retain_existing_clients'       // Client story/quote → community, loyalty
     };
 
     const platformMap: Record<Format, string[]> = {
@@ -253,6 +253,7 @@ function GeneratePage() {
                   jobStatus={jobStatus}
                   backendVariants={backendVariants}
                   onChangeStep={(s: Step) => setStep(s)}
+                  onRefineComplete={(items) => setBackendVariants(items)}
                 />
               )}
             </div>
@@ -769,15 +770,17 @@ function GeneratingScreen({ jobStatus }: { jobStatus: string }) {
   );
 }
 
-function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: any) {
+function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep, onRefineComplete }: any) {
   const [activeVariant, setActiveVariant] = useState(0);
   const [activeSlide, setActiveSlide] = useState(0);
   const [captionCopied, setCaptionCopied] = useState(false);
   const [actionDone, setActionDone] = useState<string | null>(null);
   const [refining, setRefining] = useState<string | null>(null);
+  const [refineStatus, setRefineStatus] = useState<string | null>(null);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [scheduleDateTime, setScheduleDateTime] = useState('');
   const [scheduling, setScheduling] = useState(false);
+  const refinePollRef = useRef<number | null>(null);
 
   if (generating) {
     return <GeneratingScreen jobStatus={jobStatus} />;
@@ -897,17 +900,65 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
 
   const handleRefine = async (refinement: string) => {
     if (!contentItem.id) return;
+    if (refinePollRef.current) clearInterval(refinePollRef.current);
     setRefining(refinement);
+    setRefineStatus("Starting…");
     try {
-      await api.post("/generation/tweak", {
+      const res = await api.post("/generation/tweak", {
         contentItemId: contentItem.id,
-        instruction: refinement,
+        tweakInstruction: refinement,
+        component: 'all',
       });
-      toast.success("Refining in background — check Content for the updated version.");
+      const refineJobId = res.data.data?.jobId;
+      if (!refineJobId) throw new Error("No job ID returned");
+
+      setRefineStatus("Refining…");
+
+      const timeout = window.setTimeout(() => {
+        clearInterval(refinePollRef.current!);
+        setRefining(null);
+        setRefineStatus(null);
+        toast.info("Refine is taking longer than expected — check Content library for the result.");
+      }, 60_000);
+
+      refinePollRef.current = window.setInterval(async () => {
+        try {
+          const statusRes = await api.get(`/generation/jobs/${refineJobId}`);
+          const state = statusRes.data.data?.state;
+          setRefineStatus(state === 'generating_text' ? "Writing…" : state === 'completed' ? "Done" : "Refining…");
+
+          if (state === 'completed') {
+            clearInterval(refinePollRef.current!);
+            clearTimeout(timeout);
+            const contentRes = await api.get(`/content?jobId=${refineJobId}`);
+            const body = contentRes.data.data;
+            const items = Array.isArray(body) ? body : (body?.data ?? []);
+            if (items.length > 0) {
+              onRefineComplete?.(items);
+              toast.success(`"${refinement}" applied — preview updated.`);
+            } else {
+              toast.success("Refined — check Content library.");
+            }
+            setRefining(null);
+            setRefineStatus(null);
+          } else if (state === 'failed') {
+            clearInterval(refinePollRef.current!);
+            clearTimeout(timeout);
+            setRefining(null);
+            setRefineStatus(null);
+            toast.error("Refine failed. Try again.");
+          }
+        } catch {
+          clearInterval(refinePollRef.current!);
+          clearTimeout(timeout);
+          setRefining(null);
+          setRefineStatus(null);
+        }
+      }, 2000);
     } catch {
-      toast.error("Refine failed.");
-    } finally {
       setRefining(null);
+      setRefineStatus(null);
+      toast.error("Refine failed.");
     }
   };
 
@@ -1428,7 +1479,7 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep }: an
                   : "bg-card text-taupe hover:text-foreground hover:border-foreground disabled:opacity-40")
               }
             >
-              {refining === r ? "Refining..." : r}
+              {refining === r ? (refineStatus ?? "Refining…") : r}
             </button>
           ))}
         </div>
