@@ -83,6 +83,11 @@ export class GenerationOrchestrator {
   // --------------------------------------------------------------------------
 
   async run(payload: GenerationJobPayload): Promise<GenerationResult> {
+    // Tweak jobs only carry { jobId } in the BullMQ payload — detect and delegate
+    if (!payload.tenantId) {
+      return this.runTweak(payload.jobId);
+    }
+
     const { jobId, tenantId, clientId, consentSnapshot, brandDNA, generationOptions } = payload;
     const jobStart = Date.now();
 
@@ -601,6 +606,100 @@ Requirements:
   // --------------------------------------------------------------------------
   // State Machine Transition + DB Update
   // --------------------------------------------------------------------------
+
+  // --------------------------------------------------------------------------
+  // Tweak Pipeline — lightweight caption-only refinement
+  // --------------------------------------------------------------------------
+
+  private async runTweak(jobId: string): Promise<GenerationResult> {
+    const jobStart = Date.now();
+
+    const job = await this.prisma.generationJob.findUnique({ where: { id: jobId } });
+    if (!job) throw new Error(`Tweak job ${jobId} not found`);
+
+    const tweakDto = job.jobPayload as { contentItemId: string; tweakInstruction: string; component: string };
+    const { tenantId } = job;
+
+    try {
+      await this.prisma.generationJob.update({ where: { id: jobId }, data: { state: 'generating_text' } });
+      await this.progressEmitter.emit(jobId, tenantId, 'generating_text');
+
+      const contentItem = await this.prisma.contentItem.findUnique({ where: { id: tweakDto.contentItemId } });
+      if (!contentItem) throw new Error(`Content item ${tweakDto.contentItemId} not found`);
+
+      const brandDna = await this.prisma.brandDNA.findFirst({
+        where: { tenantId, isCurrent: true },
+        include: { pillars: true },
+      });
+
+      const blacklist: string[] = [
+        ...((brandDna?.vocabularyBlacklist ?? []) as string[]),
+        ...((brandDna?.doNotSay ?? []) as string[]),
+      ];
+
+      const { systemPrompt, userPrompt } = this.promptBuilder.assembleTweakPrompt({
+        previousCaption: contentItem.caption ?? '',
+        previousHashtags: Array.isArray(contentItem.hashtags) ? (contentItem.hashtags as string[]) : [],
+        tweakInstruction: tweakDto.tweakInstruction,
+        brandDNA: {
+          businessName: brandDna?.businessName ?? 'Beauty Business',
+          primaryTone: (brandDna?.primaryTone ?? 'professional_warm') as any,
+          blacklistedWords: blacklist,
+          ...(brandDna ?? {}),
+        } as any,
+        platform: 'instagram',
+      });
+
+      const llmConfig = this.modelRouter.selectTextModel({ userTier: 'standard', brandDNAComplexityScore: 0 });
+
+      const result = await this.captionChain.generate({
+        assembledPrompt: { systemPrompt, userPrompt, cacheHits: { brandDNAFragment: false, goldenExamplesFragment: false } },
+        llmConfig,
+        brandDNABlacklist: blacklist,
+        allowRetry: false,
+      });
+
+      await this.prisma.contentItem.update({
+        where: { id: contentItem.id },
+        data: {
+          caption: result.caption,
+          hashtags: result.hashtags as any,
+          callToAction: result.callToAction,
+          hookSentence: result.hookSentence,
+        },
+      });
+
+      await this.prisma.generationJob.update({ where: { id: jobId }, data: { state: 'completed' } });
+      await this.progressEmitter.emit(jobId, tenantId, 'completed');
+
+      return {
+        jobId,
+        tenantId,
+        appointmentId: job.appointmentId,
+        contentItemId: contentItem.id,
+        captionStatus: 'completed',
+        imageStatus: 'pending',
+        reelStatus: 'pending',
+        caption: result,
+        platformVariants: null,
+        processedImage: null,
+        reel: null,
+        reelScript: null,
+        visionAnalysis: null,
+        modelUsed: `${llmConfig.provider}/${llmConfig.modelId}`,
+        totalTokensInput: 0,
+        totalTokensOutput: 0,
+        estimatedCostUSD: 0,
+        totalProcessingTimeMs: Date.now() - jobStart,
+        brandVoiceConfidenceScore: result.brandVoiceConfidenceScore ?? 0,
+        completedAt: new Date().toISOString(),
+      };
+    } catch (err) {
+      await this.prisma.generationJob.update({ where: { id: jobId }, data: { state: 'failed' } }).catch(() => {});
+      await this.progressEmitter.emit(jobId, tenantId, 'failed');
+      throw err;
+    }
+  }
 
   private async transitionState(
     jobId: string,
