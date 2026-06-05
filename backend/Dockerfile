@@ -56,6 +56,12 @@ COPY --from=deps --chown=nestjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nestjs:nodejs /app/package.json ./
 
+# Prisma schema + CLI + engines so `prisma migrate deploy` can run at deploy time.
+# (prisma CLI is a devDependency, so it is absent from the prod-only deps stage.)
+COPY --from=builder --chown=nestjs:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nestjs:nodejs /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder --chown=nestjs:nodejs /app/node_modules/@prisma/engines ./node_modules/@prisma/engines
+
 # Expose API port
 EXPOSE 3000
 
@@ -68,7 +74,7 @@ ENV PORT=3000
 
 # Healthcheck to verify the API is running
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-  CMD curl -f http://localhost:3000/api/health || exit 1
+  CMD curl -f http://localhost:3000/api/v1/health || exit 1
 
 # Default command with dumb-init for proper signal handling
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]

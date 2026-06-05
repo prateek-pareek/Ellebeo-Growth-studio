@@ -1,12 +1,21 @@
-version: '3.8'
-
 # NOTE: Redis, Postgres, and Traefik are managed externally on the VPS.
 # This compose file implements Blue-Green for the Ellebeo Growth Studio services.
+#
+# Networking:
+#   - All services join the external `proxy` network that Traefik also runs on,
+#     so Traefik can route to the blue/green containers. Override the network
+#     name via TRAEFIK_NETWORK if Traefik uses a different one.
+#   - host.docker.internal is mapped to the host gateway so containers can reach
+#     Redis/Postgres running on the VPS host (not resolvable by default on Linux).
 
 x-base-node: &base-node
   restart: unless-stopped
   env_file:
     - .env
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  networks:
+    - proxy
   mem_limit: 512m
   cpus: 0.5
   logging:
@@ -77,19 +86,9 @@ services:
   # ==========================================
   # BACKGROUND WORKERS
   # ==========================================
-  worker-content:
-    <<: *base-node
-    restart: on-failure:5
-    image: ${BACKEND_IMAGE:-ghcr.io/prateek-pareek/ellebeo-growth-studio/backend:latest}
-    container_name: growth-studio-worker-content
-    command: ["node", "dist/ai/workers/content-generation.worker.js"]
-    healthcheck:
-      test: ["CMD-SHELL", "node -e \"process.exit(0)\""]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-
+  # NOTE: the content-generation worker runs IN-PROCESS inside the API
+  # container (see backend/src/main.ts) because it emits live progress over
+  # the API's socket.io server. Only the image/video workers run standalone.
   worker-image:
     <<: *base-node
     restart: on-failure:5
@@ -120,3 +119,21 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+
+  # ==========================================
+  # DATABASE MIGRATIONS (one-off)
+  # ==========================================
+  # Run with: docker compose run --rm migrate
+  # Applies pending Prisma migrations against DATABASE_URL before traffic switch.
+  migrate:
+    <<: *base-node
+    restart: "no"
+    image: ${BACKEND_IMAGE:-ghcr.io/prateek-pareek/ellebeo-growth-studio/backend:latest}
+    container_name: growth-studio-migrate
+    entrypoint: ["node", "node_modules/prisma/build/index.js"]
+    command: ["migrate", "deploy"]
+
+networks:
+  proxy:
+    external: true
+    name: ${TRAEFIK_NETWORK:-proxy}

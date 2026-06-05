@@ -40,9 +40,10 @@ USER reactjs
 # Expose port (default for serve is 3000)
 EXPOSE 3000
 
-# Healthcheck to ensure the server is responding
+# Healthcheck to ensure the server is responding.
+# node:20-slim ships neither wget nor curl, so use Node's built-in http client.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
+  CMD ["node", "-e", "require('http').get('http://localhost:3000/', r => process.exit(r.statusCode < 400 ? 0 : 1)).on('error', () => process.exit(1))"]
 
 # Start the static file server
 CMD ["serve", "-s", "dist", "-l", "3000"]

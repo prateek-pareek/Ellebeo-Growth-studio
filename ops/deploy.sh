@@ -12,13 +12,22 @@ ACTIVE_ENV=$(docker ps --filter "name=growth-studio-backend-blue" --format "{{.N
 
 if [ "$ACTIVE_ENV" = "blue" ]; then
     TARGET_ENV="green"
-    export TRAEFIK_PRIORITY=200
-    echo "Current active environment is BLUE. Deploying to GREEN with priority 200."
 else
     TARGET_ENV="blue"
-    export TRAEFIK_PRIORITY=200
-    echo "Current active environment is GREEN. Deploying to BLUE with priority 200."
 fi
+
+# Ensure the new environment strictly outranks the currently active one so
+# Traefik routes to it immediately (avoids an equal-priority tie during overlap).
+ACTIVE_PRIORITY=$(docker inspect \
+    --format "{{ index .Config.Labels \"traefik.http.routers.growth-studio-api-${ACTIVE_ENV}.priority\" }}" \
+    "growth-studio-backend-${ACTIVE_ENV}" 2>/dev/null || echo "")
+if ! [[ "$ACTIVE_PRIORITY" =~ ^[0-9]+$ ]]; then
+    ACTIVE_PRIORITY=100
+fi
+export TRAEFIK_PRIORITY=$((ACTIVE_PRIORITY + 10))
+
+echo "Current active environment is ${ACTIVE_ENV^^} (priority $ACTIVE_PRIORITY)."
+echo "Deploying to ${TARGET_ENV^^} with priority $TRAEFIK_PRIORITY."
 
 # 2. Export environment variables for Docker Compose
 export BACKEND_IMAGE=$1
@@ -38,7 +47,6 @@ SERVICES=(
 )
 
 WORKERS=(
-  "worker-content"
   "worker-image"
   "worker-video"
 )
@@ -46,6 +54,12 @@ WORKERS=(
 # 3. Pull new images
 echo "Pulling images..."
 docker compose pull "${SERVICES[@]}" "${WORKERS[@]}"
+
+# 3b. Apply database migrations before routing traffic to new code.
+# Runs as a one-off container off the new backend image; `set -e` aborts the
+# deploy (leaving the active env untouched) if migrations fail.
+echo "Applying database migrations..."
+docker compose run --rm migrate
 
 # 4. Start new environment and workers
 echo "Starting $TARGET_ENV environment..."
