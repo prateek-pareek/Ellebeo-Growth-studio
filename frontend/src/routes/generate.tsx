@@ -10,6 +10,8 @@ import { toast } from "sonner";
 
 const searchSchema = z.object({
   appointment: z.string().optional(),
+  templateGoal: z.string().optional(),
+  templateFormat: z.string().optional(),
 });
 
 export const Route = createFileRoute("/generate")({
@@ -57,11 +59,14 @@ function GeneratePage() {
   const idMissing = !!requestedId && !requestedMatch && !loading;
 
   const { profile, technician, loading: profileLoading } = useProfile();
-  
+
+  const initialGoal = (GOALS.find((g) => g.id === search.templateGoal)?.id ?? "showcase") as Goal;
+  const initialFormat = (FORMATS.find((f) => f.id === search.templateFormat)?.id ?? "Carousel") as Format;
+
   const [appointment, setAppointment] = useState<Appointment | null>(requestedMatch);
   const [step, setStep] = useState<Step>(requestedMatch ? "consent" : "select");
-  const [goal, setGoal] = useState<Goal>("showcase");
-  const [format, setFormat] = useState<Format>("Carousel");
+  const [goal, setGoal] = useState<Goal>(initialGoal);
+  const [format, setFormat] = useState<Format>(initialFormat);
   
   const [showPaywall, setShowPaywall] = useState(false);
 
@@ -227,8 +232,16 @@ function GeneratePage() {
               {step === "consent" && appointment && (
                 <ConsentStep
                   appointment={appointment}
-                  onContinue={() => setStep("goal")}
+                  onContinue={() => {
+                    // If coming from a template, goal + format are already set — skip both steps
+                    if (search.templateGoal && search.templateFormat) {
+                      handleGenerate(initialFormat);
+                    } else {
+                      setStep("goal");
+                    }
+                  }}
                   onBack={() => setStep("select")}
+                  fromTemplate={!!(search.templateGoal && search.templateFormat)}
                 />
               )}
               {step === "goal" && appointment && (
@@ -436,16 +449,27 @@ function ConsentStep({
   appointment,
   onContinue,
   onBack,
+  fromTemplate = false,
 }: {
   appointment: Appointment;
   onContinue: () => void;
   onBack: () => void;
+  fromTemplate?: boolean;
 }) {
   const { data: consentData, loading: consentLoading } = useConsentRequest(appointment.id);
   const granted = appointment.consent === "granted";
 
   return (
     <div className="space-y-4">
+
+      {/* Template context banner */}
+      {fromTemplate && (
+        <div className="flex items-center gap-3 bg-foreground text-offwhite px-5 py-3">
+          <span className="text-[10px] uppercase tracking-widest">Template selected</span>
+          <span className="text-taupe/60 text-[10px]">·</span>
+          <span className="text-[10px] text-nude/80 uppercase tracking-widest">Goal &amp; format pre-set — confirm consent to generate</span>
+        </div>
+      )}
 
       {/* Status banner */}
       {granted ? (
@@ -546,7 +570,7 @@ function ConsentStep({
             onClick={onContinue}
             className="bg-foreground text-offwhite px-8 py-3 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors"
           >
-            Continue
+            {fromTemplate ? "Generate now →" : "Continue"}
           </button>
         )}
       </div>
