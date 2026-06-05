@@ -137,7 +137,7 @@ jobs:
             # NOTE: secrets are stored as GitHub *Variables* (vars.*) per current
             # setup. Consider moving the sensitive ones to Secrets later — vars are
             # not masked in logs. The 'EOF' quoting prevents the VPS shell from
-            # expanding values; GitHub still substitutes ${{ }} at render time.
+            # expanding values; GitHub still substitutes variables at render time.
             cat << 'EOF' > .env
             NODE_ENV=production
             DOMAIN=${{ vars.DOMAIN }}
