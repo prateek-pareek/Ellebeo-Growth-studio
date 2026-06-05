@@ -122,16 +122,16 @@ jobs:
             cat << 'EOF' > .env
             NODE_ENV=production
             DOMAIN=${{ vars.DOMAIN }}
+            REDIS_TLS=false
             GROWTH_STUDIO_DOMAIN=growth.${{ vars.DOMAIN }}
             DATABASE_URL=${{ vars.DATABASE_URL }}
             REDIS_PASSWORD=${{ vars.REDIS_PASSWORD }}
             OPENAI_API_KEY=${{ vars.OPENAI_API_KEY }}
+            ANTHROPIC_API_KEY=${{ vars.ANTHROPIC_API_KEY }}
+            GEMINI_API_KEY=${{ vars.GEMINI_API_KEY }}
             OTEL_EXPORTER_OTLP_ENDPOINT=${{ vars.OTEL_EXPORTER_OTLP_ENDPOINT }}
             OTEL_SERVICE_NAME=${{ vars.OTEL_SERVICE_NAME }}
             FRONTEND_URL=${{ vars.FRONTEND_URL }}
-            PIXABAY_API_KEY=${{ vars.PIXABAY_API_KEY }}
-            ELEVENLABS_API_KEY=${{ vars.ELEVENLABS_API_KEY }}
-            SHOTSTACK_API_KEY=${{ vars.SHOTSTACK_API_KEY }}
             CLOUDINARY_API_SECRET=${{ vars.CLOUDINARY_API_SECRET }}
             CLOUDINARY_API_KEY=${{ vars.CLOUDINARY_API_KEY }}
             CLOUDINARY_CLOUD_NAME=${{ vars.CLOUDINARY_CLOUD_NAME }}
