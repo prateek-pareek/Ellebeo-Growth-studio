@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y openssl build-essential python3
 
 WORKDIR /app
 
-# Copy package files
+# Copy package files for build
 COPY package.json package-lock.json ./
 
 # Install all dependencies (including devDependencies)
@@ -16,7 +16,7 @@ RUN npm ci
 COPY prisma ./prisma
 RUN npx prisma generate
 
-# Copy source code
+# Copy source code for deployment
 COPY . .
 
 # Build the application

@@ -105,7 +105,7 @@ export function AppShell() {
         </div>
       </main>
 
-      {/* Mobile bottom nav — 5 primary destinations */}
+      {/* Mobile bottom nav primary destinations */}
       <nav className="lg:hidden fixed bottom-0 inset-x-0 bg-offwhite/95 backdrop-blur border-t hairline z-40">
         <div className="grid grid-cols-5">
           {NAV.map((item) => {
@@ -131,7 +131,7 @@ export function AppShell() {
       <footer className="hidden md:block px-6 lg:px-12 pb-10">
         <div className="max-w-7xl mx-auto pt-8 border-t hairline flex items-center justify-between text-[10px] uppercase tracking-[0.35em] text-taupe">
           <span>Elle.Be.O · Growth</span>
-          <span>AI marketing studio for beauty professionals</span>
+          <span>AI Marketing Studio for Beauty Professionals</span>
         </div>
       </footer>
     </div>
