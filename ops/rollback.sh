@@ -15,10 +15,19 @@ fi
 
 export BACKEND_IMAGE=$1
 export FRONTEND_IMAGE=$2
-export TRAEFIK_PRIORITY=300 # Ensure rollback always wins priority
 
 # 1. Determine active environment (the one currently broken)
 ACTIVE_ENV=$(docker ps --filter "name=growth-studio-backend-blue" --format "{{.Names}}" | grep -q "growth-studio-backend-blue" && echo "blue" || echo "green")
+
+# Ensure rollback always outranks the (broken) active env, even though deploy
+# priorities climb over time.
+ACTIVE_PRIORITY=$(docker inspect \
+    --format "{{ index .Config.Labels \"traefik.http.routers.growth-studio-api-${ACTIVE_ENV}.priority\" }}" \
+    "growth-studio-backend-${ACTIVE_ENV}" 2>/dev/null || echo "")
+if ! [[ "$ACTIVE_PRIORITY" =~ ^[0-9]+$ ]]; then
+    ACTIVE_PRIORITY=100
+fi
+export TRAEFIK_PRIORITY=$((ACTIVE_PRIORITY + 100)) # Ensure rollback always wins priority
 
 if [ "$ACTIVE_ENV" = "blue" ]; then
     TARGET_ENV="green"
@@ -34,7 +43,6 @@ TARGET_SERVICES=(
 )
 
 WORKERS=(
-  "worker-content"
   "worker-image"
   "worker-video"
 )

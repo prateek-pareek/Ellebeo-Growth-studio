@@ -128,3 +128,8 @@ export function startVideoAssemblyWorker(): Worker<VideoAssemblyJobPayload> {
   console.log(`[Worker:video] Started — concurrency: ${AI_CONFIG.queues.videoAssembly.concurrency}`);
   return worker;
 }
+
+// Start automatically when run as a standalone process (dedicated worker container).
+if (require.main === module) {
+  startVideoAssemblyWorker();
+}

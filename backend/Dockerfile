@@ -1,14 +1,15 @@
-# STAGE 1: Builder
+# Stage 1: Dependencies and Build
 FROM node:20-slim AS builder
+
+# Install OpenSSL for Prisma and necessary build tools
+RUN apt-get update && apt-get install -y openssl build-essential python3
+
 WORKDIR /app
 
-# Install system dependencies for Prisma/native modules
-RUN apt-get update && apt-get install -y openssl build-essential python3 ca-certificates && rm -rf /var/lib/apt/lists/*
-
-# Layer-cache optimisation: copy only package files first
+# Copy package files
 COPY package.json package-lock.json ./
 
-# Install ALL dependencies (including devDependencies for build)
+# Install all dependencies (including devDependencies)
 RUN npm ci
 
 # Copy Prisma schema and generate client
@@ -21,38 +22,59 @@ COPY . .
 # Build the application
 RUN npm run build
 
-# Strip devDependencies in-place — cuts image size dramatically
-# This avoids a separate npm ci --omit=dev stage which breaks on lock file mismatches
-RUN npm prune --omit=dev
+# Stage 2: Production Dependencies
+FROM node:20-slim AS deps
 
-# STAGE 2: Production Runner
-FROM node:20-slim AS runner
+RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-ENV NODE_ENV=production
-ENV PORT=3000
+# Copy package files
+COPY package.json package-lock.json ./
 
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends openssl curl dumb-init ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
+# Install only production dependencies
+RUN npm ci --omit=dev
+
+# Copy generated Prisma client from builder
+COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+
+# Stage 3: Production Runner
+FROM node:20-slim AS runner
+
+# Install required runtime dependencies for Prisma and dumb-init
+RUN apt-get update && apt-get install -y openssl curl dumb-init ca-certificates && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
 
 # Use non-root user for security
 RUN groupadd -r -g 1001 nodejs && \
     useradd -r -u 1001 -g nodejs nestjs
 
-# Copy only production artefacts from builder
-COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
+# Copy from deps and builder
+COPY --from=deps --chown=nestjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
-COPY --from=builder --chown=nestjs:nodejs /app/prisma ./prisma
-COPY --from=builder --chown=nestjs:nodejs /app/package.json ./package.json
+COPY --from=builder --chown=nestjs:nodejs /app/package.json ./
 
+# Prisma schema + CLI + engines so `prisma migrate deploy` can run at deploy time.
+# (prisma CLI is a devDependency, so it is absent from the prod-only deps stage.)
+COPY --from=builder --chown=nestjs:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nestjs:nodejs /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder --chown=nestjs:nodejs /app/node_modules/@prisma/engines ./node_modules/@prisma/engines
+
+# Expose API port
+EXPOSE 3000
+
+# Set user
 USER nestjs
 
-EXPOSE 3000
+# Environment variables
+ENV NODE_ENV=production
+ENV PORT=3000
 
 # Healthcheck to verify the API is running
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-  CMD curl -f http://localhost:3000/api/health || exit 1
+  CMD curl -f http://localhost:3000/api/v1/health || exit 1
 
 # Default command with dumb-init for proper signal handling
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]

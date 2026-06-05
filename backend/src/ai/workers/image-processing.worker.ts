@@ -79,3 +79,8 @@ export function startImageProcessingWorker(): Worker<ImageProcessingJobPayload> 
   console.log(`[Worker:image] Started — concurrency: ${AI_CONFIG.queues.imageProcessing.concurrency}`);
   return worker;
 }
+
+// Start automatically when run as a standalone process (dedicated worker container).
+if (require.main === module) {
+  startImageProcessingWorker();
+}

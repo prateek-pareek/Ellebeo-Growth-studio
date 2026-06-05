@@ -16,6 +16,7 @@ import { AdminModule } from './admin/admin.module';
 import { EventsModule } from './events/events.module';
 import { FirebaseModule } from './common/firebase/firebase.module';
 import { CrmModule } from './crm/crm.module';
+import { HealthController } from './health/health.controller';
 import { CacheModule } from '@nestjs/cache-manager';
 import { TenantContextMiddleware } from './common/middleware/tenant-context.middleware';
 import { validateEnv } from './config/env.validation';
@@ -56,7 +57,7 @@ import { validateEnv } from './config/env.validation';
     CrmModule,
     // AiModule,
   ],
-  controllers: [],
+  controllers: [HealthController],
   providers: [],
 })
 export class AppModule implements NestModule {
