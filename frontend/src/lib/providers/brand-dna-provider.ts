@@ -10,6 +10,12 @@ export type BrandDnaView = {
   powers: string[];
   palette: string[];
   moodboard: string[];
+  logoUrl: string;
+  logoPosition: string;
+  aestheticDirection: string;
+  brandTier: string;
+  emojiPolicy: string;
+  captionLength: string;
   pillars: Array<{
     name: string;
     description: string;
@@ -79,7 +85,13 @@ function mapCloudRow(dna: any): BrandDnaView {
       dna.primaryBrandColor,
       dna.secondaryBrandColor
     ].filter(Boolean),
-    moodboard: [], // Remove hardcoded moodboard
+    moodboard: [],
+    logoUrl: dna.logoUrl || "",
+    logoPosition: dna.logoPosition || "bottom_right",
+    aestheticDirection: dna.aestheticDirection || "",
+    brandTier: dna.brandTier || "",
+    emojiPolicy: dna.emojiPolicy || "minimal",
+    captionLength: dna.captionLengthPreference || "medium",
     pillars: mappedPillars,
     voice: {
       summary: dna.primaryTone || "",

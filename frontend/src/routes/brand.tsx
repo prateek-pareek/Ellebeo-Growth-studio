@@ -87,16 +87,52 @@ function BrandPage() {
         <section className="col-span-12 lg:col-span-5">
           <h2 className="eyebrow mb-6">Visual identity</h2>
           <div className="artifact p-8 mb-10">
+            {/* Logo */}
+            {brandDNA.logoUrl && (
+              <div className="mb-6">
+                <p className="text-[10px] uppercase tracking-widest text-taupe mb-3">Logo</p>
+                <div className="size-20 border hairline bg-nude/20 flex items-center justify-center overflow-hidden">
+                  <img src={brandDNA.logoUrl} alt="Brand logo" className="max-w-full max-h-full object-contain p-2" />
+                </div>
+                <p className="text-[10px] text-taupe mt-1 uppercase tracking-widest">
+                  Position: {brandDNA.logoPosition.replace("_", " ")}
+                </p>
+              </div>
+            )}
+
+            {/* Colours */}
             <p className="text-[10px] uppercase tracking-widest text-taupe mb-3">Colours</p>
             <div className="flex gap-2 mb-6">
               {brandDNA.palette.length > 0 ? (
                 brandDNA.palette.map((c) => (
-                  <div key={c} className="size-12 rounded-sm ring-1 ring-border flex-shrink-0" style={{ backgroundColor: c }} title={c} />
+                  <div key={c} className="flex flex-col items-center gap-1">
+                    <div className="size-12 rounded-sm ring-1 ring-border flex-shrink-0" style={{ backgroundColor: c }} />
+                    <span className="text-[9px] text-taupe font-mono">{c}</span>
+                  </div>
                 ))
               ) : (
                 <p className="text-xs text-taupe italic">No colours set — add them in Brand DNA settings.</p>
               )}
             </div>
+
+            {/* Aesthetic + tier */}
+            {(brandDNA.aestheticDirection || brandDNA.brandTier) && (
+              <div className="grid grid-cols-2 gap-6 pt-6 border-t hairline mb-6">
+                {brandDNA.aestheticDirection && (
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Aesthetic</p>
+                    <p className="text-sm capitalize">{brandDNA.aestheticDirection.replace(/_/g, " ")}</p>
+                  </div>
+                )}
+                {brandDNA.brandTier && (
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Market tier</p>
+                    <p className="text-sm capitalize">{brandDNA.brandTier}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-6 pt-6 border-t hairline">
               <div>
                 <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Headline font</p>
@@ -112,7 +148,7 @@ function BrandPage() {
           <h2 className="eyebrow mb-6">Tone of voice</h2>
           <div className="artifact p-8">
             <p className="font-serif text-2xl mb-6">{brandDNA.voice.summary}</p>
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-2 gap-6 mb-6">
               <div>
                 <p className="text-[10px] uppercase tracking-widest text-sage mb-3">Always</p>
                 <ul className="space-y-2 text-sm text-foreground">
@@ -140,6 +176,16 @@ function BrandPage() {
                 </ul>
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-6 pt-6 border-t hairline">
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Emojis</p>
+                <p className="text-sm capitalize">{brandDNA.emojiPolicy.replace(/_/g, " ")}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Caption length</p>
+                <p className="text-sm capitalize">{brandDNA.captionLength}</p>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -164,7 +210,7 @@ function BrandPage() {
                     <span className="text-sm tabular-nums">{p.weight}%</span>
                   </div>
                   <div className="h-px bg-border relative">
-                    <div className="absolute inset-y-0 left-0 bg-foreground" style={{ width: `${p.weight * 2}%` }} />
+                    <div className="absolute inset-y-0 left-0 bg-foreground" style={{ width: `${p.weight}%` }} />
                   </div>
                 </div>
               </div>
@@ -204,7 +250,7 @@ function BrandPage() {
           <div className="artifact p-8 sm:p-10 grid grid-cols-1 md:grid-cols-3 gap-8">
             <div>
               <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Age range</p>
-              <p className="font-serif text-2xl mb-2">{brandDNA.idealClient.age}</p>
+              <p className="font-serif text-2xl mb-2">{brandDNA.idealClient.age || "—"}</p>
               <p className="text-sm text-taupe leading-relaxed">{brandDNA.idealClient.cities}</p>
             </div>
             <div>
@@ -216,6 +262,16 @@ function BrandPage() {
               <p className="font-serif text-xl mb-2">{brandDNA.category}</p>
               <p className="text-sm text-taupe">{brandDNA.oneLiner}</p>
             </div>
+            {brandDNA.idealClient.painPoints.length > 0 && (
+              <div className="md:col-span-3 pt-6 border-t hairline">
+                <p className="text-[10px] uppercase tracking-widest text-taupe mb-3">Pain points</p>
+                <div className="flex flex-wrap gap-2">
+                  {brandDNA.idealClient.painPoints.map((p) => (
+                    <span key={p} className="text-[10px] uppercase tracking-widest border hairline px-3 py-1.5 text-taupe">{p}</span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </section>
       </div>
