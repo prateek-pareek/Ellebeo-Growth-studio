@@ -1,196 +1,196 @@
-name: Production Deployment
+ name: Production Deployment
 
-on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - '.github/workflows/production.yml'
+  on:
+    push:
+      branches:
+        - main
+      paths:
+        - 'backend/**'
+        - 'frontend/**'
+        - '.github/workflows/production.yml'
 
-env:
-  REGISTRY: ghcr.io
-  BACKEND_IMAGE_NAME: ${{ github.repository }}/backend
-  FRONTEND_IMAGE_NAME: ${{ github.repository }}/frontend
+  env:
+    REGISTRY: ghcr.io
+    BACKEND_IMAGE_NAME: ${{ github.repository }}/backend
+    FRONTEND_IMAGE_NAME: ${{ github.repository }}/frontend
 
-jobs:
-  build-and-push:
-    runs-on: ubuntu-24.04
-    environment:
-      name: Growthstudio
-    permissions:
-      contents: read
-      packages: write
-    
-    outputs:
-      build_backend: ${{ steps.changes.outputs.backend }}
-      build_frontend: ${{ steps.changes.outputs.frontend }}
+  jobs:
+    build-and-push:
+      runs-on: ubuntu-24.04
+      environment:
+        name: Growthstudio
+      permissions:
+        contents: read
+        packages: write
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
+      outputs:
+        build_backend: ${{ steps.changes.outputs.backend }}
+        build_frontend: ${{ steps.changes.outputs.frontend }}
 
-      - name: Check what changed
-        id: changes
-        run: |
-          # Fallback to true if previous commit is not available
-          git diff --name-only HEAD~1 HEAD > /tmp/changed_files.txt || echo "backend/ frontend/" > /tmp/changed_files.txt
-          echo "backend=$(grep -q '^backend/' /tmp/changed_files.txt && echo true || echo false)" >> $GITHUB_OUTPUT
-          echo "frontend=$(grep -q '^frontend/' /tmp/changed_files.txt && echo true || echo false)" >> $GITHUB_OUTPUT
-          
-          # If workflow file changed, build everything just to be safe
-          if grep -q '^\.github/workflows/' /tmp/changed_files.txt; then
-            echo "backend=true" >> $GITHUB_OUTPUT
-            echo "frontend=true" >> $GITHUB_OUTPUT
-          fi
+      steps:
+        - name: Checkout repository
+          uses: actions/checkout@v4
+          with:
+            fetch-depth: 2
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        - name: Check what changed
+          id: changes
+          run: |
+            # Fallback to true if previous commit is not available
+            git diff --name-only HEAD~1 HEAD > /tmp/changed_files.txt || echo "backend/ frontend/" > /tmp/changed_files.txt
+            echo "backend=$(grep -q '^backend/' /tmp/changed_files.txt && echo true || echo false)" >> $GITHUB_OUTPUT
+            echo "frontend=$(grep -q '^frontend/' /tmp/changed_files.txt && echo true || echo false)" >> $GITHUB_OUTPUT
 
-      - name: Log in to the Container registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # BACKEND
-      - name: Extract metadata (tags, labels) for Backend
-        if: steps.changes.outputs.backend == 'true'
-        id: meta-backend
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}
-          tags: |
-            type=sha,format=long
-            type=raw,value=latest
-
-      - name: Build and push Backend
-        if: steps.changes.outputs.backend == 'true'
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          push: true
-          tags: ${{ steps.meta-backend.outputs.tags }}
-          labels: ${{ steps.meta-backend.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      # FRONTEND
-      - name: Extract metadata (tags, labels) for Frontend
-        if: steps.changes.outputs.frontend == 'true'
-        id: meta-frontend
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}
-          tags: |
-            type=sha,format=long
-            type=raw,value=latest
-
-      - name: Build and push Frontend
-        if: steps.changes.outputs.frontend == 'true'
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          push: true
-          tags: ${{ steps.meta-frontend.outputs.tags }}
-          labels: ${{ steps.meta-frontend.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            VITE_API_URL=https://growth.${{ vars.DOMAIN }}/api
-
-  deploy:
-    needs: build-and-push
-    runs-on: ubuntu-24.04
-    environment: Growthstudio
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      # Sync the ops/ files (compose + scripts) to the VPS so the server always
-      # runs the version-controlled deployment definition, not a stale local copy.
-      - name: Sync ops files to VPS
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          source: "ops/deploy.sh,ops/rollback.sh,ops/docker-compose.yml,ops/platform-resilience.md"
-          target: "/opt/ellebeo-growth-studio"
-
-      - name: Deploy to VPS
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            cd /opt/ellebeo-growth-studio/ops
-            
-            # Generate .env file for the deployment.
-            # NOTE: secrets are stored as GitHub *Variables* (vars.*) per current
-            # setup. Consider moving the sensitive ones to Secrets later — vars are
-            # not masked in logs. The 'EOF' quoting prevents the VPS shell from
-            # expanding values; GitHub still substitutes ${{ }} at render time.
-            cat << 'EOF' > .env
-            NODE_ENV=production
-            DOMAIN=${{ vars.DOMAIN }}
-            REDIS_TLS=false
-            GROWTH_STUDIO_DOMAIN=growth.${{ vars.DOMAIN }}
-            TRAEFIK_NETWORK=${{ vars.TRAEFIK_NETWORK || 'proxy' }}
-            DATABASE_URL=${{ vars.DATABASE_URL }}
-            REDIS_PASSWORD=${{ vars.REDIS_PASSWORD }}
-            OPENAI_API_KEY=${{ vars.OPENAI_API_KEY }}
-            ANTHROPIC_API_KEY=${{ vars.ANTHROPIC_API_KEY }}
-            GEMINI_API_KEY=${{ vars.GEMINI_API_KEY }}
-            OTEL_EXPORTER_OTLP_ENDPOINT=${{ vars.OTEL_EXPORTER_OTLP_ENDPOINT }}
-            OTEL_SERVICE_NAME=${{ vars.OTEL_SERVICE_NAME }}
-            FRONTEND_URL=${{ vars.FRONTEND_URL }}
-            CLOUDINARY_API_SECRET=${{ vars.CLOUDINARY_API_SECRET }}
-            CLOUDINARY_API_KEY=${{ vars.CLOUDINARY_API_KEY }}
-            CLOUDINARY_CLOUD_NAME=${{ vars.CLOUDINARY_CLOUD_NAME }}
-            FIREBASE_STORAGE_BUCKET=${{ vars.FIREBASE_STORAGE_BUCKET }}
-            FIREBASE_PRIVATE_KEY="${{ vars.FIREBASE_PRIVATE_KEY }}"
-            FIREBASE_PROJECT_ID=${{ vars.FIREBASE_PROJECT_ID }}
-            FIREBASE_CLIENT_EMAIL=${{ vars.FIREBASE_CLIENT_EMAIL }}
-            REDIS_HOST=${{ vars.REDIS_HOST || 'host.docker.internal' }}
-            REDIS_PORT=${{ vars.REDIS_PORT || '6379' }}
-            JWT_ACCESS_SECRET=${{ vars.JWT_ACCESS_SECRET }}
-            JWT_REFRESH_SECRET=${{ vars.JWT_REFRESH_SECRET }}
-            JWT_ACCESS_TTL_SECONDS=${{ vars.JWT_ACCESS_TTL_SECONDS }}
-            JWT_REFRESH_TTL_SECONDS=${{ vars.JWT_REFRESH_TTL_SECONDS }}
-            ADMIN_PORTAL_URL=${{ vars.ADMIN_PORTAL_URL }}
-            EOF
-
-            # Secure the environment file so only the owner can read it
-            chmod 600 .env
-
-            # Make sure scripts are executable
-            chmod +x deploy.sh rollback.sh
-
-            # Resolve image refs. GHCR requires a lowercase repository path.
-            # Use the immutable sha tag for components built this run; fall back
-            # to :latest for components that did not change.
-            REGISTRY=ghcr.io
-            REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-            SHA_TAG="sha-${{ github.sha }}"
-
-            if [ "${{ needs.build-and-push.outputs.build_backend }}" = "true" ]; then
-              BACKEND_TAG="$REGISTRY/$REPO/backend:$SHA_TAG"
-            else
-              BACKEND_TAG="$REGISTRY/$REPO/backend:latest"
+            # If workflow file changed, build everything just to be safe
+            if grep -q '^\.github/workflows/' /tmp/changed_files.txt; then
+              echo "backend=true" >> $GITHUB_OUTPUT
+              echo "frontend=true" >> $GITHUB_OUTPUT
             fi
 
-            if [ "${{ needs.build-and-push.outputs.build_frontend }}" = "true" ]; then
-              FRONTEND_TAG="$REGISTRY/$REPO/frontend:$SHA_TAG"
-            else
-              FRONTEND_TAG="$REGISTRY/$REPO/frontend:latest"
-            fi
+        - name: Set up Docker Buildx
+          uses: docker/setup-buildx-action@v3
 
-            # Execute blue-green deployment
-            ./deploy.sh "$BACKEND_TAG" "$FRONTEND_TAG"
+        - name: Log in to the Container registry
+          uses: docker/login-action@v3
+          with:
+            registry: ${{ env.REGISTRY }}
+            username: ${{ github.actor }}
+            password: ${{ secrets.GITHUB_TOKEN }}
+
+        # BACKEND
+        - name: Extract metadata (tags, labels) for Backend
+          if: steps.changes.outputs.backend == 'true'
+          id: meta-backend
+          uses: docker/metadata-action@v5
+          with:
+            images: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}
+            tags: |
+              type=sha,format=long
+              type=raw,value=latest
+
+        - name: Build and push Backend
+          if: steps.changes.outputs.backend == 'true'
+          uses: docker/build-push-action@v5
+          with:
+            context: ./backend
+            push: true
+            tags: ${{ steps.meta-backend.outputs.tags }}
+            labels: ${{ steps.meta-backend.outputs.labels }}
+            cache-from: type=gha
+            cache-to: type=gha,mode=max
+
+        # FRONTEND
+        - name: Extract metadata (tags, labels) for Frontend
+          if: steps.changes.outputs.frontend == 'true'
+          id: meta-frontend
+          uses: docker/metadata-action@v5
+          with:
+            images: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}
+            tags: |
+              type=sha,format=long
+              type=raw,value=latest
+
+        - name: Build and push Frontend
+          if: steps.changes.outputs.frontend == 'true'
+          uses: docker/build-push-action@v5
+          with:
+            context: ./frontend
+            push: true
+            tags: ${{ steps.meta-frontend.outputs.tags }}
+            labels: ${{ steps.meta-frontend.outputs.labels }}
+            cache-from: type=gha
+            cache-to: type=gha,mode=max
+            build-args: |
+              VITE_API_URL=https://growth.${{ vars.DOMAIN }}/api
+
+    deploy:
+      needs: build-and-push
+      runs-on: ubuntu-24.04
+      environment: Growthstudio
+
+      steps:
+        - name: Checkout repository
+          uses: actions/checkout@v4
+
+        # Sync the ops/ files (compose + scripts) to the VPS so the server always
+        # runs the version-controlled deployment definition, not a stale local copy.
+        - name: Sync ops files to VPS
+          uses: appleboy/scp-action@v0.1.7
+          with:
+            host: ${{ secrets.VPS_HOST }}
+            username: ${{ secrets.VPS_USER }}
+            key: ${{ secrets.VPS_SSH_KEY }}
+            source: "ops/deploy.sh,ops/rollback.sh,ops/docker-compose.yml,ops/platform-resilience.md"
+            target: "/opt/ellebeo-growth-studio"
+
+        - name: Deploy to VPS
+          uses: appleboy/ssh-action@v1.0.3
+          with:
+            host: ${{ secrets.VPS_HOST }}
+            username: ${{ secrets.VPS_USER }}
+            key: ${{ secrets.VPS_SSH_KEY }}
+            script: |
+              cd /opt/ellebeo-growth-studio/ops
+
+              # Generate .env file for the deployment.
+              # NOTE: secrets are stored as GitHub *Variables* (vars.*) per current
+              # setup. Consider moving the sensitive ones to Secrets later — vars are
+              # not masked in logs. The 'EOF' quoting prevents the VPS shell from
+              # expanding values; GitHub still substitutes ${{ }} at render time.
+              cat << 'EOF' > .env
+              NODE_ENV=production
+              DOMAIN=${{ vars.DOMAIN }}
+              REDIS_TLS=false
+              GROWTH_STUDIO_DOMAIN=growth.${{ vars.DOMAIN }}
+              TRAEFIK_NETWORK=${{ vars.TRAEFIK_NETWORK || 'proxy' }}
+              DATABASE_URL=${{ vars.DATABASE_URL }}
+              REDIS_PASSWORD=${{ vars.REDIS_PASSWORD }}
+              OPENAI_API_KEY=${{ vars.OPENAI_API_KEY }}
+              ANTHROPIC_API_KEY=${{ vars.ANTHROPIC_API_KEY }}
+              GEMINI_API_KEY=${{ vars.GEMINI_API_KEY }}
+              OTEL_EXPORTER_OTLP_ENDPOINT=${{ vars.OTEL_EXPORTER_OTLP_ENDPOINT }}
+              OTEL_SERVICE_NAME=${{ vars.OTEL_SERVICE_NAME }}
+              FRONTEND_URL=${{ vars.FRONTEND_URL }}
+              CLOUDINARY_API_SECRET=${{ vars.CLOUDINARY_API_SECRET }}
+              CLOUDINARY_API_KEY=${{ vars.CLOUDINARY_API_KEY }}
+              CLOUDINARY_CLOUD_NAME=${{ vars.CLOUDINARY_CLOUD_NAME }}
+              FIREBASE_STORAGE_BUCKET=${{ vars.FIREBASE_STORAGE_BUCKET }}
+              FIREBASE_PRIVATE_KEY="${{ vars.FIREBASE_PRIVATE_KEY }}"
+              FIREBASE_PROJECT_ID=${{ vars.FIREBASE_PROJECT_ID }}
+              FIREBASE_CLIENT_EMAIL=${{ vars.FIREBASE_CLIENT_EMAIL }}
+              REDIS_HOST=${{ vars.REDIS_HOST || 'host.docker.internal' }}
+              REDIS_PORT=${{ vars.REDIS_PORT || '6379' }}
+              JWT_ACCESS_SECRET=${{ vars.JWT_ACCESS_SECRET }}
+              JWT_REFRESH_SECRET=${{ vars.JWT_REFRESH_SECRET }}
+              JWT_ACCESS_TTL_SECONDS=${{ vars.JWT_ACCESS_TTL_SECONDS }}
+              JWT_REFRESH_TTL_SECONDS=${{ vars.JWT_REFRESH_TTL_SECONDS }}
+              ADMIN_PORTAL_URL=${{ vars.ADMIN_PORTAL_URL }}
+              EOF
+
+              # Secure the environment file so only the owner can read it
+              chmod 600 .env
+
+              # Make sure scripts are executable
+              chmod +x deploy.sh rollback.sh
+
+              # Resolve image refs. GHCR requires a lowercase repository path.
+              # Use the immutable sha tag for components built this run; fall back
+              # to :latest for components that did not change.
+              REGISTRY=ghcr.io
+              REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+              SHA_TAG="sha-${{ github.sha }}"
+
+              if [ "${{ needs.build-and-push.outputs.build_backend }}" = "true" ]; then
+                BACKEND_TAG="$REGISTRY/$REPO/backend:$SHA_TAG"
+              else
+                BACKEND_TAG="$REGISTRY/$REPO/backend:latest"
+              fi
+
+              if [ "${{ needs.build-and-push.outputs.build_frontend }}" = "true" ]; then
+                FRONTEND_TAG="$REGISTRY/$REPO/frontend:$SHA_TAG"
+              else
+                FRONTEND_TAG="$REGISTRY/$REPO/frontend:latest"
+              fi
+
+              # Execute blue-green deployment
+              ./deploy.sh "$BACKEND_TAG" "$FRONTEND_TAG"
