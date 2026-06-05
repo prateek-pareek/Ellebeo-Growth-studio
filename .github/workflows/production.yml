@@ -155,7 +155,7 @@ jobs:
             CLOUDINARY_API_KEY=${{ vars.CLOUDINARY_API_KEY }}
             CLOUDINARY_CLOUD_NAME=${{ vars.CLOUDINARY_CLOUD_NAME }}
             FIREBASE_STORAGE_BUCKET=${{ vars.FIREBASE_STORAGE_BUCKET }}
-            FIREBASE_PRIVATE_KEY="${{ vars.FIREBASE_PRIVATE_KEY }}"
+            FIREBASE_PRIVATE_KEY=${{ vars.FIREBASE_PRIVATE_KEY }}
             FIREBASE_PROJECT_ID=${{ vars.FIREBASE_PROJECT_ID }}
             FIREBASE_CLIENT_EMAIL=${{ vars.FIREBASE_CLIENT_EMAIL }}
             REDIS_HOST=${{ vars.REDIS_HOST || 'host.docker.internal' }}
