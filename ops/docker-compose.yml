@@ -132,8 +132,3 @@ services:
     container_name: growth-studio-migrate
     entrypoint: ["node", "node_modules/prisma/build/index.js"]
     command: ["migrate", "deploy"]
-
-networks:
-  proxy:
-    external: true
-    name: ${TRAEFIK_NETWORK:-proxy}
