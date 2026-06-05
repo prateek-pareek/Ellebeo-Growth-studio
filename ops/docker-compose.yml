@@ -1,0 +1,122 @@
+version: '3.8'
+
+# NOTE: Redis, Postgres, and Traefik are managed externally on the VPS.
+# This compose file implements Blue-Green for the Ellebeo Growth Studio services.
+
+x-base-node: &base-node
+  restart: unless-stopped
+  env_file:
+    - .env
+  mem_limit: 512m
+  cpus: 0.5
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "50m"
+      max-file: "5"
+
+services:
+  # ==========================================
+  # BLUE ENVIRONMENT
+  # ==========================================
+  backend-blue:
+    <<: *base-node
+    image: ${BACKEND_IMAGE:-ghcr.io/prateek-pareek/ellebeo-growth-studio/backend:latest}
+    container_name: growth-studio-backend-blue
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.growth-studio-api-blue.rule=Host(`${GROWTH_STUDIO_DOMAIN}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.growth-studio-api-blue.priority=${TRAEFIK_PRIORITY:-100}"
+      - "traefik.http.routers.growth-studio-api-blue.entrypoints=websecure"
+      - "traefik.http.routers.growth-studio-api-blue.tls.certresolver=letsencrypt"
+      - "traefik.http.services.growth-studio-api-blue.loadbalancer.server.port=3000"
+    profiles: ["blue"]
+
+  frontend-blue:
+    <<: *base-node
+    image: ${FRONTEND_IMAGE:-ghcr.io/prateek-pareek/ellebeo-growth-studio/frontend:latest}
+    container_name: growth-studio-frontend-blue
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.growth-studio-web-blue.rule=Host(`${GROWTH_STUDIO_DOMAIN}`)"
+      - "traefik.http.routers.growth-studio-web-blue.priority=${TRAEFIK_PRIORITY:-100}"
+      - "traefik.http.routers.growth-studio-web-blue.entrypoints=websecure"
+      - "traefik.http.routers.growth-studio-web-blue.tls.certresolver=letsencrypt"
+      - "traefik.http.services.growth-studio-web-blue.loadbalancer.server.port=3000"
+    profiles: ["blue"]
+
+  # ==========================================
+  # GREEN ENVIRONMENT
+  # ==========================================
+  backend-green:
+    <<: *base-node
+    image: ${BACKEND_IMAGE:-ghcr.io/prateek-pareek/ellebeo-growth-studio/backend:latest}
+    container_name: growth-studio-backend-green
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.growth-studio-api-green.rule=Host(`${GROWTH_STUDIO_DOMAIN}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.growth-studio-api-green.priority=${TRAEFIK_PRIORITY:-100}"
+      - "traefik.http.routers.growth-studio-api-green.entrypoints=websecure"
+      - "traefik.http.routers.growth-studio-api-green.tls.certresolver=letsencrypt"
+      - "traefik.http.services.growth-studio-api-green.loadbalancer.server.port=3000"
+    profiles: ["green"]
+
+  frontend-green:
+    <<: *base-node
+    image: ${FRONTEND_IMAGE:-ghcr.io/prateek-pareek/ellebeo-growth-studio/frontend:latest}
+    container_name: growth-studio-frontend-green
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.growth-studio-web-green.rule=Host(`${GROWTH_STUDIO_DOMAIN}`)"
+      - "traefik.http.routers.growth-studio-web-green.priority=${TRAEFIK_PRIORITY:-100}"
+      - "traefik.http.routers.growth-studio-web-green.entrypoints=websecure"
+      - "traefik.http.routers.growth-studio-web-green.tls.certresolver=letsencrypt"
+      - "traefik.http.services.growth-studio-web-green.loadbalancer.server.port=3000"
+    profiles: ["green"]
+
+  # ==========================================
+  # BACKGROUND WORKERS
+  # ==========================================
+  worker-content:
+    <<: *base-node
+    restart: on-failure:5
+    image: ${BACKEND_IMAGE:-ghcr.io/prateek-pareek/ellebeo-growth-studio/backend:latest}
+    container_name: growth-studio-worker-content
+    command: ["node", "dist/ai/workers/content-generation.worker.js"]
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"process.exit(0)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  worker-image:
+    <<: *base-node
+    restart: on-failure:5
+    image: ${BACKEND_IMAGE:-ghcr.io/prateek-pareek/ellebeo-growth-studio/backend:latest}
+    container_name: growth-studio-worker-image
+    mem_limit: 1g
+    cpus: 0.75
+    command: ["node", "dist/ai/workers/image-processing.worker.js"]
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"process.exit(0)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  worker-video:
+    <<: *base-node
+    restart: on-failure:5
+    image: ${BACKEND_IMAGE:-ghcr.io/prateek-pareek/ellebeo-growth-studio/backend:latest}
+    container_name: growth-studio-worker-video
+    mem_limit: 1.5g
+    memswap_limit: 2g
+    cpus: 1.0
+    command: ["node", "dist/ai/workers/video-assembly.worker.js"]
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"process.exit(0)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
