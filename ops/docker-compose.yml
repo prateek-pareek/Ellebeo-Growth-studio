@@ -2,9 +2,9 @@
 # This compose file implements Blue-Green for the Ellebeo Growth Studio services.
 #
 # Networking:
-#   - All services join the external `proxy` network that Traefik also runs on,
-#     so Traefik can route to the blue/green containers. Override the network
-#     name via TRAEFIK_NETWORK if Traefik uses a different one.
+#   - Traefik runs on the host (not in Docker). It discovers containers via the
+#     Docker socket and routes to them using their labels. No shared Docker
+#     network is required.
 #   - host.docker.internal is mapped to the host gateway so containers can reach
 #     Redis/Postgres running on the VPS host (not resolvable by default on Linux).
 
@@ -14,8 +14,6 @@ x-base-node: &base-node
     - .env
   extra_hosts:
     - "host.docker.internal:host-gateway"
-  networks:
-    - proxy
   mem_limit: 512m
   cpus: 0.5
   logging:
