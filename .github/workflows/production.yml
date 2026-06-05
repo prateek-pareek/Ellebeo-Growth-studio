@@ -126,12 +126,19 @@ jobs:
  
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          envs: GHCR_TOKEN,GHCR_USER
           script: |
             cd /opt/ellebeo-growth-studio/ops
+ 
+            # Log in to GHCR so the VPS can pull private images
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
  
             # Generate .env file for the deployment.
             # NOTE: secrets are stored as GitHub *Variables* (vars.*) per current
