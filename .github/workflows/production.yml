@@ -142,7 +142,7 @@ jobs:
             DOMAIN=${{ vars.DOMAIN }}
             REDIS_TLS=false
             GROWTH_STUDIO_DOMAIN=growth.${{ vars.DOMAIN }}
-            TRAEFIK_NETWORK=${{ vars.TRAEFIK_NETWORK || 'proxy' }}
+            TRAEFIK_NETWORK=${{ vars.TRAEFIK_NETWORK }}
             DATABASE_URL=${{ vars.DATABASE_URL }}
             REDIS_PASSWORD=${{ vars.REDIS_PASSWORD }}
             OPENAI_API_KEY=${{ vars.OPENAI_API_KEY }}
@@ -158,14 +158,19 @@ jobs:
             FIREBASE_PRIVATE_KEY=${{ vars.FIREBASE_PRIVATE_KEY }}
             FIREBASE_PROJECT_ID=${{ vars.FIREBASE_PROJECT_ID }}
             FIREBASE_CLIENT_EMAIL=${{ vars.FIREBASE_CLIENT_EMAIL }}
-            REDIS_HOST=${{ vars.REDIS_HOST || 'host.docker.internal' }}
-            REDIS_PORT=${{ vars.REDIS_PORT || '6379' }}
+            REDIS_HOST=${{ vars.REDIS_HOST }}
+            REDIS_PORT=${{ vars.REDIS_PORT }}
             JWT_ACCESS_SECRET=${{ vars.JWT_ACCESS_SECRET }}
             JWT_REFRESH_SECRET=${{ vars.JWT_REFRESH_SECRET }}
             JWT_ACCESS_TTL_SECONDS=${{ vars.JWT_ACCESS_TTL_SECONDS }}
             JWT_REFRESH_TTL_SECONDS=${{ vars.JWT_REFRESH_TTL_SECONDS }}
             ADMIN_PORTAL_URL=${{ vars.ADMIN_PORTAL_URL }}
             EOF
+
+            # Set defaults for optional vars
+            TRAEFIK_NETWORK="${TRAEFIK_NETWORK:-proxy}"
+            REDIS_HOST="${REDIS_HOST:-host.docker.internal}"
+            REDIS_PORT="${REDIS_PORT:-6379}"
 
             # Secure the environment file so only the owner can read it
             chmod 600 .env
