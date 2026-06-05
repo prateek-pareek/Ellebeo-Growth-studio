@@ -13,7 +13,7 @@ import {
 const NAV: Array<{ to: string; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { to: "/", label: "Home", icon: Home },
   { to: "/appointments", label: "Appointments", icon: Layers },
-  { to: "/crm", label: "Bookings", icon: BookOpen },
+  { to: "/bookings", label: "Bookings", icon: BookOpen },
   { to: "/content", label: "Content", icon: Sparkles },
   { to: "/profile", label: "Profile", icon: UserCircle2 },
 ];
@@ -22,11 +22,11 @@ const DESKTOP_NAV: Array<{ to: string; label: string }> = [
   { to: "/", label: "Home" },
   { to: "/brand", label: "Brand" },
   { to: "/appointments", label: "Appointments" },
-  { to: "/crm", label: "Bookings" },
+  { to: "/bookings", label: "Bookings" },
   { to: "/content", label: "Content" },
   { to: "/calendar", label: "Calendar" },
   { to: "/templates", label: "Templates" },
-  { to: "/campaigns", label: "Campaigns" },
+  // { to: "/campaigns", label: "Campaigns" },
   { to: "/profile", label: "Profile" },
 ];
 

@@ -97,6 +97,8 @@ export async function fetchBrandDnaForEditing(): Promise<OnboardingPayload | nul
       bookingsPerWeek: String(goalMap.get('bookings per week') ?? ""),
       postsPerWeek: String(goalMap.get('posts per week') ?? ""),
       pillars: (dna.pillars || []).map((p: any) => p.label).join(', '),
+      logoUrl: dna.logoUrl || "",
+      logoPosition: dna.logoPosition || "bottom_right",
     };
   } catch {
     return null;

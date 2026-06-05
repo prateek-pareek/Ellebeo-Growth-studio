@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/crm")({
+export const Route = createFileRoute("/bookings")({
   head: () => ({
     meta: [
       { title: "CRM Bookings — Elle.Be.O Growth" },
