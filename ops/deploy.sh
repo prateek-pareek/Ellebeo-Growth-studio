@@ -85,7 +85,7 @@ while [ $ATTEMPTS -lt $MAX_ATTEMPTS ]; do
     
     echo "Attempt $((ATTEMPTS+1))/$MAX_ATTEMPTS: Status is $STATUS... Waiting 5s."
     sleep 5
-    ((ATTEMPTS++))
+    ATTEMPTS=$((ATTEMPTS+1))
 done
 
 # 6. Traffic Switch and Teardown
