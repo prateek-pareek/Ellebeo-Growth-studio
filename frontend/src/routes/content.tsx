@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import { useContentItems, type ContentItem } from "@/lib/providers/content-provider";
 import { useAppointments } from "@/lib/providers/appointments-provider";
 import { useTemplates } from "@/lib/providers/template-provider";
@@ -32,6 +32,14 @@ const STATE_FILTERS: Array<{ id: StateFilter; label: string }> = [
 ];
 
 const FORMAT_FILTERS: Array<string> = ["Carousel", "Reel", "Story", "Caption", "TikTok"];
+
+const FORMAT_ICONS: Record<string, string> = {
+  Carousel: "⊞",
+  Reel: "▶",
+  Story: "◻",
+  Caption: "≡",
+  TikTok: "♪",
+};
 
 const GOAL_FILTERS: Array<{ id: string; label: string }> = [
   { id: "showcase", label: "Showcase" },
@@ -68,12 +76,24 @@ function ContentPage() {
       if (formatFilter && c.type !== formatFilter) return false;
       if (goalFilter && c.goal !== goalFilter) return false;
       if (q) {
-        const hay = `${c.title} ${c.caption} ${c.pillar} ${c.category}`.toLowerCase();
+        const apt = c.sourceAppointmentId ? appointmentsById.get(c.sourceAppointmentId) : undefined;
+        const hay = [
+          c.title,
+          c.caption,
+          c.category,
+          c.type,
+          c.goal,
+          c.status,
+          c.cta,
+          (c.hashtags ?? []).join(" "),
+          apt?.clientName,
+          apt?.service,
+        ].filter(Boolean).join(" ").toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [items, stateFilter, formatFilter, goalFilter, query]);
+  }, [items, appointmentsById, stateFilter, formatFilter, goalFilter, query]);
 
   const readyAppointments = appts.filter(
     (a) => a.consent === "granted"
@@ -88,6 +108,18 @@ function ContentPage() {
 
   const hasActiveFilters =
     stateFilter !== "all" || formatFilter !== null || goalFilter !== null || query.trim() !== "";
+
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const activeChipCount = (formatFilter ? 1 : 0) + (goalFilter ? 1 : 0);
 
   return (
     <div>
@@ -150,72 +182,170 @@ function ContentPage() {
       </section>
 
       {/* Filter bar */}
-      <section className="mb-8 space-y-5">
-        {/* State segments */}
-        <div className="flex flex-wrap items-center gap-x-1 gap-y-2 border-b hairline">
-          {STATE_FILTERS.map((f) => {
-            const active = stateFilter === f.id;
-            const n = counts[f.id] || 0;
-            return (
+      <section className="mb-8">
+        <div className="flex items-center gap-3 border-b hairline pb-px">
+          {/* State tabs */}
+          <div className="flex items-end gap-0 flex-1 min-w-0 overflow-x-auto">
+            {STATE_FILTERS.map((f) => {
+              const active = stateFilter === f.id;
+              const n = counts[f.id] ?? 0;
+              const dotColor: Record<string, string> = {
+                needs_review: "bg-amber-400",
+                draft: "bg-taupe/50",
+                scheduled: "bg-foreground",
+                published: "bg-sage",
+              };
+              return (
+                <button
+                  key={f.id}
+                  onClick={() => setStateFilter(f.id)}
+                  className={
+                    "group flex items-center gap-1.5 px-3 pb-2.5 -mb-px text-[11px] uppercase tracking-[0.18em] transition-all duration-150 whitespace-nowrap " +
+                    (active
+                      ? "text-foreground border-b-2 border-foreground"
+                      : "text-taupe hover:text-foreground border-b-2 border-transparent")
+                  }
+                >
+                  {f.id !== "all" && (
+                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dotColor[f.id] || "bg-taupe/40"} ${active ? "opacity-100" : "opacity-40 group-hover:opacity-70"}`} />
+                  )}
+                  {f.label}
+                  <span className={
+                    "tabular-nums text-[9px] px-1.5 py-0.5 rounded-full font-medium transition-colors " +
+                    (active ? "bg-foreground text-offwhite" : "bg-nude/60 text-taupe group-hover:bg-nude")
+                  }>{n}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Right side: Filters dropdown + search */}
+          <div className="flex items-center gap-2 pb-2 flex-shrink-0">
+            {/* Search */}
+            <div className="relative">
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-taupe text-[11px] pointer-events-none">⌕</span>
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search…"
+                className="text-[12px] bg-transparent border hairline focus:border-foreground/60 outline-none pl-7 pr-3 py-1.5 w-32 placeholder:text-taupe/60 transition-all focus:w-44"
+              />
+            </div>
+
+            {/* Filters dropdown */}
+            <div className="relative" ref={filterRef}>
               <button
-                key={f.id}
-                onClick={() => setStateFilter(f.id)}
+                onClick={() => setFilterOpen((o) => !o)}
                 className={
-                  "text-[11px] uppercase tracking-[0.2em] px-3 pb-2 -mb-px transition-colors flex items-center gap-2 " +
-                  (active
-                    ? "text-foreground border-b border-foreground"
-                    : "text-taupe hover:text-foreground")
+                  "flex items-center gap-2 text-[10px] uppercase tracking-widest px-3 py-1.5 border transition-all duration-150 " +
+                  (filterOpen || activeChipCount > 0
+                    ? "bg-foreground text-offwhite border-foreground"
+                    : "border-hairline text-taupe hover:text-foreground hover:border-foreground/50")
                 }
               >
-                <span>{f.label}</span>
-                <span className="tabular-nums text-[10px] text-taupe">{n}</span>
+                <svg width="13" height="10" viewBox="0 0 13 10" fill="none" className="flex-shrink-0">
+                  <line x1="0" y1="2" x2="13" y2="2" stroke="currentColor" strokeWidth="1.2"/>
+                  <line x1="2" y1="5" x2="11" y2="5" stroke="currentColor" strokeWidth="1.2"/>
+                  <line x1="4" y1="8" x2="9" y2="8" stroke="currentColor" strokeWidth="1.2"/>
+                </svg>
+                Filters
+                {activeChipCount > 0 && (
+                  <span className="w-4 h-4 rounded-full bg-offwhite text-foreground text-[9px] flex items-center justify-center font-semibold leading-none">
+                    {activeChipCount}
+                  </span>
+                )}
               </button>
-            );
-          })}
-        </div>
 
-        {/* Format + goal + search */}
-        <div className="flex flex-wrap items-center gap-3 lg:gap-4">
-          <ChipGroup label="Format">
-            {FORMAT_FILTERS.map((f) => (
-              <FilterChip
-                key={f}
-                active={formatFilter === f}
-                onClick={() => setFormatFilter(formatFilter === f ? null : f)}
-              >
-                {f}
-              </FilterChip>
-            ))}
-          </ChipGroup>
-          <ChipGroup label="Goal">
-            {GOAL_FILTERS.map((g) => (
-              <FilterChip
-                key={g.id}
-                active={goalFilter === g.id}
-                onClick={() => setGoalFilter(goalFilter === g.id ? null : g.id)}
-              >
-                {g.label}
-              </FilterChip>
-            ))}
-          </ChipGroup>
-          <div className="ml-auto flex items-center gap-3">
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search captions, clients…"
-              className="text-[12px] bg-transparent border-b hairline focus:border-foreground outline-none px-1 py-1 w-48 placeholder:text-taupe"
-            />
+              {filterOpen && (
+                <div className="absolute right-0 top-full mt-1.5 w-72 bg-card border hairline shadow-lg z-30 p-4 space-y-5">
+                  {/* Format */}
+                  <div>
+                    <p className="text-[9px] uppercase tracking-[0.2em] text-taupe mb-2.5 font-medium">Format</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {FORMAT_FILTERS.map((f) => (
+                        <button
+                          key={f}
+                          onClick={() => setFormatFilter(formatFilter === f ? null : f)}
+                          className={
+                            "flex items-center gap-1.5 text-[10px] uppercase tracking-widest px-2.5 py-1 border transition-all duration-150 " +
+                            (formatFilter === f
+                              ? "bg-foreground text-offwhite border-foreground"
+                              : "text-taupe border-border hover:text-foreground hover:border-foreground/50")
+                          }
+                        >
+                          <span className="leading-none opacity-70">{FORMAT_ICONS[f]}</span>
+                          {f}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Divider */}
+                  <div className="border-t hairline" />
+
+                  {/* Goal */}
+                  <div>
+                    <p className="text-[9px] uppercase tracking-[0.2em] text-taupe mb-2.5 font-medium">Goal</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {GOAL_FILTERS.map((g) => (
+                        <button
+                          key={g.id}
+                          onClick={() => setGoalFilter(goalFilter === g.id ? null : g.id)}
+                          className={
+                            "text-[10px] uppercase tracking-widest px-2.5 py-1 border transition-all duration-150 " +
+                            (goalFilter === g.id
+                              ? "bg-foreground text-offwhite border-foreground"
+                              : "text-taupe border-border hover:text-foreground hover:border-foreground/50")
+                          }
+                        >
+                          {g.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Footer */}
+                  {activeChipCount > 0 && (
+                    <>
+                      <div className="border-t hairline" />
+                      <button
+                        onClick={() => { setFormatFilter(null); setGoalFilter(null); }}
+                        className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors"
+                      >
+                        Clear filters
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Clear all (when search or state also active) */}
             {hasActiveFilters && (
               <button
                 onClick={clearFilters}
-                className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground"
+                className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors"
+                title="Clear all filters"
               >
-                Clear
+                ×
               </button>
             )}
           </div>
         </div>
+
+        {/* Active filter pills */}
+        {(formatFilter || goalFilter) && (
+          <div className="flex flex-wrap items-center gap-2 mt-2.5">
+            {formatFilter && (
+              <ActivePill label={`${FORMAT_ICONS[formatFilter]} ${formatFilter}`} onRemove={() => setFormatFilter(null)} />
+            )}
+            {goalFilter && (
+              <ActivePill label={GOAL_FILTERS.find(g => g.id === goalFilter)?.label ?? goalFilter} onRemove={() => setGoalFilter(null)} />
+            )}
+            <span className="text-[9px] text-taupe">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
+          </div>
+        )}
       </section>
 
       {/* Results */}
@@ -502,36 +632,12 @@ function StatePill({ state }: { state: string }) {
   );
 }
 
-function ChipGroup({ label, children }: { label: string; children: React.ReactNode }) {
+function ActivePill({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-[10px] uppercase tracking-widest text-taupe">{label}</span>
-      <div className="flex flex-wrap gap-1.5">{children}</div>
-    </div>
-  );
-}
-
-function FilterChip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={
-        "text-[10px] uppercase tracking-widest border hairline px-2.5 py-1 transition-colors " +
-        (active
-          ? "bg-foreground text-offwhite border-foreground"
-          : "text-taupe hover:text-foreground hover:border-foreground")
-      }
-    >
-      {children}
-    </button>
+    <span className="inline-flex items-center gap-1.5 text-[9px] uppercase tracking-widest bg-foreground/8 border hairline text-foreground px-2.5 py-1 rounded-full">
+      {label}
+      <button onClick={onRemove} className="text-taupe hover:text-foreground leading-none text-[11px]">×</button>
+    </span>
   );
 }
 
