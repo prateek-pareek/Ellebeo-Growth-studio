@@ -25,6 +25,7 @@ type StateFilter = "all" | string;
 
 const STATE_FILTERS: Array<{ id: StateFilter; label: string }> = [
   { id: "all", label: "All" },
+  { id: "needs_review", label: "Needs Review" },
   { id: "draft", label: "Drafts" },
   { id: "scheduled", label: "Scheduled" },
   { id: "published", label: "Published" },
@@ -52,10 +53,10 @@ function ContentPage() {
   const { templates } = useTemplates();
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: items.length, draft: 0, scheduled: 0, published: 0 };
+    const c: Record<string, number> = { all: items.length, draft: 0, needs_review: 0, scheduled: 0, published: 0 };
     for (const item of items) {
-        const s = item.state.toLowerCase();
-        if (c[s] !== undefined) c[s] += 1;
+      const s = item.state.toLowerCase().replace(/\s+/g, "_");
+      if (c[s] !== undefined) c[s] += 1;
     }
     return c;
   }, [items]);
@@ -63,7 +64,7 @@ function ContentPage() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return items.filter((c) => {
-      if (stateFilter !== "all" && c.state.toLowerCase() !== stateFilter) return false;
+      if (stateFilter !== "all" && c.state.toLowerCase().replace(/\s+/g, "_") !== stateFilter) return false;
       if (formatFilter && c.type !== formatFilter) return false;
       if (goalFilter && c.goal !== goalFilter) return false;
       if (q) {
@@ -236,6 +237,7 @@ function ContentPage() {
                     await api.patch(`/content/${c.id}/approve`);
                     toast.success("Content approved");
                     refresh?.();
+                    setStateFilter("all");
                   } catch { toast.error("Failed to approve"); }
                 }}
               />
@@ -250,6 +252,7 @@ function ContentPage() {
           item={editItem}
           onClose={() => setEditItem(null)}
           onSaved={() => { refresh?.(); setEditItem(null); }}
+          onApproved={() => { refresh?.(); setEditItem(null); setStateFilter("all"); }}
         />
       )}
 
@@ -370,7 +373,7 @@ function ContentCard({
   );
 }
 
-function EditSidebar({ item, onClose, onSaved }: { item: ContentItem; onClose: () => void; onSaved: () => void }) {
+function EditSidebar({ item, onClose, onSaved, onApproved }: { item: ContentItem; onClose: () => void; onSaved: () => void; onApproved?: () => void }) {
   const [caption, setCaption] = useState(item.caption);
   const [cta, setCta] = useState(item.cta ?? "");
   const [hashtags, setHashtags] = useState((item.hashtags ?? []).join(" "));
@@ -396,7 +399,7 @@ function EditSidebar({ item, onClose, onSaved }: { item: ContentItem; onClose: (
     try {
       await api.patch(`/content/${item.id}/approve`);
       toast.success("Approved!");
-      onSaved();
+      onApproved ? onApproved() : onSaved();
     } catch { toast.error("Failed to approve"); }
     finally { setApproving(false); }
   };
@@ -486,6 +489,8 @@ function EditSidebar({ item, onClose, onSaved }: { item: ContentItem; onClose: (
 function StatePill({ state }: { state: string }) {
   const styles: Record<string, string> = {
     draft: "bg-offwhite/95 text-foreground",
+    needs_review: "bg-amber-100 text-amber-800",
+    "needs review": "bg-amber-100 text-amber-800",
     scheduled: "bg-foreground text-offwhite",
     published: "bg-sage text-offwhite",
     blocked: "bg-destructive text-offwhite",
