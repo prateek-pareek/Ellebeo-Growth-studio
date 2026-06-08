@@ -90,31 +90,49 @@ function GeneratePage() {
   }, [requestedMatch]);
 
   useEffect(() => {
-    if (jobId && generating) {
-      pollRef.current = window.setInterval(async () => {
-        try {
-          const res = await api.get(`/generation/jobs/${jobId}`);
-          const status = res.data.data.state;
-          setJobStatus(status);
-          
-          if (status === 'completed') {
-            clearInterval(pollRef.current!);
-            const contentRes = await api.get(`/content?jobId=${jobId}`);
-            const contentBody = contentRes.data.data;
-            // Content service returns { data: items, meta: {...} } — extract the array
-            const items = Array.isArray(contentBody) ? contentBody : (contentBody?.data ?? []);
-            setBackendVariants(items);
-            setGenerating(false);
-          } else if (status === 'failed') {
-            clearInterval(pollRef.current!);
-            setGenerating(false);
-            toast.error("Generation failed. Please try again.");
-          }
-        } catch (e) {
-          console.error("Polling error", e);
+    if (!jobId || !generating) return;
+    let pollCount = 0;
+    let errorCount = 0;
+    const MAX_POLLS = 150; // 5 minutes at 2s intervals
+    const MAX_ERRORS = 5;
+
+    pollRef.current = window.setInterval(async () => {
+      pollCount++;
+      if (pollCount > MAX_POLLS) {
+        clearInterval(pollRef.current!);
+        setGenerating(false);
+        toast.error("Generation timed out. Please try again.");
+        return;
+      }
+      try {
+        const res = await api.get(`/generation/jobs/${jobId}`);
+        const status = res.data.data.state;
+        errorCount = 0;
+        setJobStatus(status);
+
+        if (status === 'completed') {
+          clearInterval(pollRef.current!);
+          const contentRes = await api.get(`/content?jobId=${jobId}`);
+          const contentBody = contentRes.data.data;
+          const items = Array.isArray(contentBody) ? contentBody : (contentBody?.data ?? []);
+          setBackendVariants(items);
+          setGenerating(false);
+        } else if (status === 'failed') {
+          clearInterval(pollRef.current!);
+          setGenerating(false);
+          toast.error("Generation failed. Please try again.");
         }
-      }, 2000);
-    }
+      } catch (e) {
+        errorCount++;
+        console.error("Polling error", e);
+        if (errorCount >= MAX_ERRORS) {
+          clearInterval(pollRef.current!);
+          setGenerating(false);
+          toast.error("Lost connection during generation. Please check your content library.");
+        }
+      }
+    }, 2000);
+
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };

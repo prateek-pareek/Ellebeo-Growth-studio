@@ -47,6 +47,29 @@ async function uploadBase64ToFirebase(base64: string, tenantId: string, name: st
   return `https://storage.googleapis.com/${bucket.name}/${filePath}`;
 }
 
+function buildBeforeSlidePrompt(params: {
+  overlayText: string;
+  businessName: string;
+  brandColor: string;
+}): string {
+  const { overlayText, businessName, brandColor } = params;
+  return `You are a social media designer adding a minimal text overlay to a BEFORE photo for "${businessName}".
+
+CRITICAL — this is the BEFORE image in a before/after transformation post:
+- Preserve the photo EXACTLY as it is — no color grading, no filters, no enhancements, no cinematic treatment
+- The photo must look raw and natural so the contrast with the AFTER photo is powerful and believable
+- Do NOT add bokeh, light leaks, glamour lighting, or any beautification effect
+- Do NOT make the skin/hair/nails look better than reality
+
+ONLY ADD:
+- A small, clean text label "${overlayText}" — place it in the bottom-left corner
+- Use a thin semi-transparent dark pill or rectangle behind the text (rgb 0,0,0 at 55% opacity)
+- Text in clean white, small size, all-caps tracking — minimal, unobtrusive
+- A tiny "BEFORE" badge in brand color ${brandColor} in the top-left corner
+
+CONTENT SAFETY: family-friendly, professional, no nudity or intimate areas.`;
+}
+
 function buildSlidePrompt(params: {
   overlayText: string;
   businessName: string;
@@ -131,6 +154,7 @@ export class AiImageGenerationService {
     index: number;
     isFirst: boolean;
     isLast: boolean;
+    isBeforePhoto?: boolean;
     tenantId: string;
     businessName: string;
     brandColor: string;
@@ -139,23 +163,25 @@ export class AiImageGenerationService {
     serviceType?: string;
   }): Promise<string> {
     const {
-      photoUrl, overlayText, index, isFirst, isLast,
+      photoUrl, overlayText, index, isFirst, isLast, isBeforePhoto,
       tenantId, businessName, brandColor,
       secondaryColor = '#f5f0eb',
       aesthetic = 'minimal editorial premium beauty',
       serviceType = 'beauty treatment',
     } = params;
 
-    const prompt = buildSlidePrompt({
-      overlayText,
-      businessName,
-      brandColor,
-      secondaryColor,
-      aesthetic,
-      serviceType,
-      isFirst,
-      isLast,
-    });
+    const prompt = isBeforePhoto
+      ? buildBeforeSlidePrompt({ overlayText, businessName, brandColor })
+      : buildSlidePrompt({
+          overlayText,
+          businessName,
+          brandColor,
+          secondaryColor,
+          aesthetic,
+          serviceType,
+          isFirst,
+          isLast,
+        });
 
     const imageBuffer = await downloadImageAsBuffer(photoUrl);
     const imageFile = new File([imageBuffer], 'photo.jpg', { type: 'image/jpeg' });
@@ -192,9 +218,8 @@ export class AiImageGenerationService {
         const isFirst = i === 0;
         const isLast = i === total - 1;
         // Cover + CTA use after photo; body slides use before photo
-        const photoUrl = (isFirst || isLast || !beforePhotoUrl)
-          ? afterPhotoUrl
-          : beforePhotoUrl;
+        const usingBefore = !isFirst && !isLast && !!beforePhotoUrl;
+        const photoUrl = usingBefore ? beforePhotoUrl! : afterPhotoUrl;
 
         try {
           const url = await this.generateSlide({
@@ -204,6 +229,7 @@ export class AiImageGenerationService {
             index: concept.index,
             isFirst,
             isLast,
+            isBeforePhoto: usingBefore,
             ...rest,
           });
           return { url, title: concept.title, label: `SLIDE ${String(concept.index).padStart(2, '0')}` };
@@ -238,7 +264,8 @@ export class AiImageGenerationService {
       frames.map(async (frame, i) => {
         const isFirst = i === 0;
         const isLast = i === total - 1;
-        const photoUrl = (isFirst && beforePhotoUrl) ? beforePhotoUrl : afterPhotoUrl;
+        const usingBefore = isFirst && !!beforePhotoUrl;
+        const photoUrl = usingBefore ? beforePhotoUrl! : afterPhotoUrl;
 
         try {
           const url = await this.generateSlide({
@@ -248,6 +275,7 @@ export class AiImageGenerationService {
             index: frame.index,
             isFirst,
             isLast,
+            isBeforePhoto: usingBefore,
             ...rest,
           });
           return { url, title: frame.title, label: `FRAME ${String(frame.index).padStart(2, '0')}` };
