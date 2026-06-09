@@ -8,6 +8,11 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { startContentGenerationWorker } from './ai/workers/content-generation.worker';
 import { GenerationGateway } from './generation/generation.gateway';
+import { NotificationsGateway } from './notifications/notifications.gateway';
+import { NotificationsService } from './notifications/notifications.service';
+import { SmsService } from './notifications/sms.service';
+import { PrismaService } from './prisma/prisma.service';
+import { startNotificationsWorker } from './notifications/notifications.worker';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -57,10 +62,23 @@ async function bootstrap() {
   await app.listen(port);
   console.log(`Growth Studio API is running on port ${port}`);
 
-  // Start BullMQ workers after server is live
-  const gateway = app.get(GenerationGateway);
-  startContentGenerationWorker(gateway.server);
+  // Start BullMQ workers after server is live (so WebSocket servers are ready)
+  const generationGateway = app.get(GenerationGateway);
+  const notificationsService = app.get(NotificationsService);
+
+  // notifyFn uses NotificationsService which emits WS directly — no queue delay
+  const notifyFn = async (dto: { tenantId: string; type: string; title: string; body: string; data?: Record<string, unknown> }) => {
+    await notificationsService.send(dto);
+  };
+
+  startContentGenerationWorker(generationGateway.server, notifyFn);
   console.log('Content generation worker started');
+
+  const notificationsGateway = app.get(NotificationsGateway);
+  const smsService = app.get(SmsService);
+  const prismaService = app.get(PrismaService);
+  startNotificationsWorker(prismaService as any, notificationsGateway, smsService);
+  console.log('Notifications worker started');
 }
 
 bootstrap();

@@ -32,6 +32,7 @@ export class GenerationGateway implements OnGatewayConnection, OnGatewayDisconne
   }
 
   emitJobUpdate(jobId: string, state: string) {
+    if (!this.server) return;
     this.server.to(jobId).emit('generation:update', { jobId, state });
   }
 }

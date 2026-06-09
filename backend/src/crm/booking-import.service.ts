@@ -16,11 +16,13 @@ export class BookingImportService {
     private readonly crmReader: CrmReaderService,
   ) {}
 
+  private static readonly UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
   async importBooking(tenantId: string, bookingId: string) {
     // Guard: already imported?
-    const existing = await this.prisma.appointment.findFirst({
-      where: { tenantId, crmBookingId: bookingId },
-    });
+    const existing = BookingImportService.UUID_RE.test(bookingId)
+      ? await this.prisma.appointment.findFirst({ where: { tenantId, crmBookingId: bookingId } })
+      : null;
     if (existing) {
       throw new ConflictException(`Booking ${bookingId} already imported as appointment ${existing.id}`);
     }
@@ -201,11 +203,15 @@ export class BookingImportService {
     }
 
     // Check which bookings are already imported
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const bookingIds = bookings.map((b) => b.id);
-    const imported = await this.prisma.appointment.findMany({
-      where: { tenantId, crmBookingId: { in: bookingIds } },
-      select: { crmBookingId: true, id: true },
-    });
+    const uuidBookingIds = bookingIds.filter((id) => UUID_RE.test(id));
+    const imported = uuidBookingIds.length > 0
+      ? await this.prisma.appointment.findMany({
+          where: { tenantId, crmBookingId: { in: uuidBookingIds } },
+          select: { crmBookingId: true, id: true },
+        })
+      : [];
     const importedMap = new Map(imported.map((a) => [a.crmBookingId, a.id]));
 
     return {

@@ -12,28 +12,23 @@ const MODERATION_PROMPT = `You are a content safety moderator for Elle.Be.O Grow
 
 Analyse this image and determine if it is safe for a professional beauty business platform.
 
-REJECT the image (safe: false) if it contains ANY of:
-- Nudity or partial nudity (exposed breasts, genitalia, buttocks, intimate areas)
-- Sexual, fetish, erotic, or NSFW content of any kind
-- Suggestive or provocative poses — even if the person has visible hair, makeup or nails
-- Lingerie, underwear, swimwear, or clothing that exposes intimate body areas
-- Explicit body exposure beyond what is normal for a professional salon or clinic setting
-- Pornographic content of any kind
-- Minors in inappropriate contexts
-- Hate symbols, violence, self-harm, illegal activities, or harassment imagery
-- Offensive or inappropriate text overlays
+REJECT the image (safe: false) ONLY if it clearly contains:
+- Full or partial nudity (exposed breasts, genitalia, buttocks, intimate areas)
+- Pornographic or sexually explicit content
+- Lingerie or underwear as the primary subject
+- Hate symbols, graphic violence, self-harm, or illegal activity imagery
+- Offensive or harassing text overlays
 
-CRITICAL RULE: The presence of hair, makeup, nails, or skincare does NOT automatically make an image safe.
-A person with styled hair in a suggestive pose or revealing clothing must still be REJECTED.
-The image must show the beauty SERVICE itself in a professional, clinical, or salon context.
+ACCEPT the image (safe: true) if it shows any of:
+- Hair styling, colouring, cutting, or treatment results
+- Makeup, skincare, lashes, brows, nails, or any beauty service
+- A person's face, hair, hands, or upper body in a neutral or professional context
+- Before/after shots of beauty services
+- Normal everyday clothing such as tank tops, off-shoulder tops, salon capes, or similar — these are completely fine
 
-ACCEPT the image (safe: true) only if it clearly shows ALL of these:
-- A professional beauty service result (hair, makeup, skincare, nails, lashes, brows, spa, grooming)
-- The subject is modestly dressed or the photo focuses on the service area only (e.g. close-up of hair, hands for nails, face for makeup)
-- A professional service environment OR clearly a before/after documentation shot
-- Nothing sexually suggestive about the pose, framing, or clothing
+IMPORTANT: Beauty photos commonly show clients wearing tank tops, sleeveless tops, or off-shoulder clothing so the hair or shoulders are visible. This is normal and must be ACCEPTED. Only reject for actual nudity or explicit sexual content.
 
-If the image is borderline, ambiguous, or the content cannot be clearly and confidently identified as professional beauty work — REJECT it.
+When in doubt, ACCEPT. Only reject images that clearly and obviously violate the rules above.
 
 Respond ONLY with valid JSON on a single line, no explanation, no markdown:
 {"safe": true, "reason": "Professional beauty content"}
@@ -91,8 +86,8 @@ export class ContentModerationService {
       return { safe: Boolean(result.safe), reason: String(result.reason ?? '') };
     } catch (err: any) {
       console.error('[ContentModeration] API error:', err.message);
-      // Fail closed for pre-checks, fail open for post-upload checks
-      return { safe: false, reason: 'Moderation service error — upload blocked' };
+      // Fail open — don't block legitimate uploads due to moderation service errors
+      return { safe: true, reason: 'Moderation service error — defaulting to safe' };
     }
   }
 

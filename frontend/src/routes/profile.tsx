@@ -131,6 +131,7 @@ function ProfilePage() {
         </div>
       </header>
 
+      <NotificationSettings />
       <ConnectedAccounts />
 
       <div className="grid grid-cols-12 gap-8 lg:gap-12">
@@ -331,6 +332,66 @@ function ConnectedAccounts() {
             </div>
           );
         })}
+      </div>
+    </section>
+  );
+}
+
+function NotificationSettings() {
+  const [phone, setPhone] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    api.get("/tenant/profile")
+      .then((res) => {
+        const data = res.data?.data ?? res.data;
+        setPhone(data?.phone ?? "");
+      })
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await api.patch("/tenant/profile", { phone });
+      toast.success("Phone number saved.");
+    } catch {
+      toast.error("Failed to save. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!loaded) return null;
+
+  return (
+    <section className="mb-12">
+      <h2 className="eyebrow mb-6">Notification settings</h2>
+      <div className="artifact p-6 max-w-lg">
+        <p className="text-sm text-taupe mb-5 leading-relaxed">
+          Add your phone number to receive SMS alerts when content is ready or generation fails.
+        </p>
+        <label className="block text-[10px] uppercase tracking-widest text-taupe mb-2">
+          Phone number (with country code)
+        </label>
+        <div className="flex gap-3">
+          <input
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="+91xxxxxxxxxx"
+            className="flex-1 bg-background border hairline px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
+          />
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="text-[10px] uppercase tracking-widest bg-foreground text-offwhite px-5 py-2.5 hover:bg-taupe disabled:opacity-40 transition-colors shrink-0"
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
       </div>
     </section>
   );
