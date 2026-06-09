@@ -29,7 +29,9 @@ const bullMQConnection = {
   tls: process.env['REDIS_TLS'] === 'true' ? {} : undefined,
 };
 
-export function startContentGenerationWorker(io: SocketServer): Worker<GenerationJobPayload> {
+type NotifyFn = (dto: { tenantId: string; type: string; title: string; body: string; data?: Record<string, unknown> }) => Promise<void>;
+
+export function startContentGenerationWorker(io: SocketServer, notifyFn?: NotifyFn): Worker<GenerationJobPayload> {
   const prisma = new PrismaClient();
   const redis = getRedisClient();
 
@@ -39,9 +41,8 @@ export function startContentGenerationWorker(io: SocketServer): Worker<Generatio
   const modelRouter = new ModelRouter();
   const promptBuilder = new PromptBuilder(promptCache);
 
-  const notifyFn = async (dto: {
-    tenantId: string; type: string; title: string; body: string; data?: Record<string, unknown>;
-  }) => {
+  // Fallback if notifyFn not injected (queue-only path)
+  const notify: NotifyFn = notifyFn ?? (async (dto) => {
     try {
       const notif = await prisma.notification.create({
         data: { tenantId: dto.tenantId, type: dto.type, title: dto.title, body: dto.body, data: (dto.data ?? {}) as any },
@@ -50,7 +51,7 @@ export function startContentGenerationWorker(io: SocketServer): Worker<Generatio
     } catch (e) {
       console.error('[Worker:content] Failed to send notification:', e);
     }
-  };
+  });
 
   const orchestrator = new GenerationOrchestrator(
     prisma,
@@ -58,7 +59,7 @@ export function startContentGenerationWorker(io: SocketServer): Worker<Generatio
     progressEmitter,
     modelRouter,
     promptBuilder,
-    notifyFn,
+    notify,
   );
 
   const worker = new Worker<GenerationJobPayload>(
@@ -101,7 +102,7 @@ export function startContentGenerationWorker(io: SocketServer): Worker<Generatio
         await progressEmitter.emitError(jobId, tenantId, error.name, userMessage);
 
         // Notify tenant of failure (fire-and-forget)
-        notifyFn({ tenantId, type: 'content_generation_failed', title: 'Content generation failed', body: 'Something went wrong while generating your post. Please try again.', data: { jobId } }).catch(() => {});
+        notify({ tenantId, type: 'content_generation_failed', title: 'Content generation failed', body: 'Something went wrong while generating your post. Please try again.', data: { jobId } }).catch(() => {});
 
         // Rethrow so BullMQ handles retry logic
         throw err;

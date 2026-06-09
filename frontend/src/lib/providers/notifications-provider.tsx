@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { api } from '@/lib/api';
+import { toast } from 'sonner';
 
 export type Notification = {
   id: string;
@@ -60,14 +61,30 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
     const socket = io(`${BACKEND_URL}/notifications`, {
       auth: { token },
-      transports: ['websocket'],
       reconnectionDelay: 3000,
+      reconnectionAttempts: 10,
     });
     socketRef.current = socket;
+
+    socket.on('connect', () => {
+      console.log('[Notifications] WebSocket connected');
+    });
+
+    socket.on('connect_error', (err) => {
+      console.error('[Notifications] WebSocket connection error:', err.message, err);
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.warn('[Notifications] WebSocket disconnected:', reason);
+    });
 
     socket.on('notification:new', (notif: Notification) => {
       setNotifications(prev => [notif, ...prev]);
       setUnreadCount(c => c + 1);
+      toast(notif.title ?? 'New notification', {
+        description: notif.body ?? undefined,
+        duration: 5000,
+      });
     });
 
     return () => {

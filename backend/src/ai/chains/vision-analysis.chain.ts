@@ -14,9 +14,11 @@ import { wrapSystemPrompt } from '../config/platform-system-prompt';
 
 // Zod-validated output schema enforcer (inline for strict mode)
 function parseVisionOutput(raw: string): VisionAnalysisResult {
+  // Strip markdown code fences if model wraps output in ```json ... ```
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(cleaned);
   } catch {
     throw new VisionParseError(`Vision model returned non-JSON: ${raw.slice(0, 200)}`);
   }
@@ -146,7 +148,7 @@ Return ONLY valid JSON with no markdown, no explanation.`;
       ],
     });
 
-    const response = await this.getModel().invoke([new SystemMessage(wrapSystemPrompt(systemPrompt)), humanMessage]);
+    const response = await this.getModel().invoke([new SystemMessage(systemPrompt), humanMessage]);
     const content = typeof response.content === 'string'
       ? response.content
       : JSON.stringify(response.content);
