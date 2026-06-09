@@ -16,6 +16,10 @@ export class UpdateTenantDto {
   @IsString()
   @IsOptional()
   locale?: string;
+
+  @IsString()
+  @IsOptional()
+  phone?: string;
 }
 
 export class CompleteOnboardingDto {
