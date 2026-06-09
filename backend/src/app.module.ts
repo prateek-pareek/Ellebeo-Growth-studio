@@ -16,6 +16,7 @@ import { AdminModule } from './admin/admin.module';
 import { EventsModule } from './events/events.module';
 import { FirebaseModule } from './common/firebase/firebase.module';
 import { CrmModule } from './crm/crm.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { HealthController } from './health/health.controller';
 import { CacheModule } from '@nestjs/cache-manager';
 import { TenantContextMiddleware } from './common/middleware/tenant-context.middleware';
@@ -55,6 +56,7 @@ import { validateEnv } from './config/env.validation';
     EventsModule,
     FirebaseModule,
     CrmModule,
+    NotificationsModule,
     // AiModule,
   ],
   controllers: [HealthController],

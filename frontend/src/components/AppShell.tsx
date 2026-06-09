@@ -1,6 +1,7 @@
 import { Link, Outlet, useLocation } from "@tanstack/react-router";
 import { useAuth } from "@/lib/providers/auth-provider";
 import { InitialsAvatar } from "@/components/InitialsAvatar";
+import { NotificationBell } from "@/components/NotificationPanel";
 import {
   Home,
   Sparkles,
@@ -72,6 +73,7 @@ export function AppShell() {
           <div className="flex items-center gap-3">
             {user ? (
               <>
+                <NotificationBell />
                 <div className="hidden sm:flex flex-col items-end leading-tight">
                   <span className="text-xs font-medium text-foreground">{user?.tenant?.businessName || user?.email}</span>
                   <span className="text-[10px] text-taupe">{user?.email}</span>

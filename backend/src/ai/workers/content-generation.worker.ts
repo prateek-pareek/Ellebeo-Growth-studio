@@ -20,6 +20,7 @@ import type { DLQJobPayload } from '../queues/queue.definitions';
 import { USER_ERROR_MESSAGES } from '../types/generation-result.types';
 import { ConsentBlockedError } from '../orchestrator/generation-orchestrator';
 import { getRedisClient } from '../../config/redis.client';
+import { notificationsQueue } from '../../notifications/notification-queue';
 
 const bullMQConnection = {
   host: process.env['REDIS_HOST'] ?? 'localhost',
@@ -38,12 +39,26 @@ export function startContentGenerationWorker(io: SocketServer): Worker<Generatio
   const modelRouter = new ModelRouter();
   const promptBuilder = new PromptBuilder(promptCache);
 
+  const notifyFn = async (dto: {
+    tenantId: string; type: string; title: string; body: string; data?: Record<string, unknown>;
+  }) => {
+    try {
+      const notif = await prisma.notification.create({
+        data: { tenantId: dto.tenantId, type: dto.type, title: dto.title, body: dto.body, data: (dto.data ?? {}) as any },
+      });
+      await notificationsQueue.add('deliver', { notificationId: notif.id });
+    } catch (e) {
+      console.error('[Worker:content] Failed to send notification:', e);
+    }
+  };
+
   const orchestrator = new GenerationOrchestrator(
     prisma,
     consentGuard,
     progressEmitter,
     modelRouter,
-    promptBuilder
+    promptBuilder,
+    notifyFn,
   );
 
   const worker = new Worker<GenerationJobPayload>(
@@ -84,6 +99,9 @@ export function startContentGenerationWorker(io: SocketServer): Worker<Generatio
         console.error(error.stack);
         const userMessage = mapErrorToUserMessage(error);
         await progressEmitter.emitError(jobId, tenantId, error.name, userMessage);
+
+        // Notify tenant of failure (fire-and-forget)
+        notifyFn({ tenantId, type: 'content_generation_failed', title: 'Content generation failed', body: 'Something went wrong while generating your post. Please try again.', data: { jobId } }).catch(() => {});
 
         // Rethrow so BullMQ handles retry logic
         throw err;
