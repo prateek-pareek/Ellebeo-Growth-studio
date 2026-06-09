@@ -106,13 +106,17 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto, ipAddress?: string, userAgent?: string) {
-    const user = await this.prisma.user.findUnique({ 
+    let user = await this.prisma.user.findUnique({
       where: { email: loginDto.email },
       include: { tenant: true }
     });
 
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      // Fallback: check CRM public.users + public.AuthIdentity
+      user = await this.tryProvisionFromCrm(loginDto.email, loginDto.password);
+      if (!user) throw new UnauthorizedException('Invalid credentials');
+      // CRM password already validated inside tryProvisionFromCrm — skip re-check
+      return this.generateTokens(user.id, user.role, user.tenant?.id, ipAddress, userAgent);
     }
 
     // Check lockout
@@ -349,6 +353,57 @@ export class AuthService {
 
     await this.prisma.tenant.update({ where: { id: user.tenant.id }, data: { avatarUrl: url } });
     return { url };
+  }
+
+  private async tryProvisionFromCrm(email: string, password: string) {
+    const { Client } = await import('pg');
+    const client = new Client({ connectionString: process.env['DATABASE_URL'] });
+    try {
+      await client.connect();
+      const { rows } = await client.query<{
+        id: string; email: string | null; fullName: string | null; passwordHash: string | null;
+      }>(
+        `SELECT u.id, u.email, u."fullName", ai."passwordHash"
+         FROM public."User" u
+         JOIN public."AuthIdentity" ai ON ai."userId" = u.id
+         WHERE lower(u.email) = lower($1)
+           AND ai.provider::text = 'EMAIL'
+         LIMIT 1`,
+        [email]
+      );
+
+      const crm = rows[0];
+      if (!crm?.passwordHash) return null;
+
+      const valid = await bcrypt.compare(password, crm.passwordHash);
+      if (!valid) return null;
+
+      return this.prisma.$transaction(async (tx) => {
+        const newUser = await tx.user.create({
+          data: {
+            email: crm.email ?? email,
+            passwordHash: crm.passwordHash!,
+            role: 'technician',
+            emailVerified: true,
+          },
+        });
+        await tx.tenant.create({
+          data: {
+            userId: newUser.id,
+            businessName: crm.fullName || email.split('@')[0],
+            timezone: 'UTC',
+            subscriptionTier: 'free',
+            hasGrowthStudioAccess: true,
+          },
+        });
+        return tx.user.findUnique({ where: { id: newUser.id }, include: { tenant: true } });
+      });
+    } catch (err) {
+      console.error('[Auth] CRM fallback error:', err);
+      return null;
+    } finally {
+      await client.end();
+    }
   }
 
   private async generateTokens(userId: string, role: string, tenantId?: string, ipAddress?: string, userAgent?: string) {
