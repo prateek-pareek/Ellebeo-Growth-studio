@@ -71,12 +71,12 @@ export function startContentGenerationWorker(io: SocketServer, notifyFn?: Notify
       console.log(`[Worker:content] Processing job ${jobId} for tenant ${tenantId}`);
 
       try {
-        // Check job TTL — fail if job is too old
+        // Check job TTL — discard silently if job is too old (no retry)
         const ageMs = Date.now() - new Date(payload.createdAt).getTime();
         if (ageMs > AI_CONFIG.queues.contentGeneration.jobTTLMs) {
-          throw new JobTTLExceededError(
-            `Job ${jobId} exceeded TTL of ${AI_CONFIG.queues.contentGeneration.jobTTLMs}ms`
-          );
+          console.warn(`[Worker:content] Job ${jobId} expired (age: ${Math.round(ageMs / 1000)}s) — discarding without retry`);
+          await progressEmitter.emit(jobId, tenantId, 'failed');
+          return; // return instead of throw — BullMQ won't retry
         }
 
         const result = await orchestrator.run(payload);
