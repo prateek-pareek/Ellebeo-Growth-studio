@@ -41,16 +41,16 @@ type FilterTab = "all" | "available" | "imported";
 const PAGE_SIZE = 20;
 
 function CrmPage() {
-  const [tab, setTab] = useState<FilterTab>("all");
-  const [bookings, setBookings] = useState<CrmBooking[]>([]);
-  const [total, setTotal] = useState(0);
+  const [tab, setTab]                     = useState<FilterTab>("all");
+  const [bookings, setBookings]           = useState<CrmBooking[]>([]);
+  const [total, setTotal]                 = useState(0);
   const [technicianFound, setTechnicianFound] = useState(true);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [offset, setOffset] = useState(0);
-  const [importingId, setImportingId] = useState<string | null>(null);
-  const [importingAll, setImportingAll] = useState(false);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [loading, setLoading]             = useState(true);
+  const [error, setError]                 = useState<string | null>(null);
+  const [offset, setOffset]               = useState(0);
+  const [importingId, setImportingId]     = useState<string | null>(null);
+  const [importingAll, setImportingAll]   = useState(false);
+  const [expandedId, setExpandedId]       = useState<string | null>(null);
 
   const fetchBookings = useCallback(async (off = 0) => {
     setLoading(true);
@@ -71,9 +71,7 @@ function CrmPage() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchBookings(0);
-  }, [fetchBookings]);
+  useEffect(() => { fetchBookings(0); }, [fetchBookings]);
 
   const handleImport = async (bookingId: string) => {
     setImportingId(bookingId);
@@ -94,11 +92,9 @@ function CrmPage() {
       const res = await api.post<{ data: { status: string }[] }>("/crm/bookings/import-all");
       const results = res.data.data ?? [];
       const imported = results.filter((r) => r.status === "imported").length;
-      const skipped = results.filter((r) => r.status === "already_imported").length;
-      const failed = results.filter((r) => r.status === "failed").length;
-      toast.success(
-        `${imported} imported · ${skipped} already done · ${failed} failed`
-      );
+      const skipped  = results.filter((r) => r.status === "already_imported").length;
+      const failed   = results.filter((r) => r.status === "failed").length;
+      toast.success(`${imported} imported · ${skipped} already done · ${failed} failed`);
       fetchBookings(offset);
     } catch (e: any) {
       toast.error(e.response?.data?.message ?? "Bulk import failed");
@@ -109,102 +105,140 @@ function CrmPage() {
 
   const filtered = bookings.filter((b) => {
     if (tab === "available") return !b.imported;
-    if (tab === "imported") return b.imported;
+    if (tab === "imported")  return b.imported;
     return true;
   });
 
   const counts = {
-    all: bookings.length,
+    all:       bookings.length,
     available: bookings.filter((b) => !b.imported).length,
-    imported: bookings.filter((b) => b.imported).length,
+    imported:  bookings.filter((b) => b.imported).length,
   };
 
   return (
     <div>
-      <header className="mt-6 lg:mt-10 mb-10 max-w-[68ch]">
-        <p className="eyebrow mb-5">Bookings</p>
-        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight">
-          Bookings from your <span className="italic">Client CRM</span>.
-        </h1>
-        <p className="mt-6 text-base sm:text-lg text-taupe leading-relaxed">
-          Browse bookings with consent, import them into Growth Studio, and turn
-          each session into content — without re-entering data.
-        </p>
+      {/* ── Page header ──────────────────────────────────────────────────── */}
+      <header className="relative mt-6 lg:mt-10 mb-10 overflow-hidden border border-nude/60 bg-card p-6 sm:p-8 shadow-sm">
+        <div
+          className="pointer-events-none absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-taupe via-sage to-sage opacity-90"
+          aria-hidden
+        />
+        <div className="pl-4 sm:pl-5 max-w-[68ch]">
+          <p className="eyebrow mb-4">Bookings</p>
+          <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight">
+            Bookings from your <span className="italic">Client CRM</span>.
+          </h1>
+          <p className="mt-5 text-base sm:text-lg text-taupe leading-relaxed">
+            Browse bookings with consent, import them into Growth Studio, and turn
+            each session into content — without re-entering data.
+          </p>
+        </div>
       </header>
 
-      {/* Status bar */}
+      {/* ── Stats + import all ───────────────────────────────────────────── */}
       {!loading && !error && (
-        <section className="artifact p-6 mb-10 grid grid-cols-2 sm:grid-cols-4 gap-6">
-          <Stat label="Total CRM bookings" value={total} />
-          <Stat label="Available to import" value={counts.available} accent />
-          <Stat label="Already imported" value={counts.imported} />
-          <div className="flex items-center sm:justify-end col-span-2 sm:col-span-1">
-            <button
-              onClick={handleImportAll}
-              disabled={importingAll || counts.available === 0}
-              className="w-full sm:w-auto bg-foreground text-offwhite px-5 py-2.5 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors disabled:opacity-40"
-            >
-              {importingAll ? "Importing…" : "Import all"}
-            </button>
+        <section className="border border-border bg-card shadow-sm overflow-hidden mb-10">
+          <div className="bg-muted px-5 py-3 border-b border-border">
+            <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+              Overview
+            </h2>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-border">
+            <div className="px-6 py-5 group hover:bg-nude/20 transition-colors cursor-default">
+              <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-muted-foreground group-hover:text-taupe transition-colors">
+                Total CRM bookings
+              </p>
+              <p className="mt-2 font-serif text-4xl tabular-nums">{total}</p>
+            </div>
+            <div className="px-6 py-5 group hover:bg-nude/20 transition-colors cursor-default">
+              <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-muted-foreground group-hover:text-taupe transition-colors">
+                Available to import
+              </p>
+              <p className="mt-2 font-serif text-4xl tabular-nums text-foreground">{counts.available}</p>
+            </div>
+            <div className="px-6 py-5 group hover:bg-nude/20 transition-colors cursor-default">
+              <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-muted-foreground group-hover:text-taupe transition-colors">
+                Already imported
+              </p>
+              <p className="mt-2 font-serif text-4xl tabular-nums text-sage">{counts.imported}</p>
+            </div>
+            <div className="px-6 py-5 flex items-center justify-start sm:justify-end">
+              <button
+                onClick={handleImportAll}
+                disabled={importingAll || counts.available === 0}
+                className="inline-flex items-center gap-2 bg-foreground text-offwhite text-xs font-medium px-4 py-2.5 shadow-sm hover:opacity-90 hover:shadow-md active:scale-[0.97] transition-all disabled:opacity-40"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                {importingAll ? "Importing…" : "Import all"}
+              </button>
+            </div>
           </div>
         </section>
       )}
 
-      {/* No technician match */}
+      {/* ── No CRM account linked ────────────────────────────────────────── */}
       {!loading && !technicianFound && (
-        <div className="artifact p-10 text-center mb-10">
+        <div className="flex flex-col items-center justify-center border-2 border-dashed border-border bg-card/50 py-14 text-center mb-10">
           <p className="eyebrow mb-3">No CRM account linked</p>
           <p className="font-serif text-2xl mb-3">Account not found in Client CRM.</p>
-          <p className="text-sm text-taupe max-w-[48ch] mx-auto">
+          <p className="text-sm text-taupe max-w-[48ch] mx-auto leading-relaxed">
             Your Growth Studio login email doesn't match any technician in the Client
             CRM. Ask your admin to ensure both accounts share the same email address.
           </p>
         </div>
       )}
 
-      {/* Filter tabs */}
+      {/* ── Bookings table ───────────────────────────────────────────────── */}
       {technicianFound && (
-        <>
-          <div className="flex items-baseline gap-1 border-b hairline mb-8">
-            {(["all", "available", "imported"] as FilterTab[]).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={
-                  "text-[11px] uppercase tracking-[0.2em] px-3 pb-2 -mb-px transition-colors flex items-center gap-2 " +
-                  (tab === t
-                    ? "text-foreground border-b border-foreground"
-                    : "text-taupe hover:text-foreground")
-                }
-              >
-                <span>{t === "all" ? "All" : t === "available" ? "Available" : "Imported"}</span>
-                <span className="tabular-nums text-[10px] text-taupe">{counts[t]}</span>
-              </button>
-            ))}
+        <div className="border border-border bg-card shadow-sm overflow-hidden">
+          {/* Toolbar */}
+          <div className="bg-muted px-5 py-3 border-b border-border flex flex-wrap items-center justify-between gap-3">
+            {/* Filter tabs */}
+            <div className="flex items-center divide-x divide-border border border-border">
+              {(["all", "available", "imported"] as FilterTab[]).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  className={
+                    "px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors flex items-center gap-2 " +
+                    (tab === t
+                      ? "bg-foreground text-offwhite"
+                      : "text-taupe hover:text-foreground hover:bg-nude/30")
+                  }
+                >
+                  {t === "all" ? "All" : t === "available" ? "Available" : "Imported"}
+                  <span className="tabular-nums opacity-70">{counts[t]}</span>
+                </button>
+              ))}
+            </div>
             {!loading && (
               <button
                 onClick={() => fetchBookings(offset)}
-                className="ml-auto text-[10px] uppercase tracking-widest text-taupe hover:text-foreground pb-2"
+                className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors flex items-center gap-1.5"
               >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+                </svg>
                 Refresh
               </button>
             )}
           </div>
 
-          {/* Booking list */}
+          {/* States */}
           {loading ? (
-            <div className="artifact p-12 text-center text-taupe italic">
+            <div className="px-5 py-14 text-center text-sm text-taupe italic">
               Loading CRM bookings…
             </div>
           ) : error ? (
-            <div className="artifact p-10 text-center">
-              <p className="text-[11px] uppercase tracking-widest border-l-2 border-destructive pl-3 text-destructive mb-2">
-                {error}
-              </p>
+            <div className="m-6 flex flex-col items-center justify-center border-2 border-dashed border-destructive/30 bg-destructive/5 py-10 text-center">
+              <p className="text-xs font-medium text-destructive mb-1">Error loading bookings</p>
+              <p className="text-sm text-taupe">{error}</p>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="artifact p-10 text-center">
-              <p className="eyebrow mb-3">No bookings</p>
+            <div className="flex flex-col items-center justify-center border-2 border-dashed border-border m-6 py-12 text-center bg-muted/20">
+              <p className="eyebrow mb-2">No bookings</p>
               <p className="text-sm text-taupe">
                 {tab === "imported"
                   ? "No bookings have been imported yet."
@@ -212,31 +246,43 @@ function CrmPage() {
               </p>
             </div>
           ) : (
-            <div className="space-y-px bg-border">
-              {filtered.map((b) => (
-                <BookingRow
-                  key={b.id}
-                  booking={b}
-                  expanded={expandedId === b.id}
-                  onToggleExpand={() =>
-                    setExpandedId(expandedId === b.id ? null : b.id)
-                  }
-                  importing={importingId === b.id}
-                  onImport={() => handleImport(b.id)}
-                />
-              ))}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm" style={{ minWidth: "680px" }}>
+                <thead className="bg-muted border-b border-border text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                  <tr>
+                    <th className="px-5 py-3 w-8"></th>
+                    <th className="px-5 py-3">Client · Service</th>
+                    <th className="px-5 py-3 w-[160px]">Date · Category</th>
+                    <th className="px-5 py-3 w-[180px]">Consent</th>
+                    <th className="px-5 py-3 w-[160px] text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {filtered.map((b) => (
+                    <BookingRow
+                      key={b.id}
+                      booking={b}
+                      expanded={expandedId === b.id}
+                      onToggleExpand={() => setExpandedId(expandedId === b.id ? null : b.id)}
+                      importing={importingId === b.id}
+                      onImport={() => handleImport(b.id)}
+                    />
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
 
           {/* Pagination */}
-          {total > PAGE_SIZE && (
-            <div className="flex items-center justify-between mt-8">
+          {total > PAGE_SIZE && !loading && (
+            <div className="flex items-center justify-between px-5 py-4 border-t border-border bg-muted/40">
               <button
                 onClick={() => fetchBookings(Math.max(0, offset - PAGE_SIZE))}
                 disabled={offset === 0 || loading}
-                className="text-[11px] uppercase tracking-[0.2em] border hairline px-4 py-2 hover:bg-card disabled:opacity-30"
+                className="inline-flex items-center gap-1.5 border border-border bg-card text-xs font-medium text-foreground px-3.5 py-2 shadow-sm hover:bg-muted hover:shadow-md active:scale-[0.97] transition-all disabled:opacity-30"
               >
-                ← Previous
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+                Previous
               </button>
               <span className="text-[10px] uppercase tracking-widest text-taupe">
                 {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total}
@@ -244,13 +290,14 @@ function CrmPage() {
               <button
                 onClick={() => fetchBookings(offset + PAGE_SIZE)}
                 disabled={offset + PAGE_SIZE >= total || loading}
-                className="text-[11px] uppercase tracking-[0.2em] border hairline px-4 py-2 hover:bg-card disabled:opacity-30"
+                className="inline-flex items-center gap-1.5 border border-border bg-card text-xs font-medium text-foreground px-3.5 py-2 shadow-sm hover:bg-muted hover:shadow-md active:scale-[0.97] transition-all disabled:opacity-30"
               >
-                Next →
+                Next
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
               </button>
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );
@@ -271,9 +318,7 @@ function BookingRow({
 }) {
   const date = booking.confirmedStartTime
     ? new Date(booking.confirmedStartTime).toLocaleDateString("en-AU", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
+        day: "numeric", month: "short", year: "numeric",
       })
     : "Date TBC";
 
@@ -282,71 +327,72 @@ function BookingRow({
     : [];
 
   return (
-    <div className="bg-card">
-      {/* Main row */}
-      <div className="p-5 sm:p-6 grid grid-cols-1 sm:grid-cols-12 gap-5 items-center">
+    <>
+      <tr className="hover:bg-nude/20 transition-colors">
         {/* Status dot */}
-        <div className="sm:col-span-1 flex items-center">
-          <span
-            className={
-              "size-2.5 rounded-full flex-shrink-0 " +
-              (booking.imported ? "bg-sage" : "bg-foreground")
-            }
-          />
-        </div>
+        <td className="px-5 py-4">
+          <span className={
+            "size-2.5 rounded-full block shrink-0 " +
+            (booking.imported ? "bg-sage" : "bg-foreground")
+          } />
+        </td>
 
-        {/* Client + service */}
-        <div className="sm:col-span-4 min-w-0">
-          <p className="eyebrow mb-1">
-            {date} · {booking.category ?? "General"}
-          </p>
-          <p className="font-serif text-xl mb-0.5">
+        {/* Client · Service */}
+        <td className="px-5 py-4">
+          <p className="font-serif text-base leading-tight mb-0.5">
             {booking.recipientName ?? "Unknown client"}
           </p>
-          <p className="text-xs text-taupe truncate">
+          <p className="text-xs text-taupe truncate max-w-[24ch]">
             {booking.serviceName ?? "—"}
           </p>
-        </div>
-
-        {/* Consent summary */}
-        <div className="sm:col-span-3">
-          <p
-            className={
-              "text-[10px] uppercase tracking-widest mb-1 " +
-              (booking.marketingImageConsent ? "text-sage" : "text-taupe")
-            }
-          >
-            {booking.marketingImageConsent
-              ? "Marketing consent ✓"
-              : "No marketing consent"}
-          </p>
           {booking.recipientEmail && (
-            <p className="text-xs text-taupe truncate">{booking.recipientEmail}</p>
+            <p className="text-[10px] text-taupe/70 mt-0.5 truncate max-w-[24ch]">
+              {booking.recipientEmail}
+            </p>
           )}
-        </div>
+        </td>
 
-        {/* Actions */}
-        <div className="sm:col-span-4 flex flex-wrap items-center gap-3 sm:justify-end">
+        {/* Date · Category */}
+        <td className="px-5 py-4">
+          <p className="text-xs text-foreground">{date}</p>
+          <p className="text-[10px] uppercase tracking-widest text-taupe mt-0.5">
+            {booking.category ?? "General"}
+          </p>
+        </td>
+
+        {/* Consent */}
+        <td className="px-5 py-4">
+          <span className={
+            "inline-block text-[10px] uppercase tracking-widest px-2 py-0.5 mb-1 " +
+            (booking.marketingImageConsent
+              ? "text-sage bg-sage/10"
+              : "text-taupe bg-taupe/10")
+          }>
+            {booking.marketingImageConsent ? "Consent granted" : "No consent"}
+          </span>
           {consentKeys.length > 0 && (
             <button
               onClick={onToggleExpand}
-              className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground"
+              className="block text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors mt-0.5"
             >
-              {expanded ? "Hide details ↑" : "See details ↓"}
+              {expanded ? "Hide details ↑" : `${consentKeys.length} permissions ↓`}
             </button>
           )}
+        </td>
 
+        {/* Action */}
+        <td className="px-5 py-4 text-right">
           {booking.imported ? (
-            <div className="flex items-center gap-3">
-              <span className="text-[10px] uppercase tracking-widest text-sage">
+            <div className="flex items-center justify-end gap-3">
+              <span className="inline-block text-[10px] uppercase tracking-widest text-sage bg-sage/10 px-2 py-0.5">
                 Imported
               </span>
               {booking.appointmentId && (
                 <Link
                   to="/appointments"
-                  className="text-[11px] uppercase tracking-[0.2em] border hairline px-4 py-2 hover:bg-card"
+                  className="inline-flex items-center gap-1.5 border border-border bg-card text-xs font-medium text-foreground px-3.5 py-2 shadow-sm hover:bg-muted hover:shadow-md active:scale-[0.97] transition-all"
                 >
-                  View →
+                  View
                 </Link>
               )}
             </div>
@@ -354,92 +400,85 @@ function BookingRow({
             <button
               onClick={onImport}
               disabled={importing}
-              className="text-[11px] uppercase tracking-[0.2em] bg-foreground text-offwhite px-4 py-2 hover:bg-taupe transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 bg-foreground text-offwhite text-xs font-medium px-3.5 py-2 shadow-sm hover:opacity-90 hover:shadow-md active:scale-[0.97] transition-all disabled:opacity-50"
             >
-              {importing ? "Importing…" : "Import"}
+              {importing ? (
+                <>
+                  <svg className="animate-spin size-3" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                  </svg>
+                  Importing…
+                </>
+              ) : (
+                <>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  Import
+                </>
+              )}
             </button>
           )}
-        </div>
-      </div>
+        </td>
+      </tr>
 
-      {/* Expanded: consent + questionnaire data */}
+      {/* Expanded detail row */}
       {expanded && (
-        <div className="px-5 sm:px-6 pb-6 pt-0 border-t hairline grid grid-cols-1 sm:grid-cols-2 gap-6">
-          {/* Consent breakdown */}
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-taupe mb-3 mt-4">
-              Consent permissions
-            </p>
-            <div className="space-y-1.5">
-              <ConsentLine
-                label="Marketing image use"
-                allowed={booking.marketingImageConsent}
-              />
-              {consentKeys.map(([key, val]) => (
-                <ConsentLine
-                  key={key}
-                  label={key
-                    .replace(/_/g, " ")
-                    .replace(/([A-Z])/g, " $1")
-                    .trim()}
-                  allowed={!!val}
-                />
-              ))}
-            </div>
-          </div>
+        <tr className="bg-muted/30">
+          <td />
+          <td colSpan={4} className="px-5 py-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              {/* Consent permissions */}
+              <div className="border border-border bg-card shadow-sm overflow-hidden">
+                <div className="bg-muted px-4 py-2 border-b border-border">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                    Consent permissions
+                  </p>
+                </div>
+                <div className="divide-y divide-border">
+                  <div className="px-4 py-2.5 flex items-center justify-between">
+                    <span className="text-xs text-taupe">Marketing image use</span>
+                    <span className={
+                      "text-[10px] uppercase tracking-widest px-2 py-0.5 " +
+                      (booking.marketingImageConsent ? "text-sage bg-sage/10" : "text-taupe bg-taupe/10")
+                    }>
+                      {booking.marketingImageConsent ? "Allowed" : "Denied"}
+                    </span>
+                  </div>
+                  {consentKeys.map(([key, val]) => (
+                    <div key={key} className="px-4 py-2.5 flex items-center justify-between">
+                      <span className="text-xs text-taupe capitalize">
+                        {key.replace(/_/g, " ").replace(/([A-Z])/g, " $1").trim()}
+                      </span>
+                      <span className={
+                        "text-[10px] uppercase tracking-widest px-2 py-0.5 " +
+                        (val ? "text-sage bg-sage/10" : "text-taupe bg-taupe/10")
+                      }>
+                        {val ? "Allowed" : "Denied"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
-          {/* Raw intake / notes */}
-          {booking.recipientConsentData && (
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-taupe mb-3 mt-4">
-                Consent data
-              </p>
-              <pre className="text-[11px] text-taupe leading-relaxed whitespace-pre-wrap break-words font-mono bg-card/60 p-3 border hairline">
-                {JSON.stringify(booking.recipientConsentData, null, 2)}
-              </pre>
+              {/* Raw consent data */}
+              {booking.recipientConsentData && (
+                <div className="border border-border bg-card shadow-sm overflow-hidden">
+                  <div className="bg-muted px-4 py-2 border-b border-border">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                      Consent data
+                    </p>
+                  </div>
+                  <pre className="px-4 py-3 text-[11px] text-taupe leading-relaxed whitespace-pre-wrap break-words font-mono overflow-auto max-h-40">
+                    {JSON.stringify(booking.recipientConsentData, null, 2)}
+                  </pre>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </td>
+        </tr>
       )}
-    </div>
-  );
-}
-
-function ConsentLine({ label, allowed }: { label: string; allowed: boolean }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span
-        className={
-          "text-[10px] " + (allowed ? "text-sage" : "text-taupe")
-        }
-      >
-        {allowed ? "✓" : "✗"}
-      </span>
-      <span className="text-[11px] text-taupe capitalize">{label}</span>
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: number;
-  accent?: boolean;
-}) {
-  return (
-    <div>
-      <p
-        className={
-          "font-serif text-3xl mb-1 " +
-          (accent ? "text-foreground" : "text-taupe")
-        }
-      >
-        {value}
-      </p>
-      <p className="text-[10px] uppercase tracking-widest text-taupe">{label}</p>
-    </div>
+    </>
   );
 }
