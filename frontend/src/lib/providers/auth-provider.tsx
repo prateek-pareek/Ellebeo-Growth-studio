@@ -47,6 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = (accessToken: string) => {
     localStorage.setItem('accessToken', accessToken);
+    setLoading(true);
     fetchUser();
   };
 

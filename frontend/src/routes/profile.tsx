@@ -1,22 +1,34 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useCallback, useRef } from "react";
+import { motion } from "framer-motion";
 import { InitialsAvatar } from "@/components/InitialsAvatar";
 import { useProfile } from "@/lib/providers/profile-provider";
 import { useAuth } from "@/lib/providers/auth-provider";
-import { Camera, LogOut } from "lucide-react";
+import {
+  Camera, LogOut, Instagram, Facebook, Zap,
+  Star, MessageSquare, Clock, BarChart2,
+  Image, Layers, Bell, ChevronRight,
+} from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
     meta: [
-      { title: "Profile optimisation — Elle.Be.O Growth" },
-      { name: "description", content: "Optimise your Elle.Be.O marketplace profile to attract more bookings." },
-      { property: "og:title", content: "Profile — Elle.Be.O Growth" },
+      { title: "Profile — Elle.Be.O Growth" },
+      { name: "description", content: "Optimise your Elle.Be.O marketplace profile." },
     ],
   }),
   component: ProfilePage,
 });
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 16 },
+  show:   { opacity: 1, y: 0, transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] as [number,number,number,number] } },
+};
+const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.07 } } };
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 function ProfilePage() {
   const { profile, technician, loading } = useProfile();
@@ -45,8 +57,7 @@ function ProfilePage() {
       const res = await api.post("/auth/upload-avatar", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-      const url = res.data.data?.url || res.data.url || "";
-      setAvatarUrl(url);
+      setAvatarUrl(res.data.data?.url || res.data.url || "");
       toast.success("Profile photo updated.");
     } catch {
       toast.error("Upload failed. Please try again.");
@@ -58,226 +69,214 @@ function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center text-taupe italic text-sm">
-        Loading profile data…
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="size-5 border-2 border-taupe/30 border-t-foreground rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div>
-      {/* ── Page header ──────────────────────────────────────────────────── */}
-      <header className="relative mt-6 lg:mt-10 mb-10 overflow-hidden border border-nude/60 bg-card shadow-sm">
-        <div
-          className="pointer-events-none absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-taupe via-sage to-sage opacity-90"
-          aria-hidden
-        />
-        <div className="pl-5 pr-6 py-6 sm:py-8 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-          {/* Left — identity */}
-          <div className="lg:col-span-7 flex items-center gap-5">
+    <motion.div
+      variants={stagger}
+      initial="hidden"
+      animate="show"
+      className="space-y-6 pb-10"
+    >
+
+      {/* ── Hero header card ──────────────────────────────────────────────── */}
+      <motion.div
+        variants={fadeUp}
+        className="relative overflow-hidden rounded-2xl border border-nude/60 bg-card shadow-sm"
+      >
+        {/* Ambient gradient */}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-nude/30 via-transparent to-sage/10" aria-hidden />
+        <div className="pointer-events-none absolute -top-20 -right-20 size-64 rounded-full bg-nude/30 blur-3xl" aria-hidden />
+
+        <div className="relative px-6 py-8 sm:px-8">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-6 sm:gap-8">
+
             {/* Avatar */}
-            <div className="relative shrink-0 group">
-              <InitialsAvatar
-                name={technician.name}
-                imageUrl={avatarUrl || undefined}
-                className="size-16 ring-1 ring-border"
-                textClassName="text-xl"
-              />
+            <div className="relative shrink-0 group w-fit">
+              <div className="p-0.5 rounded-full bg-gradient-to-tr from-taupe/40 via-nude to-sage/40">
+                <InitialsAvatar
+                  name={technician.name}
+                  imageUrl={avatarUrl || undefined}
+                  className="size-20 ring-2 ring-card"
+                  textClassName="text-2xl"
+                />
+              </div>
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
                 disabled={uploading}
-                className="absolute inset-0 rounded-full flex items-center justify-center bg-foreground/0 group-hover:bg-foreground/40 transition-colors disabled:cursor-not-allowed"
-                title="Change profile photo"
+                className="absolute inset-0 rounded-full flex items-center justify-center bg-foreground/0 group-hover:bg-foreground/40 transition-colors"
               >
-                {uploading ? (
-                  <span className="text-white text-[9px] opacity-0 group-hover:opacity-100">…</span>
-                ) : (
-                  <Camera className="size-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                )}
+                <Camera className="size-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
               </button>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="hidden"
-                onChange={handleAvatarUpload}
-              />
+              <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleAvatarUpload} />
+              {/* Online dot */}
+              <span className="absolute bottom-1 right-1 size-3.5 rounded-full bg-sage border-2 border-card" />
             </div>
 
-            <div>
-              <p className="eyebrow mb-1">Profile optimisation</p>
-              <p className="font-serif text-2xl sm:text-3xl leading-tight">{technician.name}</p>
-              <p className="text-xs text-taupe mt-0.5">{technician.handle} · {technician.city}</p>
+            {/* Identity */}
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-taupe mb-1">Profile optimisation</p>
+              <h1 className="font-serif text-3xl sm:text-4xl leading-tight tracking-tight">{technician.name}</h1>
+              <p className="text-sm text-taupe mt-1">{technician.handle} · {technician.city}</p>
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
                 disabled={uploading}
-                className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors mt-1 disabled:opacity-50"
+                className="mt-2 text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors disabled:opacity-40"
               >
                 {uploading ? "Uploading…" : "Change photo"}
               </button>
             </div>
-          </div>
 
-          {/* Right — headline + sign-out */}
-          <div className="lg:col-span-5">
-            <p className="font-serif text-xl sm:text-2xl leading-snug text-taupe mb-4">
-              Small fixes to your listing typically lift bookings by{" "}
-              <span className="text-foreground not-italic">20%+</span>.
-            </p>
-            <button
-              onClick={handleLogout}
-              className="inline-flex items-center gap-2 border border-border bg-card text-xs font-medium text-foreground px-3.5 py-2 shadow-sm hover:bg-muted hover:shadow-md active:scale-[0.97] transition-all"
-            >
-              <LogOut className="size-3" />
-              Sign out
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* ── Notification settings ─────────────────────────────────────────── */}
-      <NotificationSettings />
-
-      {/* ── Connected accounts ───────────────────────────────────────────── */}
-      <ConnectedAccounts />
-
-      {/* ── Profile strength + recommendations ───────────────────────────── */}
-      <div className="grid grid-cols-12 gap-8 lg:gap-10">
-        {/* Left — completion */}
-        <section className="col-span-12 lg:col-span-5">
-          <div className="border border-border bg-card shadow-sm overflow-hidden mb-6">
-            <div className="bg-muted px-5 py-3 border-b border-border">
-              <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                Profile strength
-              </h2>
-            </div>
-            <div className="p-6">
-              <div className="flex items-baseline justify-between mb-3">
-                <span className="font-serif text-5xl tabular-nums">{profile.completion}%</span>
-                <span className="text-xs text-taupe uppercase tracking-widest">complete</span>
-              </div>
-              <div className="h-1.5 bg-border relative mb-5 overflow-hidden">
-                <div
-                  className="absolute inset-y-0 left-0 bg-foreground transition-all duration-700"
-                  style={{ width: `${profile.completion}%` }}
-                />
-              </div>
-              <p className="text-sm text-taupe leading-relaxed">
-                Profiles above 90% appear higher in Elle.Be.O search and convert roughly twice as often.
-              </p>
-            </div>
-          </div>
-
-          {/* Key stats */}
-          <div className="border border-border bg-card shadow-sm overflow-hidden">
-            <div className="bg-muted px-5 py-3 border-b border-border">
-              <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                Key metrics
-              </h2>
-            </div>
-            <div className="grid grid-cols-2 divide-y divide-border">
-              <div className="divide-x divide-border flex">
-                <StatCell label="Avg. rating"    value={profile.averageRating.toString()} />
-                <StatCell label="Reviews"        value={profile.reviewsCount.toString()} />
-              </div>
-              <div className="divide-x divide-border flex">
-                <StatCell label="Avg. reply"     value={`${profile.responseTimeHours}h`} />
-                <StatCell label="Bio strength"   value={profile.bioStrength} />
-              </div>
-              <div className="divide-x divide-border flex col-span-2">
-                <StatCell label="Services listed" value={`${profile.servicesListed} / ${profile.servicesRecommended}`} />
-                <StatCell label="Photos uploaded" value={`${profile.photosCount} / ${profile.photosRecommended}`} />
-              </div>
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Link
-              to="/brand"
-              className="inline-flex items-center gap-1.5 border border-border bg-card text-xs font-medium text-foreground px-3.5 py-2 shadow-sm hover:bg-muted hover:shadow-md active:scale-[0.97] transition-all"
-            >
-              Edit brand profile
-            </Link>
-            <Link
-              to="/appointments"
-              className="inline-flex items-center gap-1.5 bg-foreground text-offwhite text-xs font-medium px-3.5 py-2 shadow-sm hover:opacity-90 hover:shadow-md active:scale-[0.97] transition-all"
-            >
-              Add photos from appointments
-            </Link>
-          </div>
-        </section>
-
-        {/* Right — recommendations */}
-        <section className="col-span-12 lg:col-span-7">
-          <div className="border border-border bg-card shadow-sm overflow-hidden">
-            <div className="bg-muted px-5 py-3 border-b border-border">
-              <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                Recommended improvements
-              </h2>
-            </div>
-            {profile.suggestions.length === 0 ? (
-              <div className="flex flex-col items-center justify-center border-2 border-dashed border-border m-6 py-12 text-center bg-muted/20">
-                <p className="eyebrow mb-2">All good</p>
-                <p className="text-sm text-taupe">
-                  Your profile is in great shape — no immediate improvements recommended.
+            {/* Right side */}
+            <div className="flex flex-col items-start sm:items-end gap-4 shrink-0">
+              <div className="text-right hidden sm:block">
+                <p className="font-serif text-lg leading-snug text-taupe max-w-[28ch] text-left sm:text-right">
+                  Small fixes to your listing lift bookings by{" "}
+                  <span className="text-foreground font-semibold">20%+</span>.
                 </p>
               </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm" style={{ minWidth: "480px" }}>
-                  <thead className="bg-muted border-b border-border text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                    <tr>
-                      <th className="px-5 py-3">#</th>
-                      <th className="px-5 py-3">Improvement</th>
-                      <th className="px-5 py-3 w-[100px]">Impact</th>
-                      <th className="px-5 py-3 w-[80px] text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {profile.suggestions.map((s, i) => (
-                      <tr key={i} className="hover:bg-nude/20 transition-colors">
-                        <td className="px-5 py-4 text-taupe/60 text-xs tabular-nums">{i + 1}</td>
-                        <td className="px-5 py-4 text-sm">{s.label}</td>
-                        <td className="px-5 py-4">
-                          <span className={
-                            "text-[10px] uppercase tracking-widest px-2 py-0.5 " +
-                            (s.impact === "High"
-                              ? "bg-foreground text-offwhite"
-                              : s.impact === "Medium"
-                                ? "bg-taupe/10 text-taupe"
-                                : "bg-border text-taupe/60")
-                          }>
-                            {s.impact}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 text-right">
-                          <Link
-                            to={s.link as any}
-                            className="inline-flex items-center border border-border bg-card text-xs font-medium text-foreground px-3 py-1.5 shadow-sm hover:bg-muted hover:shadow-md active:scale-[0.97] transition-all"
-                          >
-                            Fix
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+              <button
+                onClick={handleLogout}
+                className="inline-flex items-center gap-2 border border-border bg-card/80 backdrop-blur-sm text-xs font-medium text-foreground px-4 py-2.5 rounded-full shadow-sm hover:bg-nude/30 hover:shadow-md active:scale-[0.97] transition-all"
+              >
+                <LogOut className="size-3" />
+                Sign out
+              </button>
+            </div>
           </div>
-        </section>
+
+          {/* Completion bar */}
+          <div className="mt-7 pt-6 border-t border-border/50">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-taupe">Profile strength</span>
+              <span className="font-serif text-xl tabular-nums">{profile.completion}%</span>
+            </div>
+            <div className="h-1.5 bg-border/60 rounded-full overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${profile.completion}%` }}
+                transition={{ duration: 1, delay: 0.4, ease: [0.22, 1, 0.36, 1] as [number,number,number,number] }}
+                className="h-full rounded-full bg-gradient-to-r from-taupe via-sage to-sage"
+              />
+            </div>
+            <p className="mt-2 text-xs text-taupe">
+              Profiles above 90% appear higher in search and convert twice as often.
+            </p>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* ── Key metrics ───────────────────────────────────────────────────── */}
+      <motion.div variants={fadeUp} className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {[
+          { icon: Star,         label: "Avg. rating",      value: profile.averageRating.toString() },
+          { icon: MessageSquare,label: "Reviews",           value: profile.reviewsCount.toString() },
+          { icon: Clock,        label: "Avg. reply",        value: `${profile.responseTimeHours}h` },
+          { icon: BarChart2,    label: "Bio strength",      value: profile.bioStrength },
+          { icon: Layers,       label: "Services",          value: `${profile.servicesListed}/${profile.servicesRecommended}` },
+          { icon: Image,        label: "Photos",            value: `${profile.photosCount}/${profile.photosRecommended}` },
+        ].map(({ icon: Icon, label, value }) => (
+          <div key={label} className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm hover:border-foreground/20 hover:shadow-md transition-all group cursor-default">
+            <Icon className="size-3.5 text-taupe mb-3 group-hover:text-foreground transition-colors" />
+            <p className="font-serif text-2xl tabular-nums leading-none">{value}</p>
+            <p className="text-[9px] uppercase tracking-widest text-taupe mt-1.5">{label}</p>
+          </div>
+        ))}
+      </motion.div>
+
+      {/* ── Notification settings + Connected accounts (2-col on lg) ─────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <motion.div variants={fadeUp}>
+          <NotificationSettings />
+        </motion.div>
+        <motion.div variants={fadeUp}>
+          <ConnectedAccounts />
+        </motion.div>
       </div>
-    </div>
+
+      {/* ── Recommendations ───────────────────────────────────────────────── */}
+      <motion.div variants={fadeUp} className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+        <div className="bg-muted border-b border-border px-5 py-3 flex items-center justify-between">
+          <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            Recommended improvements
+          </h2>
+          {profile.suggestions.length > 0 && (
+            <span className="text-[10px] uppercase tracking-widest text-taupe">
+              {profile.suggestions.length} items
+            </span>
+          )}
+        </div>
+
+        {profile.suggestions.length === 0 ? (
+          <div className="flex flex-col items-center justify-center border-2 border-dashed border-border m-6 py-12 text-center rounded-xl bg-muted/20">
+            <span className="text-2xl mb-3">✦</span>
+            <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">All good</p>
+            <p className="text-sm text-taupe">Your profile is in great shape — no improvements needed.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {profile.suggestions.map((s, i) => (
+              <div key={i} className="flex items-center gap-4 px-5 py-4 hover:bg-nude/20 transition-colors group">
+                <span className="shrink-0 font-serif text-lg tabular-nums text-taupe/30 w-6 text-center">
+                  {i + 1}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm leading-snug">{s.label}</p>
+                </div>
+                <span className={
+                  "shrink-0 text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full " +
+                  (s.impact === "High"
+                    ? "bg-foreground text-offwhite"
+                    : s.impact === "Medium"
+                      ? "bg-taupe/10 text-taupe border border-taupe/20"
+                      : "bg-border text-taupe/60")
+                }>
+                  {s.impact}
+                </span>
+                <Link
+                  to={s.link as any}
+                  className="shrink-0 inline-flex items-center gap-1 border border-border bg-card text-xs font-medium text-foreground px-3 py-1.5 rounded-full shadow-sm hover:bg-nude/30 hover:shadow-md active:scale-[0.97] transition-all"
+                >
+                  Fix <ChevronRight className="size-3" />
+                </Link>
+              </div>
+            ))}
+          </div>
+        )}
+      </motion.div>
+
+      {/* ── Quick actions ─────────────────────────────────────────────────── */}
+      <motion.div variants={fadeUp} className="flex flex-wrap gap-3">
+        <Link
+          to="/brand"
+          className="inline-flex items-center gap-2 border border-border bg-card text-xs font-medium text-foreground px-4 py-2.5 rounded-full shadow-sm hover:bg-nude/30 hover:shadow-md active:scale-[0.97] transition-all"
+        >
+          Edit brand profile
+        </Link>
+        <Link
+          to="/appointments"
+          className="inline-flex items-center gap-2 bg-foreground text-offwhite text-xs font-medium px-4 py-2.5 rounded-full shadow-sm hover:opacity-90 hover:shadow-md active:scale-[0.97] transition-all"
+        >
+          Add photos from appointments
+        </Link>
+      </motion.div>
+
+    </motion.div>
   );
 }
 
-const PLATFORMS: { id: "instagram" | "facebook" | "tiktok"; label: string; note: string }[] = [
-  { id: "instagram", label: "Instagram", note: "Feed, Reels & Stories" },
-  { id: "facebook",  label: "Facebook",  note: "Page posts & Stories" },
-  { id: "tiktok",    label: "TikTok",    note: "Coming soon" },
+// ─── Connected accounts ────────────────────────────────────────────────────────
+
+const PLATFORMS: { id: "instagram" | "facebook" | "tiktok"; label: string; note: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { id: "instagram", label: "Instagram", note: "Feed, Reels & Stories", icon: Instagram },
+  { id: "facebook",  label: "Facebook",  note: "Page posts & Stories",  icon: Facebook  },
+  { id: "tiktok",    label: "TikTok",    note: "Coming soon",           icon: Zap       },
 ];
 
 function ConnectedAccounts() {
@@ -298,9 +297,7 @@ function ConnectedAccounts() {
   const handleConnect = async (platform: "instagram" | "facebook") => {
     setBusy(platform);
     try {
-      await api.get(`/social-accounts/connect/${platform}/callback`, {
-        params: { code: "mock_connect" },
-      });
+      await api.get(`/social-accounts/connect/${platform}/callback`, { params: { code: "mock_connect" } });
       toast.success(`${platform.charAt(0).toUpperCase() + platform.slice(1)} connected`);
       fetchAccounts();
     } catch {
@@ -323,97 +320,79 @@ function ConnectedAccounts() {
     }
   };
 
-  const connectedCount = accounts.filter((a) => a.status === "connected").length;
-
   return (
-    <section className="mb-10 border border-border bg-card shadow-sm overflow-hidden">
-      <div className="bg-muted px-5 py-3 border-b border-border flex items-center justify-between">
+    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden h-full">
+      <div className="bg-muted border-b border-border px-5 py-3 flex items-center justify-between">
         <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
           Connected accounts
         </h2>
-        {!loading && connectedCount > 0 && (
+        {!loading && accounts.filter(a => a.status === "connected").length > 0 && (
           <span className="text-[10px] uppercase tracking-widest text-sage">
-            {connectedCount} connected
+            {accounts.filter(a => a.status === "connected").length} connected
           </span>
         )}
       </div>
-      <p className="text-sm text-taupe px-5 py-4 border-b border-border">
-        Connect your social accounts to publish content directly from the calendar.
+      <p className="text-xs text-taupe px-5 py-3 border-b border-border">
+        Connect socials to publish directly from your calendar.
       </p>
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm" style={{ minWidth: "480px" }}>
-          <thead className="bg-muted border-b border-border text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            <tr>
-              <th className="px-5 py-3">Platform</th>
-              <th className="px-5 py-3">Account</th>
-              <th className="px-5 py-3 w-[160px] text-right">Status · Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {PLATFORMS.map((p) => {
-              const account     = accounts.find((a) => a.platform === p.id && a.status === "connected");
-              const isBusy      = busy === p.id || busy === account?.id;
-              const isComingSoon = p.id === "tiktok";
+      <div className="divide-y divide-border">
+        {PLATFORMS.map((p) => {
+          const account      = accounts.find((a) => a.platform === p.id && a.status === "connected");
+          const isBusy       = busy === p.id || busy === account?.id;
+          const isComingSoon = p.id === "tiktok";
+          const Icon         = p.icon;
 
-              return (
-                <tr key={p.id} className="hover:bg-nude/20 transition-colors">
-                  <td className="px-5 py-4">
-                    <p className="text-sm font-medium">{p.label}</p>
-                    <p className="text-[10px] text-taupe mt-0.5">{p.note}</p>
-                  </td>
-                  <td className="px-5 py-4">
-                    {account ? (
-                      <div className="flex items-center gap-2">
-                        <span className="size-1.5 rounded-full bg-sage shrink-0" />
-                        <span className="text-sm truncate max-w-[24ch]">{account.accountName}</span>
-                      </div>
-                    ) : (
-                      <span className="text-sm text-taupe italic">
-                        {isComingSoon ? "Not available yet" : "Not connected"}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-5 py-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      {account ? (
-                        <>
-                          <span className="text-[9px] uppercase tracking-widest text-sage px-2 py-0.5 bg-sage/10">
-                            Connected
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleDisconnect(account.id, p.label)}
-                            disabled={isBusy}
-                            className="inline-flex items-center border border-destructive/30 bg-destructive/5 text-destructive text-xs font-medium px-3 py-1.5 hover:bg-destructive/10 active:scale-[0.97] transition-all disabled:opacity-40"
-                          >
-                            {isBusy ? "…" : "Disconnect"}
-                          </button>
-                        </>
-                      ) : isComingSoon ? (
-                        <span className="text-[10px] uppercase tracking-widest text-taupe/40 border border-border px-3 py-1.5">
-                          Soon
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleConnect(p.id)}
-                          disabled={isBusy || loading}
-                          className="inline-flex items-center bg-foreground text-offwhite text-xs font-medium px-3.5 py-1.5 shadow-sm hover:opacity-90 hover:shadow-md active:scale-[0.97] transition-all disabled:opacity-40"
-                        >
-                          {isBusy ? "Connecting…" : "Connect"}
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+          return (
+            <div key={p.id} className="flex items-center gap-4 px-5 py-4 hover:bg-nude/20 transition-colors">
+              <div className="size-9 rounded-xl border border-border bg-muted flex items-center justify-center shrink-0">
+                <Icon className="size-4 text-taupe" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium leading-none">{p.label}</p>
+                <p className="text-[10px] text-taupe mt-0.5">
+                  {account ? account.accountName : p.note}
+                </p>
+              </div>
+              <div className="shrink-0">
+                {account ? (
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-sage bg-sage/10 border border-sage/20 px-2.5 py-1 rounded-full">
+                      <span className="size-1.5 rounded-full bg-sage" />
+                      Live
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleDisconnect(account.id, p.label)}
+                      disabled={isBusy}
+                      className="text-[10px] text-destructive/70 hover:text-destructive transition-colors disabled:opacity-40"
+                    >
+                      {isBusy ? "…" : "Disconnect"}
+                    </button>
+                  </div>
+                ) : isComingSoon ? (
+                  <span className="text-[9px] uppercase tracking-widest text-taupe/40 border border-border px-2.5 py-1 rounded-full">
+                    Soon
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleConnect(p.id)}
+                    disabled={isBusy || loading}
+                    className="inline-flex items-center gap-1 bg-foreground text-offwhite text-[10px] font-semibold uppercase tracking-widest px-3.5 py-1.5 rounded-full shadow-sm hover:opacity-90 active:scale-[0.97] transition-all disabled:opacity-40"
+                  >
+                    {isBusy ? "…" : "Connect"}
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
-    </section>
+    </div>
   );
 }
+
+// ─── Notification settings ─────────────────────────────────────────────────────
 
 function NotificationSettings() {
   const [phone,  setPhone]  = useState("");
@@ -445,51 +424,37 @@ function NotificationSettings() {
   if (!loaded) return null;
 
   return (
-    <section className="mb-10 border border-border bg-card shadow-sm overflow-hidden">
-      <div className="bg-muted px-5 py-3 border-b border-border">
+    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden h-full">
+      <div className="bg-muted border-b border-border px-5 py-3 flex items-center gap-2">
+        <Bell className="size-3 text-taupe" />
         <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
           Notification settings
         </h2>
       </div>
-      <div className="p-6">
-        <p className="text-sm text-taupe mb-5 leading-relaxed max-w-[56ch]">
+      <div className="p-5">
+        <p className="text-xs text-taupe leading-relaxed mb-5">
           Add your phone number to receive SMS alerts when content is ready or generation fails.
         </p>
-        <div className="border border-border bg-card shadow-sm overflow-hidden max-w-md">
-          <div className="bg-muted px-4 py-2 border-b border-border">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-              Phone number (with country code)
-            </p>
-          </div>
-          <div className="flex items-stretch divide-x divide-border">
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+91xxxxxxxxxx"
-              className="flex-1 bg-transparent px-4 py-3 text-sm focus:outline-none placeholder:text-taupe/50"
-            />
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="inline-flex items-center bg-foreground text-offwhite text-xs font-medium px-4 py-3 hover:opacity-90 active:scale-[0.97] transition-all disabled:opacity-40 shrink-0"
-            >
-              {saving ? "Saving…" : "Save"}
-            </button>
-          </div>
+        <label className="block text-[9px] font-bold uppercase tracking-widest text-taupe mb-2">
+          Phone number (with country code)
+        </label>
+        <div className="flex items-stretch gap-2">
+          <input
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="+91 00000 00000"
+            className="flex-1 border border-border bg-muted/40 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-foreground/30 placeholder:text-taupe/40 transition-colors"
+          />
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="inline-flex items-center bg-foreground text-offwhite text-xs font-semibold px-5 py-2.5 rounded-xl hover:opacity-90 active:scale-[0.97] transition-all disabled:opacity-40 shrink-0"
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
         </div>
       </div>
-    </section>
-  );
-}
-
-function StatCell({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex-1 px-5 py-4 group hover:bg-nude/20 transition-colors cursor-default">
-      <p className="text-[10px] uppercase tracking-widest text-taupe mb-1.5 group-hover:text-taupe transition-colors">
-        {label}
-      </p>
-      <p className="font-serif text-2xl tabular-nums">{value}</p>
     </div>
   );
 }

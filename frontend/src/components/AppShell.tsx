@@ -40,8 +40,12 @@ export function AppShell() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!loading && !user && !AUTH_ROUTES.includes(pathname)) {
+    if (loading) return;
+    if (!user && !AUTH_ROUTES.includes(pathname)) {
       navigate({ to: "/landing" });
+    }
+    if (user && AUTH_ROUTES.includes(pathname)) {
+      navigate({ to: "/" });
     }
   }, [loading, user, pathname, navigate]);
 
