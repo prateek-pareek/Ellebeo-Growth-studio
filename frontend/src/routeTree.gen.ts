@@ -13,6 +13,7 @@ import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as LandingRouteImport } from './routes/landing'
 import { Route as GenerateRouteImport } from './routes/generate'
 import { Route as ContentRouteImport } from './routes/content'
 import { Route as CampaignsRouteImport } from './routes/campaigns'
@@ -43,6 +44,11 @@ const ProfileRoute = ProfileRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LandingRoute = LandingRouteImport.update({
+  id: '/landing',
+  path: '/landing',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GenerateRoute = GenerateRouteImport.update({
@@ -111,6 +117,7 @@ export interface FileRoutesByFullPath {
   '/campaigns': typeof CampaignsRoute
   '/content': typeof ContentRoute
   '/generate': typeof GenerateRoute
+  '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
   '/signup': typeof SignupRoute
@@ -128,6 +135,7 @@ export interface FileRoutesByTo {
   '/campaigns': typeof CampaignsRoute
   '/content': typeof ContentRoute
   '/generate': typeof GenerateRoute
+  '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
   '/signup': typeof SignupRoute
@@ -146,6 +154,7 @@ export interface FileRoutesById {
   '/campaigns': typeof CampaignsRoute
   '/content': typeof ContentRoute
   '/generate': typeof GenerateRoute
+  '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
   '/signup': typeof SignupRoute
@@ -165,6 +174,7 @@ export interface FileRouteTypes {
     | '/campaigns'
     | '/content'
     | '/generate'
+    | '/landing'
     | '/login'
     | '/profile'
     | '/signup'
@@ -182,6 +192,7 @@ export interface FileRouteTypes {
     | '/campaigns'
     | '/content'
     | '/generate'
+    | '/landing'
     | '/login'
     | '/profile'
     | '/signup'
@@ -199,6 +210,7 @@ export interface FileRouteTypes {
     | '/campaigns'
     | '/content'
     | '/generate'
+    | '/landing'
     | '/login'
     | '/profile'
     | '/signup'
@@ -217,6 +229,7 @@ export interface RootRouteChildren {
   CampaignsRoute: typeof CampaignsRoute
   ContentRoute: typeof ContentRoute
   GenerateRoute: typeof GenerateRoute
+  LandingRoute: typeof LandingRoute
   LoginRoute: typeof LoginRoute
   ProfileRoute: typeof ProfileRoute
   SignupRoute: typeof SignupRoute
@@ -252,6 +265,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/landing': {
+      id: '/landing'
+      path: '/landing'
+      fullPath: '/landing'
+      preLoaderRoute: typeof LandingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/generate': {
@@ -354,6 +374,7 @@ const rootRouteChildren: RootRouteChildren = {
   CampaignsRoute: CampaignsRoute,
   ContentRoute: ContentRoute,
   GenerateRoute: GenerateRoute,
+  LandingRoute: LandingRoute,
   LoginRoute: LoginRoute,
   ProfileRoute: ProfileRoute,
   SignupRoute: SignupRoute,

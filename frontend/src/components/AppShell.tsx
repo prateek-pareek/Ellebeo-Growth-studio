@@ -1,4 +1,5 @@
-import { Link, Outlet, useLocation } from "@tanstack/react-router";
+import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { useAuth } from "@/lib/providers/auth-provider";
 import { InitialsAvatar } from "@/components/InitialsAvatar";
 import { NotificationBell } from "@/components/NotificationPanel";
@@ -31,11 +32,18 @@ const DESKTOP_NAV: Array<{ to: string; label: string }> = [
   { to: "/profile", label: "Profile" },
 ];
 
-const AUTH_ROUTES = ['/login', '/signup', '/auth'];
+const AUTH_ROUTES = ['/login', '/signup', '/auth', '/landing'];
 
 export function AppShell() {
   const { pathname } = useLocation();
   const { user, loading } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!loading && !user && !AUTH_ROUTES.includes(pathname)) {
+      navigate({ to: "/landing" });
+    }
+  }, [loading, user, pathname, navigate]);
 
   if (loading) {
     return (
@@ -47,6 +55,14 @@ export function AppShell() {
 
   if (AUTH_ROUTES.includes(pathname)) {
     return <Outlet />;
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-dvh bg-background flex items-center justify-center">
+        <div className="size-5 border-2 border-taupe/30 border-t-foreground rounded-full animate-spin" />
+      </div>
+    );
   }
 
   return (
