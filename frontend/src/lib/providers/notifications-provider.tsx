@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
+import axios from 'axios';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 
@@ -58,11 +59,16 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
     const apiUrl: string = (import.meta as any).env?.VITE_API_URL ?? 'http://localhost:3001';
     const BACKEND_URL = apiUrl.replace(/\/api.*$/, '');
+    const REST_BASE = apiUrl.endsWith('/api/v1') ? apiUrl : `${BACKEND_URL}/api/v1`;
 
     const socket = io(`${BACKEND_URL}/notifications`, {
-      auth: { token },
-      reconnectionDelay: 3000,
-      reconnectionAttempts: 10,
+      // Callback form — Socket.IO calls this fresh on every (re)connect,
+      // so it always sends the latest token rather than the one captured at mount.
+      auth: (cb: (data: { token: string | null }) => void) => {
+        cb({ token: localStorage.getItem('accessToken') });
+      },
+      reconnectionDelay: 2000,
+      reconnectionAttempts: 15,
     });
     socketRef.current = socket;
 
@@ -70,8 +76,25 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       console.log('[Notifications] WebSocket connected');
     });
 
-    socket.on('connect_error', (err) => {
-      console.error('[Notifications] WebSocket connection error:', err.message, err);
+    socket.on('connect_error', async (err) => {
+      console.error('[Notifications] WebSocket connection error:', err.message);
+
+      // JWT expired — refresh before the next automatic reconnect attempt.
+      // The auth callback above will pick up the new token on retry.
+      const msg = err.message?.toLowerCase() ?? '';
+      if (msg.includes('expired') || msg.includes('jwt') || msg.includes('unauthorized')) {
+        try {
+          const res = await axios.post(
+            `${REST_BASE}/auth/refresh`,
+            {},
+            { withCredentials: true },
+          );
+          const { accessToken } = res.data?.data ?? res.data;
+          if (accessToken) localStorage.setItem('accessToken', accessToken);
+        } catch {
+          // silent — next reconnect will fail and eventually give up
+        }
+      }
     });
 
     socket.on('disconnect', (reason) => {
