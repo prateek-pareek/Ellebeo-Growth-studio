@@ -37,9 +37,9 @@ function HomePage() {
   const todayISO = now.toISOString().slice(0, 10);
   const todayAppointments = appointments.filter((a) => a.rawDate === todayISO);
 
-  const reviewQueue = contentItems.filter((c) => c.status === "Needs review").slice(0, 2);
+  const reviewQueue         = contentItems.filter((c) => c.status === "Needs review").slice(0, 2);
   const postsReadyForReview = contentItems.filter((c) => c.status === "Needs review").length;
-  const consentPending = appointments.filter(
+  const consentPending      = appointments.filter(
     (a) => a.consent === "pending" || a.consent === "not_requested"
   ).length;
   const scheduledThisWeek = contentItems.filter((c) => c.status === "Scheduled").length;
@@ -57,7 +57,7 @@ function HomePage() {
     const d = new Date(a.rawDate + "T12:00:00");
     return d >= monday && d <= sunday;
   }).length;
-  const bookingTarget = brandDNA?.goals?.bookingsPerWeek || 0;
+  const bookingTarget   = brandDNA?.goals?.bookingsPerWeek || 0;
   const bookingShortfall = bookingTarget > 0 ? Math.max(0, bookingTarget - bookingsThisWeek) : 0;
 
   // Week at a glance (Mon–Sun of current week)
@@ -65,9 +65,9 @@ function HomePage() {
   const weekDays = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
-    const label = DAY_LABELS[i] + String(d.getDate()).padStart(2, "0");
+    const label     = DAY_LABELS[i] + String(d.getDate()).padStart(2, "0");
     const hasContent = calendarEntries.some((e) => e.date === d.getDate());
-    const isToday = d.toISOString().slice(0, 10) === todayISO;
+    const isToday   = d.toISOString().slice(0, 10) === todayISO;
     return { label, hasContent, isToday };
   });
 
@@ -94,42 +94,102 @@ function HomePage() {
         </div>
       </section>
 
+      {/* ── Stats strip ──────────────────────────────────────────────────── */}
+      <section className="mb-10 border border-border bg-card shadow-sm overflow-hidden">
+        <div className="bg-muted px-5 py-3 border-b border-border">
+          <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            At a glance
+          </h2>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-border">
+          <Link
+            to="/content"
+            className="px-6 py-5 group hover:bg-nude/20 transition-colors"
+          >
+            <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-muted-foreground group-hover:text-taupe transition-colors">
+              Review
+            </p>
+            <p className="mt-2 font-serif text-4xl tabular-nums">{postsReadyForReview}</p>
+            <p className="text-xs text-taupe mt-1 mb-3">posts ready for review</p>
+            <span className="text-[10px] uppercase tracking-widest text-foreground border-b border-foreground/40 pb-0.5 group-hover:border-foreground transition-colors">
+              Open queue →
+            </span>
+          </Link>
+
+          <div className="px-6 py-5 group hover:bg-nude/20 transition-colors cursor-default">
+            <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-muted-foreground group-hover:text-taupe transition-colors">
+              Consent
+            </p>
+            <p className="mt-2 font-serif text-4xl tabular-nums">{consentPending}</p>
+            <p className="text-xs text-taupe mt-1 mb-3">client consent waiting</p>
+            <Link
+              to="/appointments"
+              className="text-[10px] uppercase tracking-widest text-foreground border-b border-foreground/40 pb-0.5 hover:border-foreground transition-colors"
+            >
+              Send reminder →
+            </Link>
+          </div>
+
+          <Link
+            to="/calendar"
+            className="px-6 py-5 group hover:bg-nude/20 transition-colors"
+          >
+            <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-muted-foreground group-hover:text-taupe transition-colors">
+              This week
+            </p>
+            <p className="mt-2 font-serif text-4xl tabular-nums">{scheduledThisWeek}</p>
+            <p className="text-xs text-taupe mt-1 mb-3">posts scheduled</p>
+            <span className="text-[10px] uppercase tracking-widest text-foreground border-b border-foreground/40 pb-0.5 group-hover:border-foreground transition-colors">
+              Open calendar →
+            </span>
+          </Link>
+        </div>
+      </section>
+
       {/* ── Brand DNA ────────────────────────────────────────────────────── */}
-      <section className="mb-12">
-        <div className="flex items-baseline justify-between mb-4 pb-3 border-b hairline">
-          <p className="eyebrow">Your Brand DNA</p>
-          <Link to="/brand" className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
+      <section className="mb-10 border border-border bg-card shadow-sm overflow-hidden">
+        <div className="bg-muted px-5 py-3 border-b border-border flex items-center justify-between">
+          <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            Your Brand DNA
+          </h2>
+          <Link
+            to="/brand"
+            className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors"
+          >
             Open Brand DNA →
           </Link>
         </div>
 
         {!brandDNA ? (
-          <div className="border border-border bg-card p-10 text-center shadow-sm">
-            <p className="text-taupe italic text-sm mb-4">No Brand DNA set up yet.</p>
+          <div className="flex flex-col items-center justify-center border-2 border-dashed border-border m-6 py-12 text-center bg-muted/20">
+            <p className="eyebrow mb-2">Not set up yet</p>
+            <p className="text-sm text-taupe mb-4 max-w-[40ch] mx-auto">
+              Build your Brand DNA to power every piece of content this account generates.
+            </p>
             <Link
               to="/brand/onboarding"
-              className="text-[10px] uppercase tracking-[0.2em] bg-foreground text-offwhite px-5 py-2.5 hover:bg-taupe transition-colors"
+              className="inline-flex items-center bg-foreground text-offwhite text-xs font-medium px-4 py-2.5 shadow-sm hover:opacity-90 hover:shadow-md active:scale-[0.97] transition-all"
             >
               Build your Brand DNA
             </Link>
           </div>
         ) : (
-          <div className="border border-border bg-card p-6 sm:p-10 shadow-sm grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10">
+          <div className="p-6 sm:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10">
             {/* Left — identity */}
             <div className="lg:col-span-5">
               <div className="flex items-center gap-2 mb-4">
                 <span className="size-1.5 rounded-full bg-sage shrink-0" />
                 <span className="text-[10px] uppercase tracking-widest text-sage">Active · powering this account</span>
               </div>
-              <h2 className="font-serif text-2xl sm:text-3xl leading-tight italic mb-3">
+              <h3 className="font-serif text-2xl sm:text-3xl leading-tight italic mb-3">
                 {brandDNA.archetype}
-              </h2>
+              </h3>
               {brandDNA.oneLiner && (
-                <p className="text-sm text-taupe leading-relaxed mb-6">{brandDNA.oneLiner}</p>
+                <p className="text-sm text-taupe leading-relaxed mb-5">{brandDNA.oneLiner}</p>
               )}
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-6">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-5">
                 {brandDNA.category && (
-                  <span className="text-[10px] uppercase tracking-widest border hairline px-3 py-1.5">
+                  <span className="text-[10px] uppercase tracking-widest border border-border bg-muted px-3 py-1.5">
                     {brandDNA.category}
                   </span>
                 )}
@@ -144,7 +204,7 @@ function HomePage() {
                   {brandDNA.palette.map((c, i) => (
                     <div
                       key={i}
-                      className="size-7 rounded-sm border hairline"
+                      className="size-7 border border-border"
                       style={{ backgroundColor: c }}
                       title={c}
                     />
@@ -153,15 +213,15 @@ function HomePage() {
               )}
             </div>
 
-            {/* Right — what it powers */}
-            <div className="lg:col-span-7 lg:border-l lg:hairline lg:pl-10">
-              <p className="text-sm leading-relaxed mb-5">
+            {/* Right — powers */}
+            <div className="lg:col-span-7 lg:border-l lg:border-border lg:pl-10">
+              <p className="text-sm leading-relaxed mb-4">
                 Your Brand DNA is the intelligence layer of{" "}
                 <span className="font-medium">Elle.Be.O Growth</span>. It powers every part of the
                 product so the work feels like{" "}
                 <em className="not-italic font-medium">you</em>, not a generic template.
               </p>
-              <ul className="space-y-2.5 mb-8">
+              <ul className="space-y-2.5 mb-7">
                 {brandDNA.powers.map((p) => (
                   <li key={p} className="flex items-start gap-3 text-sm text-taupe">
                     <span className="mt-[7px] size-1 rounded-full bg-foreground/40 shrink-0" />
@@ -172,13 +232,13 @@ function HomePage() {
               <div className="flex flex-wrap gap-3">
                 <Link
                   to="/brand/onboarding"
-                  className="text-[10px] uppercase tracking-[0.2em] border hairline px-4 py-2.5 hover:bg-muted transition-colors"
+                  className="inline-flex items-center gap-1.5 border border-border bg-card text-xs font-medium text-foreground px-3.5 py-2 shadow-sm hover:bg-muted hover:shadow-md active:scale-[0.97] transition-all"
                 >
                   Refine Brand DNA
                 </Link>
                 <Link
                   to="/generate"
-                  className="text-[10px] uppercase tracking-[0.2em] bg-foreground text-offwhite px-4 py-2.5 hover:bg-taupe transition-colors"
+                  className="inline-flex items-center bg-foreground text-offwhite text-xs font-medium px-3.5 py-2 shadow-sm hover:opacity-90 hover:shadow-md active:scale-[0.97] transition-all"
                 >
                   Generate content
                 </Link>
@@ -188,62 +248,34 @@ function HomePage() {
         )}
       </section>
 
-      {/* ── Stats strip ──────────────────────────────────────────────────── */}
-      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-12">
-        <Link to="/content" className="bg-card border border-border p-6 shadow-sm hover:shadow-md hover:bg-nude/20 transition-all group">
-          <p className="eyebrow mb-3">Review</p>
-          <p className="font-serif text-5xl mb-2 tabular-nums">{postsReadyForReview}</p>
-          <p className="text-sm text-taupe mb-5">posts are ready for review</p>
-          <span className="text-[10px] uppercase tracking-widest text-foreground border-b border-foreground/40 pb-0.5 group-hover:border-foreground transition-colors">
-            Open queue →
-          </span>
-        </Link>
-
-        <div className="bg-card border border-border p-6 shadow-sm">
-          <p className="eyebrow mb-3">Consent</p>
-          <p className="font-serif text-5xl mb-2 tabular-nums">{consentPending}</p>
-          <p className="text-sm text-taupe mb-5">client consent waiting</p>
-          <Link
-            to="/appointments"
-            className="text-[10px] uppercase tracking-widest text-foreground border-b border-foreground/40 pb-0.5 hover:border-foreground transition-colors"
-          >
-            Send reminder →
-          </Link>
-        </div>
-
-        <Link to="/calendar" className="bg-card border border-border p-6 shadow-sm hover:shadow-md hover:bg-nude/20 transition-all group">
-          <p className="eyebrow mb-3">This week</p>
-          <p className="font-serif text-5xl mb-2 tabular-nums">{scheduledThisWeek}</p>
-          <p className="text-sm text-taupe mb-5">posts scheduled</p>
-          <span className="text-[10px] uppercase tracking-widest text-foreground border-b border-foreground/40 pb-0.5 group-hover:border-foreground transition-colors">
-            Open calendar →
-          </span>
-        </Link>
-      </section>
-
       {/* ── Main two-col grid ─────────────────────────────────────────────── */}
-      <div className="grid grid-cols-12 gap-8 lg:gap-12">
+      <div className="grid grid-cols-12 gap-8 lg:gap-10">
 
-        {/* Left col ─ appointments + bookings */}
-        <div className="col-span-12 lg:col-span-7 space-y-10">
+        {/* Left col — today's appointments + bookings */}
+        <div className="col-span-12 lg:col-span-7 space-y-8">
 
           {/* Today's appointments */}
-          <section>
-            <div className="flex items-baseline justify-between mb-4 pb-3 border-b hairline">
-              <h2 className="eyebrow">Today's appointments</h2>
-              <Link to="/appointments" className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
+          <section className="border border-border bg-card shadow-sm overflow-hidden">
+            <div className="bg-muted px-5 py-3 border-b border-border flex items-center justify-between">
+              <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                Today's appointments
+              </h2>
+              <Link
+                to="/appointments"
+                className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors"
+              >
                 All appointments →
               </Link>
             </div>
-            <div className="space-y-3">
-              {todayAppointments.length === 0 ? (
-                <div className="bg-card border border-border p-10 text-center text-taupe italic text-sm shadow-sm">
-                  No appointments scheduled for today.
-                </div>
-              ) : (
-                todayAppointments.map((a) => (
-                  <div key={a.id} className="bg-card border border-border p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
-                    <div className="size-[52px] shrink-0 overflow-hidden bg-nude/40 rounded-sm">
+            {todayAppointments.length === 0 ? (
+              <div className="flex flex-col items-center justify-center border-2 border-dashed border-border m-5 py-10 text-center bg-muted/20">
+                <p className="text-sm text-taupe italic">No appointments scheduled for today.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {todayAppointments.map((a) => (
+                  <div key={a.id} className="px-5 py-4 flex items-center gap-4 hover:bg-nude/20 transition-colors">
+                    <div className="size-[48px] shrink-0 overflow-hidden bg-nude/40 border border-border">
                       {a.afterPhotoUrl || a.beforePhotoUrl ? (
                         <img
                           src={(a.afterPhotoUrl ?? a.beforePhotoUrl)!}
@@ -256,8 +288,8 @@ function HomePage() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="eyebrow mb-1">Today · {a.timeLabel} · {a.category}</p>
-                      <p className="font-serif text-lg leading-tight truncate">{a.clientName}</p>
+                      <p className="eyebrow mb-0.5">Today · {a.timeLabel} · {a.category}</p>
+                      <p className="font-serif text-base leading-tight truncate">{a.clientName}</p>
                       <p className="text-xs text-taupe truncate">{a.service}</p>
                     </div>
                     <div className="text-right shrink-0">
@@ -265,49 +297,53 @@ function HomePage() {
                       <Link
                         to="/generate"
                         search={{ appointment: a.id }}
-                        className="block mt-2 text-[10px] uppercase tracking-widest text-foreground border-b border-foreground pb-0.5 hover:text-taupe hover:border-taupe transition-colors"
+                        className="block mt-1.5 text-[10px] uppercase tracking-widest text-foreground border-b border-foreground/40 pb-0.5 hover:text-taupe hover:border-taupe transition-colors"
                       >
                         Turn into content
                       </Link>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
+                ))}
+              </div>
+            )}
           </section>
 
           {/* Bookings this week */}
-          <section>
-            <h2 className="eyebrow mb-4 pb-3 border-b hairline">Bookings this week</h2>
-            <div className="bg-card border border-border p-6 shadow-sm">
-              <div className="flex items-baseline justify-between mb-1">
+          <section className="border border-border bg-card shadow-sm overflow-hidden">
+            <div className="bg-muted px-5 py-3 border-b border-border">
+              <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                Bookings this week
+              </h2>
+            </div>
+            <div className="p-6">
+              <div className="flex items-baseline justify-between mb-2">
                 <span className="font-serif text-5xl tabular-nums">{bookingsThisWeek}</span>
                 {bookingTarget > 0 && (
-                  <span className="text-xs text-taupe">target {bookingTarget}</span>
+                  <span className="text-xs text-taupe uppercase tracking-widest">target {bookingTarget}</span>
                 )}
               </div>
 
               {bookingTarget > 0 ? (
                 <>
-                  <div className="h-px bg-border relative my-4">
+                  <div className="h-1.5 bg-border relative my-4 overflow-hidden">
                     <div
-                      className="absolute inset-y-0 left-0 bg-foreground transition-all"
+                      className="absolute inset-y-0 left-0 bg-foreground transition-all duration-700"
                       style={{ width: `${Math.min(100, (bookingsThisWeek / bookingTarget) * 100)}%` }}
                     />
                   </div>
                   {bookingShortfall > 0 ? (
-                    <p className="text-xs text-taupe mb-4">
+                    <p className="text-xs text-taupe mb-5">
                       {bookingShortfall} booking{bookingShortfall !== 1 ? "s" : ""} short of target.{" "}
                       <Link to="/campaigns" className="text-foreground underline underline-offset-2 hover:text-taupe">
                         Try a campaign to fill quiet weekdays.
                       </Link>
                     </p>
                   ) : (
-                    <p className="text-xs text-sage mb-4">On track to meet your weekly target.</p>
+                    <p className="text-xs text-sage mb-5">On track to meet your weekly target.</p>
                   )}
                 </>
               ) : (
-                <p className="text-xs text-taupe mt-2 mb-4">
+                <p className="text-xs text-taupe mt-2 mb-5">
                   Set a booking target in your{" "}
                   <Link to="/brand/onboarding" className="text-foreground underline underline-offset-2">
                     Brand DNA
@@ -326,26 +362,31 @@ function HomePage() {
           </section>
         </div>
 
-        {/* Right col ─ review queue + week glance */}
-        <div className="col-span-12 lg:col-span-5 space-y-10">
+        {/* Right col — review queue + week glance */}
+        <div className="col-span-12 lg:col-span-5 space-y-8">
 
           {/* Posts ready for review */}
-          <section>
-            <div className="flex items-baseline justify-between mb-4 pb-3 border-b hairline">
-              <h2 className="eyebrow">Posts ready for review</h2>
-              <Link to="/content" className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
+          <section className="border border-border bg-card shadow-sm overflow-hidden">
+            <div className="bg-muted px-5 py-3 border-b border-border flex items-center justify-between">
+              <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                Posts ready for review
+              </h2>
+              <Link
+                to="/content"
+                className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors"
+              >
                 Review all →
               </Link>
             </div>
-            <div className="space-y-3">
-              {reviewQueue.length === 0 ? (
-                <div className="bg-card border border-border p-6 text-sm text-taupe italic shadow-sm">
-                  All caught up — no posts waiting for review.
-                </div>
-              ) : (
-                reviewQueue.map((c) => (
-                  <div key={c.id} className="bg-card border border-border p-4 flex items-start gap-4 shadow-sm hover:shadow-md transition-shadow">
-                    <div className="w-16 aspect-[4/5] shrink-0 overflow-hidden bg-nude/30 rounded-sm">
+            {reviewQueue.length === 0 ? (
+              <div className="px-5 py-8 text-sm text-taupe italic text-center">
+                All caught up — no posts waiting for review.
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {reviewQueue.map((c) => (
+                  <div key={c.id} className="px-5 py-4 flex items-start gap-4 hover:bg-nude/20 transition-colors">
+                    <div className="w-14 aspect-[4/5] shrink-0 overflow-hidden bg-nude/30 border border-border">
                       <img
                         src={c.image}
                         alt={c.title}
@@ -359,41 +400,43 @@ function HomePage() {
                       <p className="text-xs text-taupe leading-relaxed line-clamp-2">{c.caption}</p>
                       <Link
                         to="/content"
-                        className="mt-3 inline-block text-[10px] uppercase tracking-widest text-foreground border-b border-foreground/40 pb-0.5 hover:border-foreground transition-colors"
+                        className="mt-2.5 inline-block text-[10px] uppercase tracking-widest text-foreground border-b border-foreground/40 pb-0.5 hover:border-foreground transition-colors"
                       >
                         Review →
                       </Link>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
+                ))}
+              </div>
+            )}
           </section>
 
           {/* This week at a glance */}
-          <section>
-            <h2 className="eyebrow mb-4 pb-3 border-b hairline">This week at a glance</h2>
-            <div className="border border-border bg-card shadow-sm overflow-hidden">
-              <div className="grid grid-cols-7 gap-px bg-border">
-                {weekDays.map((d, i) => (
-                  <div
-                    key={i}
-                    className={"py-4 px-1 text-center bg-card " + (d.isToday ? "!bg-nude/30" : "")}
-                  >
-                    <p className={
-                      "text-[9px] uppercase tracking-wide mb-3 " +
-                      (d.isToday ? "text-foreground font-semibold" : "text-taupe")
-                    }>
-                      {d.label}
-                    </p>
-                    {d.hasContent ? (
-                      <span className="block size-1.5 rounded-full bg-foreground mx-auto" />
-                    ) : (
-                      <span className="block text-[10px] text-taupe/40 leading-none mx-auto">–</span>
-                    )}
-                  </div>
-                ))}
-              </div>
+          <section className="border border-border bg-card shadow-sm overflow-hidden">
+            <div className="bg-muted px-5 py-3 border-b border-border">
+              <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                This week at a glance
+              </h2>
+            </div>
+            <div className="grid grid-cols-7 divide-x divide-border">
+              {weekDays.map((d, i) => (
+                <div
+                  key={i}
+                  className={"py-5 px-1 text-center " + (d.isToday ? "bg-nude/30" : "hover:bg-nude/10 transition-colors")}
+                >
+                  <p className={
+                    "text-[9px] uppercase tracking-wide mb-3 " +
+                    (d.isToday ? "text-foreground font-semibold" : "text-taupe")
+                  }>
+                    {d.label}
+                  </p>
+                  {d.hasContent ? (
+                    <span className="block size-1.5 rounded-full bg-foreground mx-auto" />
+                  ) : (
+                    <span className="block text-[10px] text-taupe/40 leading-none mx-auto">–</span>
+                  )}
+                </div>
+              ))}
             </div>
           </section>
         </div>
@@ -404,11 +447,15 @@ function HomePage() {
 
 function ConsentBadge({ status }: { status: "granted" | "pending" | "declined" | "not_requested" }) {
   const map: Record<string, { label: string; cls: string }> = {
-    granted:      { label: "Consent granted",  cls: "text-sage" },
-    pending:      { label: "Consent pending",  cls: "text-foreground" },
-    declined:     { label: "Consent declined", cls: "text-destructive" },
-    not_requested:{ label: "Consent required", cls: "text-taupe" },
+    granted:       { label: "Consent granted",  cls: "text-sage" },
+    pending:       { label: "Consent pending",  cls: "text-foreground" },
+    declined:      { label: "Consent declined", cls: "text-destructive" },
+    not_requested: { label: "Consent required", cls: "text-taupe" },
   };
   const m = map[status] ?? map["not_requested"];
-  return <span className={"text-[10px] uppercase tracking-widest " + m.cls}>{m.label}</span>;
+  return (
+    <span className={"text-[10px] uppercase tracking-widest " + m.cls}>
+      {m.label}
+    </span>
+  );
 }
