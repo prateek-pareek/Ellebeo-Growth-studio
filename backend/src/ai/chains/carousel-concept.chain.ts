@@ -94,6 +94,12 @@ Return exactly this JSON shape:
         typeof response.content === 'string'
           ? response.content
           : JSON.stringify(response.content);
+          
+      const usage = (response as { usage_metadata?: { input_tokens?: number; output_tokens?: number } }).usage_metadata;
+      if (usage) {
+        console.log(`[TokenDebug] CarouselConceptChain (gpt-4o-mini): Used ${usage.input_tokens} input tokens, ${usage.output_tokens} output tokens.`);
+      }
+
       const cleaned = content
         .replace(/^```(?:json)?\n?/m, '')
         .replace(/\n?```$/m, '')
