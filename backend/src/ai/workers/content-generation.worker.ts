@@ -115,9 +115,18 @@ export function startContentGenerationWorker(io: SocketServer, notifyFn?: Notify
     }
   );
 
-  // --------------------------------------------------------------------------
-  // DLQ Handler — fires when all retry attempts are exhausted
-  // --------------------------------------------------------------------------
+  // Decrement concurrent job counter whenever a job finishes (success or fail)
+  const decrementConcurrent = async (tenantId: string) => {
+    try {
+      const key = AI_CONFIG.redisKeys.rateLimitConcurrent(tenantId);
+      const val = await redis.decr(key);
+      if (val <= 0) await redis.del(key); // clean up if at zero
+    } catch { /* non-fatal */ }
+  };
+
+  worker.on('completed', async (job) => {
+    if (job?.data?.tenantId) await decrementConcurrent(job.data.tenantId);
+  });
 
   worker.on('failed', async (job, err) => {
     if (!job) return;

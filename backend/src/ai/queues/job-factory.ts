@@ -30,6 +30,12 @@ interface RateLimitCheckResult {
 }
 import { PrismaClient } from '@prisma/client';
 
+// Helper — returns current year-month string e.g. '2026-06'
+function currentYearMonth(): string {
+  const now = new Date();
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
 // ---------------------------------------------------------------------------
 // Input shape expected from the API route handler
 // ---------------------------------------------------------------------------
@@ -114,17 +120,76 @@ export class JobFactory {
   ): Promise<JobAcceptedResponse> {
     const { tenantId, appointmentId, clientId, generationOptions } = input;
     const tier: UserTier = generationOptions.userTier;
-
-    // 1. Rate limit check (daily generation limit)
-    const genLimitKey = AI_CONFIG.redisKeys.rateLimitGenerations(tenantId);
     const limits = AI_CONFIG.rateLimits[tier];
+    const ym = currentYearMonth();
+    const DAY_SEC = AI_CONFIG.cache.rateLimitWindowSec;   // 24h
+    const MONTH_SEC = 31 * 24 * 3600;                     // ~31 days
+
+    // 1a. Minimum interval between job submissions (anti-spam)
+    const lastSubmitKey = AI_CONFIG.redisKeys.rateLimitLastSubmission(tenantId);
+    const lastSubmit = await this.redis.get(lastSubmitKey);
+    if (lastSubmit) {
+      throw new RateLimitError(
+        `Please wait ${limits.minJobIntervalSec} seconds between submissions`,
+        'RATE_LIMIT_INTERVAL'
+      );
+    }
+
+    // 1b. Concurrent job cap
+    const concurrentKey = AI_CONFIG.redisKeys.rateLimitConcurrent(tenantId);
+    const activeJobs = await this.redis.get(concurrentKey);
+    if (activeJobs && parseInt(activeJobs, 10) >= limits.maxConcurrentJobs) {
+      throw new RateLimitError(
+        `Maximum ${limits.maxConcurrentJobs} concurrent jobs reached. Please wait for a job to finish.`,
+        'RATE_LIMIT_CONCURRENT'
+      );
+    }
+
+    // 1c. Daily generation limit (sliding window)
+    const genLimitKey = AI_CONFIG.redisKeys.rateLimitGenerations(tenantId);
     const genCheck = await this.rateLimiter.checkAndIncrement(
       genLimitKey,
       limits.maxGenerationsPerDay,
-      AI_CONFIG.cache.rateLimitWindowSec
+      DAY_SEC
     );
     if (!genCheck.allowed) {
       throw new RateLimitError(genCheck.reason ?? 'Daily generation limit reached', 'RATE_LIMIT_DAILY');
+    }
+
+    // 1d. Monthly generation limit (simple counter with monthly TTL)
+    const genMonthKey = AI_CONFIG.redisKeys.rateLimitGenerationsMonthly(tenantId, ym);
+    const genMonthCheck = await this.rateLimiter.checkAndIncrement(
+      genMonthKey,
+      limits.maxGenerationsPerMonth,
+      MONTH_SEC
+    );
+    if (!genMonthCheck.allowed) {
+      throw new RateLimitError('Monthly generation limit reached. Resets on the 1st of next month.', 'RATE_LIMIT_MONTHLY');
+    }
+
+    // 1e. Image generation limits (carousel + story each generate multiple images)
+    const hasImageGen = generationOptions.outputFormats.includes('carousel') ||
+                        generationOptions.outputFormats.includes('story');
+    if (hasImageGen) {
+      const imgGenKey = AI_CONFIG.redisKeys.rateLimitImageGen(tenantId);
+      const imgGenCheck = await this.rateLimiter.checkAndIncrement(
+        imgGenKey,
+        limits.maxImageGenerationsPerDay,
+        DAY_SEC
+      );
+      if (!imgGenCheck.allowed) {
+        throw new RateLimitError('Daily AI image generation limit reached', 'RATE_LIMIT_IMAGE_DAILY');
+      }
+
+      const imgGenMonthKey = AI_CONFIG.redisKeys.rateLimitImageGenMonthly(tenantId, ym);
+      const imgGenMonthCheck = await this.rateLimiter.checkAndIncrement(
+        imgGenMonthKey,
+        limits.maxImageGenerationsPerMonth,
+        MONTH_SEC
+      );
+      if (!imgGenMonthCheck.allowed) {
+        throw new RateLimitError('Monthly AI image generation limit reached. Resets on the 1st of next month.', 'RATE_LIMIT_IMAGE_MONTHLY');
+      }
     }
 
     // 2. Reel rate limit check (if reel requested)
@@ -133,7 +198,7 @@ export class JobFactory {
       const reelCheck = await this.rateLimiter.checkAndIncrement(
         reelLimitKey,
         limits.maxReelsPerDay,
-        AI_CONFIG.cache.rateLimitWindowSec
+        DAY_SEC
       );
       if (!reelCheck.allowed) {
         throw new RateLimitError(reelCheck.reason ?? 'Daily Reel limit reached', 'RATE_LIMIT_REELS');
@@ -197,6 +262,15 @@ export class JobFactory {
         ...AI_CONFIG.queues.contentGeneration.defaultJobOptions,
       }
     );
+
+    // 9. Set the minimum-interval debounce key AFTER successful enqueue
+    await this.redis.set(lastSubmitKey, '1', 'EX', limits.minJobIntervalSec);
+
+    // 10. Increment concurrent job counter (expires after 10 minutes — job TTL)
+    const pipe = this.redis.pipeline();
+    pipe.incr(concurrentKey);
+    pipe.expire(concurrentKey, 600);
+    await pipe.exec();
 
     const estimatedWait = await this.estimateWaitSeconds(priority);
 
@@ -345,9 +419,10 @@ export class JobFactory {
 
   private async fetchImageAssets(appointmentId: string): Promise<ImageAsset[]> {
     return this.prisma.$queryRaw<ImageAsset[]>`
-      SELECT raw_storage_path        AS \"rawStoragePath\",
-             cloudinary_public_id    AS \"cloudinaryPublicId\",
-             vision_analysis_cache   AS \"visionAnalysisCache\"
+      SELECT raw_storage_path        AS "rawStoragePath",
+             cloudinary_public_id    AS "cloudinaryPublicId",
+             vision_analysis_cache   AS "visionAnalysisCache",
+             s3_object_hash          AS "s3ObjectHash"
       FROM appointment_images
       WHERE appointment_id = ${appointmentId}
       ORDER BY created_at ASC

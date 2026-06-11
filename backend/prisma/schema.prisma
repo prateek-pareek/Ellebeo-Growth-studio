@@ -437,6 +437,18 @@ model ImageAsset {
   @@schema("platform")
 }
 
+model ImageVisionCache {
+  hash          String   @id @db.VarChar(64) // SHA256 of image bytes
+  model         String   @db.VarChar(100)    // e.g., 'gpt-4o'
+  promptVersion String   @map("prompt_version") @db.VarChar(50) // e.g., 'v1.0'
+  result        Json
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("image_vision_cache")
+  @@schema("platform")
+}
+
 model GoldenExample {
   id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId     String    @map("tenant_id") @db.Uuid
