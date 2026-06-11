@@ -168,6 +168,11 @@ export class CaptionGenerationChain {
     const response = await model.generateContent(prompt.userPrompt);
     const raw = response.response.text();
     const result = parseCaptionOutput(raw);
+    const usage = response.response.usageMetadata;
+    const inputTokens = usage?.promptTokenCount ?? estimateTokens(`${prompt.systemPrompt}\n${prompt.userPrompt}`);
+    const outputTokens = usage?.candidatesTokenCount ?? estimateTokens(raw);
+    result.tokenUsage = { inputTokens, outputTokens };
+    console.log(`[TokenDebug] CaptionChain (Gemini): Used ${inputTokens} input tokens, ${outputTokens} output tokens.`);
     this.checkBlacklist(result.caption, blacklist);
     return result;
   }
@@ -196,6 +201,7 @@ export class CaptionGenerationChain {
       inputTokens: usage?.input_tokens ?? estimateTokens(promptText),
       outputTokens: usage?.output_tokens ?? estimateTokens(content),
     };
+    console.log(`[TokenDebug] CaptionChain (${model._modelType()}): Used ${parsed.tokenUsage.inputTokens} input tokens, ${parsed.tokenUsage.outputTokens} output tokens.`);
     return parsed;
   }
 

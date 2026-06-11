@@ -35,7 +35,15 @@ const AUTH_ROUTES = ['/login', '/signup', '/auth'];
 
 export function AppShell() {
   const { pathname } = useLocation();
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-dvh bg-background flex items-center justify-center">
+        <div className="size-5 border-2 border-taupe/30 border-t-foreground rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   if (AUTH_ROUTES.includes(pathname)) {
     return <Outlet />;
