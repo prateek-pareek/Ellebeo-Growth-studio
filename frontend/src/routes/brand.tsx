@@ -16,7 +16,6 @@ function BrandPage() {
   const { data: brandDNA, loading, isEmpty, error } = useBrandDna();
   const location = useLocation();
 
-  // If we are on a sub-route (like /brand/onboarding), just render the Outlet
   if (location.pathname !== "/brand") {
     return <Outlet />;
   }
@@ -37,169 +36,215 @@ function BrandPage() {
 
   return (
     <div>
-      <header className="mt-6 lg:mt-10 mb-12 max-w-[72ch]">
-        <p className="eyebrow mb-5">Brand DNA · the intelligence layer</p>
-        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight text-balance">
-          Your Brand DNA is <span className="italic">ready</span>.
-        </h1>
-        <p className="mt-6 text-base sm:text-lg text-taupe leading-relaxed">
-          {brandDNA.oneLiner} Brand DNA powers every caption, template, campaign and calendar recommendation across Elle.Be.O Growth.
-        </p>
-        <div className="mt-5 flex items-center gap-3 flex-wrap">
-          <span className="text-[10px] uppercase tracking-widest border hairline px-3 py-1.5">{brandDNA.category}</span>
-          <span className="text-[10px] uppercase tracking-widest text-sage">Active</span>
-          {error && (
-            <span className="text-[10px] uppercase tracking-widest text-destructive">
-              Error loading saved profile
-            </span>
-          )}
-        </div>
-        <div className="mt-6 flex flex-wrap gap-3">
-          <Link
-            to="/brand/onboarding"
-            className="text-[11px] uppercase tracking-[0.2em] border hairline px-4 py-2 hover:bg-card"
-          >
-            Edit Brand DNA
-          </Link>
-          <Link
-            to="/generate"
-            className="text-[11px] uppercase tracking-[0.2em] bg-foreground text-offwhite px-4 py-2"
-          >
-            Generate content
-          </Link>
+      {/* ── Page header ──────────────────────────────────────────────────── */}
+      <header className="relative mt-6 lg:mt-10 mb-12 overflow-hidden border border-nude/60 bg-card p-6 sm:p-8 shadow-sm">
+        <div
+          className="pointer-events-none absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-taupe via-sage to-sage opacity-90"
+          aria-hidden
+        />
+        <div className="pl-4 sm:pl-5 max-w-[72ch]">
+          <p className="eyebrow mb-4">Brand DNA · the intelligence layer</p>
+          <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight text-balance">
+            Your Brand DNA is <span className="italic">ready</span>.
+          </h1>
+          <p className="mt-5 text-base sm:text-lg text-taupe leading-relaxed">
+            {brandDNA.oneLiner} Brand DNA powers every caption, template, campaign and calendar recommendation across Elle.Be.O Growth.
+          </p>
+          <div className="mt-5 flex items-center gap-3 flex-wrap">
+            <span className="text-[10px] uppercase tracking-widest border hairline px-3 py-1.5">{brandDNA.category}</span>
+            <span className="text-[10px] uppercase tracking-widest text-sage">Active</span>
+            {error && (
+              <span className="text-[10px] uppercase tracking-widest text-destructive">
+                Error loading saved profile
+              </span>
+            )}
+          </div>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link
+              to="/brand/onboarding"
+              className="text-[11px] uppercase tracking-[0.2em] border hairline px-4 py-2 hover:bg-muted transition-colors"
+            >
+              Edit Brand DNA
+            </Link>
+            <Link
+              to="/generate"
+              className="text-[11px] uppercase tracking-[0.2em] bg-foreground text-offwhite px-4 py-2 hover:bg-taupe transition-colors"
+            >
+              Generate content
+            </Link>
+          </div>
         </div>
       </header>
 
-      {/* What it powers */}
+      {/* ── What it powers ───────────────────────────────────────────────── */}
       <section className="mb-12">
-        <h2 className="eyebrow mb-6">What your Brand DNA powers</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-px bg-border border hairline">
-          {brandDNA.powers.map((p) => (
-            <div key={p} className="bg-card p-5">
-              <p className="text-sm leading-snug">{p}</p>
-            </div>
-          ))}
+        <div className="flex items-center justify-between mb-4 pb-3 border-b hairline">
+          <h2 className="eyebrow">What your Brand DNA powers</h2>
+          <span className="text-[10px] uppercase tracking-widest text-sage bg-sage/10 px-2 py-1">
+            {brandDNA.powers.length} features
+          </span>
+        </div>
+        <div className="border border-border bg-card shadow-sm overflow-hidden">
+          {/* Table header */}
+          <div className="bg-muted px-5 py-3 grid grid-cols-[2.5rem_1fr_auto] gap-4 border-b border-border">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">#</span>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Feature</span>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Status</span>
+          </div>
+          {/* Rows */}
+          <div className="divide-y divide-border">
+            {brandDNA.powers.map((p, i) => (
+              <div
+                key={p}
+                className="px-5 py-3.5 grid grid-cols-[2.5rem_1fr_auto] gap-4 items-center hover:bg-nude/20 transition-colors"
+              >
+                <span className="text-[10px] font-mono text-taupe tabular-nums">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <span className="text-sm text-foreground">{p}</span>
+                <span className="text-[10px] uppercase tracking-widest text-sage bg-sage/10 px-2 py-0.5">
+                  Active
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
       <div className="grid grid-cols-12 gap-8 lg:gap-12">
-        {/* Identity & palette */}
+        {/* ── Identity & palette ───────────────────────────────────────── */}
         <section className="col-span-12 lg:col-span-5">
-          <h2 className="eyebrow mb-6">Visual identity</h2>
-          <div className="artifact p-8 mb-10">
-            {/* Logo */}
-            {brandDNA.logoUrl && (
-              <div className="mb-6">
-                <p className="text-[10px] uppercase tracking-widest text-taupe mb-3">Logo</p>
-                <div className="size-20 border hairline bg-nude/20 flex items-center justify-center overflow-hidden">
-                  <img src={brandDNA.logoUrl} alt="Brand logo" className="max-w-full max-h-full object-contain p-2" />
-                </div>
-                <p className="text-[10px] text-taupe mt-1 uppercase tracking-widest">
-                  Position: {brandDNA.logoPosition.replace("_", " ")}
-                </p>
-              </div>
-            )}
-
-            {/* Colours */}
-            <p className="text-[10px] uppercase tracking-widest text-taupe mb-3">Colours</p>
-            <div className="flex gap-2 mb-6">
-              {brandDNA.palette.length > 0 ? (
-                brandDNA.palette.map((c) => (
-                  <div key={c} className="flex flex-col items-center gap-1">
-                    <div className="size-12 rounded-sm ring-1 ring-border flex-shrink-0" style={{ backgroundColor: c }} />
-                    <span className="text-[9px] text-taupe font-mono">{c}</span>
-                  </div>
-                ))
-              ) : (
-                <p className="text-xs text-taupe italic">No colours set — add them in Brand DNA settings.</p>
-              )}
+          {/* Visual identity — definition table */}
+          <div className="border border-border bg-card shadow-sm overflow-hidden mb-10">
+            {/* Card header */}
+            <div className="bg-muted px-5 py-3 border-b border-border flex items-center justify-between">
+              <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Visual identity</h2>
+              <span className="eyebrow">Identity</span>
             </div>
-
-            {/* Aesthetic + tier */}
-            {(brandDNA.aestheticDirection || brandDNA.brandTier) && (
-              <div className="grid grid-cols-2 gap-6 pt-6 border-t hairline mb-6">
-                {brandDNA.aestheticDirection && (
-                  <div>
-                    <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Aesthetic</p>
-                    <p className="text-sm capitalize">{brandDNA.aestheticDirection.replace(/_/g, " ")}</p>
+            <div className="divide-y divide-border">
+              {/* Logo */}
+              {brandDNA.logoUrl && (
+                <div className="px-5 py-4 grid grid-cols-[9rem_1fr] gap-4 items-center">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Logo</span>
+                  <div className="flex items-center gap-3">
+                    <div className="size-12 border hairline bg-nude/20 flex items-center justify-center overflow-hidden shrink-0">
+                      <img src={brandDNA.logoUrl} alt="Brand logo" className="max-w-full max-h-full object-contain p-1" />
+                    </div>
+                    <span className="text-[10px] uppercase tracking-widest text-taupe">
+                      {brandDNA.logoPosition.replace("_", " ")}
+                    </span>
                   </div>
-                )}
-                {brandDNA.brandTier && (
-                  <div>
-                    <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Market tier</p>
-                    <p className="text-sm capitalize">{brandDNA.brandTier}</p>
+                </div>
+              )}
+              {/* Colours */}
+              <div className="px-5 py-4 grid grid-cols-[9rem_1fr] gap-4 items-center">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Colours</span>
+                {brandDNA.palette.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {brandDNA.palette.map((c) => (
+                      <div key={c} className="flex flex-col items-center gap-1">
+                        <div className="size-8 rounded-sm ring-1 ring-border shrink-0" style={{ backgroundColor: c }} />
+                        <span className="text-[9px] text-taupe font-mono">{c}</span>
+                      </div>
+                    ))}
                   </div>
+                ) : (
+                  <span className="text-xs text-taupe italic">No colours set — add them in Brand DNA settings.</span>
                 )}
               </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-6 pt-6 border-t hairline">
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Headline font</p>
-                <p className="font-serif text-2xl">Playfair</p>
+              {/* Aesthetic */}
+              {brandDNA.aestheticDirection && (
+                <div className="px-5 py-4 grid grid-cols-[9rem_1fr] gap-4 items-center">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Aesthetic</span>
+                  <span className="text-sm capitalize">{brandDNA.aestheticDirection.replace(/_/g, " ")}</span>
+                </div>
+              )}
+              {/* Market tier */}
+              {brandDNA.brandTier && (
+                <div className="px-5 py-4 grid grid-cols-[9rem_1fr] gap-4 items-center">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Market tier</span>
+                  <span className="text-sm capitalize">{brandDNA.brandTier}</span>
+                </div>
+              )}
+              {/* Headline font */}
+              <div className="px-5 py-4 grid grid-cols-[9rem_1fr] gap-4 items-center">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Headline font</span>
+                <span className="font-serif text-xl">Playfair</span>
               </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Body font</p>
-                <p className="text-base">Inter</p>
+              {/* Body font */}
+              <div className="px-5 py-4 grid grid-cols-[9rem_1fr] gap-4 items-center">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Body font</span>
+                <span className="text-sm">Inter</span>
               </div>
             </div>
           </div>
 
-          <h2 className="eyebrow mb-6">Tone of voice</h2>
-          <div className="artifact p-8">
-            <p className="font-serif text-2xl mb-6">{brandDNA.voice.summary}</p>
-            <div className="grid grid-cols-2 gap-6 mb-6">
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-sage mb-3">Always</p>
-                <ul className="space-y-2 text-sm text-foreground">
-                  {brandDNA.voice.do.length === 0 ? (
-                    <li className="text-taupe/60 italic">No rules set</li>
-                  ) : brandDNA.voice.do.map((d) => (
-                    <li key={d} className="flex gap-2">
-                      <span className="text-sage">·</span>
-                      <span>{d}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-taupe mb-3">Never</p>
-                <ul className="space-y-2 text-sm text-foreground">
-                  {brandDNA.voice.dont.length === 0 ? (
-                    <li className="text-taupe/60 italic">No rules set</li>
-                  ) : brandDNA.voice.dont.map((d) => (
-                    <li key={d} className="flex gap-2">
-                      <span className="text-taupe">·</span>
-                      <span>{d}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+          {/* Tone of voice — rules table */}
+          <div className="border border-border bg-card shadow-sm overflow-hidden">
+            <div className="bg-muted px-5 py-3 border-b border-border flex items-center justify-between">
+              <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Tone of voice</h2>
+              <span className="eyebrow">Voice</span>
             </div>
-            <div className="grid grid-cols-2 gap-6 pt-6 border-t hairline">
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Emojis</p>
+            {/* Summary */}
+            <div className="px-5 py-4 border-b border-border bg-nude/10">
+              <p className="font-serif text-xl leading-snug">{brandDNA.voice.summary}</p>
+            </div>
+            {/* Rules table header */}
+            <div className="bg-muted px-5 py-2.5 border-b border-border grid grid-cols-[2.5rem_5.5rem_1fr] gap-4">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">#</span>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Type</span>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Rule</span>
+            </div>
+            {/* Rules rows */}
+            <div className="divide-y divide-border">
+              {brandDNA.voice.do.length === 0 && brandDNA.voice.dont.length === 0 ? (
+                <div className="px-5 py-4 text-sm text-taupe italic">No voice rules set yet.</div>
+              ) : (
+                <>
+                  {brandDNA.voice.do.map((d, i) => (
+                    <div key={d} className="px-5 py-3.5 grid grid-cols-[2.5rem_5.5rem_1fr] gap-4 items-center hover:bg-nude/20 transition-colors">
+                      <span className="text-[10px] font-mono text-taupe tabular-nums">{String(i + 1).padStart(2, "0")}</span>
+                      <span className="text-[10px] uppercase tracking-widest text-sage bg-sage/10 px-2 py-0.5 text-center">Always</span>
+                      <span className="text-sm text-foreground">{d}</span>
+                    </div>
+                  ))}
+                  {brandDNA.voice.dont.map((d, i) => (
+                    <div key={d} className="px-5 py-3.5 grid grid-cols-[2.5rem_5.5rem_1fr] gap-4 items-center hover:bg-nude/20 transition-colors">
+                      <span className="text-[10px] font-mono text-taupe tabular-nums">{String(brandDNA.voice.do.length + i + 1).padStart(2, "0")}</span>
+                      <span className="text-[10px] uppercase tracking-widest text-taupe bg-taupe/10 px-2 py-0.5 text-center">Never</span>
+                      <span className="text-sm text-foreground">{d}</span>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+            {/* Settings footer */}
+            <div className="grid grid-cols-2 divide-x divide-border border-t border-border">
+              <div className="px-5 py-3.5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground mb-1">Emojis</p>
                 <p className="text-sm capitalize">{brandDNA.emojiPolicy.replace(/_/g, " ")}</p>
               </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Caption length</p>
+              <div className="px-5 py-3.5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground mb-1">Caption length</p>
                 <p className="text-sm capitalize">{brandDNA.captionLength}</p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Pillars + goals */}
+        {/* ── Pillars + goals ──────────────────────────────────────────── */}
         <section className="col-span-12 lg:col-span-7">
-          <h2 className="eyebrow mb-6">Content pillars</h2>
+          <h2 className="eyebrow mb-4 pb-3 border-b hairline">Content pillars</h2>
           <p className="text-sm text-taupe mb-6 max-w-[60ch]">
             Every post is tagged to one pillar. The mix below is what we plan against in your calendar.
           </p>
-          <div className="space-y-px bg-border mb-10">
+          <div className="space-y-3 mb-10">
             {brandDNA.pillars.length === 0 ? (
-              <div className="bg-card p-6 text-taupe italic text-sm">No pillars defined yet.</div>
+              <div className="bg-card border border-border p-6 text-taupe italic text-sm shadow-sm">
+                No pillars defined yet.
+              </div>
             ) : brandDNA.pillars.map((p) => (
-              <div key={p.name} className="bg-card p-6 flex items-center gap-6">
+              <div key={p.name} className="bg-card border border-border p-6 flex items-center gap-6 shadow-sm hover:shadow-md transition-shadow">
                 <div className="flex-1">
                   <p className="font-serif text-2xl mb-1">{p.name}</p>
                   <p className="text-sm text-taupe">{p.description}</p>
@@ -217,16 +262,42 @@ function BrandPage() {
             ))}
           </div>
 
-          <h2 className="eyebrow mb-6">Business goals</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-border border hairline mb-10">
-            <Goal label="Bookings per week" value={`${brandDNA.goals.bookingsPerWeek}`} />
-            <Goal label="Posts per week" value={`${brandDNA.goals.postsPerWeek}`} />
-            <Goal label="Focus services" value={`${brandDNA.goals.focusServices.length}`} />
+          {/* Business goals — stat grid */}
+          <div className="border border-border bg-card shadow-sm overflow-hidden mb-10">
+            <div className="bg-muted px-5 py-3 border-b border-border">
+              <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Business goals</h2>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-border">
+              <div className="px-6 py-5 group hover:bg-nude/20 transition-colors cursor-default">
+                <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-muted-foreground group-hover:text-taupe transition-colors">
+                  Bookings per week
+                </p>
+                <p className="mt-2 font-serif text-4xl tabular-nums text-foreground">
+                  {brandDNA.goals.bookingsPerWeek}
+                </p>
+              </div>
+              <div className="px-6 py-5 group hover:bg-nude/20 transition-colors cursor-default">
+                <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-muted-foreground group-hover:text-taupe transition-colors">
+                  Posts per week
+                </p>
+                <p className="mt-2 font-serif text-4xl tabular-nums text-foreground">
+                  {brandDNA.goals.postsPerWeek}
+                </p>
+              </div>
+              <div className="px-6 py-5 group hover:bg-nude/20 transition-colors cursor-default">
+                <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-muted-foreground group-hover:text-taupe transition-colors">
+                  Focus services
+                </p>
+                <p className="mt-2 font-serif text-4xl tabular-nums text-foreground">
+                  {brandDNA.goals.focusServices.length}
+                </p>
+              </div>
+            </div>
           </div>
 
           {brandDNA.moodboard.length > 0 && (
             <>
-              <h2 className="eyebrow mb-6">Moodboard</h2>
+              <h2 className="eyebrow mb-4 pb-3 border-b hairline">Moodboard</h2>
               <div className="grid grid-cols-3 gap-2">
                 {brandDNA.moodboard.map((src, i) => (
                   <div
@@ -244,34 +315,48 @@ function BrandPage() {
           )}
         </section>
 
-        {/* Ideal client */}
+        {/* ── Ideal client ─────────────────────────────────────────────── */}
         <section className="col-span-12 mt-12">
-          <h2 className="eyebrow mb-6">Ideal client</h2>
-          <div className="artifact p-8 sm:p-10 grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Age range</p>
-              <p className="font-serif text-2xl mb-2">{brandDNA.idealClient.age || "—"}</p>
-              <p className="text-sm text-taupe leading-relaxed">{brandDNA.idealClient.cities}</p>
+          {/* Ideal client — definition table */}
+          <div className="border border-border bg-card shadow-sm overflow-hidden">
+            <div className="bg-muted px-5 py-3 border-b border-border flex items-center justify-between">
+              <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Ideal client</h2>
+              <span className="eyebrow">Profile</span>
             </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">She is looking for</p>
-              <p className="text-base leading-relaxed">{brandDNA.idealClient.looksFor || "Not defined"}</p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Your niche</p>
-              <p className="font-serif text-xl mb-2">{brandDNA.category}</p>
-              <p className="text-sm text-taupe">{brandDNA.oneLiner}</p>
-            </div>
-            {brandDNA.idealClient.painPoints.length > 0 && (
-              <div className="md:col-span-3 pt-6 border-t hairline">
-                <p className="text-[10px] uppercase tracking-widest text-taupe mb-3">Pain points</p>
-                <div className="flex flex-wrap gap-2">
-                  {brandDNA.idealClient.painPoints.map((p) => (
-                    <span key={p} className="text-[10px] uppercase tracking-widest border hairline px-3 py-1.5 text-taupe">{p}</span>
-                  ))}
+            <div className="divide-y divide-border">
+              <div className="px-5 py-4 grid grid-cols-[9rem_1fr] gap-4 items-start hover:bg-nude/20 transition-colors">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground pt-0.5">Age range</span>
+                <div>
+                  <p className="font-serif text-xl">{brandDNA.idealClient.age || "—"}</p>
+                  {brandDNA.idealClient.cities && (
+                    <p className="text-sm text-taupe mt-1">{brandDNA.idealClient.cities}</p>
+                  )}
                 </div>
               </div>
-            )}
+              <div className="px-5 py-4 grid grid-cols-[9rem_1fr] gap-4 items-start hover:bg-nude/20 transition-colors">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground pt-0.5">Looking for</span>
+                <p className="text-sm leading-relaxed">{brandDNA.idealClient.looksFor || "Not defined"}</p>
+              </div>
+              <div className="px-5 py-4 grid grid-cols-[9rem_1fr] gap-4 items-start hover:bg-nude/20 transition-colors">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground pt-0.5">Your niche</span>
+                <div>
+                  <p className="font-serif text-lg mb-1">{brandDNA.category}</p>
+                  <p className="text-sm text-taupe">{brandDNA.oneLiner}</p>
+                </div>
+              </div>
+              {brandDNA.idealClient.painPoints.length > 0 && (
+                <div className="px-5 py-4 grid grid-cols-[9rem_1fr] gap-4 items-start">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground pt-0.5">Pain points</span>
+                  <div className="flex flex-wrap gap-2">
+                    {brandDNA.idealClient.painPoints.map((p) => (
+                      <span key={p} className="text-[10px] uppercase tracking-widest border hairline px-3 py-1.5 text-taupe">
+                        {p}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </section>
       </div>
@@ -279,32 +364,30 @@ function BrandPage() {
   );
 }
 
-function Goal({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="bg-card p-6">
-      <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">{label}</p>
-      <p className="font-serif text-3xl tabular-nums">{value}</p>
-    </div>
-  );
-}
 
 function BrandEmptyState() {
   return (
-    <div className="mt-6 lg:mt-10 max-w-[60ch]">
-      <p className="eyebrow mb-5">Brand DNA · the intelligence layer</p>
-      <h1 className="font-serif text-4xl sm:text-5xl leading-[1.05] tracking-tight">
-        Your Brand DNA is <span className="italic">not set up yet</span>.
-      </h1>
-      <p className="mt-6 text-base sm:text-lg text-taupe leading-relaxed">
-        Brand DNA powers every caption, template, campaign and calendar recommendation. Set it up once and the rest of Elle.Be.O Growth tunes itself to your voice.
-      </p>
-      <div className="mt-8 flex flex-wrap gap-3">
-        <Link
-          to="/brand/onboarding"
-          className="text-[11px] uppercase tracking-[0.2em] bg-foreground text-offwhite px-4 py-2"
-        >
-          Build your Brand DNA
-        </Link>
+    <div className="relative mt-6 lg:mt-10 overflow-hidden border border-nude/60 bg-card p-6 sm:p-8 shadow-sm max-w-[60ch]">
+      <div
+        className="pointer-events-none absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-taupe via-sage to-sage opacity-90"
+        aria-hidden
+      />
+      <div className="pl-4 sm:pl-5">
+        <p className="eyebrow mb-4">Brand DNA · the intelligence layer</p>
+        <h1 className="font-serif text-4xl sm:text-5xl leading-[1.05] tracking-tight">
+          Your Brand DNA is <span className="italic">not set up yet</span>.
+        </h1>
+        <p className="mt-5 text-base sm:text-lg text-taupe leading-relaxed">
+          Brand DNA powers every caption, template, campaign and calendar recommendation. Set it up once and the rest of Elle.Be.O Growth tunes itself to your voice.
+        </p>
+        <div className="mt-8 flex flex-wrap gap-3">
+          <Link
+            to="/brand/onboarding"
+            className="text-[11px] uppercase tracking-[0.2em] bg-foreground text-offwhite px-4 py-2 hover:bg-taupe transition-colors"
+          >
+            Build your Brand DNA
+          </Link>
+        </div>
       </div>
     </div>
   );

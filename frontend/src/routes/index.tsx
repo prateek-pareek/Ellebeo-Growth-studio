@@ -74,31 +74,37 @@ function HomePage() {
   return (
     <div>
       {/* ── Greeting ─────────────────────────────────────────────────────── */}
-      <section className="mt-6 lg:mt-10 mb-10 max-w-[68ch]">
-        <p className="eyebrow mb-5">{dateLabel}</p>
-        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight">
-          {greeting}, <span className="italic">{firstName}.</span>
-        </h1>
-        <p className="mt-6 text-base sm:text-lg text-taupe leading-relaxed">
-          You have{" "}
-          <span className="text-foreground font-medium">{todayAppointments.length} appointments today</span>,{" "}
-          <span className="text-foreground font-medium">{postsReadyForReview} posts ready for review</span>, and{" "}
-          <span className="text-foreground font-medium">{consentPending} client consent</span>{" "}
-          still pending.
-        </p>
+      <section className="relative mt-6 lg:mt-10 mb-10 overflow-hidden border border-nude/60 bg-card p-6 sm:p-8 shadow-sm">
+        <div
+          className="pointer-events-none absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-taupe via-sage to-sage opacity-90"
+          aria-hidden
+        />
+        <div className="pl-4 sm:pl-5">
+          <p className="eyebrow mb-4">{dateLabel}</p>
+          <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight">
+            {greeting}, <span className="italic">{firstName}.</span>
+          </h1>
+          <p className="mt-5 text-base sm:text-lg text-taupe leading-relaxed max-w-[68ch]">
+            You have{" "}
+            <span className="text-foreground font-medium">{todayAppointments.length} appointments today</span>,{" "}
+            <span className="text-foreground font-medium">{postsReadyForReview} posts ready for review</span>, and{" "}
+            <span className="text-foreground font-medium">{consentPending} client consent</span>{" "}
+            still pending.
+          </p>
+        </div>
       </section>
 
       {/* ── Brand DNA ────────────────────────────────────────────────────── */}
       <section className="mb-12">
-        <div className="flex items-baseline justify-between mb-4">
+        <div className="flex items-baseline justify-between mb-4 pb-3 border-b hairline">
           <p className="eyebrow">Your Brand DNA</p>
-          <Link to="/brand" className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground">
+          <Link to="/brand" className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
             Open Brand DNA →
           </Link>
         </div>
 
         {!brandDNA ? (
-          <div className="artifact p-10 text-center">
+          <div className="border border-border bg-card p-10 text-center shadow-sm">
             <p className="text-taupe italic text-sm mb-4">No Brand DNA set up yet.</p>
             <Link
               to="/brand/onboarding"
@@ -108,7 +114,7 @@ function HomePage() {
             </Link>
           </div>
         ) : (
-          <div className="artifact p-6 sm:p-10 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10">
+          <div className="border border-border bg-card p-6 sm:p-10 shadow-sm grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10">
             {/* Left — identity */}
             <div className="lg:col-span-5">
               <div className="flex items-center gap-2 mb-4">
@@ -166,7 +172,7 @@ function HomePage() {
               <div className="flex flex-wrap gap-3">
                 <Link
                   to="/brand/onboarding"
-                  className="text-[10px] uppercase tracking-[0.2em] border hairline px-4 py-2.5 hover:bg-card transition-colors"
+                  className="text-[10px] uppercase tracking-[0.2em] border hairline px-4 py-2.5 hover:bg-muted transition-colors"
                 >
                   Refine Brand DNA
                 </Link>
@@ -183,8 +189,8 @@ function HomePage() {
       </section>
 
       {/* ── Stats strip ──────────────────────────────────────────────────── */}
-      <section className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-border border hairline mb-12">
-        <Link to="/content" className="bg-card p-6 hover:bg-nude/30 transition-colors group">
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-12">
+        <Link to="/content" className="bg-card border border-border p-6 shadow-sm hover:shadow-md hover:bg-nude/20 transition-all group">
           <p className="eyebrow mb-3">Review</p>
           <p className="font-serif text-5xl mb-2 tabular-nums">{postsReadyForReview}</p>
           <p className="text-sm text-taupe mb-5">posts are ready for review</p>
@@ -193,7 +199,7 @@ function HomePage() {
           </span>
         </Link>
 
-        <div className="bg-card p-6">
+        <div className="bg-card border border-border p-6 shadow-sm">
           <p className="eyebrow mb-3">Consent</p>
           <p className="font-serif text-5xl mb-2 tabular-nums">{consentPending}</p>
           <p className="text-sm text-taupe mb-5">client consent waiting</p>
@@ -205,7 +211,7 @@ function HomePage() {
           </Link>
         </div>
 
-        <Link to="/calendar" className="bg-card p-6 hover:bg-nude/30 transition-colors group">
+        <Link to="/calendar" className="bg-card border border-border p-6 shadow-sm hover:shadow-md hover:bg-nude/20 transition-all group">
           <p className="eyebrow mb-3">This week</p>
           <p className="font-serif text-5xl mb-2 tabular-nums">{scheduledThisWeek}</p>
           <p className="text-sm text-taupe mb-5">posts scheduled</p>
@@ -223,21 +229,21 @@ function HomePage() {
 
           {/* Today's appointments */}
           <section>
-            <div className="flex items-baseline justify-between mb-6">
+            <div className="flex items-baseline justify-between mb-4 pb-3 border-b hairline">
               <h2 className="eyebrow">Today's appointments</h2>
-              <Link to="/appointments" className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground">
+              <Link to="/appointments" className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
                 All appointments →
               </Link>
             </div>
-            <div className="space-y-px bg-border">
+            <div className="space-y-3">
               {todayAppointments.length === 0 ? (
-                <div className="bg-card p-10 text-center text-taupe italic text-sm">
+                <div className="bg-card border border-border p-10 text-center text-taupe italic text-sm shadow-sm">
                   No appointments scheduled for today.
                 </div>
               ) : (
                 todayAppointments.map((a) => (
-                  <div key={a.id} className="bg-card p-5 flex items-center gap-4">
-                    <div className="size-[52px] shrink-0 overflow-hidden bg-nude/40">
+                  <div key={a.id} className="bg-card border border-border p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="size-[52px] shrink-0 overflow-hidden bg-nude/40 rounded-sm">
                       {a.afterPhotoUrl || a.beforePhotoUrl ? (
                         <img
                           src={(a.afterPhotoUrl ?? a.beforePhotoUrl)!}
@@ -272,8 +278,8 @@ function HomePage() {
 
           {/* Bookings this week */}
           <section>
-            <h2 className="eyebrow mb-6">Bookings this week</h2>
-            <div className="artifact p-6">
+            <h2 className="eyebrow mb-4 pb-3 border-b hairline">Bookings this week</h2>
+            <div className="bg-card border border-border p-6 shadow-sm">
               <div className="flex items-baseline justify-between mb-1">
                 <span className="font-serif text-5xl tabular-nums">{bookingsThisWeek}</span>
                 {bookingTarget > 0 && (
@@ -325,21 +331,21 @@ function HomePage() {
 
           {/* Posts ready for review */}
           <section>
-            <div className="flex items-baseline justify-between mb-6">
+            <div className="flex items-baseline justify-between mb-4 pb-3 border-b hairline">
               <h2 className="eyebrow">Posts ready for review</h2>
-              <Link to="/content" className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground">
+              <Link to="/content" className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
                 Review all →
               </Link>
             </div>
-            <div className="space-y-px bg-border">
+            <div className="space-y-3">
               {reviewQueue.length === 0 ? (
-                <div className="bg-card p-6 text-sm text-taupe italic">
+                <div className="bg-card border border-border p-6 text-sm text-taupe italic shadow-sm">
                   All caught up — no posts waiting for review.
                 </div>
               ) : (
                 reviewQueue.map((c) => (
-                  <div key={c.id} className="bg-card p-4 flex items-start gap-4">
-                    <div className="w-16 aspect-[4/5] shrink-0 overflow-hidden bg-nude/30">
+                  <div key={c.id} className="bg-card border border-border p-4 flex items-start gap-4 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="w-16 aspect-[4/5] shrink-0 overflow-hidden bg-nude/30 rounded-sm">
                       <img
                         src={c.image}
                         alt={c.title}
@@ -366,26 +372,28 @@ function HomePage() {
 
           {/* This week at a glance */}
           <section>
-            <h2 className="eyebrow mb-6">This week at a glance</h2>
-            <div className="grid grid-cols-7 border hairline bg-border gap-px">
-              {weekDays.map((d, i) => (
-                <div
-                  key={i}
-                  className={"bg-card py-4 px-1 text-center " + (d.isToday ? "bg-nude/30" : "")}
-                >
-                  <p className={
-                    "text-[9px] uppercase tracking-wide mb-3 " +
-                    (d.isToday ? "text-foreground font-semibold" : "text-taupe")
-                  }>
-                    {d.label}
-                  </p>
-                  {d.hasContent ? (
-                    <span className="block size-1.5 rounded-full bg-foreground mx-auto" />
-                  ) : (
-                    <span className="block text-[10px] text-taupe/40 leading-none mx-auto">–</span>
-                  )}
-                </div>
-              ))}
+            <h2 className="eyebrow mb-4 pb-3 border-b hairline">This week at a glance</h2>
+            <div className="border border-border bg-card shadow-sm overflow-hidden">
+              <div className="grid grid-cols-7 gap-px bg-border">
+                {weekDays.map((d, i) => (
+                  <div
+                    key={i}
+                    className={"py-4 px-1 text-center bg-card " + (d.isToday ? "!bg-nude/30" : "")}
+                  >
+                    <p className={
+                      "text-[9px] uppercase tracking-wide mb-3 " +
+                      (d.isToday ? "text-foreground font-semibold" : "text-taupe")
+                    }>
+                      {d.label}
+                    </p>
+                    {d.hasContent ? (
+                      <span className="block size-1.5 rounded-full bg-foreground mx-auto" />
+                    ) : (
+                      <span className="block text-[10px] text-taupe/40 leading-none mx-auto">–</span>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           </section>
         </div>
