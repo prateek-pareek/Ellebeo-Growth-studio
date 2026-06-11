@@ -79,6 +79,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     });
 
     socket.on('notification:new', (notif: Notification) => {
+      console.log('[Notifications] notification:new received:', notif);
       setNotifications(prev => [notif, ...prev]);
       setUnreadCount(c => c + 1);
       toast(notif.title ?? 'New notification', {

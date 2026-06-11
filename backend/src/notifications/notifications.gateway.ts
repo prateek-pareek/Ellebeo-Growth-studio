@@ -46,7 +46,9 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
         take: 10,
       });
 
+      console.log(`[NotificationsGateway] Missed notifications for tenant:${tenantId}: ${missed.length}`);
       for (const n of missed) {
+        console.log(`[NotificationsGateway] Pushing missed notification ${n.id} type:${n.type}`);
         client.emit('notification:new', {
           id: n.id,
           type: n.type,
