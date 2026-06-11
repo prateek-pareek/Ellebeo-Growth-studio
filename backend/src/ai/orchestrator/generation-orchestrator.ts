@@ -149,6 +149,7 @@ export class GenerationOrchestrator {
         const visionAnalysis = await this.visionChain.analyse({
           imageUrl,
           storagePath: primaryImage.rawStoragePath,
+          imageHash: primaryImage.s3ObjectHash,
           cachedResult: primaryImage.visionAnalysisCache,
         });
         visionResult = visionAnalysis.result;

@@ -134,10 +134,20 @@ export const AI_CONFIG = {
       `music:track:${tenantId}`,
     rateLimitGenerations: (tenantId: string) =>
       `ratelimit:gen:${tenantId}`,
+    rateLimitGenerationsMonthly: (tenantId: string, ym: string) =>
+      `ratelimit:gen:monthly:${tenantId}:${ym}`,
     rateLimitReels: (tenantId: string) =>
       `ratelimit:reel:${tenantId}`,
+    rateLimitImageGen: (tenantId: string) =>
+      `ratelimit:imggen:${tenantId}`,
+    rateLimitImageGenMonthly: (tenantId: string, ym: string) =>
+      `ratelimit:imggen:monthly:${tenantId}:${ym}`,
     rateLimitTweaks: (tenantId: string, contentItemId: string) =>
       `ratelimit:tweak:${tenantId}:${contentItemId}`,
+    rateLimitConcurrent: (tenantId: string) =>
+      `ratelimit:concurrent:${tenantId}`,
+    rateLimitLastSubmission: (tenantId: string) =>
+      `ratelimit:lastsubmit:${tenantId}`,
     regenerationDebounce: (contentItemId: string) =>
       `debounce:regen:${contentItemId}`,
     socketRoom: (tenantId: string) =>
@@ -149,14 +159,24 @@ export const AI_CONFIG = {
   // --------------------------------------------------------------------------
   rateLimits: {
     standard: {
-      maxGenerationsPerDay: 30,
-      maxReelsPerDay: 5,
-      maxTweaksPerContentItem: 10,
+      maxGenerationsPerDay:       10,
+      maxGenerationsPerMonth:    100,
+      maxReelsPerDay:              3,
+      maxImageGenerationsPerDay:  20,
+      maxImageGenerationsPerMonth: 200,
+      maxTweaksPerContentItem:     3,
+      maxConcurrentJobs:           2,
+      minJobIntervalSec:          10,
     },
     premium: {
-      maxGenerationsPerDay: 100,
-      maxReelsPerDay: 20,
-      maxTweaksPerContentItem: 10,
+      maxGenerationsPerDay:       30,
+      maxGenerationsPerMonth:    300,
+      maxReelsPerDay:             10,
+      maxImageGenerationsPerDay:  80,
+      maxImageGenerationsPerMonth: 800,
+      maxTweaksPerContentItem:     5,
+      maxConcurrentJobs:           5,
+      minJobIntervalSec:           5,
     },
     regenerationDebounceSec: 10,
   },
