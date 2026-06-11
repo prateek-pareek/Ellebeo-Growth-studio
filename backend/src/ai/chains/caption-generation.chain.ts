@@ -99,22 +99,20 @@ export class CaptionGenerationChain {
       .then(result => ({ ...result, generatedBy: 'ChatGPT' }))
       .catch(err => { console.error('[CaptionChain] OpenAI failed:', err); return null; });
 
-    // Option 2: prefer Gemini when a CLASSIC key is configured (AIzaSy...).
-    // Ephemeral AQ.* tokens are browser-only and cannot auth server-side, so we
-    // treat them as "no Gemini" and fall back to GPT-4o — that way the two-option
-    // compare always works on the OpenAI key alone, and Gemini switches on
-    // automatically the moment a real key is present.
+    // Option 2: Use Gemini when a key is configured.
+    // As of June 2026, Google AI Studio issues Auth keys with an AQ. prefix (not AIzaSy...).
+    // Both formats are valid server-side keys — any non-empty GEMINI_API_KEY is usable.
     const geminiKey = process.env['GEMINI_API_KEY'];
-    const geminiUsable = !!geminiKey && !geminiKey.startsWith('AQ.');
+    const geminiUsable = !!geminiKey && geminiKey.length > 0;
 
     const secondPromise = geminiUsable
       ? this.callGemini(assembledPrompt, brandDNABlacklist)
           .then(result => ({ ...result, generatedBy: 'Gemini' }))
           .catch(err => {
-            console.error('[CaptionChain] Gemini failed, falling back to GPT-4o:', err);
-            return this.generateGpt4oOption(assembledPrompt, brandDNABlacklist, allowRetry);
+            console.error('[CaptionChain] Gemini failed, falling back to GPT-4o-mini:', err);
+            return this.generateGpt4oMiniOption(assembledPrompt, brandDNABlacklist, allowRetry);
           })
-      : this.generateGpt4oOption(assembledPrompt, brandDNABlacklist, allowRetry);
+      : this.generateGpt4oMiniOption(assembledPrompt, brandDNABlacklist, allowRetry);
 
     const results = await Promise.all([openAiPromise, secondPromise]);
     const validResults = results.filter(r => r !== null) as (CaptionGenerationResult & { generatedBy: string })[];
@@ -130,20 +128,19 @@ export class CaptionGenerationChain {
   }
 
   // --------------------------------------------------------------------------
-  // GPT-4o fallback option — used as Option 2 when Gemini isn't available.
-  // Higher temperature than gpt-4o-mini so the two options are meaningfully
-  // different to choose between.
+  // GPT-4o-mini fallback — used as Option 2 when Gemini is unavailable or fails.
+  // Cheaper than gpt-4o while still producing quality captions.
   // --------------------------------------------------------------------------
 
-  private generateGpt4oOption(
+  private generateGpt4oMiniOption(
     assembledPrompt: AssembledPrompt,
     brandDNABlacklist: string[],
     allowRetry: boolean
   ): Promise<(CaptionGenerationResult & { generatedBy: string }) | null> {
-    const gpt4oConfig: LLMConfig = { provider: 'openai', modelId: 'gpt-4o', temperature: 0.85, maxTokens: 1024, timeoutMs: 45000, systemPromptCacheKey: null };
-    return this.generate({ assembledPrompt, llmConfig: gpt4oConfig, brandDNABlacklist, allowRetry })
-      .then(result => ({ ...result, generatedBy: 'GPT-4o' }))
-      .catch(err => { console.error('[CaptionChain] GPT-4o fallback failed:', err); return null; });
+    const gpt4oMiniConfig: LLMConfig = { provider: 'openai', modelId: 'gpt-4o-mini', temperature: 0.85, maxTokens: 1024, timeoutMs: 45000, systemPromptCacheKey: null };
+    return this.generate({ assembledPrompt, llmConfig: gpt4oMiniConfig, brandDNABlacklist, allowRetry })
+      .then(result => ({ ...result, generatedBy: 'GPT-4o-mini' }))
+      .catch(err => { console.error('[CaptionChain] GPT-4o-mini fallback failed:', err); return null; });
   }
 
   // --------------------------------------------------------------------------
