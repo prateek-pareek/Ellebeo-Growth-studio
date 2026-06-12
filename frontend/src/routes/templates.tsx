@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useTemplates, type Template } from "@/lib/providers/template-provider";
 import { useState } from "react";
+import { Layers, Play, Zap, Image, Music } from "lucide-react";
 
 export const Route = createFileRoute("/templates")({
   head: () => ({
@@ -15,43 +16,95 @@ export const Route = createFileRoute("/templates")({
 
 const PILLARS = ["All", "Transformations", "Education", "Behind the chair", "Client stories"];
 
+const FORMAT_META: Record<string, {
+  icon: React.ComponentType<{ className?: string }>;
+  color: string;
+  bg: string;
+  border: string;
+  label: string;
+}> = {
+  Carousel: { icon: Layers, label: "Carousel",  color: "text-taupe",       bg: "bg-nude/80",       border: "border-taupe/20" },
+  Reel:     { icon: Play,   label: "Reel",       color: "text-offwhite",    bg: "bg-foreground/80", border: "border-white/10" },
+  Story:    { icon: Zap,    label: "Story",      color: "text-sage",        bg: "bg-sage/20",       border: "border-sage/30"  },
+  Caption:  { icon: Image,  label: "Caption",    color: "text-taupe",       bg: "bg-nude/80",       border: "border-taupe/20" },
+  TikTok:   { icon: Music,  label: "TikTok",     color: "text-offwhite",    bg: "bg-foreground/80", border: "border-white/10" },
+};
+
+const FORMAT_FILTERS = ["All", "Carousel", "Reel", "Story", "Caption", "TikTok"];
+
 function TemplatesPage() {
   const { templates, categories } = useTemplates();
-  const [pillar, setPillar] = useState("All");
+  const [pillar,   setPillar]   = useState("All");
   const [category, setCategory] = useState("All");
+  const [format,   setFormat]   = useState("All");
 
   const filtered = templates.filter((t) => {
-    if (pillar !== "All" && t.pillar.toLowerCase() !== pillar.toLowerCase()) return false;
-    if (category !== "All" && !t.categories.includes(category)) return false;
+    if (pillar   !== "All" && t.pillar.toLowerCase() !== pillar.toLowerCase()) return false;
+    if (category !== "All" && !t.categories.includes(category))                return false;
+    if (format   !== "All" && t.type !== format)                               return false;
     return true;
   });
 
   return (
     <div>
-      <header className="mt-6 lg:mt-10 mb-10 max-w-[68ch]">
-        <p className="eyebrow mb-5">Templates</p>
-        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight">
-          Start from a <span className="italic">template</span>.
+      {/* ── Header ──────────────────────────────────────────────────────── */}
+      <header className="mt-6 lg:mt-10 mb-8">
+        <div className="flex items-center gap-2.5 mb-4">
+          <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-taupe">Templates</span>
+          <span className="text-taupe/30">·</span>
+          <span className="inline-flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-sage bg-sage/10 border border-sage/25 px-2.5 py-1 rounded-full">
+            <span className="size-1.5 rounded-full bg-sage" />
+            {templates.length} ready
+          </span>
+        </div>
+        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight max-w-[22ch]">
+          Start from a <span className="italic text-taupe">template</span>.
         </h1>
-        <p className="mt-6 text-base sm:text-lg text-taupe leading-relaxed">
-          Each template auto-fills with your Brand DNA, an appointment, or a service.{" "}
-          Edit before approving.
+        <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[52ch]">
+          Each template auto-fills with your Brand DNA. Pick a format, choose a goal, edit and approve.
         </p>
       </header>
 
-      {/* Category filter */}
+      {/* ── Format filter — most prominent ──────────────────────────────── */}
+      <div className="mb-6">
+        <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-taupe mb-3">Format</p>
+        <div className="flex flex-wrap gap-2">
+          {FORMAT_FILTERS.map((f) => {
+            const meta = FORMAT_META[f];
+            const Icon = meta?.icon;
+            const active = format === f;
+            return (
+              <button
+                key={f}
+                onClick={() => setFormat(f)}
+                className={
+                  "inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest px-3 py-1.5 rounded-full border-2 transition-all " +
+                  (active
+                    ? "bg-foreground text-offwhite border-foreground"
+                    : "bg-card text-taupe border-border hover:border-foreground/30 hover:bg-nude/20")
+                }
+              >
+                {Icon && <Icon className="size-3" />}
+                {f}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Category filter ──────────────────────────────────────────────── */}
       <div className="mb-5">
-        <p className="eyebrow mb-3">Category</p>
+        <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-taupe mb-3">Category</p>
         <div className="flex flex-wrap gap-2">
           {["All", ...categories].map((c) => (
             <button
               key={c}
               onClick={() => setCategory(c)}
               className={
-                "text-[11px] uppercase tracking-[0.18em] px-3 py-1.5 border hairline transition-colors " +
+                "text-[10px] uppercase tracking-widest px-3 py-1.5 rounded-full border transition-colors " +
                 (category === c
                   ? "bg-foreground text-offwhite border-foreground"
-                  : "text-taupe hover:text-foreground hover:border-foreground")
+                  : "border-border text-taupe hover:text-foreground hover:border-foreground/30")
               }
             >
               {c}
@@ -60,9 +113,9 @@ function TemplatesPage() {
         </div>
       </div>
 
-      {/* Pillar filter */}
-      <div className="mb-10 border-b hairline pb-1">
-        <p className="eyebrow mb-3">Pillar</p>
+      {/* ── Pillar filter ────────────────────────────────────────────────── */}
+      <div className="mb-10 border-b border-border pb-1">
+        <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-taupe mb-3">Pillar</p>
         <div className="flex flex-wrap gap-x-6 gap-y-2">
           {PILLARS.map((p) => (
             <button
@@ -81,11 +134,14 @@ function TemplatesPage() {
         </div>
       </div>
 
-      {/* Grid */}
+      {/* ── Grid ─────────────────────────────────────────────────────────── */}
       {filtered.length === 0 ? (
-        <p className="text-sm text-taupe py-12 italic">No templates match this filter.</p>
+        <div className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-2xl py-16 text-center">
+          <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">No results</p>
+          <p className="text-sm text-taupe">No templates match this filter combination.</p>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-14">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {filtered.map((t) => (
             <TemplateCard key={t.id} template={t} />
           ))}
@@ -96,52 +152,63 @@ function TemplatesPage() {
 }
 
 function TemplateCard({ template: t }: { template: Template }) {
+  const meta = FORMAT_META[t.type] ?? FORMAT_META["Caption"];
+  const Icon = meta.icon;
+
   return (
-    <article className="group flex flex-col">
-      {/* Image */}
-      <div className="aspect-[4/5] overflow-hidden bg-nude/30 mb-4">
+    <article className="group flex flex-col rounded-2xl border-2 border-border bg-card overflow-hidden hover:border-foreground/25 hover:shadow-md transition-all duration-200">
+
+      {/* Image with format badge overlay */}
+      <div className="relative aspect-[4/5] overflow-hidden bg-nude/30">
         <img
           src={t.preview}
           alt={t.name}
           loading="lazy"
-          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.02]"
+          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
         />
+        {/* Format badge — top left */}
+        <div className={`absolute top-3 left-3 inline-flex items-center gap-1.5 backdrop-blur-sm border px-2.5 py-1.5 rounded-full ${meta.bg} ${meta.border}`}>
+          <Icon className={`size-3 ${meta.color}`} />
+          <span className={`text-[9px] font-bold uppercase tracking-widest ${meta.color}`}>{meta.label}</span>
+        </div>
+        {/* Pillar badge — top right */}
+        <div className="absolute top-3 right-3 bg-foreground/70 backdrop-blur-sm px-2 py-1 rounded-full">
+          <span className="text-[8px] uppercase tracking-widest text-offwhite">{t.pillar}</span>
+        </div>
       </div>
 
-      {/* Type · Pillar */}
-      <p className="eyebrow mb-2">{t.type} · {t.pillar}</p>
+      {/* Body */}
+      <div className="flex flex-col flex-1 p-4">
+        {/* Title */}
+        <h3 className="font-serif text-lg leading-snug mb-1.5">{t.name}</h3>
 
-      {/* Title */}
-      <h3 className="font-serif text-xl leading-snug mb-2">{t.name}</h3>
+        {/* Description */}
+        <p className="text-xs text-taupe leading-relaxed mb-3 flex-1">{t.description}</p>
 
-      {/* Description */}
-      <p className="text-sm text-taupe leading-relaxed mb-3">{t.description}</p>
+        {/* Category chips */}
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {t.categories.slice(0, 3).map((c) => (
+            <span key={c} className="text-[9px] uppercase tracking-widest border border-border bg-muted px-2 py-0.5 rounded-full text-taupe">
+              {c}
+            </span>
+          ))}
+          {t.categories.length > 3 && (
+            <span className="text-[9px] uppercase tracking-widest text-taupe/50 py-0.5">
+              +{t.categories.length - 3}
+            </span>
+          )}
+        </div>
 
-      {/* Category chips */}
-      <div className="flex flex-wrap gap-1.5 mb-4">
-        {t.categories.slice(0, 3).map((c) => (
-          <span
-            key={c}
-            className="text-[9px] uppercase tracking-widest border hairline px-2 py-0.5 text-taupe"
-          >
-            {c}
-          </span>
-        ))}
-        {t.categories.length > 3 && (
-          <span className="text-[9px] uppercase tracking-widest text-taupe py-0.5">
-            +{t.categories.length - 3} more
-          </span>
-        )}
+        {/* CTA */}
+        <Link
+          to="/generate"
+          search={{ templateGoal: t.goal, templateFormat: t.type }}
+          className="inline-flex items-center justify-center gap-2 bg-foreground text-offwhite text-[10px] font-semibold uppercase tracking-widest px-4 py-2.5 rounded-xl hover:bg-taupe active:scale-[0.97] transition-all"
+        >
+          <Icon className="size-3" />
+          Use {meta.label} template
+        </Link>
       </div>
-
-      {/* CTA */}
-      <Link
-        to="/generate"
-        search={{ templateGoal: t.goal, templateFormat: t.type }}
-        className="mt-auto text-[10px] uppercase tracking-widest text-foreground border-b border-foreground pb-0.5 self-start hover:text-taupe hover:border-taupe transition-colors"
-      >
-        Use this template →
-      </Link>
     </article>
   );
 }
