@@ -114,36 +114,30 @@ function ContentPage() {
   return (
     <div>
       {/* ── Page header ──────────────────────────────────────────────────── */}
-      <header className="relative mt-6 lg:mt-10 mb-10 overflow-hidden border border-nude/60 bg-card p-6 sm:p-8 shadow-sm">
-        <div
-          className="pointer-events-none absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-taupe via-sage to-sage opacity-90"
-          aria-hidden
-        />
-        <div className="pl-4 sm:pl-5 max-w-[68ch]">
-          <div className="flex items-center gap-3 mb-4">
-            <p className="eyebrow">Content library</p>
-            {!loading && !error && items.length > 0 && (
-              <span className="text-[9px] uppercase tracking-widest border border-sage text-sage px-2 py-0.5">
-                Live
-              </span>
-            )}
-            {loading && (
-              <span className="text-[9px] uppercase tracking-widest text-taupe">Loading…</span>
-            )}
-          </div>
-          <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight">
-            Every draft, scheduled post and <span className="italic">published</span> piece, in one place.
-          </h1>
-          <p className="mt-5 text-base sm:text-lg text-taupe leading-relaxed">
-            Generated from real appointments and shaped by your Brand DNA. Filter by state, format or
-            goal — and see exactly which posts are blocked because the client hasn't consented.
-          </p>
-          {error && (
-            <p className="mt-4 text-[11px] uppercase tracking-widest border-l-2 border-destructive pl-3 text-destructive">
-              Couldn't load content from your account.
-            </p>
+      <header className="mt-6 lg:mt-10 mb-8">
+        <div className="flex items-center gap-2.5 mb-4">
+          <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-taupe">Content library</span>
+          <span className="text-taupe/30">·</span>
+          {loading ? (
+            <span className="text-[9px] uppercase tracking-widest text-taupe">Loading…</span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-sage bg-sage/10 border border-sage/25 px-2.5 py-1 rounded-full">
+              <span className="size-1.5 rounded-full bg-sage animate-pulse" />
+              {items.length} items
+            </span>
           )}
         </div>
+        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight max-w-[22ch]">
+          Every draft, post and <span className="italic text-taupe">publish</span> in one place.
+        </h1>
+        <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[52ch]">
+          Filter by state, format or goal. Posts blocked by missing consent are clearly flagged.
+        </p>
+        {error && (
+          <p className="mt-3 text-[11px] uppercase tracking-widest border-l-2 border-destructive pl-3 text-destructive">
+            Couldn't load content from your account.
+          </p>
+        )}
       </header>
 
       {/* ── Generate hand-off ────────────────────────────────────────────── */}

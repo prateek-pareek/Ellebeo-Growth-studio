@@ -41,8 +41,38 @@ function PermissionBadge({ granted }: { granted: boolean }) {
 }
 
 function GrantedView({ data }: { data: NonNullable<ReturnType<typeof useConsentRequest>["data"]> }) {
-  const { appointment, permissions } = data;
-  const grantedCount = Object.values(permissions).filter(Boolean).length;
+  const { appointment, permissions: initial } = data;
+  const [perms, setPerms] = useState<ConsentPermissions>({ ...initial });
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const dirty = (Object.keys(perms) as (keyof ConsentPermissions)[]).some(k => perms[k] !== initial[k]);
+  const grantedCount = Object.values(perms).filter(Boolean).length;
+
+  const toggle = (key: keyof ConsentPermissions) => {
+    setSaved(false);
+    setPerms(p => ({ ...p, [key]: !p[key] }));
+  };
+
+  const handleSave = async () => {
+    if (!appointment.clientId) {
+      toast.error("Client ID not found. Please refresh and try again.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.post(`/clients/${appointment.clientId}/consent`, {
+        ...perms,
+        consentMethod: "manual",
+      });
+      setSaved(true);
+      toast.success("Permissions updated for " + appointment.clientName);
+    } catch {
+      toast.error("Failed to save. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div>
@@ -55,33 +85,88 @@ function GrantedView({ data }: { data: NonNullable<ReturnType<typeof useConsentR
           <span className="italic">{appointment.clientName}</span> has consented.
         </h1>
         <p className="mt-6 text-base sm:text-lg text-taupe leading-relaxed">
-          {grantedCount} of {PERMISSION_ITEMS.length} permissions granted. You can now generate content for this appointment.
+          {grantedCount} of {PERMISSION_ITEMS.length} permissions granted.{" "}
+          <span className="text-foreground">Click any permission below to toggle it on or off.</span>
         </p>
       </header>
 
       <div className="grid grid-cols-12 gap-8 lg:gap-12">
-        {/* Permission breakdown */}
+        {/* Permission breakdown — now editable */}
         <section className="col-span-12 lg:col-span-7">
-          <h2 className="eyebrow mb-4">Permission breakdown</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="eyebrow">Permission breakdown</h2>
+            <span className="text-[9px] uppercase tracking-widest text-taupe">Click to toggle</span>
+          </div>
           <div className="space-y-px bg-border">
             {PERMISSION_ITEMS.map((item) => {
-              const granted = permissions[item.key];
+              const granted = perms[item.key];
+              const changed = perms[item.key] !== initial[item.key];
               return (
-                <div
+                <label
                   key={item.key}
-                  className={"bg-card p-5 flex items-start gap-4 " + (granted ? "" : "opacity-60")}
+                  className={"group bg-card p-5 flex items-start gap-4 cursor-pointer hover:bg-nude/20 transition-colors " + (!granted ? "opacity-70 hover:opacity-100" : "")}
                 >
-                  <PermissionBadge granted={granted} />
+                  <input
+                    type="checkbox"
+                    checked={granted}
+                    onChange={() => toggle(item.key)}
+                    className="sr-only"
+                  />
+                  {/* Toggle circle */}
+                  <div className={
+                    "flex items-center justify-center size-5 rounded-full border shrink-0 mt-0.5 transition-all " +
+                    (granted ? "bg-foreground border-foreground" : "border-border bg-transparent group-hover:border-foreground/40")
+                  }>
+                    {granted && (
+                      <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                        <path d="M1 4l3 3 5-6" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </div>
                   <div className="flex-1">
-                    <p className={"text-sm font-medium " + (granted ? "text-foreground" : "text-taupe")}>{item.title}</p>
+                    <div className="flex items-center gap-2">
+                      <p className={"text-sm font-medium " + (granted ? "text-foreground" : "text-taupe")}>{item.title}</p>
+                      {changed && (
+                        <span className="text-[9px] uppercase tracking-widest text-taupe bg-nude/40 border border-nude px-1.5 py-0.5 rounded-full">
+                          {granted ? "Added" : "Removed"}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-taupe mt-1">{item.help}</p>
                   </div>
-                  <span className={"text-[9px] uppercase tracking-widest shrink-0 " + (granted ? "text-sage" : "text-taupe")}>
+                  <span className={"text-[9px] uppercase tracking-widest shrink-0 " + (granted ? "text-sage" : "text-taupe/50")}>
                     {granted ? "Granted" : "Not granted"}
                   </span>
-                </div>
+                </label>
               );
             })}
+          </div>
+
+          {/* Save bar — appears when dirty */}
+          <div className={
+            "mt-4 flex items-center justify-between gap-4 rounded-xl border-2 px-5 py-3.5 transition-all duration-300 " +
+            (dirty ? "border-foreground bg-card opacity-100" : "border-border bg-muted opacity-50 pointer-events-none")
+          }>
+            <p className="text-xs text-taupe">
+              {dirty ? "You have unsaved permission changes." : "No changes."}
+            </p>
+            <div className="flex items-center gap-3">
+              {dirty && (
+                <button
+                  onClick={() => { setPerms({ ...initial }); setSaved(false); }}
+                  className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors"
+                >
+                  Reset
+                </button>
+              )}
+              <button
+                onClick={handleSave}
+                disabled={!dirty || saving}
+                className="bg-foreground text-offwhite px-5 py-2 text-[10px] uppercase tracking-widest rounded-lg hover:bg-taupe transition-colors disabled:opacity-40"
+              >
+                {saving ? "Saving…" : saved ? "Saved ✓" : "Save changes"}
+              </button>
+            </div>
           </div>
         </section>
 
@@ -110,13 +195,13 @@ function GrantedView({ data }: { data: NonNullable<ReturnType<typeof useConsentR
             )}
 
             <div className="space-y-2">
-              {PERMISSION_ITEMS.filter((p) => permissions[p.key]).map((p) => (
+              {PERMISSION_ITEMS.filter((p) => perms[p.key]).map((p) => (
                 <div key={p.key} className="flex items-center gap-2">
                   <span className="size-1.5 rounded-full bg-sage shrink-0" />
                   <span className="text-xs text-foreground">{p.title}</span>
                 </div>
               ))}
-              {PERMISSION_ITEMS.filter((p) => !permissions[p.key]).map((p) => (
+              {PERMISSION_ITEMS.filter((p) => !perms[p.key]).map((p) => (
                 <div key={p.key} className="flex items-center gap-2">
                   <span className="size-1.5 rounded-full bg-border shrink-0" />
                   <span className="text-xs text-taupe line-through">{p.title}</span>

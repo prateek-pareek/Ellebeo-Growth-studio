@@ -37,42 +37,40 @@ function BrandPage() {
   return (
     <div>
       {/* ── Page header ──────────────────────────────────────────────────── */}
-      <header className="relative mt-6 lg:mt-10 mb-12 overflow-hidden border border-nude/60 bg-card p-6 sm:p-8 shadow-sm">
-        <div
-          className="pointer-events-none absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-taupe via-sage to-sage opacity-90"
-          aria-hidden
-        />
-        <div className="pl-4 sm:pl-5 max-w-[72ch]">
-          <p className="eyebrow mb-4">Brand DNA · the intelligence layer</p>
-          <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight text-balance">
-            Your Brand DNA is <span className="italic">ready</span>.
-          </h1>
-          <p className="mt-5 text-base sm:text-lg text-taupe leading-relaxed">
-            {brandDNA.oneLiner} Brand DNA powers every caption, template, campaign and calendar recommendation across Elle.Be.O Growth.
-          </p>
-          <div className="mt-5 flex items-center gap-3 flex-wrap">
-            <span className="text-[10px] uppercase tracking-widest border hairline px-3 py-1.5">{brandDNA.category}</span>
-            <span className="text-[10px] uppercase tracking-widest text-sage">Active</span>
-            {error && (
-              <span className="text-[10px] uppercase tracking-widest text-destructive">
-                Error loading saved profile
-              </span>
-            )}
-          </div>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Link
-              to="/brand/onboarding"
-              className="text-[11px] uppercase tracking-[0.2em] border hairline px-4 py-2 hover:bg-muted transition-colors"
-            >
-              Edit Brand DNA
-            </Link>
-            <Link
-              to="/generate"
-              className="text-[11px] uppercase tracking-[0.2em] bg-foreground text-offwhite px-4 py-2 hover:bg-taupe transition-colors"
-            >
-              Generate content
-            </Link>
-          </div>
+      <header className="mt-6 lg:mt-10 mb-10">
+        <div className="flex items-center gap-2.5 mb-4">
+          <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-taupe">Brand DNA</span>
+          <span className="text-taupe/30">·</span>
+          <span className="inline-flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-sage bg-sage/10 border border-sage/25 px-2.5 py-1 rounded-full">
+            <span className="size-1.5 rounded-full bg-sage animate-pulse" />
+            Active
+          </span>
+          {error && (
+            <span className="text-[9px] uppercase tracking-widest text-destructive border border-destructive/30 px-2.5 py-1 rounded-full">
+              Error loading
+            </span>
+          )}
+        </div>
+        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight max-w-[22ch]">
+          Your Brand DNA is <span className="italic text-taupe">ready</span>.
+        </h1>
+        <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[52ch]">
+          {brandDNA.oneLiner} Powers every caption, template and calendar recommendation.
+        </p>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <span className="text-[10px] uppercase tracking-widest border border-border bg-muted px-3 py-1.5 rounded-full">{brandDNA.category}</span>
+          <Link
+            to="/brand/onboarding"
+            className="text-[10px] uppercase tracking-widest border border-border bg-card px-3 py-1.5 rounded-full hover:bg-nude/30 transition-colors"
+          >
+            Edit Brand DNA
+          </Link>
+          <Link
+            to="/generate"
+            className="text-[10px] uppercase tracking-widest bg-foreground text-offwhite px-3 py-1.5 rounded-full hover:bg-taupe transition-colors"
+          >
+            Generate content
+          </Link>
         </div>
       </header>
 

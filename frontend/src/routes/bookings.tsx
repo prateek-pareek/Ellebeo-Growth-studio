@@ -118,21 +118,21 @@ function CrmPage() {
   return (
     <div>
       {/* ── Page header ──────────────────────────────────────────────────── */}
-      <header className="relative mt-6 lg:mt-10 mb-10 overflow-hidden border border-nude/60 bg-card p-6 sm:p-8 shadow-sm">
-        <div
-          className="pointer-events-none absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-taupe via-sage to-sage opacity-90"
-          aria-hidden
-        />
-        <div className="pl-4 sm:pl-5 max-w-[68ch]">
-          <p className="eyebrow mb-4">Bookings</p>
-          <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight">
-            Bookings from your <span className="italic">Client CRM</span>.
-          </h1>
-          <p className="mt-5 text-base sm:text-lg text-taupe leading-relaxed">
-            Browse bookings with consent, import them into Growth Studio, and turn
-            each session into content — without re-entering data.
-          </p>
+      <header className="mt-6 lg:mt-10 mb-8">
+        <div className="flex items-center gap-2.5 mb-4">
+          <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-taupe">Bookings</span>
+          <span className="text-taupe/30">·</span>
+          <span className="inline-flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-sage bg-sage/10 border border-sage/25 px-2.5 py-1 rounded-full">
+            <span className="size-1.5 rounded-full bg-sage animate-pulse" />
+            Live
+          </span>
         </div>
+        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight max-w-[22ch]">
+          Bookings from your <span className="italic text-taupe">Client CRM</span>.
+        </h1>
+        <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[52ch]">
+          Browse bookings, import them into Growth Studio, and turn each session into content.
+        </p>
       </header>
 
       {/* ── Stats + import all ───────────────────────────────────────────── */}
