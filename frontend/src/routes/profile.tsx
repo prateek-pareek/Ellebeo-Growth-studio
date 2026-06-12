@@ -294,7 +294,7 @@ function ConnectedAccounts() {
 
   useEffect(() => { fetchAccounts(); }, [fetchAccounts]);
 
-  const handleConnect = async (platform: "instagram" | "facebook") => {
+  const handleConnect = async (platform: string) => {
     setBusy(platform);
     try {
       await api.get(`/social-accounts/connect/${platform}/callback`, { params: { code: "mock_connect" } });

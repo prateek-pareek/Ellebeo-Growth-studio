@@ -289,7 +289,7 @@ function GeneratePage() {
                   jobStatus={jobStatus}
                   backendVariants={backendVariants}
                   onChangeStep={(s: Step) => setStep(s)}
-                  onRefineComplete={(items) => setBackendVariants(items)}
+                  onRefineComplete={(items: any[]) => setBackendVariants(items)}
                 />
               )}
             </div>
