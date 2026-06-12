@@ -74,25 +74,26 @@ function HomePage() {
   return (
     <div>
       {/* ── Greeting ─────────────────────────────────────────────────────── */}
-      <section className="relative mt-6 lg:mt-10 mb-10 overflow-hidden border border-nude/60 bg-card p-6 sm:p-8 shadow-sm">
-        <div
-          className="pointer-events-none absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-taupe via-sage to-sage opacity-90"
-          aria-hidden
-        />
-        <div className="pl-4 sm:pl-5">
-          <p className="eyebrow mb-4">{dateLabel}</p>
-          <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight">
-            {greeting}, <span className="italic">{firstName}.</span>
-          </h1>
-          <p className="mt-5 text-base sm:text-lg text-taupe leading-relaxed max-w-[68ch]">
-            You have{" "}
-            <span className="text-foreground font-medium">{todayAppointments.length} appointments today</span>,{" "}
-            <span className="text-foreground font-medium">{postsReadyForReview} posts ready for review</span>, and{" "}
-            <span className="text-foreground font-medium">{consentPending} client consent</span>{" "}
-            still pending.
-          </p>
+      <header className="mt-6 lg:mt-10 mb-8">
+        <div className="flex items-center gap-2.5 mb-4">
+          <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-taupe">{dateLabel}</span>
+          <span className="text-taupe/30">·</span>
+          <span className="inline-flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-sage bg-sage/10 border border-sage/25 px-2.5 py-1 rounded-full">
+            <span className="size-1.5 rounded-full bg-sage animate-pulse" />
+            Live
+          </span>
         </div>
-      </section>
+        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight max-w-[22ch]">
+          {greeting}, <span className="italic text-taupe">{firstName}.</span>
+        </h1>
+        <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[52ch]">
+          You have{" "}
+          <span className="text-foreground font-medium">{todayAppointments.length} appointments today</span>,{" "}
+          <span className="text-foreground font-medium">{postsReadyForReview} posts ready for review</span>, and{" "}
+          <span className="text-foreground font-medium">{consentPending} consent</span>{" "}
+          pending.
+        </p>
+      </header>
 
       {/* ── Stats strip ──────────────────────────────────────────────────── */}
       <section className="mb-10 border border-border bg-card shadow-sm overflow-hidden">
