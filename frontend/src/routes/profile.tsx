@@ -273,10 +273,10 @@ function ProfilePage() {
 
 // ─── Connected accounts ────────────────────────────────────────────────────────
 
-const PLATFORMS: { id: "instagram" | "facebook" | "tiktok"; label: string; note: string; icon: React.ComponentType<{ className?: string }> }[] = [
+const PLATFORMS: { id: "instagram" | "facebook"; label: string; note: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "instagram", label: "Instagram", note: "Feed, Reels & Stories", icon: Instagram },
   { id: "facebook",  label: "Facebook",  note: "Page posts & Stories",  icon: Facebook  },
-  { id: "tiktok",    label: "TikTok",    note: "Coming soon",           icon: Zap       },
+  // { id: "tiktok", label: "TikTok", note: "Coming soon", icon: Zap },
 ];
 
 function ConnectedAccounts() {
