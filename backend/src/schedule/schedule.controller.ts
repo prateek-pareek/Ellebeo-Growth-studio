@@ -45,6 +45,12 @@ export class ScheduleController {
     return { redirectUrl };
   }
 
+  @Post('social-accounts/connect/facebook')
+  connectFacebook(@Req() req: any) {
+    const redirectUrl = this.scheduleService.getFacebookOAuthUrl(req.user.tenantId);
+    return { redirectUrl };
+  }
+
   @Delete('social-accounts/:id')
   disconnectSocialAccount(@Req() req: any, @Param('id') id: string) {
     return this.scheduleService.disconnectSocialAccount(req.user.tenantId, id);
