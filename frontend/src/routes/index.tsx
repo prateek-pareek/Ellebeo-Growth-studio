@@ -125,6 +125,7 @@ function HomePage() {
             <p className="text-xs text-taupe mt-1 mb-3">client consent waiting</p>
             <Link
               to="/appointments"
+              search={{ filter: "consent" }}
               className="text-[10px] uppercase tracking-widest text-foreground border-b border-foreground/40 pb-0.5 hover:border-foreground transition-colors"
             >
               Send reminder →

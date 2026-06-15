@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useAppointments, type Appointment } from "@/lib/providers/appointments-provider";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
+import { Send } from "lucide-react";
 
 export const Route = createFileRoute("/appointments")({
   head: () => ({
@@ -306,7 +307,7 @@ function AppointmentsPage() {
               </thead>
               <tbody className="divide-y divide-border">
                 {filtered.map((a) => (
-                  <AppointmentRow key={a.id} a={a} />
+                  <AppointmentRow key={a.id} a={a} onReminderSent={refresh} />
                 ))}
                 {filtered.length === 0 && (
                   <tr>
@@ -362,7 +363,27 @@ function PhotoUpload({
   );
 }
 
-function AppointmentRow({ a }: { a: Appointment }) {
+function AppointmentRow({ a, onReminderSent }: { a: Appointment; onReminderSent?: () => void }) {
+  const [sending, setSending] = useState(false);
+
+  const handleSendReminder = async () => {
+    setSending(true);
+    try {
+      const res = await api.post(`/appointments/${a.id}/send-consent-reminder`);
+      const data = res.data?.data ?? res.data;
+      if (data?.sent === false) {
+        toast.warning(data.reason ?? "Could not send reminder — client has no phone number.");
+      } else {
+        toast.success("Consent reminder sent via SMS.");
+        onReminderSent?.();
+      }
+    } catch (e: any) {
+      toast.error(e.response?.data?.message ?? "Failed to send reminder.");
+    } finally {
+      setSending(false);
+    }
+  };
+
   return (
     <tr className="text-foreground hover:bg-nude/20 transition-colors">
       {/* Photos */}
@@ -421,27 +442,46 @@ function AppointmentRow({ a }: { a: Appointment }) {
             Turn into content
           </Link>
         ) : a.consent === "pending" ? (
-          <Link
-            to="/consent/$id"
-            params={{ id: a.id }}
-            className="inline-flex items-center gap-1.5 border border-border bg-card text-xs font-medium text-foreground px-3.5 py-2 shadow-sm hover:bg-muted hover:shadow-md active:scale-[0.97] transition-all"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
-            </svg>
-            Resend consent
-          </Link>
+          <div className="flex flex-col items-end gap-1.5">
+            <button
+              type="button"
+              onClick={handleSendReminder}
+              disabled={sending}
+              className="inline-flex items-center gap-1.5 bg-foreground text-offwhite text-xs font-medium px-3.5 py-2 shadow-sm hover:opacity-90 active:scale-[0.97] transition-all disabled:opacity-50"
+            >
+              <Send className="size-3" />
+              {sending ? "Sending…" : "Send reminder"}
+            </button>
+            <Link
+              to="/consent/$id"
+              params={{ id: a.id }}
+              className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors"
+            >
+              View consent →
+            </Link>
+          </div>
         ) : a.consent === "not_requested" ? (
-          <Link
-            to="/consent/$id"
-            params={{ id: a.id }}
-            className="inline-flex items-center gap-1.5 bg-foreground text-offwhite text-xs font-medium px-3.5 py-2 shadow-sm hover:opacity-90 hover:shadow-md active:scale-[0.97] transition-all"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
-            </svg>
-            Request consent
-          </Link>
+          <div className="flex flex-col items-end gap-1.5">
+            <Link
+              to="/consent/$id"
+              params={{ id: a.id }}
+              className="inline-flex items-center gap-1.5 bg-foreground text-offwhite text-xs font-medium px-3.5 py-2 shadow-sm hover:opacity-90 hover:shadow-md active:scale-[0.97] transition-all"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+              </svg>
+              Request consent
+            </Link>
+            <button
+              type="button"
+              onClick={handleSendReminder}
+              disabled={sending}
+              className="inline-flex items-center gap-1.5 border border-border bg-card text-[10px] font-medium text-taupe px-3 py-1.5 hover:text-foreground hover:bg-nude/30 active:scale-[0.97] transition-all disabled:opacity-50"
+            >
+              <Send className="size-3" />
+              {sending ? "Sending…" : "Send SMS reminder"}
+            </button>
+          </div>
         ) : (
           <span className="inline-flex items-center gap-1.5 border border-destructive/30 bg-destructive/5 text-destructive text-xs font-medium px-3.5 py-2">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

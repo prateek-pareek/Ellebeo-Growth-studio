@@ -5,6 +5,7 @@ import { getStorage } from 'firebase-admin/storage';
 import { v4 as uuidv4 } from 'uuid';
 import { ConfigService } from '@nestjs/config';
 import { ContentModerationService } from '../ai/guards/content-moderation.service';
+import { SmsService } from '../notifications/sms.service';
 
 @Injectable()
 export class AppointmentService {
@@ -14,6 +15,7 @@ export class AppointmentService {
     private prisma: PrismaService,
     private configService: ConfigService,
     private moderation: ContentModerationService,
+    private smsService: SmsService,
     @Inject('FIREBASE_ADMIN') private firebaseAdmin: any,
   ) {
     const bucketName = this.configService.get<string>('FIREBASE_STORAGE_BUCKET');
@@ -320,5 +322,52 @@ export class AppointmentService {
     return this.prisma.contentItem.findMany({
       where: { appointmentId, tenantId, deletedAt: null }
     });
+  }
+
+  async sendConsentReminder(tenantId: string, appointmentId: string): Promise<{ sent: boolean; reason: string }> {
+    const apt = await this.prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      include: {
+        client: { select: { id: true, firstName: true, lastName: true, phone: true } },
+        consentRecord: { select: { status: true } },
+      },
+    });
+
+    if (!apt || apt.tenantId !== tenantId) throw new NotFoundException('Appointment not found');
+
+    // Resolve consent status: direct link → client's current record
+    let consentStatus: string | null = apt.consentRecord?.status ?? null;
+    if (!consentStatus && apt.clientId) {
+      const current = await this.prisma.consentRecord.findFirst({
+        where: { clientId: apt.clientId, tenantId, isCurrent: true },
+        select: { status: true },
+      });
+      consentStatus = current?.status ?? null;
+    }
+
+    if (consentStatus === 'granted') {
+      throw new BadRequestException('Consent already granted — no reminder needed.');
+    }
+    if (consentStatus === 'declined') {
+      throw new BadRequestException('Client has declined consent — cannot send reminder.');
+    }
+
+    const phone = apt.client?.phone;
+    if (!phone) {
+      return { sent: false, reason: 'Client has no phone number on file.' };
+    }
+
+    const clientName  = apt.client ? `${apt.client.firstName}` : 'your client';
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL') ?? 'http://localhost:5173';
+    const consentLink = `${frontendUrl}/consent/${apt.id}`;
+
+    const message =
+      `Hi ${clientName}! Your beauty technician is waiting on your content consent ` +
+      `before sharing your transformation photos. It only takes a moment — ` +
+      `please review and confirm here: ${consentLink}`;
+
+    await this.smsService.sendSms(phone, message);
+
+    return { sent: true, reason: `SMS sent to ${phone}` };
   }
 }

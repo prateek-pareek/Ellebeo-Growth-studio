@@ -92,4 +92,9 @@ export class AppointmentController {
   getContent(@Req() req: any, @Param('id') id: string) {
     return this.appointmentService.getContent(req.user.tenantId, id);
   }
+
+  @Post(':id/send-consent-reminder')
+  sendConsentReminder(@Req() req: any, @Param('id') id: string) {
+    return this.appointmentService.sendConsentReminder(req.user.tenantId, id);
+  }
 }
