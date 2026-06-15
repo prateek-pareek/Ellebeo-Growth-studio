@@ -202,6 +202,87 @@ export class ScheduleService {
     });
   }
 
+  // ── Facebook OAuth ───────────────────────────────────────────────────────
+
+  getFacebookOAuthUrl(tenantId: string): string {
+    const state = Buffer.from(JSON.stringify({ tenantId, platform: 'facebook' })).toString('base64url');
+    const params = new URLSearchParams({
+      client_id:     process.env.INSTAGRAM_CLIENT_ID!, // same Facebook App
+      redirect_uri:  process.env.FACEBOOK_REDIRECT_URI!,
+      scope:         'pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_metadata',
+      response_type: 'code',
+      state,
+    });
+    return `https://www.facebook.com/v21.0/dialog/oauth?${params.toString()}`;
+  }
+
+  async handleFacebookCallback(code: string, stateRaw: string): Promise<void> {
+    const { tenantId } = JSON.parse(Buffer.from(stateRaw, 'base64url').toString()) as { tenantId: string };
+
+    const clientId     = process.env.INSTAGRAM_CLIENT_ID!;
+    const clientSecret = process.env.INSTAGRAM_CLIENT_SECRET!;
+    const redirectUri  = process.env.FACEBOOK_REDIRECT_URI!;
+
+    // 1 — Exchange code for short-lived token
+    const tokenUrl  = `https://graph.facebook.com/v21.0/oauth/access_token?${new URLSearchParams({
+      client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri, code,
+    })}`;
+    const tokenData = await (await fetch(tokenUrl)).json() as any;
+    if (!tokenData.access_token) throw new Error(tokenData.error?.message ?? 'Token exchange failed');
+
+    // 2 — Long-lived token
+    const longUrl  = `https://graph.facebook.com/v21.0/oauth/access_token?${new URLSearchParams({
+      grant_type: 'fb_exchange_token', client_id: clientId, client_secret: clientSecret,
+      fb_exchange_token: tokenData.access_token,
+    })}`;
+    const longData = await (await fetch(longUrl)).json() as any;
+    const longToken = longData.access_token ?? tokenData.access_token;
+    const expiresIn = longData.expires_in ?? 5184000;
+
+    // 3 — Get Facebook Pages
+    const pagesUrl  = `https://graph.facebook.com/v21.0/me/accounts?${new URLSearchParams({
+      access_token: longToken,
+      fields: 'id,name,access_token,picture,fan_count',
+    })}`;
+    const pagesData = await (await fetch(pagesUrl)).json() as any;
+    const pages: any[] = pagesData.data ?? [];
+
+    if (pages.length === 0) throw new Error('No Facebook Pages found on this account.');
+
+    // Use the first page (most common case for beauty businesses)
+    const page           = pages[0];
+    const pageToken      = page.access_token;
+    const expiresAt      = new Date(Date.now() + expiresIn * 1000);
+
+    await this.prisma.socialAccount.upsert({
+      where:  { unique_platform_per_tenant: { tenantId, platform: 'facebook' } },
+      update: {
+        status:            'connected',
+        platformAccountId: page.id,
+        accountName:       page.name,
+        accountHandle:     null,
+        profilePictureUrl: page.picture?.data?.url ?? null,
+        accessToken:       pageToken,
+        tokenExpiresAt:    expiresAt,
+        tokenRefreshedAt:  new Date(),
+        scopesGranted:     ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts', 'pages_manage_metadata'],
+      },
+      create: {
+        tenantId,
+        platform:          'facebook',
+        platformAccountId: page.id,
+        accountName:       page.name,
+        accountHandle:     null,
+        profilePictureUrl: page.picture?.data?.url ?? null,
+        status:            'connected',
+        accessToken:       pageToken,
+        tokenExpiresAt:    expiresAt,
+        tokenRefreshedAt:  new Date(),
+        scopesGranted:     ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts', 'pages_manage_metadata'],
+      },
+    });
+  }
+
   async refreshInstagramToken(tenantId: string, id: string) {
     const account = await this.prisma.socialAccount.findUnique({ where: { id } });
     if (!account || account.tenantId !== tenantId) throw new NotFoundException('Account not found');

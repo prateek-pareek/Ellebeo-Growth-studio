@@ -32,4 +32,26 @@ export class SocialOAuthController {
       return res.redirect(`${frontendUrl}/profile?error=instagram_connect_failed`);
     }
   }
+
+  @Get('social-accounts/connect/facebook/callback')
+  async facebookCallback(
+    @Query('code')  code:  string,
+    @Query('state') state: string,
+    @Query('error') error: string,
+    @Res() res: Response,
+  ) {
+    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+
+    if (error || !code) {
+      return res.redirect(`${frontendUrl}/profile?error=facebook_denied`);
+    }
+
+    try {
+      await this.scheduleService.handleFacebookCallback(code, state);
+      return res.redirect(`${frontendUrl}/profile?connected=facebook`);
+    } catch (e: any) {
+      console.error('[Facebook OAuth] callback error:', e?.message);
+      return res.redirect(`${frontendUrl}/profile?error=facebook_connect_failed`);
+    }
+  }
 }
