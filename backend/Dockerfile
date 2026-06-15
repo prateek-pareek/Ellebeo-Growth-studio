@@ -25,7 +25,7 @@ RUN npm run build
 # Stage 2: Production Dependencies
 FROM node:20-slim AS deps
 
-RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y openssl ca-certificates build-essential python3 && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
