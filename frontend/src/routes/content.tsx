@@ -141,7 +141,7 @@ function ContentPage() {
       </header>
 
       {/* ── Generate hand-off ────────────────────────────────────────────── */}
-      <section className="mb-10 border border-border bg-card shadow-sm overflow-hidden">
+      {!loading && <section className="mb-10 border border-border bg-card shadow-sm overflow-hidden">
         <div className="bg-muted px-5 py-3 border-b border-border">
           <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
             Generate new content
@@ -180,10 +180,19 @@ function ContentPage() {
             </Link>
           </div>
         </div>
-      </section>
+      </section>}
+
+      {/* ── Loading skeleton ─────────────────────────────────────────────── */}
+      {loading && (
+        <div className="space-y-3 mb-8">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-40 rounded-xl bg-nude/30 animate-pulse" />
+          ))}
+        </div>
+      )}
 
       {/* ── Filter bar ───────────────────────────────────────────────────── */}
-      <div className="border border-border bg-card shadow-sm overflow-hidden mb-8">
+      {!loading && <div className="border border-border bg-card shadow-sm overflow-hidden mb-8">
         <div className="bg-muted px-5 py-3 border-b border-border flex flex-wrap items-center justify-between gap-3">
           {/* State segment tabs */}
           <div className="flex items-center divide-x divide-border border border-border">
@@ -366,12 +375,13 @@ function ContentPage() {
                       setStateFilter("all");
                     } catch { toast.error("Failed to approve"); }
                   }}
+                  onDeleted={() => refresh?.()}
                 />
               ))}
             </div>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* Edit sidebar */}
       {editItem && (
@@ -384,7 +394,7 @@ function ContentPage() {
       )}
 
       {/* ── Quick templates ───────────────────────────────────────────────── */}
-      {templates.length > 0 && (
+      {!loading && templates.length > 0 && (
         <section className="border border-border bg-card shadow-sm overflow-hidden">
           <div className="bg-muted px-5 py-3 border-b border-border flex items-center justify-between">
             <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
@@ -416,13 +426,32 @@ function ContentCard({
   appointment,
   onReview,
   onApprove,
+  onDeleted,
 }: {
   item: ContentItem;
   appointment?: any;
   onReview?: () => void;
   onApprove?: () => void;
+  onDeleted?: () => void;
 }) {
-  const [approving, setApproving] = useState(false);
+  const [approving,  setApproving]  = useState(false);
+  const [discarding, setDiscarding] = useState(false);
+  const [confirm,    setConfirm]    = useState(false);
+
+  const handleDiscard = async () => {
+    if (!confirm) { setConfirm(true); return; }
+    setDiscarding(true);
+    try {
+      await api.delete(`/content/${item.id}`);
+      toast.success("Draft discarded.");
+      onDeleted?.();
+    } catch {
+      toast.error("Failed to discard. Try again.");
+    } finally {
+      setDiscarding(false);
+      setConfirm(false);
+    }
+  };
   const state   = item.state.toLowerCase();
   const blocked = state === "blocked";
   const isDraft = state === "draft" || state === "needs review";
@@ -480,30 +509,49 @@ function ContentCard({
         </div>
 
         {!blocked && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onReview}
-              className="inline-flex items-center gap-1.5 border border-border bg-card text-xs font-medium text-foreground px-3 py-1.5 shadow-sm hover:bg-muted hover:shadow-md active:scale-[0.97] transition-all"
-            >
-              Review
-            </button>
-            {isDraft && (
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
               <button
-                onClick={async () => {
-                  setApproving(true);
-                  await onApprove?.();
-                  setApproving(false);
-                }}
-                disabled={approving}
-                className="inline-flex items-center bg-foreground text-offwhite text-xs font-medium px-3 py-1.5 shadow-sm hover:opacity-90 hover:shadow-md active:scale-[0.97] transition-all disabled:opacity-50"
+                onClick={onReview}
+                className="inline-flex items-center gap-1.5 border border-border bg-card text-xs font-medium text-foreground px-3 py-1.5 shadow-sm hover:bg-muted hover:shadow-md active:scale-[0.97] transition-all"
               >
-                {approving ? "Approving…" : "Approve"}
+                Review
               </button>
-            )}
-            {(state === "approved" || state === "scheduled") && (
-              <span className="text-[10px] uppercase tracking-widest text-sage bg-sage/10 px-2 py-0.5">
-                {state}
-              </span>
+              {isDraft && (
+                <button
+                  onClick={async () => {
+                    setApproving(true);
+                    await onApprove?.();
+                    setApproving(false);
+                  }}
+                  disabled={approving}
+                  className="inline-flex items-center bg-foreground text-offwhite text-xs font-medium px-3 py-1.5 shadow-sm hover:opacity-90 hover:shadow-md active:scale-[0.97] transition-all disabled:opacity-50"
+                >
+                  {approving ? "Approving…" : "Approve"}
+                </button>
+              )}
+              {(state === "approved" || state === "scheduled") && (
+                <span className="text-[10px] uppercase tracking-widest text-sage bg-sage/10 px-2 py-0.5">
+                  {state}
+                </span>
+              )}
+            </div>
+
+            {/* Discard — two-tap confirm */}
+            {state !== "published" && (
+              <button
+                onClick={handleDiscard}
+                disabled={discarding}
+                onBlur={() => setConfirm(false)}
+                className={
+                  "text-[10px] uppercase tracking-widest px-2.5 py-1.5 transition-all disabled:opacity-40 " +
+                  (confirm
+                    ? "bg-destructive/10 text-destructive border border-destructive/30 rounded"
+                    : "text-taupe/50 hover:text-destructive opacity-0 group-hover:opacity-100")
+                }
+              >
+                {discarding ? "…" : confirm ? "Confirm?" : "Discard"}
+              </button>
             )}
           </div>
         )}
