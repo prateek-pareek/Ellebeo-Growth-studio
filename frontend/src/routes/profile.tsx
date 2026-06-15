@@ -1,13 +1,15 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { InitialsAvatar } from "@/components/InitialsAvatar";
 import { useProfile } from "@/lib/providers/profile-provider";
 import { useAuth } from "@/lib/providers/auth-provider";
 import {
-  Camera, LogOut, Instagram, Facebook, Zap,
+  Camera, LogOut, Instagram, Facebook,
   Star, MessageSquare, Clock, BarChart2,
   Image, Layers, Bell, ChevronRight,
+  TrendingUp, Zap, CheckCircle2, AlertCircle,
+  Link2, RefreshCw, Shield, Sparkles,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -23,10 +25,10 @@ export const Route = createFileRoute("/profile")({
 });
 
 const fadeUp = {
-  hidden: { opacity: 0, y: 16 },
-  show:   { opacity: 1, y: 0, transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] as [number,number,number,number] } },
+  hidden: { opacity: 0, y: 20 },
+  show:   { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] as [number,number,number,number] } },
 };
-const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.07 } } };
+const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.08 } } };
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -75,173 +77,234 @@ function ProfilePage() {
     );
   }
 
+  const completionColor =
+    profile.completion >= 80 ? "from-sage via-sage to-sage/70"
+    : profile.completion >= 50 ? "from-taupe via-taupe to-taupe/70"
+    : "from-taupe/60 to-taupe/40";
+
   return (
-    <motion.div
-      variants={stagger}
-      initial="hidden"
-      animate="show"
-      className="space-y-6 pb-10"
-    >
+    <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-5 pb-12">
 
-      {/* ── Hero header card ──────────────────────────────────────────────── */}
-      <motion.div
-        variants={fadeUp}
-        className="relative overflow-hidden rounded-2xl border border-nude/60 bg-card shadow-sm"
-      >
-        {/* Ambient gradient */}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-nude/30 via-transparent to-sage/10" aria-hidden />
-        <div className="pointer-events-none absolute -top-20 -right-20 size-64 rounded-full bg-nude/30 blur-3xl" aria-hidden />
+      {/* ── Hero ─────────────────────────────────────────────────────────── */}
+      <motion.div variants={fadeUp} className="relative overflow-hidden rounded-3xl bg-card border border-nude/60 shadow-sm">
 
-        <div className="relative px-6 py-8 sm:px-8">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-6 sm:gap-8">
+        {/* layered ambient */}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-nude/40 via-offwhite/20 to-sage/10" />
+        <div className="pointer-events-none absolute -top-24 -right-24 size-72 rounded-full bg-nude/50 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-16 -left-16 size-56 rounded-full bg-sage/20 blur-3xl" />
 
-            {/* Avatar */}
-            <div className="relative shrink-0 group w-fit">
-              <div className="p-0.5 rounded-full bg-gradient-to-tr from-taupe/40 via-nude to-sage/40">
+        {/* top action bar */}
+        <div className="relative flex items-center justify-between px-7 pt-6 pb-0">
+          <span className="inline-flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.3em] text-taupe">
+            <Sparkles className="size-3" /> Elle.Be.O Growth
+          </span>
+          <button
+            onClick={handleLogout}
+            className="inline-flex items-center gap-1.5 border border-border/70 bg-card/70 backdrop-blur-sm text-[10px] font-medium text-taupe px-3.5 py-1.5 rounded-full hover:bg-nude/40 hover:text-foreground active:scale-[0.97] transition-all"
+          >
+            <LogOut className="size-3" />
+            Sign out
+          </button>
+        </div>
+
+        {/* main hero body */}
+        <div className="relative px-7 pt-6 pb-7">
+          <div className="flex flex-col sm:flex-row sm:items-end gap-6">
+
+            {/* Avatar block */}
+            <div className="relative shrink-0 w-fit group">
+              {/* animated ring */}
+              <div className="absolute -inset-1 rounded-full bg-gradient-to-tr from-taupe via-nude to-sage/60 opacity-60 blur-sm group-hover:opacity-100 transition-opacity duration-500" />
+              <div className="relative p-1 rounded-full bg-gradient-to-tr from-taupe/60 via-nude to-sage/50">
                 <InitialsAvatar
                   name={technician.name}
                   imageUrl={avatarUrl || undefined}
-                  className="size-20 ring-2 ring-card"
-                  textClassName="text-2xl"
+                  className="size-24 ring-2 ring-card"
+                  textClassName="text-3xl"
                 />
               </div>
+              {/* camera overlay */}
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
                 disabled={uploading}
-                className="absolute inset-0 rounded-full flex items-center justify-center bg-foreground/0 group-hover:bg-foreground/40 transition-colors"
+                className="absolute inset-0 rounded-full flex items-center justify-center bg-foreground/0 group-hover:bg-foreground/50 transition-colors duration-200"
               >
-                <Camera className="size-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                {uploading
+                  ? <div className="size-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  : <Camera className="size-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                }
               </button>
               <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleAvatarUpload} />
-              {/* Online dot */}
-              <span className="absolute bottom-1 right-1 size-3.5 rounded-full bg-sage border-2 border-card" />
+              {/* status dot */}
+              <span className="absolute bottom-1.5 right-1.5 size-3.5 rounded-full bg-sage border-2 border-card shadow-sm" />
             </div>
 
             {/* Identity */}
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-taupe mb-1">Profile optimisation</p>
-              <h1 className="font-serif text-3xl sm:text-4xl leading-tight tracking-tight">{technician.name}</h1>
-              <p className="text-sm text-taupe mt-1">{technician.handle} · {technician.city}</p>
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="inline-flex items-center gap-1 text-[8px] font-bold uppercase tracking-[0.25em] bg-foreground text-offwhite px-2.5 py-1 rounded-full">
+                  <Shield className="size-2.5" /> Pro
+                </span>
+              </div>
+              <h1 className="font-serif text-4xl sm:text-5xl leading-[1.05] tracking-tight">{technician.name}</h1>
+              <p className="text-sm text-taupe mt-1.5 flex items-center gap-1.5">
+                {technician.handle && <span className="font-medium text-foreground/70">{technician.handle}</span>}
+                {technician.handle && technician.city && <span className="text-taupe/40">·</span>}
+                {technician.city && <span>{technician.city}</span>}
+              </p>
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
                 disabled={uploading}
-                className="mt-2 text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors disabled:opacity-40"
+                className="mt-2.5 text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors disabled:opacity-40"
               >
                 {uploading ? "Uploading…" : "Change photo"}
               </button>
             </div>
 
-            {/* Right side */}
-            <div className="flex flex-col items-start sm:items-end gap-4 shrink-0">
-              <div className="text-right hidden sm:block">
-                <p className="font-serif text-lg leading-snug text-taupe max-w-[28ch] text-left sm:text-right">
-                  Small fixes to your listing lift bookings by{" "}
-                  <span className="text-foreground font-semibold">20%+</span>.
+            {/* Right — CTA hint */}
+            <div className="hidden sm:flex flex-col items-end gap-3">
+              <div className="text-right max-w-[26ch]">
+                <p className="font-serif text-base leading-snug text-taupe">
+                  Small fixes lift bookings by{" "}
+                  <span className="text-foreground font-semibold">20%+</span>
                 </p>
               </div>
-              <button
-                onClick={handleLogout}
-                className="inline-flex items-center gap-2 border border-border bg-card/80 backdrop-blur-sm text-xs font-medium text-foreground px-4 py-2.5 rounded-full shadow-sm hover:bg-nude/30 hover:shadow-md active:scale-[0.97] transition-all"
+              <Link
+                to="/brand"
+                className="inline-flex items-center gap-1.5 border border-border bg-card/80 text-[10px] font-medium text-foreground px-4 py-2 rounded-full shadow-sm hover:bg-nude/30 active:scale-[0.97] transition-all"
               >
-                <LogOut className="size-3" />
-                Sign out
-              </button>
+                Edit brand profile <ChevronRight className="size-3" />
+              </Link>
             </div>
           </div>
 
           {/* Completion bar */}
-          <div className="mt-7 pt-6 border-t border-border/50">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-taupe">Profile strength</span>
-              <span className="font-serif text-xl tabular-nums">{profile.completion}%</span>
+          <div className="mt-8 pt-6 border-t border-border/40">
+            <div className="flex items-end justify-between mb-3">
+              <div>
+                <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-taupe mb-0.5">Profile strength</p>
+                <p className="text-xs text-taupe">
+                  {profile.completion >= 80
+                    ? "Great shape — high search visibility"
+                    : profile.completion >= 50
+                    ? "Getting there — a few fixes needed"
+                    : "Needs attention — complete your profile"}
+                </p>
+              </div>
+              <span className="font-serif text-3xl tabular-nums leading-none">{profile.completion}<span className="text-base text-taupe font-sans">%</span></span>
             </div>
-            <div className="h-1.5 bg-border/60 rounded-full overflow-hidden">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${profile.completion}%` }}
-                transition={{ duration: 1, delay: 0.4, ease: [0.22, 1, 0.36, 1] as [number,number,number,number] }}
-                className="h-full rounded-full bg-gradient-to-r from-taupe via-sage to-sage"
-              />
+
+            {/* Track with milestones */}
+            <div className="relative">
+              <div className="h-2 bg-border/50 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${profile.completion}%` }}
+                  transition={{ duration: 1.2, delay: 0.5, ease: [0.22, 1, 0.36, 1] as [number,number,number,number] }}
+                  className={`h-full rounded-full bg-gradient-to-r ${completionColor}`}
+                />
+              </div>
+              {/* milestone ticks */}
+              {[50, 80, 100].map((m) => (
+                <div
+                  key={m}
+                  className="absolute top-0 -translate-x-px h-2 w-px bg-card"
+                  style={{ left: `${m}%` }}
+                />
+              ))}
             </div>
-            <p className="mt-2 text-xs text-taupe">
-              Profiles above 90% appear higher in search and convert twice as often.
-            </p>
+            <div className="flex justify-between mt-1.5">
+              {[{ v: 50, l: "Good" }, { v: 80, l: "Strong" }, { v: 100, l: "Perfect" }].map(({ v, l }) => (
+                <span key={v} className="text-[8px] uppercase tracking-widest text-taupe/50" style={{ marginLeft: v === 50 ? "calc(50% - 1rem)" : v === 80 ? "calc(80% - 1.5rem)" : "calc(100% - 2rem)" }}>
+                  {l}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       </motion.div>
 
-      {/* ── Key metrics ───────────────────────────────────────────────────── */}
-      <motion.div variants={fadeUp} className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {[
-          { icon: Star,         label: "Avg. rating",      value: profile.averageRating.toString() },
-          { icon: MessageSquare,label: "Reviews",           value: profile.reviewsCount.toString() },
-          { icon: Clock,        label: "Avg. reply",        value: `${profile.responseTimeHours}h` },
-          { icon: BarChart2,    label: "Bio strength",      value: profile.bioStrength },
-          { icon: Layers,       label: "Services",          value: `${profile.servicesListed}/${profile.servicesRecommended}` },
-          { icon: Image,        label: "Photos",            value: `${profile.photosCount}/${profile.photosRecommended}` },
-        ].map(({ icon: Icon, label, value }) => (
-          <div key={label} className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm hover:border-foreground/20 hover:shadow-md transition-all group cursor-default">
-            <Icon className="size-3.5 text-taupe mb-3 group-hover:text-foreground transition-colors" />
-            <p className="font-serif text-2xl tabular-nums leading-none">{value}</p>
-            <p className="text-[9px] uppercase tracking-widest text-taupe mt-1.5">{label}</p>
-          </div>
-        ))}
+      {/* ── Metrics grid ─────────────────────────────────────────────────── */}
+      <motion.div variants={fadeUp}>
+        <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-taupe mb-3 px-0.5">Performance snapshot</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {[
+            { icon: Star,          label: "Avg. rating",  value: profile.averageRating.toString(),   accent: "text-amber-500",  bg: "bg-amber-50" },
+            { icon: MessageSquare, label: "Reviews",      value: profile.reviewsCount.toString(),    accent: "text-blue-500",   bg: "bg-blue-50"  },
+            { icon: Clock,         label: "Avg. reply",   value: `${profile.responseTimeHours}h`,   accent: "text-sage",       bg: "bg-sage/10"  },
+            { icon: BarChart2,     label: "Bio strength", value: profile.bioStrength,                accent: "text-taupe",      bg: "bg-nude/30"  },
+            { icon: Layers,        label: "Services",     value: `${profile.servicesListed}/${profile.servicesRecommended}`, accent: "text-purple-500", bg: "bg-purple-50" },
+            { icon: Image,         label: "Photos",       value: `${profile.photosCount}/${profile.photosRecommended}`,      accent: "text-rose-500",   bg: "bg-rose-50"   },
+          ].map(({ icon: Icon, label, value, accent, bg }) => (
+            <motion.div
+              key={label}
+              whileHover={{ y: -2, transition: { duration: 0.2 } }}
+              className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm hover:shadow-md hover:border-foreground/15 transition-all cursor-default group"
+            >
+              <div className={`inline-flex items-center justify-center size-7 rounded-lg ${bg} mb-3`}>
+                <Icon className={`size-3.5 ${accent}`} />
+              </div>
+              <p className="font-serif text-2xl tabular-nums leading-none">{value}</p>
+              <p className="text-[9px] uppercase tracking-widest text-taupe mt-1.5 leading-tight">{label}</p>
+            </motion.div>
+          ))}
+        </div>
       </motion.div>
 
-      {/* ── Notification settings + Connected accounts (2-col on lg) ─────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <motion.div variants={fadeUp}>
-          <NotificationSettings />
-        </motion.div>
-        <motion.div variants={fadeUp}>
-          <ConnectedAccounts />
-        </motion.div>
+      {/* ── Connected accounts + Notification settings ────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <motion.div variants={fadeUp}><ConnectedAccounts /></motion.div>
+        <motion.div variants={fadeUp}><NotificationSettings /></motion.div>
       </div>
 
-      {/* ── Recommendations ───────────────────────────────────────────────── */}
+      {/* ── Recommendations ──────────────────────────────────────────────── */}
       <motion.div variants={fadeUp} className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-        <div className="bg-muted border-b border-border px-5 py-3 flex items-center justify-between">
-          <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            Recommended improvements
-          </h2>
+        <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="size-7 rounded-lg bg-foreground/5 flex items-center justify-center">
+              <TrendingUp className="size-3.5 text-taupe" />
+            </div>
+            <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground">Recommended improvements</h2>
+          </div>
           {profile.suggestions.length > 0 && (
-            <span className="text-[10px] uppercase tracking-widest text-taupe">
-              {profile.suggestions.length} items
+            <span className="text-[9px] font-bold uppercase tracking-widest text-taupe bg-muted border border-border px-2.5 py-1 rounded-full">
+              {profile.suggestions.length} item{profile.suggestions.length !== 1 ? "s" : ""}
             </span>
           )}
         </div>
 
         {profile.suggestions.length === 0 ? (
-          <div className="flex flex-col items-center justify-center border-2 border-dashed border-border m-6 py-12 text-center rounded-xl bg-muted/20">
-            <span className="text-2xl mb-3">✦</span>
+          <div className="flex flex-col items-center justify-center m-6 py-14 text-center rounded-2xl border-2 border-dashed border-border bg-muted/20">
+            <CheckCircle2 className="size-8 text-sage mb-3" />
             <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">All good</p>
-            <p className="text-sm text-taupe">Your profile is in great shape — no improvements needed.</p>
+            <p className="text-sm text-taupe">Your profile is in great shape.</p>
           </div>
         ) : (
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-border/60">
             {profile.suggestions.map((s, i) => (
-              <div key={i} className="flex items-center gap-4 px-5 py-4 hover:bg-nude/20 transition-colors group">
-                <span className="shrink-0 font-serif text-lg tabular-nums text-taupe/30 w-6 text-center">
-                  {i + 1}
-                </span>
+              <div key={i} className="flex items-center gap-4 px-6 py-4 hover:bg-nude/20 transition-colors group">
+                {/* impact accent bar */}
+                <div className={`shrink-0 w-0.5 h-8 rounded-full ${
+                  s.impact === "High" ? "bg-foreground" : s.impact === "Medium" ? "bg-taupe/50" : "bg-border"
+                }`} />
+                <span className="shrink-0 font-serif text-lg tabular-nums text-taupe/30 w-5 text-right">{i + 1}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm leading-snug">{s.label}</p>
                 </div>
-                <span className={
-                  "shrink-0 text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full " +
-                  (s.impact === "High"
+                <span className={`shrink-0 text-[8px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full ${
+                  s.impact === "High"
                     ? "bg-foreground text-offwhite"
                     : s.impact === "Medium"
-                      ? "bg-taupe/10 text-taupe border border-taupe/20"
-                      : "bg-border text-taupe/60")
-                }>
+                    ? "bg-taupe/10 text-taupe border border-taupe/20"
+                    : "bg-border/60 text-taupe/60"
+                }`}>
                   {s.impact}
                 </span>
                 <Link
                   to={s.link as any}
-                  className="shrink-0 inline-flex items-center gap-1 border border-border bg-card text-xs font-medium text-foreground px-3 py-1.5 rounded-full shadow-sm hover:bg-nude/30 hover:shadow-md active:scale-[0.97] transition-all"
+                  className="shrink-0 inline-flex items-center gap-1 border border-border bg-card text-[10px] font-medium text-foreground px-3 py-1.5 rounded-full hover:bg-nude/30 hover:shadow-sm active:scale-[0.97] transition-all opacity-0 group-hover:opacity-100"
                 >
                   Fix <ChevronRight className="size-3" />
                 </Link>
@@ -251,7 +314,7 @@ function ProfilePage() {
         )}
       </motion.div>
 
-      {/* ── Quick actions ─────────────────────────────────────────────────── */}
+      {/* ── Quick actions ──────────────────────────────────────────────────── */}
       <motion.div variants={fadeUp} className="flex flex-wrap gap-3">
         <Link
           to="/brand"
@@ -273,10 +336,26 @@ function ProfilePage() {
 
 // ─── Connected accounts ────────────────────────────────────────────────────────
 
-const PLATFORMS: { id: "instagram" | "facebook"; label: string; note: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: "instagram", label: "Instagram", note: "Feed, Reels & Stories", icon: Instagram },
-  { id: "facebook",  label: "Facebook",  note: "Page posts & Stories",  icon: Facebook  },
-  // { id: "tiktok", label: "TikTok", note: "Coming soon", icon: Zap },
+const PLATFORMS: {
+  id: "instagram" | "facebook";
+  label: string;
+  note: string;
+  icon: React.ComponentType<{ className?: string }>;
+  gradient: string;
+  iconColor: string;
+}[] = [
+  {
+    id: "instagram", label: "Instagram", note: "Feed, Reels & Stories",
+    icon: Instagram,
+    gradient: "from-pink-500 via-rose-500 to-orange-400",
+    iconColor: "text-white",
+  },
+  {
+    id: "facebook", label: "Facebook", note: "Page posts & Stories",
+    icon: Facebook,
+    gradient: "from-blue-600 to-blue-500",
+    iconColor: "text-white",
+  },
 ];
 
 function ConnectedAccounts() {
@@ -324,73 +403,97 @@ function ConnectedAccounts() {
     }
   };
 
+  const connectedCount = accounts.filter((a) => a.status === "connected").length;
+
   return (
-    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden h-full">
-      <div className="bg-muted border-b border-border px-5 py-3 flex items-center justify-between">
-        <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-          Connected accounts
-        </h2>
-        {!loading && accounts.filter(a => a.status === "connected").length > 0 && (
-          <span className="text-[10px] uppercase tracking-widest text-sage">
-            {accounts.filter(a => a.status === "connected").length} connected
+    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden h-full flex flex-col">
+      {/* header */}
+      <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="size-7 rounded-lg bg-foreground/5 flex items-center justify-center">
+            <Link2 className="size-3.5 text-taupe" />
+          </div>
+          <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground">Connected accounts</h2>
+        </div>
+        {!loading && connectedCount > 0 && (
+          <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-sage bg-sage/10 border border-sage/20 px-2.5 py-1 rounded-full">
+            <span className="size-1.5 rounded-full bg-sage animate-pulse" />
+            {connectedCount} live
           </span>
         )}
       </div>
-      <p className="text-xs text-taupe px-5 py-3 border-b border-border">
-        Connect socials to publish directly from your calendar.
+
+      <p className="text-xs text-taupe px-5 py-3 border-b border-border/60 bg-muted/30">
+        Publish directly from your content calendar when connected.
       </p>
-      <div className="divide-y divide-border">
+
+      {/* platform rows */}
+      <div className="flex-1 divide-y divide-border/60">
         {PLATFORMS.map((p) => {
-          const account      = accounts.find((a) => a.platform === p.id && a.status === "connected");
-          const isBusy       = busy === p.id || busy === account?.id;
-          const isComingSoon = p.id === "tiktok";
-          const Icon         = p.icon;
+          const account = accounts.find((a) => a.platform === p.id && a.status === "connected");
+          const isBusy  = busy === p.id || busy === account?.id;
+          const Icon    = p.icon;
 
           return (
-            <div key={p.id} className="flex items-center gap-4 px-5 py-4 hover:bg-nude/20 transition-colors">
-              <div className="size-9 rounded-xl border border-border bg-muted flex items-center justify-center shrink-0">
-                <Icon className="size-4 text-taupe" />
+            <div key={p.id} className="flex items-center gap-4 px-5 py-4 hover:bg-nude/20 transition-colors group">
+              {/* icon */}
+              <div className={`shrink-0 size-10 rounded-xl flex items-center justify-center ${
+                account
+                  ? `bg-gradient-to-br ${p.gradient} shadow-sm`
+                  : "bg-muted border border-border"
+              }`}>
+                <Icon className={`size-4.5 ${account ? p.iconColor : "text-taupe"}`} />
               </div>
+
+              {/* info */}
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium leading-none">{p.label}</p>
-                <p className="text-[10px] text-taupe mt-0.5">
-                  {account ? account.accountName : p.note}
+                <p className="text-[10px] text-taupe mt-0.5 truncate">
+                  {account ? (account.accountHandle ?? account.accountName) : p.note}
                 </p>
               </div>
+
+              {/* action */}
               <div className="shrink-0">
                 {account ? (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2.5">
                     <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-sage bg-sage/10 border border-sage/20 px-2.5 py-1 rounded-full">
-                      <span className="size-1.5 rounded-full bg-sage" />
-                      Live
+                      <CheckCircle2 className="size-2.5" /> Connected
                     </span>
                     <button
                       type="button"
                       onClick={() => handleDisconnect(account.id, p.label)}
                       disabled={isBusy}
-                      className="text-[10px] text-destructive/70 hover:text-destructive transition-colors disabled:opacity-40"
+                      className="text-[10px] text-destructive/60 hover:text-destructive transition-colors disabled:opacity-40"
                     >
-                      {isBusy ? "…" : "Disconnect"}
+                      {isBusy ? <RefreshCw className="size-3 animate-spin" /> : "Remove"}
                     </button>
                   </div>
-                ) : isComingSoon ? (
-                  <span className="text-[9px] uppercase tracking-widest text-taupe/40 border border-border px-2.5 py-1 rounded-full">
-                    Soon
-                  </span>
                 ) : (
                   <button
                     type="button"
                     onClick={() => handleConnect(p.id)}
                     disabled={isBusy || loading}
-                    className="inline-flex items-center gap-1 bg-foreground text-offwhite text-[10px] font-semibold uppercase tracking-widest px-3.5 py-1.5 rounded-full shadow-sm hover:opacity-90 active:scale-[0.97] transition-all disabled:opacity-40"
+                    className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest px-4 py-2 rounded-full shadow-sm transition-all disabled:opacity-40 active:scale-[0.97] bg-gradient-to-r ${p.gradient} text-white hover:shadow-md hover:opacity-90`}
                   >
-                    {isBusy ? "…" : "Connect"}
+                    {isBusy
+                      ? <><RefreshCw className="size-3 animate-spin" /> Connecting…</>
+                      : <><Zap className="size-3" /> Connect</>
+                    }
                   </button>
                 )}
               </div>
             </div>
           );
         })}
+      </div>
+
+      {/* footer hint */}
+      <div className="px-5 py-3 border-t border-border/60 bg-muted/20">
+        <p className="text-[9px] text-taupe/60 flex items-center gap-1">
+          <Shield className="size-2.5" />
+          Tokens are encrypted and stored securely. We never post without your approval.
+        </p>
       </div>
     </div>
   );
@@ -401,6 +504,7 @@ function ConnectedAccounts() {
 function NotificationSettings() {
   const [phone,  setPhone]  = useState("");
   const [saving, setSaving] = useState(false);
+  const [saved,  setSaved]  = useState(false);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -418,6 +522,8 @@ function NotificationSettings() {
     try {
       await api.patch("/tenant/profile", { phone });
       toast.success("Phone number saved.");
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
     } catch {
       toast.error("Failed to save. Try again.");
     } finally {
@@ -428,35 +534,73 @@ function NotificationSettings() {
   if (!loaded) return null;
 
   return (
-    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden h-full">
-      <div className="bg-muted border-b border-border px-5 py-3 flex items-center gap-2">
-        <Bell className="size-3 text-taupe" />
-        <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-          Notification settings
-        </h2>
+    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden h-full flex flex-col">
+      {/* header */}
+      <div className="px-5 py-4 border-b border-border flex items-center gap-2.5">
+        <div className="size-7 rounded-lg bg-foreground/5 flex items-center justify-center">
+          <Bell className="size-3.5 text-taupe" />
+        </div>
+        <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground">Notifications</h2>
       </div>
-      <div className="p-5">
-        <p className="text-xs text-taupe leading-relaxed mb-5">
-          Add your phone number to receive SMS alerts when content is ready or generation fails.
+
+      <div className="flex-1 p-5 flex flex-col gap-5">
+        <p className="text-xs text-taupe leading-relaxed">
+          Receive SMS alerts when content is ready to review or generation fails.
         </p>
-        <label className="block text-[9px] font-bold uppercase tracking-widest text-taupe mb-2">
-          Phone number (with country code)
-        </label>
-        <div className="flex items-stretch gap-2">
-          <input
-            type="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="+91 00000 00000"
-            className="flex-1 border border-border bg-muted/40 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-foreground/30 placeholder:text-taupe/40 transition-colors"
-          />
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="inline-flex items-center bg-foreground text-offwhite text-xs font-semibold px-5 py-2.5 rounded-xl hover:opacity-90 active:scale-[0.97] transition-all disabled:opacity-40 shrink-0"
-          >
-            {saving ? "Saving…" : "Save"}
-          </button>
+
+        {/* input */}
+        <div className="space-y-2">
+          <label className="block text-[9px] font-bold uppercase tracking-widest text-taupe">
+            Phone number <span className="text-taupe/40">(with country code)</span>
+          </label>
+          <div className="flex items-stretch gap-2">
+            <div className="relative flex-1">
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => { setPhone(e.target.value); setSaved(false); }}
+                placeholder="+91 00000 00000"
+                className="w-full border border-border bg-muted/40 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-foreground/30 placeholder:text-taupe/30 transition-colors"
+              />
+              <AnimatePresence>
+                {saved && (
+                  <motion.span
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2"
+                  >
+                    <CheckCircle2 className="size-4 text-sage" />
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </div>
+            <button
+              onClick={handleSave}
+              disabled={saving || !phone.trim()}
+              className="inline-flex items-center gap-1.5 bg-foreground text-offwhite text-xs font-semibold px-5 py-2.5 rounded-xl hover:opacity-90 active:scale-[0.97] transition-all disabled:opacity-40 shrink-0"
+            >
+              {saving ? <RefreshCw className="size-3.5 animate-spin" /> : null}
+              {saving ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </div>
+
+        {/* alert types */}
+        <div className="rounded-xl border border-border/60 bg-muted/30 divide-y divide-border/60 overflow-hidden">
+          {[
+            { icon: Sparkles, label: "Content ready",     note: "When AI finishes generating" },
+            { icon: AlertCircle, label: "Generation failed", note: "If something goes wrong"   },
+          ].map(({ icon: Icon, label, note }) => (
+            <div key={label} className="flex items-center gap-3 px-4 py-3">
+              <Icon className="size-3.5 text-taupe shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium">{label}</p>
+                <p className="text-[10px] text-taupe">{note}</p>
+              </div>
+              <span className="text-[9px] uppercase tracking-widest text-taupe/50 border border-border/60 px-2 py-0.5 rounded-full">SMS</span>
+            </div>
+          ))}
         </div>
       </div>
     </div>
