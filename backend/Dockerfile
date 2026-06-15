@@ -22,24 +22,10 @@ COPY . .
 # Build the application
 RUN npm run build
 
-# Stage 2: Production Dependencies
-FROM node:20-slim AS deps
+# Prune devDependencies in place — avoids a separate reinstall stage
+RUN npm prune --omit=dev
 
-RUN apt-get update && apt-get install -y openssl ca-certificates build-essential python3 && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-
-# Copy package files
-COPY package.json package-lock.json ./
-
-# Install only production dependencies
-RUN npm ci --omit=dev
-
-# Copy generated Prisma client from builder
-COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-
-# Stage 3: Production Runner
+# Stage 2: Production Runner
 FROM node:20-slim AS runner
 
 # Install required runtime dependencies for Prisma and dumb-init
@@ -51,16 +37,11 @@ WORKDIR /app
 RUN groupadd -r -g 1001 nodejs && \
     useradd -r -u 1001 -g nodejs nestjs
 
-# Copy from deps and builder
-COPY --from=deps --chown=nestjs:nodejs /app/node_modules ./node_modules
+# Copy from builder (node_modules already pruned to prod-only)
+COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nestjs:nodejs /app/package.json ./
-
-# Prisma schema + CLI + engines so `prisma migrate deploy` can run at deploy time.
-# (prisma CLI is a devDependency, so it is absent from the prod-only deps stage.)
 COPY --from=builder --chown=nestjs:nodejs /app/prisma ./prisma
-COPY --from=builder --chown=nestjs:nodejs /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder --chown=nestjs:nodejs /app/node_modules/@prisma/engines ./node_modules/@prisma/engines
 
 # Expose API port
 EXPOSE 3000
