@@ -4,7 +4,6 @@ import {
   Get,
   Param,
   Query,
-  ParseUUIDPipe,
   ParseIntPipe,
   DefaultValuePipe,
   UseGuards,
@@ -42,7 +41,7 @@ export class CrmController {
   @HttpCode(HttpStatus.CREATED)
   importBooking(
     @Request() req: any,
-    @Param('bookingId', ParseUUIDPipe) bookingId: string,
+    @Param('bookingId') bookingId: string,
   ) {
     return this.bookingImport.importBooking(req.user.tenantId, bookingId);
   }
@@ -58,7 +57,7 @@ export class CrmController {
 
   @Get('bookings/:bookingId')
   previewBooking(
-    @Param('bookingId', ParseUUIDPipe) bookingId: string,
+    @Param('bookingId') bookingId: string,
   ) {
     return this.crmReader.getBookingById(bookingId);
   }

@@ -56,6 +56,25 @@ function mapStatus(status: string): string {
   return 'Needs review';
 }
 
+const GOAL_REVERSE_MAP: Record<string, string> = {
+  attract_new_clients: "showcase",
+  build_brand_authority: "educate",
+  promote_high_margin_services: "convert",
+  fill_quiet_days: "availability",
+  retain_existing_clients: "trust",
+  launch_new_service: "showcase",
+  seasonal_promotion: "availability",
+};
+
+const FORMAT_MAP: Record<string, string> = {
+  carousel: "Carousel", reel: "Reel", story: "Story",
+  caption: "Caption", tiktok: "TikTok", post: "Post",
+};
+
+function normalizeFormat(fmt: string): string {
+  return FORMAT_MAP[fmt?.toLowerCase()] ?? fmt ?? "Caption";
+}
+
 function mapRow(row: any): { item: ContentItem; appointment: Appointment | null } {
   const apt = row.appointment;
   const clientName = apt?.client
@@ -65,12 +84,12 @@ function mapRow(row: any): { item: ContentItem; appointment: Appointment | null 
   const item: ContentItem = {
     id: row.id,
     title: row.caption ? row.caption.slice(0, 60).split(/[.!?]/)[0] || 'New Content' : 'New Content',
-    type: (row.postFormat || apt?.serviceCategory || 'Caption') as any,
+    type: normalizeFormat(row.postFormat || apt?.serviceCategory || 'Caption') as any,
     pillar: 'General',
     category: apt?.serviceCategory || 'general',
     status: mapStatus(row.status),
     state: row.status || 'draft',
-    goal: row.goal || 'showcase',
+    goal: (row.goal ? (GOAL_REVERSE_MAP[row.goal] ?? row.goal) : 'showcase'),
     image: row.processedImageUrlFeed || CLOUD_PLACEHOLDER_IMAGE,
     caption: row.caption || '',
     cta: row.callToAction || '',

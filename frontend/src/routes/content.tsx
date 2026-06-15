@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import { useContentItems, type ContentItem } from "@/lib/providers/content-provider";
 import { useAppointments } from "@/lib/providers/appointments-provider";
 import { useTemplates } from "@/lib/providers/template-provider";
@@ -24,38 +24,47 @@ export const Route = createFileRoute("/content")({
 type StateFilter = "all" | string;
 
 const STATE_FILTERS: Array<{ id: StateFilter; label: string }> = [
-  { id: "all", label: "All" },
-  { id: "draft", label: "Drafts" },
-  { id: "scheduled", label: "Scheduled" },
-  { id: "published", label: "Published" },
+  { id: "all",          label: "All" },
+  { id: "needs_review", label: "Needs Review" },
+  { id: "draft",        label: "Drafts" },
+  { id: "scheduled",    label: "Scheduled" },
+  { id: "published",    label: "Published" },
 ];
 
 const FORMAT_FILTERS: Array<string> = ["Carousel", "Reel", "Story", "Caption", "TikTok"];
 
+const FORMAT_ICONS: Record<string, string> = {
+  Carousel: "⊞",
+  Reel: "▶",
+  Story: "◻",
+  Caption: "≡",
+  TikTok: "♪",
+};
+
 const GOAL_FILTERS: Array<{ id: string; label: string }> = [
-  { id: "showcase", label: "Showcase" },
-  { id: "educate", label: "Educate" },
-  { id: "convert", label: "Convert" },
+  { id: "showcase",     label: "Showcase" },
+  { id: "educate",      label: "Educate" },
+  { id: "convert",      label: "Convert" },
   { id: "availability", label: "Availability" },
-  { id: "trust", label: "Trust" },
+  { id: "trust",        label: "Trust" },
 ];
 
 function ContentPage() {
   const [stateFilter, setStateFilter] = useState<StateFilter>("all");
   const [formatFilter, setFormatFilter] = useState<string | null>(null);
-  const [goalFilter, setGoalFilter] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
-  const [editItem, setEditItem] = useState<ContentItem | null>(null);
+  const [goalFilter, setGoalFilter]     = useState<string | null>(null);
+  const [query, setQuery]               = useState("");
+  const [editItem, setEditItem]         = useState<ContentItem | null>(null);
 
   const { items, appointmentsById, loading, error, refresh } = useContentItems();
   const { data: appts } = useAppointments();
-  const { templates } = useTemplates();
+  const { templates }   = useTemplates();
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: items.length, draft: 0, scheduled: 0, published: 0 };
+    const c: Record<string, number> = { all: items.length, draft: 0, needs_review: 0, scheduled: 0, published: 0 };
     for (const item of items) {
-        const s = item.state.toLowerCase();
-        if (c[s] !== undefined) c[s] += 1;
+      const s = item.state.toLowerCase().replace(/\s+/g, "_");
+      if (c[s] !== undefined) c[s] += 1;
     }
     return c;
   }, [items]);
@@ -63,20 +72,22 @@ function ContentPage() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return items.filter((c) => {
-      if (stateFilter !== "all" && c.state.toLowerCase() !== stateFilter) return false;
+      if (stateFilter !== "all" && c.state.toLowerCase().replace(/\s+/g, "_") !== stateFilter) return false;
       if (formatFilter && c.type !== formatFilter) return false;
       if (goalFilter && c.goal !== goalFilter) return false;
       if (q) {
-        const hay = `${c.title} ${c.caption} ${c.pillar} ${c.category}`.toLowerCase();
+        const apt = c.sourceAppointmentId ? appointmentsById.get(c.sourceAppointmentId) : undefined;
+        const hay = [
+          c.title, c.caption, c.category, c.type, c.goal, c.status, c.cta,
+          (c.hashtags ?? []).join(" "), apt?.clientName, apt?.service,
+        ].filter(Boolean).join(" ").toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [items, stateFilter, formatFilter, goalFilter, query]);
+  }, [items, appointmentsById, stateFilter, formatFilter, goalFilter, query]);
 
-  const readyAppointments = appts.filter(
-    (a) => a.consent === "granted"
-  );
+  const readyAppointments = appts.filter((a) => a.consent === "granted");
 
   const clearFilters = () => {
     setStateFilter("all");
@@ -88,161 +99,279 @@ function ContentPage() {
   const hasActiveFilters =
     stateFilter !== "all" || formatFilter !== null || goalFilter !== null || query.trim() !== "";
 
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const activeChipCount = (formatFilter ? 1 : 0) + (goalFilter ? 1 : 0);
+
   return (
     <div>
-      <header className="mt-6 lg:mt-10 mb-10 max-w-[68ch]">
-        <div className="flex items-center gap-3 mb-5">
-          <p className="eyebrow">Content library</p>
-          {!loading && !error && items.length > 0 && (
-             <span className="text-[9px] uppercase tracking-widest border border-sage text-sage px-2 py-1">
-              Live
+      {/* ── Page header ──────────────────────────────────────────────────── */}
+      <header className="mt-6 lg:mt-10 mb-8">
+        <div className="flex items-center gap-2.5 mb-4">
+          <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-taupe">Content library</span>
+          <span className="text-taupe/30">·</span>
+          {loading ? (
+            <span className="text-[9px] uppercase tracking-widest text-taupe">Loading…</span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-sage bg-sage/10 border border-sage/25 px-2.5 py-1 rounded-full">
+              <span className="size-1.5 rounded-full bg-sage animate-pulse" />
+              {items.length} items
             </span>
           )}
-          {loading && (
-            <span className="text-[9px] uppercase tracking-widest text-taupe">Loading…</span>
-          )}
         </div>
-        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight">
-          Every draft, scheduled post and <span className="italic">published</span> piece, in one place.
+        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight max-w-[22ch]">
+          Every draft, post and <span className="italic text-taupe">publish</span> in one place.
         </h1>
-        <p className="mt-6 text-base sm:text-lg text-taupe leading-relaxed">
-          Generated from real appointments and shaped by your Brand DNA. Filter by state, format or goal — and see exactly which posts are blocked because the client hasn't consented.
+        <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[52ch]">
+          Filter by state, format or goal. Posts blocked by missing consent are clearly flagged.
         </p>
         {error && (
-          <p className="mt-4 text-[11px] uppercase tracking-widest border-l-2 border-destructive pl-3 text-destructive">
+          <p className="mt-3 text-[11px] uppercase tracking-widest border-l-2 border-destructive pl-3 text-destructive">
             Couldn't load content from your account.
           </p>
         )}
       </header>
 
-      {/* Generate hand-off */}
-      <section className="mb-12">
-        <div className="artifact p-6 lg:p-7 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+      {/* ── Generate hand-off ────────────────────────────────────────────── */}
+      <section className="mb-10 border border-border bg-card shadow-sm overflow-hidden">
+        <div className="bg-muted px-5 py-3 border-b border-border">
+          <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            Generate new content
+          </h2>
+        </div>
+        <div className="p-6 lg:p-7 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
           <div className="lg:col-span-7">
-            <p className="eyebrow mb-2">Generate new content</p>
             <p className="font-serif text-2xl mb-2">Turn an appointment into 3 ready-to-review posts</p>
             <p className="text-sm text-taupe leading-relaxed max-w-[60ch]">
               Pick an appointment with consent and visuals on file. Your Brand DNA shapes every variant.
             </p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {readyAppointments.slice(0, 3).map((a) => (
-                <Link
-                  key={a.id}
-                  to="/generate"
-                  search={{ appointment: a.id }}
-                  className="text-[10px] uppercase tracking-widest border hairline px-3 py-1.5 hover:bg-card"
-                >
-                  {a.clientName.split(" ")[0]} · {a.category}
-                </Link>
-              ))}
-            </div>
+            {readyAppointments.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {readyAppointments.slice(0, 3).map((a) => (
+                  <Link
+                    key={a.id}
+                    to="/generate"
+                    search={{ appointment: a.id }}
+                    className="text-[10px] uppercase tracking-widest border border-border bg-muted px-3 py-1.5 hover:bg-nude/30 transition-colors"
+                  >
+                    {a.clientName.split(" ")[0]} · {a.category}
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
           <div className="lg:col-span-5 flex lg:justify-end">
             <Link
               to="/generate"
-              className="inline-block bg-foreground text-offwhite px-6 py-3 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors"
+              className="inline-flex items-center gap-2 bg-foreground text-offwhite text-xs font-medium px-4 py-2.5 shadow-sm hover:opacity-90 hover:shadow-md active:scale-[0.97] transition-all"
             >
-              Open generator →
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+              </svg>
+              Open generator
             </Link>
           </div>
         </div>
       </section>
 
-      {/* Filter bar */}
-      <section className="mb-8 space-y-5">
-        {/* State segments */}
-        <div className="flex flex-wrap items-center gap-x-1 gap-y-2 border-b hairline">
-          {STATE_FILTERS.map((f) => {
-            const active = stateFilter === f.id;
-            const n = counts[f.id] || 0;
-            return (
+      {/* ── Filter bar ───────────────────────────────────────────────────── */}
+      <div className="border border-border bg-card shadow-sm overflow-hidden mb-8">
+        <div className="bg-muted px-5 py-3 border-b border-border flex flex-wrap items-center justify-between gap-3">
+          {/* State segment tabs */}
+          <div className="flex items-center divide-x divide-border border border-border">
+            {STATE_FILTERS.map((f) => {
+              const active = stateFilter === f.id;
+              const n = counts[f.id] ?? 0;
+              const dotColor: Record<string, string> = {
+                needs_review: "bg-amber-400",
+                draft:        "bg-taupe/50",
+                scheduled:    "bg-foreground",
+                published:    "bg-sage",
+              };
+              return (
+                <button
+                  key={f.id}
+                  onClick={() => setStateFilter(f.id)}
+                  className={
+                    "flex items-center gap-1.5 px-3 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors whitespace-nowrap " +
+                    (active
+                      ? "bg-foreground text-offwhite"
+                      : "text-taupe hover:text-foreground hover:bg-nude/30")
+                  }
+                >
+                  {f.id !== "all" && (
+                    <span className={`size-1.5 rounded-full flex-shrink-0 ${dotColor[f.id] || "bg-taupe/40"}`} />
+                  )}
+                  {f.label}
+                  <span className="tabular-nums opacity-70">{n}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Right: search + filters */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Search */}
+            <div className="relative">
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-taupe text-[11px] pointer-events-none">⌕</span>
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search…"
+                className="text-[12px] bg-card border border-border focus:border-foreground/60 outline-none pl-7 pr-3 py-1.5 w-32 placeholder:text-taupe/60 transition-all focus:w-44"
+              />
+            </div>
+
+            {/* Filters dropdown */}
+            <div className="relative" ref={filterRef}>
               <button
-                key={f.id}
-                onClick={() => setStateFilter(f.id)}
+                onClick={() => setFilterOpen((o) => !o)}
                 className={
-                  "text-[11px] uppercase tracking-[0.2em] px-3 pb-2 -mb-px transition-colors flex items-center gap-2 " +
-                  (active
-                    ? "text-foreground border-b border-foreground"
-                    : "text-taupe hover:text-foreground")
+                  "flex items-center gap-2 text-[10px] uppercase tracking-widest px-3 py-1.5 border transition-all duration-150 " +
+                  (filterOpen || activeChipCount > 0
+                    ? "bg-foreground text-offwhite border-foreground"
+                    : "border-border text-taupe hover:text-foreground hover:border-foreground/50")
                 }
               >
-                <span>{f.label}</span>
-                <span className="tabular-nums text-[10px] text-taupe">{n}</span>
+                <svg width="13" height="10" viewBox="0 0 13 10" fill="none" className="flex-shrink-0">
+                  <line x1="0" y1="2" x2="13" y2="2" stroke="currentColor" strokeWidth="1.2"/>
+                  <line x1="2" y1="5" x2="11" y2="5" stroke="currentColor" strokeWidth="1.2"/>
+                  <line x1="4" y1="8" x2="9"  y2="8" stroke="currentColor" strokeWidth="1.2"/>
+                </svg>
+                Filters
+                {activeChipCount > 0 && (
+                  <span className="size-4 rounded-full bg-offwhite text-foreground text-[9px] flex items-center justify-center font-semibold leading-none">
+                    {activeChipCount}
+                  </span>
+                )}
               </button>
-            );
-          })}
-        </div>
 
-        {/* Format + goal + search */}
-        <div className="flex flex-wrap items-center gap-3 lg:gap-4">
-          <ChipGroup label="Format">
-            {FORMAT_FILTERS.map((f) => (
-              <FilterChip
-                key={f}
-                active={formatFilter === f}
-                onClick={() => setFormatFilter(formatFilter === f ? null : f)}
-              >
-                {f}
-              </FilterChip>
-            ))}
-          </ChipGroup>
-          <ChipGroup label="Goal">
-            {GOAL_FILTERS.map((g) => (
-              <FilterChip
-                key={g.id}
-                active={goalFilter === g.id}
-                onClick={() => setGoalFilter(goalFilter === g.id ? null : g.id)}
-              >
-                {g.label}
-              </FilterChip>
-            ))}
-          </ChipGroup>
-          <div className="ml-auto flex items-center gap-3">
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search captions, clients…"
-              className="text-[12px] bg-transparent border-b hairline focus:border-foreground outline-none px-1 py-1 w-48 placeholder:text-taupe"
-            />
+              {filterOpen && (
+                <div className="absolute right-0 top-full mt-1.5 w-72 bg-card border border-border shadow-lg z-30 overflow-hidden">
+                  <div className="bg-muted px-4 py-2 border-b border-border">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Format</p>
+                  </div>
+                  <div className="px-4 py-3 flex flex-wrap gap-1.5">
+                    {FORMAT_FILTERS.map((f) => (
+                      <button
+                        key={f}
+                        onClick={() => setFormatFilter(formatFilter === f ? null : f)}
+                        className={
+                          "flex items-center gap-1.5 text-[10px] uppercase tracking-widest px-2.5 py-1 border transition-all duration-150 " +
+                          (formatFilter === f
+                            ? "bg-foreground text-offwhite border-foreground"
+                            : "text-taupe border-border hover:text-foreground hover:border-foreground/50")
+                        }
+                      >
+                        <span className="leading-none opacity-70">{FORMAT_ICONS[f]}</span>
+                        {f}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="border-t border-border" />
+                  <div className="bg-muted px-4 py-2 border-b border-border">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Goal</p>
+                  </div>
+                  <div className="px-4 py-3 flex flex-wrap gap-1.5">
+                    {GOAL_FILTERS.map((g) => (
+                      <button
+                        key={g.id}
+                        onClick={() => setGoalFilter(goalFilter === g.id ? null : g.id)}
+                        className={
+                          "text-[10px] uppercase tracking-widest px-2.5 py-1 border transition-all duration-150 " +
+                          (goalFilter === g.id
+                            ? "bg-foreground text-offwhite border-foreground"
+                            : "text-taupe border-border hover:text-foreground hover:border-foreground/50")
+                        }
+                      >
+                        {g.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {activeChipCount > 0 && (
+                    <>
+                      <div className="border-t border-border" />
+                      <div className="px-4 py-3">
+                        <button
+                          onClick={() => { setFormatFilter(null); setGoalFilter(null); }}
+                          className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors"
+                        >
+                          Clear filters
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
             {hasActiveFilters && (
               <button
                 onClick={clearFilters}
-                className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground"
+                className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors"
+                title="Clear all filters"
               >
-                Clear
+                ×
               </button>
             )}
           </div>
         </div>
-      </section>
 
-      {/* Results */}
-      <section className="mb-16">
-        {loading ? (
-            <div className="artifact p-12 text-center text-taupe italic">Loading library...</div>
-        ) : filtered.length === 0 ? (
-          <EmptyState onClear={clearFilters} hasFilters={hasActiveFilters} />
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-            {filtered.map((c) => (
-              <ContentCard
-                key={c.id}
-                item={c}
-                appointment={c.sourceAppointmentId ? appointmentsById.get(c.sourceAppointmentId) : undefined}
-                onReview={() => setEditItem(c)}
-                onApprove={async () => {
-                  try {
-                    await api.patch(`/content/${c.id}/approve`);
-                    toast.success("Content approved");
-                    refresh?.();
-                  } catch { toast.error("Failed to approve"); }
-                }}
+        {/* Active filter pills */}
+        {(formatFilter || goalFilter) && (
+          <div className="flex flex-wrap items-center gap-2 px-5 py-2.5 border-b border-border bg-nude/10">
+            {formatFilter && (
+              <ActivePill label={`${FORMAT_ICONS[formatFilter]} ${formatFilter}`} onRemove={() => setFormatFilter(null)} />
+            )}
+            {goalFilter && (
+              <ActivePill
+                label={GOAL_FILTERS.find((g) => g.id === goalFilter)?.label ?? goalFilter}
+                onRemove={() => setGoalFilter(null)}
               />
-            ))}
+            )}
+            <span className="text-[9px] text-taupe">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
           </div>
         )}
-      </section>
+
+        {/* Results */}
+        <div className="p-6">
+          {loading ? (
+            <div className="py-12 text-center text-sm text-taupe italic">Loading library…</div>
+          ) : filtered.length === 0 ? (
+            <EmptyState onClear={clearFilters} hasFilters={hasActiveFilters} />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filtered.map((c) => (
+                <ContentCard
+                  key={c.id}
+                  item={c}
+                  appointment={c.sourceAppointmentId ? appointmentsById.get(c.sourceAppointmentId) : undefined}
+                  onReview={() => setEditItem(c)}
+                  onApprove={async () => {
+                    try {
+                      await api.patch(`/content/${c.id}/approve`);
+                      toast.success("Content approved");
+                      refresh?.();
+                      setStateFilter("all");
+                    } catch { toast.error("Failed to approve"); }
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Edit sidebar */}
       {editItem && (
@@ -250,29 +379,34 @@ function ContentPage() {
           item={editItem}
           onClose={() => setEditItem(null)}
           onSaved={() => { refresh?.(); setEditItem(null); }}
+          onApproved={() => { refresh?.(); setEditItem(null); setStateFilter("all"); }}
         />
       )}
 
-      {/* Quick templates */}
-      <section>
-        <div className="flex items-baseline justify-between mb-6">
-          <h2 className="eyebrow">Quick start from a template</h2>
-          <Link to="/templates" className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground">
-            All templates →
-          </Link>
-        </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-          {templates.slice(0, 4).map((t) => (
-            <Link to="/templates" key={t.id} className="group">
-              <div className="aspect-[4/5] overflow-hidden bg-nude/30 mb-3 ring-1 ring-border">
-                <img src={t.preview} alt={t.name} className="w-full h-full object-cover" loading="lazy" />
-              </div>
-              <p className="eyebrow mb-1">{t.type} · {t.pillar}</p>
-              <p className="font-serif text-base leading-tight">{t.name}</p>
+      {/* ── Quick templates ───────────────────────────────────────────────── */}
+      {templates.length > 0 && (
+        <section className="border border-border bg-card shadow-sm overflow-hidden">
+          <div className="bg-muted px-5 py-3 border-b border-border flex items-center justify-between">
+            <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+              Quick start from a template
+            </h2>
+            <Link to="/templates" className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
+              All templates →
             </Link>
-          ))}
-        </div>
-      </section>
+          </div>
+          <div className="p-6 grid grid-cols-2 lg:grid-cols-4 gap-5">
+            {templates.slice(0, 4).map((t) => (
+              <Link to="/templates" key={t.id} className="group">
+                <div className="aspect-[4/5] overflow-hidden bg-nude/30 mb-3 border border-border">
+                  <img src={t.preview} alt={t.name} className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-700" loading="lazy" />
+                </div>
+                <p className="eyebrow mb-1">{t.type} · {t.pillar}</p>
+                <p className="font-serif text-base leading-tight">{t.name}</p>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
@@ -289,12 +423,14 @@ function ContentCard({
   onApprove?: () => void;
 }) {
   const [approving, setApproving] = useState(false);
-  const state = item.state.toLowerCase();
+  const state   = item.state.toLowerCase();
   const blocked = state === "blocked";
   const isDraft = state === "draft" || state === "needs review";
+
   return (
-    <article className="group flex flex-col">
-      <div className="aspect-[4/5] overflow-hidden bg-nude/30 mb-4 ring-1 ring-border relative">
+    <article className="group flex flex-col border border-border bg-card shadow-sm hover:shadow-md transition-shadow overflow-hidden">
+      {/* Image */}
+      <div className="aspect-[4/5] overflow-hidden bg-nude/30 relative border-b border-border">
         <img
           src={item.image}
           alt={item.title}
@@ -304,7 +440,7 @@ function ContentCard({
             (blocked ? "opacity-40 grayscale" : "")
           }
         />
-        <div className="absolute top-3 left-3 flex flex-col gap-1.5">
+        <div className="absolute top-3 left-3">
           <StatePill state={state} />
         </div>
         {blocked && (
@@ -316,65 +452,81 @@ function ContentCard({
         )}
       </div>
 
-      <p className="eyebrow mb-2">{item.type} · {item.pillar}</p>
-      <h3 className="font-serif text-xl mb-2 leading-snug">{item.title}</h3>
-      {!blocked ? (
-        <p className="text-sm text-taupe leading-relaxed line-clamp-3 mb-4">{item.caption}</p>
-      ) : (
-        <p className="text-sm text-taupe leading-relaxed mb-4">
-          The client declined consent. We won't preview, schedule or publish this draft.
-        </p>
-      )}
+      {/* Body */}
+      <div className="flex flex-col flex-1 p-4">
+        <p className="eyebrow mb-1.5">{item.type} · {item.pillar}</p>
+        <h3 className="font-serif text-lg mb-2 leading-snug">{item.title}</h3>
+        {!blocked ? (
+          <p className="text-sm text-taupe leading-relaxed line-clamp-3 mb-4">{item.caption}</p>
+        ) : (
+          <p className="text-sm text-taupe leading-relaxed mb-4">
+            The client declined consent. We won't preview, schedule or publish this draft.
+          </p>
+        )}
+      </div>
 
       {/* Meta strip */}
-      <div className="mt-auto pt-4 border-t hairline space-y-3">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[10px] uppercase tracking-widest text-taupe">
+      <div className="bg-muted border-t border-border px-4 py-3">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] uppercase tracking-widest text-taupe mb-2">
           {appointment && (
             <span>{appointment.clientName.split(" ")[0]} · {appointment.category}</span>
           )}
-          {item.scheduledFor && <span>· Scheduled {new Date(item.scheduledFor).toLocaleDateString()}</span>}
-          {item.postedAt && <span>· Posted {new Date(item.postedAt).toLocaleDateString()}</span>}
-          <span className="ml-auto">· Updated {item.updatedAt}</span>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-          {!blocked && (
-            <div className="flex items-center gap-3">
-              <button
-                onClick={onReview}
-                className="text-[10px] uppercase tracking-widest text-foreground border-b border-foreground pb-0.5 hover:text-taupe hover:border-taupe"
-              >
-                Review
-              </button>
-              {isDraft && (
-                <button
-                  onClick={async () => {
-                    setApproving(true);
-                    await onApprove?.();
-                    setApproving(false);
-                  }}
-                  disabled={approving}
-                  className="text-[10px] uppercase tracking-widest bg-foreground text-offwhite px-3 py-1.5 hover:bg-taupe disabled:opacity-50 transition-colors"
-                >
-                  {approving ? "..." : "Approve"}
-                </button>
-              )}
-              {(state === "approved" || state === "scheduled") && (
-                <span className="text-[10px] uppercase tracking-widest text-sage">{state}</span>
-              )}
-            </div>
+          {item.scheduledFor && (
+            <span>· Scheduled {new Date(item.scheduledFor).toLocaleDateString()}</span>
+          )}
+          {item.postedAt && (
+            <span>· Posted {new Date(item.postedAt).toLocaleDateString()}</span>
           )}
         </div>
+
+        {!blocked && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onReview}
+              className="inline-flex items-center gap-1.5 border border-border bg-card text-xs font-medium text-foreground px-3 py-1.5 shadow-sm hover:bg-muted hover:shadow-md active:scale-[0.97] transition-all"
+            >
+              Review
+            </button>
+            {isDraft && (
+              <button
+                onClick={async () => {
+                  setApproving(true);
+                  await onApprove?.();
+                  setApproving(false);
+                }}
+                disabled={approving}
+                className="inline-flex items-center bg-foreground text-offwhite text-xs font-medium px-3 py-1.5 shadow-sm hover:opacity-90 hover:shadow-md active:scale-[0.97] transition-all disabled:opacity-50"
+              >
+                {approving ? "Approving…" : "Approve"}
+              </button>
+            )}
+            {(state === "approved" || state === "scheduled") && (
+              <span className="text-[10px] uppercase tracking-widest text-sage bg-sage/10 px-2 py-0.5">
+                {state}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </article>
   );
 }
 
-function EditSidebar({ item, onClose, onSaved }: { item: ContentItem; onClose: () => void; onSaved: () => void }) {
-  const [caption, setCaption] = useState(item.caption);
-  const [cta, setCta] = useState(item.cta ?? "");
+function EditSidebar({
+  item,
+  onClose,
+  onSaved,
+  onApproved,
+}: {
+  item: ContentItem;
+  onClose: () => void;
+  onSaved: () => void;
+  onApproved?: () => void;
+}) {
+  const [caption,  setCaption]  = useState(item.caption);
+  const [cta,      setCta]      = useState(item.cta ?? "");
   const [hashtags, setHashtags] = useState((item.hashtags ?? []).join(" "));
-  const [saving, setSaving] = useState(false);
+  const [saving,   setSaving]   = useState(false);
   const [approving, setApproving] = useState(false);
 
   const handleSave = async () => {
@@ -383,7 +535,7 @@ function EditSidebar({ item, onClose, onSaved }: { item: ContentItem; onClose: (
       await api.patch(`/content/${item.id}`, {
         caption,
         callToAction: cta,
-        hashtags: hashtags.split(/\s+/).map(h => h.replace(/^#/, '')).filter(Boolean),
+        hashtags: hashtags.split(/\s+/).map((h) => h.replace(/^#/, "")).filter(Boolean),
       });
       toast.success("Saved");
       onSaved();
@@ -396,30 +548,32 @@ function EditSidebar({ item, onClose, onSaved }: { item: ContentItem; onClose: (
     try {
       await api.patch(`/content/${item.id}/approve`);
       toast.success("Approved!");
-      onSaved();
+      onApproved ? onApproved() : onSaved();
     } catch { toast.error("Failed to approve"); }
     finally { setApproving(false); }
   };
 
   return (
     <>
-      {/* Backdrop */}
       <div className="fixed inset-0 bg-foreground/20 z-40" onClick={onClose} />
 
-      {/* Sidebar */}
-      <div className="fixed top-0 right-0 h-full w-full max-w-md bg-card border-l hairline z-50 flex flex-col shadow-2xl">
+      <div className="fixed top-0 right-0 h-full w-full max-w-md bg-card border-l border-border z-50 flex flex-col shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b hairline">
+        <div className="bg-muted flex items-center justify-between px-6 py-4 border-b border-border">
           <div>
-            <p className="text-[10px] uppercase tracking-widest text-taupe mb-0.5">Edit draft</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground mb-0.5">
+              Edit draft
+            </p>
             <p className="font-serif text-lg leading-tight">{item.title}</p>
           </div>
-          <button onClick={onClose} className="text-taupe hover:text-foreground text-xl leading-none">×</button>
+          <button onClick={onClose} className="text-taupe hover:text-foreground text-xl leading-none">
+            ×
+          </button>
         </div>
 
         {/* Status */}
-        <div className="px-6 py-3 border-b hairline">
-          <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Status</p>
+        <div className="px-6 py-3 border-b border-border flex items-center gap-3">
+          <span className="text-[10px] uppercase tracking-widest text-taupe">Status</span>
           <StatePill state={item.state.toLowerCase()} />
         </div>
 
@@ -429,17 +583,17 @@ function EditSidebar({ item, onClose, onSaved }: { item: ContentItem; onClose: (
             <label className="text-[10px] uppercase tracking-widest text-taupe block mb-2">Caption</label>
             <textarea
               value={caption}
-              onChange={e => setCaption(e.target.value)}
+              onChange={(e) => setCaption(e.target.value)}
               rows={6}
-              className="w-full bg-transparent border hairline p-3 text-sm outline-none focus:border-foreground resize-none leading-relaxed"
+              className="w-full bg-muted/30 border border-border p-3 text-sm outline-none focus:border-foreground resize-none leading-relaxed"
             />
           </div>
           <div>
             <label className="text-[10px] uppercase tracking-widest text-taupe block mb-2">Call to action</label>
             <input
               value={cta}
-              onChange={e => setCta(e.target.value)}
-              className="w-full bg-transparent border hairline p-3 text-sm outline-none focus:border-foreground"
+              onChange={(e) => setCta(e.target.value)}
+              className="w-full bg-muted/30 border border-border px-3 py-2.5 text-sm outline-none focus:border-foreground"
             />
           </div>
           <div>
@@ -447,33 +601,36 @@ function EditSidebar({ item, onClose, onSaved }: { item: ContentItem; onClose: (
             <p className="text-[9px] text-taupe mb-2">Space-separated. # is optional.</p>
             <input
               value={hashtags}
-              onChange={e => setHashtags(e.target.value)}
-              className="w-full bg-transparent border hairline p-3 text-sm outline-none focus:border-foreground"
+              onChange={(e) => setHashtags(e.target.value)}
+              className="w-full bg-muted/30 border border-border px-3 py-2.5 text-sm outline-none focus:border-foreground"
               placeholder="#haircolour #sydney"
             />
           </div>
         </div>
 
         {/* Footer actions */}
-        <div className="px-6 py-4 border-t hairline flex items-center justify-between gap-3">
-          <button onClick={onClose} className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground">
+        <div className="bg-muted px-6 py-4 border-t border-border flex items-center justify-between gap-3">
+          <button
+            onClick={onClose}
+            className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors"
+          >
             Cancel
           </button>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button
               onClick={handleSave}
               disabled={saving}
-              className="text-[10px] uppercase tracking-widest border hairline px-4 py-2 hover:bg-nude/30 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 border border-border bg-card text-xs font-medium text-foreground px-3.5 py-2 shadow-sm hover:bg-nude/30 hover:shadow-md active:scale-[0.97] transition-all disabled:opacity-50"
             >
-              {saving ? "Saving..." : "Save"}
+              {saving ? "Saving…" : "Save"}
             </button>
             {(item.state.toLowerCase() === "draft" || item.state.toLowerCase() === "needs review") && (
               <button
                 onClick={handleApprove}
                 disabled={approving}
-                className="text-[10px] uppercase tracking-widest bg-foreground text-offwhite px-4 py-2 hover:bg-taupe disabled:opacity-50 transition-colors"
+                className="inline-flex items-center bg-foreground text-offwhite text-xs font-medium px-3.5 py-2 shadow-sm hover:opacity-90 hover:shadow-md active:scale-[0.97] transition-all disabled:opacity-50"
               >
-                {approving ? "Approving..." : "Approve"}
+                {approving ? "Approving…" : "Approve"}
               </button>
             )}
           </div>
@@ -485,10 +642,12 @@ function EditSidebar({ item, onClose, onSaved }: { item: ContentItem; onClose: (
 
 function StatePill({ state }: { state: string }) {
   const styles: Record<string, string> = {
-    draft: "bg-offwhite/95 text-foreground",
-    scheduled: "bg-foreground text-offwhite",
-    published: "bg-sage text-offwhite",
-    blocked: "bg-destructive text-offwhite",
+    draft:        "bg-offwhite/95 text-foreground",
+    needs_review: "bg-amber-100 text-amber-800",
+    "needs review": "bg-amber-100 text-amber-800",
+    scheduled:    "bg-foreground text-offwhite",
+    published:    "bg-sage text-offwhite",
+    blocked:      "bg-destructive text-offwhite",
   };
   return (
     <span className={`backdrop-blur px-2 py-1 text-[9px] uppercase tracking-[0.18em] ${styles[state] || styles.draft}`}>
@@ -497,42 +656,20 @@ function StatePill({ state }: { state: string }) {
   );
 }
 
-function ChipGroup({ label, children }: { label: string; children: React.ReactNode }) {
+function ActivePill({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-[10px] uppercase tracking-widest text-taupe">{label}</span>
-      <div className="flex flex-wrap gap-1.5">{children}</div>
-    </div>
-  );
-}
-
-function FilterChip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={
-        "text-[10px] uppercase tracking-widest border hairline px-2.5 py-1 transition-colors " +
-        (active
-          ? "bg-foreground text-offwhite border-foreground"
-          : "text-taupe hover:text-foreground hover:border-foreground")
-      }
-    >
-      {children}
-    </button>
+    <span className="inline-flex items-center gap-1.5 text-[9px] uppercase tracking-widest bg-muted border border-border text-foreground px-2.5 py-1">
+      {label}
+      <button onClick={onRemove} className="text-taupe hover:text-foreground leading-none text-[11px]">
+        ×
+      </button>
+    </span>
   );
 }
 
 function EmptyState({ hasFilters, onClear }: { hasFilters: boolean; onClear: () => void }) {
   return (
-    <div className="artifact p-12 text-center">
+    <div className="flex flex-col items-center justify-center border-2 border-dashed border-border bg-muted/20 py-14 text-center">
       <p className="eyebrow mb-3">No content matches</p>
       <p className="font-serif text-2xl mb-3">
         {hasFilters ? "Nothing here with those filters." : "Your library is empty."}
@@ -542,20 +679,23 @@ function EmptyState({ hasFilters, onClear }: { hasFilters: boolean; onClear: () 
           ? "Try clearing the filters, or generate a new draft from an appointment."
           : "Generate your first post from an appointment to start building your library."}
       </p>
-      <div className="flex items-center justify-center gap-4">
+      <div className="flex items-center justify-center gap-3">
         {hasFilters && (
           <button
             onClick={onClear}
-            className="text-[11px] uppercase tracking-[0.2em] border-b border-foreground pb-0.5 hover:text-taupe hover:border-taupe"
+            className="inline-flex items-center gap-1.5 border border-border bg-card text-xs font-medium text-foreground px-3.5 py-2 shadow-sm hover:bg-muted hover:shadow-md active:scale-[0.97] transition-all"
           >
             Clear filters
           </button>
         )}
         <Link
           to="/generate"
-          className="inline-block bg-foreground text-offwhite px-6 py-3 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors"
+          className="inline-flex items-center gap-2 bg-foreground text-offwhite text-xs font-medium px-4 py-2.5 shadow-sm hover:opacity-90 hover:shadow-md active:scale-[0.97] transition-all"
         >
-          Open generator →
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+          </svg>
+          Open generator
         </Link>
       </div>
     </div>

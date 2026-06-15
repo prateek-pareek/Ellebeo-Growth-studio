@@ -175,6 +175,7 @@ model Tenant {
   timezone              String           @default("UTC") @db.VarChar(100)
   locale                String           @default("en-AU") @db.VarChar(20)
   avatarUrl             String?          @map("avatar_url") @db.VarChar(2000)
+  phone                 String?          @db.VarChar(50)
   onboardingCompleted   Boolean          @default(false) @map("onboarding_completed")
   onboardingStep        Int              @default(1) @map("onboarding_step")
   createdAt             DateTime         @default(now()) @map("created_at") @db.Timestamptz
@@ -201,6 +202,7 @@ model Tenant {
   generationFingerprints GenerationFingerprint[]
   failedJobs             FailedJob[]
   crmIntegrationConfig   CrmIntegrationConfig?
+  notifications          Notification[]
 
   @@index([userId])
   @@index([status])
@@ -351,7 +353,7 @@ model ConsentRecord {
   createdAt              DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt              DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   supersededAt           DateTime?     @map("superseded_at") @db.Timestamptz
-  crmBookingId           String?       @map("crm_booking_id") @db.Uuid
+  crmBookingId           String?       @map("crm_booking_id") @db.VarChar(255)
 
   tenant            Tenant          @relation(fields: [tenantId], references: [id])
   client            Client          @relation(fields: [clientId], references: [id])
@@ -386,7 +388,7 @@ model Appointment {
   updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   deletedAt          DateTime? @map("deleted_at") @db.Timestamptz
 
-  crmBookingId String? @map("crm_booking_id") @db.Uuid
+  crmBookingId String? @map("crm_booking_id") @db.VarChar(255)
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
   client Client @relation(fields: [clientId], references: [id])
@@ -432,6 +434,18 @@ model ImageAsset {
   @@index([tenantId])
   @@index([contentItemId])
   @@map("image_assets")
+  @@schema("platform")
+}
+
+model ImageVisionCache {
+  hash          String   @id @db.VarChar(64) // SHA256 of image bytes
+  model         String   @db.VarChar(100)    // e.g., 'gpt-4o'
+  promptVersion String   @map("prompt_version") @db.VarChar(50) // e.g., 'v1.0'
+  result        Json
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("image_vision_cache")
   @@schema("platform")
 }
 
@@ -725,7 +739,7 @@ model FailedJob {
 model AppointmentQuestionnaireResponse {
   id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   appointmentId String    @map("appointment_id") @db.Uuid
-  crmBookingId  String    @map("crm_booking_id") @db.Uuid
+  crmBookingId  String    @map("crm_booking_id") @db.VarChar(255)
   questionKey   String    @map("question_key") @db.Text
   questionLabel String?   @map("question_label") @db.Text
   answer        String?   @db.Text
@@ -772,5 +786,27 @@ model RefreshToken {
   @@index([userId])
   @@index([expiresAt])
   @@map("refresh_tokens")
+  @@schema("platform")
+}
+
+model Notification {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  type          String    @db.VarChar(100)
+  title         String?   @db.VarChar(255)
+  body          String?   @db.Text
+  data          Json?
+  readAt        DateTime? @map("read_at") @db.Timestamptz
+  deliveredAt   DateTime? @map("delivered_at") @db.Timestamptz
+  channelSms    Boolean   @default(false) @map("channel_sms")
+  externalPhone String?   @map("external_phone") @db.VarChar(50)
+  deliveryError String?   @map("delivery_error") @db.Text
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, readAt])
+  @@index([tenantId, createdAt])
+  @@map("notifications")
   @@schema("platform")
 }

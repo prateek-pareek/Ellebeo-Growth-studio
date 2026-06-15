@@ -12,11 +12,15 @@ import type { VisionAnalysisResult } from '../types/chain-output.types';
 import type { ModelRouter } from '../orchestrator/model-router';
 import { wrapSystemPrompt } from '../config/platform-system-prompt';
 
+const VISION_PROMPT_VERSION = 'v1.0';
+
 // Zod-validated output schema enforcer (inline for strict mode)
 function parseVisionOutput(raw: string): VisionAnalysisResult {
+  // Strip markdown code fences if model wraps output in ```json ... ```
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(cleaned);
   } catch {
     throw new VisionParseError(`Vision model returned non-JSON: ${raw.slice(0, 200)}`);
   }
@@ -84,15 +88,17 @@ export class VisionAnalysisChain {
 
   async analyse(params: {
     imageUrl: string;   // Cloudinary CDN URL (processed, accessible)
-    storagePath: string; // Used to compute the cache key
-    cachedResult?: string; // Pre-fetched from job payload if already cached
+    storagePath: string; // Used to compute the cache key if no imageHash
+    imageHash?: string | null; // s3ObjectHash if available
+    cachedResult?: string | null; // Pre-fetched from job payload if already cached
   }): Promise<{ result: VisionAnalysisResult; fromCache: boolean }> {
-    const { imageUrl, storagePath, cachedResult } = params;
+    const { imageUrl, storagePath, imageHash, cachedResult } = params;
 
     // 1. Check in-payload cache (fastest — already in memory)
     if (cachedResult) {
       try {
         const parsed = JSON.parse(cachedResult) as VisionAnalysisResult;
+        console.log(`[VisionCache] HIT (in-memory payload cache)`);
         return { result: parsed, fromCache: true };
       } catch {
         // Corrupted cache — fall through to DB check
@@ -100,17 +106,20 @@ export class VisionAnalysisChain {
     }
 
     // 2. Compute image hash and check PostgreSQL cache
-    const storageHash = createHash('sha256').update(storagePath).digest('hex');
-    const dbCached = await this.checkDBCache(storageHash);
+    const finalHash = imageHash || createHash('sha256').update(storagePath).digest('hex');
+    const dbCached = await this.checkDBCache(finalHash);
     if (dbCached) {
+      console.log(`[VisionCache] HIT for hash ${finalHash}`);
       return { result: dbCached, fromCache: true };
     }
+
+    console.log(`[VisionCache] MISS for hash ${finalHash} — calling GPT-4o Vision`);
 
     // 3. No cache hit — call GPT-4o Vision
     const result = await this.callVisionModel(imageUrl);
 
-    // 4. Save to PostgreSQL cache (permanent — never expires)
-    await this.saveToDBCache(storageHash, storagePath, result);
+    // 4. Save to PostgreSQL cache
+    await this.saveToDBCache(finalHash, result);
 
     return { result, fromCache: false };
   }
@@ -146,10 +155,15 @@ Return ONLY valid JSON with no markdown, no explanation.`;
       ],
     });
 
-    const response = await this.getModel().invoke([new SystemMessage(wrapSystemPrompt(systemPrompt)), humanMessage]);
+    const response = await this.getModel().invoke([new SystemMessage(systemPrompt), humanMessage]);
     const content = typeof response.content === 'string'
       ? response.content
       : JSON.stringify(response.content);
+
+    const usage = (response as { usage_metadata?: { input_tokens?: number; output_tokens?: number } }).usage_metadata;
+    if (usage) {
+      console.log(`[TokenDebug] VisionAnalysisChain (gpt-4o vision): Used ${usage.input_tokens} input tokens, ${usage.output_tokens} output tokens.`);
+    }
 
     return parseVisionOutput(content);
   }
@@ -158,17 +172,49 @@ Return ONLY valid JSON with no markdown, no explanation.`;
   // PostgreSQL Cache Read/Write
   // --------------------------------------------------------------------------
 
-  private async checkDBCache(_storageHash: string): Promise<VisionAnalysisResult | null> {
-    // image_vision_cache table not yet provisioned — skip cache lookup
-    return null;
+  private async checkDBCache(hash: string): Promise<VisionAnalysisResult | null> {
+    try {
+      const record = await this.prisma.imageVisionCache.findUnique({
+        where: { hash },
+      });
+
+      if (!record) return null;
+
+      // Validate that the cached record matches our current model & prompt version
+      if (record.model !== this.cfg.modelId || record.promptVersion !== VISION_PROMPT_VERSION) {
+        console.log(`[VisionCache] MISS (version mismatch) — expected ${this.cfg.modelId}@${VISION_PROMPT_VERSION}, got ${record.model}@${record.promptVersion}`);
+        return null;
+      }
+
+      return record.result as unknown as VisionAnalysisResult;
+    } catch (err) {
+      console.warn('[VisionCache] Failed to read from cache table:', err);
+      return null;
+    }
   }
 
   private async saveToDBCache(
-    _storageHash: string,
-    _storagePath: string,
-    _result: VisionAnalysisResult
+    hash: string,
+    result: VisionAnalysisResult
   ): Promise<void> {
-    // image_vision_cache table not yet provisioned — skip cache write
+    try {
+      await this.prisma.imageVisionCache.upsert({
+        where: { hash },
+        update: {
+          result: result as unknown as any,
+          model: this.cfg.modelId,
+          promptVersion: VISION_PROMPT_VERSION,
+        },
+        create: {
+          hash,
+          result: result as unknown as any,
+          model: this.cfg.modelId,
+          promptVersion: VISION_PROMPT_VERSION,
+        },
+      });
+    } catch (err) {
+      console.warn('[VisionCache] Failed to save to cache table:', err);
+    }
   }
 }
 

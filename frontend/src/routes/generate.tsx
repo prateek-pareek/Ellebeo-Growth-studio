@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useSearch, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, useRef } from "react";
+import { Sparkles, BookOpen, TrendingUp, Clock, Heart, Layers, Play, Zap, Image, Music, ChevronRight, Calendar } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAppointments, type Appointment } from "@/lib/providers/appointments-provider";
 import { useBrandDna } from "@/lib/providers/brand-dna-provider";
@@ -90,31 +91,49 @@ function GeneratePage() {
   }, [requestedMatch]);
 
   useEffect(() => {
-    if (jobId && generating) {
-      pollRef.current = window.setInterval(async () => {
-        try {
-          const res = await api.get(`/generation/jobs/${jobId}`);
-          const status = res.data.data.state;
-          setJobStatus(status);
-          
-          if (status === 'completed') {
-            clearInterval(pollRef.current!);
-            const contentRes = await api.get(`/content?jobId=${jobId}`);
-            const contentBody = contentRes.data.data;
-            // Content service returns { data: items, meta: {...} } — extract the array
-            const items = Array.isArray(contentBody) ? contentBody : (contentBody?.data ?? []);
-            setBackendVariants(items);
-            setGenerating(false);
-          } else if (status === 'failed') {
-            clearInterval(pollRef.current!);
-            setGenerating(false);
-            toast.error("Generation failed. Please try again.");
-          }
-        } catch (e) {
-          console.error("Polling error", e);
+    if (!jobId || !generating) return;
+    let pollCount = 0;
+    let errorCount = 0;
+    const MAX_POLLS = 150; // 5 minutes at 2s intervals
+    const MAX_ERRORS = 5;
+
+    pollRef.current = window.setInterval(async () => {
+      pollCount++;
+      if (pollCount > MAX_POLLS) {
+        clearInterval(pollRef.current!);
+        setGenerating(false);
+        toast.error("Generation timed out. Please try again.");
+        return;
+      }
+      try {
+        const res = await api.get(`/generation/jobs/${jobId}`);
+        const status = res.data.data.state;
+        errorCount = 0;
+        setJobStatus(status);
+
+        if (status === 'completed') {
+          clearInterval(pollRef.current!);
+          const contentRes = await api.get(`/content?jobId=${jobId}`);
+          const contentBody = contentRes.data.data;
+          const items = Array.isArray(contentBody) ? contentBody : (contentBody?.data ?? []);
+          setBackendVariants(items);
+          setGenerating(false);
+        } else if (status === 'failed') {
+          clearInterval(pollRef.current!);
+          setGenerating(false);
+          toast.error("Generation failed. Please try again.");
         }
-      }, 2000);
-    }
+      } catch (e) {
+        errorCount++;
+        console.error("Polling error", e);
+        if (errorCount >= MAX_ERRORS) {
+          clearInterval(pollRef.current!);
+          setGenerating(false);
+          toast.error("Lost connection during generation. Please check your content library.");
+        }
+      }
+    }, 2000);
+
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
@@ -189,22 +208,26 @@ function GeneratePage() {
           </div>
         </div>
       )}
-      <header className="mt-6 lg:mt-10 mb-8 max-w-[68ch]">
-        <div className="flex items-center gap-3 mb-5">
-          <p className="eyebrow">AI generation</p>
-          {!generating && !loading && (
-             <span className="text-[9px] uppercase tracking-widest border border-sage text-sage px-2 py-1">Live</span>
-          )}
-          {generating && (
-            <span className="text-[9px] uppercase tracking-widest text-taupe">
-              AI is working: {jobStatus || 'Processing'}...
+      <header className="mt-6 lg:mt-10 mb-8">
+        <div className="flex items-center gap-2.5 mb-5">
+          <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-taupe">AI generation</span>
+          <span className="text-taupe/30">·</span>
+          {!generating ? (
+            <span className="inline-flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-sage bg-sage/10 border border-sage/25 px-2.5 py-1 rounded-full">
+              <span className="size-1.5 rounded-full bg-sage animate-pulse" />
+              Live
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-taupe bg-muted border border-border px-2.5 py-1 rounded-full">
+              <span className="size-3 border border-taupe/40 border-t-foreground rounded-full animate-spin" />
+              {jobStatus || "Processing"}
             </span>
           )}
         </div>
-        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight">
-          Turn this appointment into <span className="italic">content</span>.
+        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight max-w-[20ch]">
+          Turn this appointment into <span className="italic text-taupe">content.</span>
         </h1>
-        <p className="mt-6 text-base sm:text-lg text-taupe leading-relaxed">
+        <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[52ch]">
           Every step is shaped by your Brand DNA — tone, pillar mix, ideal client, CTA style and visual direction.
         </p>
       </header>
@@ -266,7 +289,7 @@ function GeneratePage() {
                   jobStatus={jobStatus}
                   backendVariants={backendVariants}
                   onChangeStep={(s: Step) => setStep(s)}
-                  onRefineComplete={(items) => setBackendVariants(items)}
+                  onRefineComplete={(items: any[]) => setBackendVariants(items)}
                 />
               )}
             </div>
@@ -326,20 +349,21 @@ function Stepper({
 }) {
   const steps: { id: Step; label: string; sub: string }[] = [
     { id: "select", label: "Appointment", sub: "Pick the visit" },
-    { id: "consent", label: "Consent", sub: "Confirm permissions" },
-    { id: "goal", label: "Goal", sub: "Choose the angle" },
-    { id: "format", label: "Format", sub: "Pick the surface" },
-    { id: "review", label: "Review", sub: "Refine & schedule" },
+    { id: "consent", label: "Consent",     sub: "Confirm permissions" },
+    { id: "goal",   label: "Goal",         sub: "Choose the angle" },
+    { id: "format", label: "Format",       sub: "Pick the surface" },
+    { id: "review", label: "Review",       sub: "Refine & schedule" },
   ];
   const idx = steps.findIndex((s) => s.id === step);
-  const progress = Math.round(((idx + 1) / steps.length) * 100);
+
   return (
-    <div>
-      <div className="flex items-center gap-3 mb-3">
-        <div className="flex-1 h-px bg-border relative overflow-hidden">
+    <div className="rounded-2xl border border-border bg-card shadow-sm p-4 sm:p-5">
+      {/* Progress bar + counter */}
+      <div className="flex items-center gap-3 mb-5">
+        <div className="flex-1 h-1 bg-border rounded-full overflow-hidden">
           <div
-            className="absolute inset-y-0 left-0 bg-foreground transition-all duration-500 ease-out"
-            style={{ width: `${progress}%` }}
+            className="h-full bg-gradient-to-r from-taupe to-foreground rounded-full transition-all duration-500 ease-out"
+            style={{ width: `${Math.round(((idx + 1) / steps.length) * 100)}%` }}
           />
         </div>
         <span className="text-[10px] uppercase tracking-widest text-taupe tabular-nums shrink-0">
@@ -347,43 +371,66 @@ function Stepper({
         </span>
       </div>
 
-      <div className="grid grid-cols-5 gap-px bg-border border hairline">
+      {/* Step indicators */}
+      <div className="relative flex items-start justify-between">
+        {/* Connecting line behind circles */}
+        <div className="absolute left-0 right-0 top-[14px] h-px bg-border z-0" />
+        <div
+          className="absolute left-0 top-[14px] h-px bg-foreground z-0 transition-all duration-500 ease-out"
+          style={{ width: idx === 0 ? "0%" : `${(idx / (steps.length - 1)) * 100}%` }}
+        />
+
         {steps.map((s, i) => {
-          const active = i === idx;
-          const done = i < idx;
+          const active    = i === idx;
+          const done      = i < idx;
           const clickable = hasAppointment || s.id === "select";
+
           return (
             <button
               key={s.id}
               onClick={() => clickable && onJump(s.id)}
               disabled={!clickable}
-              className={
-                "p-4 text-left transition-colors group " +
-                (active
-                  ? "bg-foreground text-offwhite"
-                  : done
-                    ? "bg-card hover:bg-nude/30"
-                    : "bg-card text-taupe disabled:cursor-not-allowed")
-              }
+              className="relative z-10 flex flex-col items-center gap-2 disabled:cursor-not-allowed group"
+              style={{ width: `${100 / steps.length}%` }}
             >
-              <div className="flex items-center gap-2 mb-1.5">
-                <span
-                  className={
-                    "inline-flex items-center justify-center size-4 rounded-full text-[9px] tabular-nums font-medium transition-colors " +
-                    (active
-                      ? "bg-nude text-foreground"
-                      : done
-                        ? "bg-sage text-offwhite"
-                        : "bg-border text-taupe")
-                  }
-                >
-                  {done ? "✓" : i + 1}
-                </span>
-                <p className={"text-[10px] uppercase tracking-widest " + (active ? "text-nude" : "text-taupe")}>
-                  Step
+              {/* Circle */}
+              <div className={
+                "size-7 rounded-full flex items-center justify-center border-2 transition-all duration-300 " +
+                (done
+                  ? "bg-foreground border-foreground"
+                  : active
+                    ? "bg-foreground border-foreground ring-4 ring-foreground/10"
+                    : "bg-card border-border group-hover:border-foreground/30")
+              }>
+                {done ? (
+                  <svg width="9" height="7" viewBox="0 0 10 8" fill="none">
+                    <path d="M1 4l3 3 5-6" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                ) : (
+                  <span className={
+                    "text-[9px] font-bold tabular-nums " +
+                    (active ? "text-offwhite" : "text-taupe")
+                  }>
+                    {i + 1}
+                  </span>
+                )}
+              </div>
+
+              {/* Labels */}
+              <div className="text-center px-1">
+                <p className={
+                  "text-[10px] font-semibold uppercase tracking-widest leading-tight transition-colors " +
+                  (active ? "text-foreground" : done ? "text-taupe" : "text-taupe/50")
+                }>
+                  {s.label}
+                </p>
+                <p className={
+                  "text-[9px] mt-0.5 leading-tight hidden sm:block transition-colors " +
+                  (active ? "text-taupe" : "text-taupe/40")
+                }>
+                  {s.sub}
                 </p>
               </div>
-              <p className="text-xs sm:text-sm font-medium leading-tight">{s.label}</p>
             </button>
           );
         })}
@@ -416,21 +463,68 @@ function SelectAppointment({
 }) {
   return (
     <div>
-      <h2 className="eyebrow mb-4">Pick an appointment</h2>
-      <div className="space-y-px bg-border">
-        {appointments.map((a) => (
-          <button
-            key={a.id}
-            onClick={() => onPick(a)}
-            className="w-full text-left bg-card p-5 flex items-center gap-5 hover:bg-nude/20 transition-colors"
-          >
-            <div className="flex-1 min-w-0">
-              <p className="eyebrow mb-1">{a.date} · {a.category}</p>
-              <p className="font-serif text-lg truncate">{a.clientName}</p>
-              <p className="text-xs text-taupe truncate">{a.service}</p>
-            </div>
-          </button>
-        ))}
+      {/* Header */}
+      <div className="mb-6">
+        <p className="text-[10px] uppercase tracking-[0.3em] text-taupe mb-2">Step 1 · Appointment</p>
+        <h2 className="font-serif text-3xl leading-tight">Which appointment are we working with?</h2>
+        <p className="text-sm text-taupe mt-2 leading-relaxed">
+          Pick a session to turn into content. Only appointments with client photos are shown.
+        </p>
+      </div>
+
+      {/* Appointment cards */}
+      <div className="space-y-2">
+        {appointments.map((a) => {
+          const initials = a.clientName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
+          const consentColor =
+            a.consent === "granted"  ? "bg-sage/10 text-sage border-sage/20" :
+            a.consent === "declined" ? "bg-destructive/10 text-destructive border-destructive/20" :
+            a.consent === "pending"  ? "bg-taupe/10 text-taupe border-taupe/20" :
+                                       "bg-border text-taupe/50 border-border";
+          const consentLabel =
+            a.consent === "granted"  ? "Consent granted" :
+            a.consent === "declined" ? "Declined" :
+            a.consent === "pending"  ? "Pending" : "No consent";
+
+          return (
+            <button
+              key={a.id}
+              onClick={() => onPick(a)}
+              className="w-full text-left group rounded-2xl border-2 border-border bg-card p-4 flex items-center gap-4 hover:border-foreground/30 hover:bg-nude/20 hover:shadow-sm transition-all duration-200"
+            >
+              {/* Initials avatar */}
+              <div className="size-10 rounded-xl bg-muted flex items-center justify-center shrink-0 group-hover:bg-nude/40 transition-colors">
+                <span className="text-[11px] font-semibold text-taupe group-hover:text-foreground tracking-wide transition-colors">
+                  {initials}
+                </span>
+              </div>
+
+              {/* Details */}
+              <div className="flex-1 min-w-0">
+                <p className="font-serif text-base leading-tight truncate">{a.clientName}</p>
+                <p className="text-[11px] text-taupe truncate mt-0.5">{a.service}</p>
+                <div className="flex items-center gap-1.5 mt-1.5">
+                  <Calendar className="size-3 text-taupe/60 shrink-0" />
+                  <span className="text-[10px] text-taupe">{a.date}</span>
+                  {a.category && (
+                    <>
+                      <span className="text-taupe/30">·</span>
+                      <span className="text-[10px] text-taupe">{a.category}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Consent badge */}
+              <span className={`shrink-0 text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full border ${consentColor}`}>
+                {consentLabel}
+              </span>
+
+              {/* Arrow */}
+              <ChevronRight className="size-4 text-taupe/40 group-hover:text-foreground shrink-0 transition-colors" />
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -578,6 +672,14 @@ function ConsentStep({
   );
 }
 
+const GOAL_ICONS: Record<Goal, React.ComponentType<{ className?: string }>> = {
+  showcase:     Sparkles,
+  educate:      BookOpen,
+  convert:      TrendingUp,
+  availability: Clock,
+  trust:        Heart,
+};
+
 function GoalStep({
   goal,
   setGoal,
@@ -591,33 +693,82 @@ function GoalStep({
 }) {
   return (
     <div>
-      <h2 className="eyebrow mb-4">Choose a content goal</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-border border hairline mb-6">
-        {GOALS.map((g) => (
-          <button
-            key={g.id}
-            onClick={() => setGoal(g.id)}
-            className={"p-5 text-left transition-colors " + (g.id === goal ? "bg-foreground text-offwhite" : "bg-card hover:bg-nude/30")}
-          >
-            <p className="font-serif text-xl mb-1">{g.name}</p>
-            <p className={"text-xs " + (g.id === goal ? "text-nude" : "text-taupe")}>{g.help}</p>
-          </button>
-        ))}
+      {/* Header */}
+      <div className="mb-6">
+        <p className="text-[10px] uppercase tracking-[0.3em] text-taupe mb-2">Step 3 · Goal</p>
+        <h2 className="font-serif text-3xl leading-tight">What's the goal of this post?</h2>
+        <p className="text-sm text-taupe mt-2 leading-relaxed">
+          Your Brand DNA shapes the tone — pick the angle that fits this appointment.
+        </p>
       </div>
+
+      {/* Goal cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+        {GOALS.map((g) => {
+          const selected = g.id === goal;
+          const Icon = GOAL_ICONS[g.id];
+          return (
+            <button
+              key={g.id}
+              onClick={() => setGoal(g.id)}
+              className={
+                "relative group p-4 text-left rounded-2xl border-2 transition-all duration-200 " +
+                (selected
+                  ? "border-foreground bg-foreground text-offwhite shadow-md scale-[1.01]"
+                  : "border-border bg-card hover:border-foreground/30 hover:bg-nude/20 hover:shadow-sm")
+              }
+            >
+              {/* Check indicator */}
+              <span className={
+                "absolute top-3 right-3 size-4 rounded-full flex items-center justify-center transition-all duration-200 " +
+                (selected ? "bg-white/20 opacity-100" : "opacity-0")
+              }>
+                <svg width="8" height="7" viewBox="0 0 10 8" fill="none">
+                  <path d="M1 4l3 3 5-6" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </span>
+
+              {/* Icon badge */}
+              <div className={
+                "size-7 rounded-lg flex items-center justify-center mb-3 transition-colors " +
+                (selected ? "bg-white/15" : "bg-muted group-hover:bg-nude/40")
+              }>
+                <Icon className={"size-3.5 transition-colors " + (selected ? "text-nude" : "text-taupe group-hover:text-foreground")} />
+              </div>
+
+              <p className="font-serif text-base leading-tight mb-0.5">{g.name}</p>
+              <p className={"text-[11px] leading-relaxed " + (selected ? "text-nude" : "text-taupe")}>{g.help}</p>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Navigation */}
       <div className="flex items-center justify-between pt-2">
-        <button onClick={onBack} className="text-[11px] uppercase tracking-[0.2em] text-taupe hover:text-foreground transition-colors">
+        <button
+          onClick={onBack}
+          className="text-[11px] uppercase tracking-[0.2em] text-taupe hover:text-foreground transition-colors"
+        >
           ← Back
         </button>
         <button
           onClick={onContinue}
-          className="bg-foreground text-offwhite px-8 py-3 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors"
+          className="bg-foreground text-offwhite px-8 py-3 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors rounded-xl"
         >
-          Continue
+          Continue →
         </button>
       </div>
     </div>
   );
 }
+
+const FORMAT_ICONS: Record<Format, React.ComponentType<{ className?: string }>> = {
+  Carousel: Layers,
+  Reel:     Play,
+  Story:    Zap,
+  Caption:  Image,
+  TikTok:   Music,
+};
 
 function FormatStep({
   format,
@@ -632,28 +783,69 @@ function FormatStep({
 }) {
   return (
     <div>
-      <h2 className="eyebrow mb-4">Choose a format</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-border border hairline mb-6">
-        {FORMATS.map((f) => (
-          <button
-            key={f.id}
-            onClick={() => setFormat(f.id)}
-            className={"p-5 text-left transition-colors " + (f.id === format ? "bg-foreground text-offwhite" : "bg-card hover:bg-nude/30")}
-          >
-            <p className="font-serif text-xl mb-1">{f.name}</p>
-            <p className={"text-xs " + (f.id === format ? "text-nude" : "text-taupe")}>{f.help}</p>
-          </button>
-        ))}
+      {/* Header */}
+      <div className="mb-6">
+        <p className="text-[10px] uppercase tracking-[0.3em] text-taupe mb-2">Step 4 · Format</p>
+        <h2 className="font-serif text-3xl leading-tight">Pick a content format.</h2>
+        <p className="text-sm text-taupe mt-2 leading-relaxed">
+          Choose how your content will be delivered — each format is optimised for reach and engagement.
+        </p>
       </div>
+
+      {/* Format cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
+        {FORMATS.map((f) => {
+          const selected = f.id === format;
+          const Icon = FORMAT_ICONS[f.id];
+          return (
+            <button
+              key={f.id}
+              onClick={() => setFormat(f.id)}
+              className={
+                "relative group p-4 text-left rounded-2xl border-2 transition-all duration-200 " +
+                (selected
+                  ? "border-foreground bg-foreground text-offwhite shadow-md scale-[1.01]"
+                  : "border-border bg-card hover:border-foreground/30 hover:bg-nude/20 hover:shadow-sm")
+              }
+            >
+              {/* Check indicator */}
+              <span className={
+                "absolute top-3 right-3 size-4 rounded-full flex items-center justify-center transition-all duration-200 " +
+                (selected ? "bg-white/20 opacity-100" : "opacity-0")
+              }>
+                <svg width="8" height="7" viewBox="0 0 10 8" fill="none">
+                  <path d="M1 4l3 3 5-6" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </span>
+
+              {/* Icon badge */}
+              <div className={
+                "size-7 rounded-lg flex items-center justify-center mb-3 transition-colors " +
+                (selected ? "bg-white/15" : "bg-muted group-hover:bg-nude/40")
+              }>
+                <Icon className={"size-3.5 transition-colors " + (selected ? "text-nude" : "text-taupe group-hover:text-foreground")} />
+              </div>
+
+              <p className="font-serif text-base leading-tight mb-0.5">{f.name}</p>
+              <p className={"text-[11px] leading-relaxed " + (selected ? "text-nude" : "text-taupe")}>{f.help}</p>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Navigation */}
       <div className="flex items-center justify-between pt-2">
-        <button onClick={onBack} className="text-[11px] uppercase tracking-[0.2em] text-taupe hover:text-foreground transition-colors">
+        <button
+          onClick={onBack}
+          className="text-[11px] uppercase tracking-[0.2em] text-taupe hover:text-foreground transition-colors"
+        >
           ← Back
         </button>
         <button
           onClick={() => onContinue(format)}
-          className="bg-foreground text-offwhite px-8 py-3 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors"
+          className="bg-foreground text-offwhite px-8 py-3 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors rounded-xl"
         >
-          Generate
+          Generate →
         </button>
       </div>
     </div>
@@ -1584,15 +1776,70 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep, onRe
 
 function BrandDNAInfluence({ brandDna }: any) {
   return (
-    <div className="artifact p-6">
-      <p className="eyebrow mb-4">Brand DNA Influence</p>
+    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+      <div className="bg-muted border-b border-border px-5 py-3">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Brand DNA Influence</p>
+      </div>
       {brandDna ? (
-        <div className="space-y-4">
-            <p className="text-xs text-taupe uppercase tracking-widest">Voice: {brandDna.voice.summary}</p>
-            <p className="text-xs text-taupe uppercase tracking-widest">Archetype: {brandDna.archetype}</p>
+        <div className="divide-y divide-border">
+          {brandDna.voice?.summary && (
+            <div className="px-5 py-4">
+              <p className="text-[9px] uppercase tracking-widest text-taupe mb-1.5">Voice</p>
+              <div className="flex flex-wrap gap-1.5">
+                {brandDna.voice.summary.split(/[·,]/).map((v: string) => v.trim()).filter(Boolean).map((v: string) => (
+                  <span key={v} className="text-[10px] uppercase tracking-widest border border-border bg-muted px-2.5 py-1 rounded-full text-foreground">
+                    {v}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {brandDna.archetype && (
+            <div className="px-5 py-4">
+              <p className="text-[9px] uppercase tracking-widest text-taupe mb-1.5">Archetype</p>
+              <p className="text-sm font-medium leading-snug">{brandDna.archetype}</p>
+            </div>
+          )}
+          {brandDna.idealClient && (
+            <div className="px-5 py-4">
+              <p className="text-[9px] uppercase tracking-widest text-taupe mb-1.5">Ideal client</p>
+              {typeof brandDna.idealClient === "string" ? (
+                <p className="text-xs text-taupe leading-relaxed">{brandDna.idealClient}</p>
+              ) : (
+                <div className="space-y-1">
+                  {brandDna.idealClient.age && (
+                    <p className="text-xs text-taupe"><span className="text-foreground">Age:</span> {brandDna.idealClient.age}</p>
+                  )}
+                  {brandDna.idealClient.cities && (
+                    <p className="text-xs text-taupe"><span className="text-foreground">Location:</span> {Array.isArray(brandDna.idealClient.cities) ? brandDna.idealClient.cities.join(", ") : brandDna.idealClient.cities}</p>
+                  )}
+                  {brandDna.idealClient.looksFor && (
+                    <p className="text-xs text-taupe"><span className="text-foreground">Wants:</span> {brandDna.idealClient.looksFor}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+          {brandDna.pillars?.length > 0 && (
+            <div className="px-5 py-4">
+              <p className="text-[9px] uppercase tracking-widest text-taupe mb-1.5">Content pillars</p>
+              <div className="flex flex-wrap gap-1.5">
+                {brandDna.pillars.map((p: any, i: number) => {
+                  const label = typeof p === "string" ? p : (p.name ?? p.description ?? `Pillar ${i + 1}`);
+                  return (
+                    <span key={i} className="text-[10px] uppercase tracking-widest border border-sage/30 bg-sage/10 text-sage px-2.5 py-1 rounded-full">
+                      {label}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       ) : (
-        <p className="text-xs text-taupe">Loading brand influence...</p>
+        <div className="px-5 py-8 text-center">
+          <p className="text-xs text-taupe italic">Loading brand influence…</p>
+        </div>
       )}
     </div>
   );

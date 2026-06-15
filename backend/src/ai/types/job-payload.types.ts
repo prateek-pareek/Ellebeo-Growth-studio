@@ -69,7 +69,7 @@ export type BusinessGoalType =
 // ---------------------------------------------------------------------------
 
 export type SocialPlatform = 'instagram' | 'facebook' | 'tiktok';
-export type OutputFormat = 'feed' | 'story' | 'reel';
+export type OutputFormat = 'feed' | 'carousel' | 'story' | 'reel';
 export type UserTier = 'standard' | 'premium';
 
 export interface GoldenExample {
@@ -90,6 +90,7 @@ export interface ImageAsset {
   rawStoragePath: string;
   cloudinaryPublicId?: string;
   visionAnalysisCache?: string;
+  s3ObjectHash?: string;
   isBeforePhoto?: boolean;
   isAfterPhoto?: boolean;
 }

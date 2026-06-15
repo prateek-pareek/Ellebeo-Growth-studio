@@ -31,6 +31,14 @@ import type { VisionAnalysisResult, CaptionGenerationResult, ReelScriptResult, P
 import { validateStateTransition } from '../types/job-payload.types';
 import type { JobState } from '../types/job-payload.types';
 
+type NotifyFn = (dto: {
+  tenantId: string;
+  type: string;
+  title: string;
+  body: string;
+  data?: Record<string, unknown>;
+}) => Promise<void>;
+
 export class GenerationOrchestrator {
   private readonly modelRouter: ModelRouter;
   private readonly promptBuilder: PromptBuilder;
@@ -56,7 +64,8 @@ export class GenerationOrchestrator {
     private readonly consentGuard: ConsentGuard,
     private readonly progressEmitter: JobProgressEmitter,
     modelRouter: ModelRouter,
-    promptBuilder: PromptBuilder
+    promptBuilder: PromptBuilder,
+    private readonly notify?: NotifyFn,
   ) {
     this.modelRouter = modelRouter;
     this.promptBuilder = promptBuilder;
@@ -140,6 +149,7 @@ export class GenerationOrchestrator {
         const visionAnalysis = await this.visionChain.analyse({
           imageUrl,
           storagePath: primaryImage.rawStoragePath,
+          imageHash: primaryImage.s3ObjectHash,
           cachedResult: primaryImage.visionAnalysisCache,
         });
         visionResult = visionAnalysis.result;
@@ -576,6 +586,15 @@ Requirements:
     // ── Step 7: Final State Transition ────────────────────────────────────────
     await this.transitionState(jobId, 'generating_text', 'completed');
     await this.progressEmitter.emit(jobId, tenantId, 'completed');
+
+    // ── Step 8: Notify tenant ────────────────────────────────────────────────
+    this.notify?.({
+      tenantId,
+      type: 'content_generation_complete',
+      title: 'Content ready to review',
+      body: 'Your new post is ready. Tap to review and schedule.',
+      data: { contentItemId, jobId },
+    }).catch(() => {});
 
     return {
       jobId,

@@ -31,6 +31,17 @@ export class BrandDnaService {
       const nextVersion = current ? current.version + 1 : 1;
 
       if (current) {
+        // Delete old non-current versions first to avoid unique constraint on (tenant_id, is_current)
+        const old = await tx.brandDNA.findMany({
+          where: { tenantId, isCurrent: false },
+          select: { id: true },
+        });
+        if (old.length > 0) {
+          const oldIds = old.map((r) => r.id);
+          await tx.brandPillar.deleteMany({ where: { brandDNAId: { in: oldIds } } });
+          await tx.brandGoal.deleteMany({ where: { brandDNAId: { in: oldIds } } });
+          await tx.brandDNA.deleteMany({ where: { id: { in: oldIds } } });
+        }
         await tx.brandDNA.update({
           where: { id: current.id },
           data: { isCurrent: false }
@@ -48,6 +59,8 @@ export class BrandDnaService {
           secondaryPersona: dto.personaAge,
           locationCity: dto.personaLocation,
           primaryTone: dto.primaryTone,
+          clientPainPoints: [],
+          vocabularyBlacklist: [],
           vocabularyPreferred: dto.voiceDo || [],
           doNotSay: dto.voiceDont || [],
           aestheticDirection: dto.aestheticDirection as any,
@@ -59,10 +72,11 @@ export class BrandDnaService {
           logoUrl: dto.logoUrl,
           logoPosition: dto.logoPosition || 'bottom_right',
           pillars: {
-            create: dto.pillars?.map((label, i) => ({ 
-              label, 
+            create: dto.pillars?.map((label, i) => ({
+              label,
               sortOrder: i,
-              tenantId 
+              keywords: [],
+              tenantId
             })) || []
           },
           goals: {

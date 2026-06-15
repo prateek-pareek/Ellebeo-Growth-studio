@@ -1,6 +1,8 @@
-import { Link, Outlet, useLocation } from "@tanstack/react-router";
+import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { useAuth } from "@/lib/providers/auth-provider";
 import { InitialsAvatar } from "@/components/InitialsAvatar";
+import { NotificationBell } from "@/components/NotificationPanel";
 import {
   Home,
   Sparkles,
@@ -30,14 +32,41 @@ const DESKTOP_NAV: Array<{ to: string; label: string }> = [
   { to: "/profile", label: "Profile" },
 ];
 
-const AUTH_ROUTES = ['/login', '/signup', '/auth'];
+const AUTH_ROUTES = ['/login', '/signup', '/auth', '/landing'];
 
 export function AppShell() {
   const { pathname } = useLocation();
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (loading) return;
+    if (!user && !AUTH_ROUTES.includes(pathname)) {
+      navigate({ to: "/landing" });
+    }
+    if (user && AUTH_ROUTES.includes(pathname)) {
+      navigate({ to: "/" });
+    }
+  }, [loading, user, pathname, navigate]);
+
+  if (loading) {
+    return (
+      <div className="min-h-dvh bg-background flex items-center justify-center">
+        <div className="size-5 border-2 border-taupe/30 border-t-foreground rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   if (AUTH_ROUTES.includes(pathname)) {
     return <Outlet />;
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-dvh bg-background flex items-center justify-center">
+        <div className="size-5 border-2 border-taupe/30 border-t-foreground rounded-full animate-spin" />
+      </div>
+    );
   }
 
   return (
@@ -72,6 +101,7 @@ export function AppShell() {
           <div className="flex items-center gap-3">
             {user ? (
               <>
+                <NotificationBell />
                 <div className="hidden sm:flex flex-col items-end leading-tight">
                   <span className="text-xs font-medium text-foreground">{user?.tenant?.businessName || user?.email}</span>
                   <span className="text-[10px] text-taupe">{user?.email}</span>

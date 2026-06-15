@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useCalendar, type CalendarEntry } from "@/lib/providers/calendar-provider";
 import { useContentItems, type ContentItem } from "@/lib/providers/content-provider";
 import { useCampaigns } from "@/lib/providers/campaign-provider";
@@ -31,6 +31,27 @@ function CalendarPage() {
   const { data: campaigns } = useCampaigns();
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [selectedEntry, setSelectedEntry] = useState<CalendarEntry | null>(null);
+  const [dragOverDay, setDragOverDay] = useState<number | null>(null);
+  const draggedEntry = useRef<CalendarEntry | null>(null);
+
+  const handleDrop = useCallback(async (targetDay: number) => {
+    const entry = draggedEntry.current;
+    draggedEntry.current = null;
+    setDragOverDay(null);
+    if (!entry?.scheduledPostId || !entry.scheduledFor) return;
+    const src = new Date(entry.scheduledFor);
+    if (src.getDate() === targetDay && src.getMonth() === monthIndex && src.getFullYear() === year) return;
+    const newDate = new Date(year, monthIndex, targetDay, src.getHours(), src.getMinutes(), 0, 0);
+    try {
+      await api.patch(`/schedule/${entry.scheduledPostId}`, {
+        scheduledFor: newDate.toISOString(),
+      });
+      toast.success(`Moved to ${String(targetDay).padStart(2, "0")} ${month.split(" ")[0]}`);
+      refresh();
+    } catch {
+      toast.error("Reschedule failed. Try again.");
+    }
+  }, [year, monthIndex, month, refresh]);
 
   // Group entries by day (multiple per day supported)
   const entriesByDay = new Map<number, CalendarEntry[]>();
@@ -121,14 +142,19 @@ function CalendarPage() {
           const isWeekday = i % 7 < 5;
           const isQuiet = dayEntries.length === 0 && isWeekday && !loading;
 
+          const isDragTarget = dragOverDay === day;
+
           return (
             <div
               key={i}
-              draggable={dayEntries.length > 0}
               onClick={() => setSelectedDay(day)}
+              onDragOver={(e) => { e.preventDefault(); setDragOverDay(day); }}
+              onDragLeave={() => setDragOverDay(null)}
+              onDrop={(e) => { e.preventDefault(); handleDrop(day); }}
               className={
                 "bg-card min-h-[110px] sm:min-h-[140px] p-3 sm:p-4 flex flex-col gap-2 transition-colors cursor-pointer hover:bg-nude/20 " +
-                (primary?.status === "scheduled" ? "ring-1 ring-inset ring-foreground/10" : "")
+                (primary?.status === "scheduled" ? "ring-1 ring-inset ring-foreground/10 " : "") +
+                (isDragTarget ? "bg-nude/30 ring-1 ring-inset ring-foreground/30" : "")
               }
             >
               <div className="flex items-baseline justify-between">
@@ -147,8 +173,10 @@ function CalendarPage() {
                     <button
                       key={j}
                       type="button"
+                      draggable
+                      onDragStart={(ev) => { ev.stopPropagation(); draggedEntry.current = e; ev.dataTransfer.effectAllowed = "move"; }}
                       onClick={(ev) => { ev.stopPropagation(); setSelectedEntry(e); }}
-                      className="w-full text-left hover:bg-foreground/5 rounded-sm px-1 -mx-1 py-0.5 transition-colors"
+                      className="w-full text-left hover:bg-foreground/5 rounded-sm px-1 -mx-1 py-0.5 transition-colors cursor-grab active:cursor-grabbing"
                     >
                       <p className="text-[11px] font-medium leading-tight tracking-tight line-clamp-1">{e.title}</p>
                       <p className="text-[10px] text-taupe">{e.type}</p>
@@ -217,12 +245,24 @@ function CalendarPage() {
           </div>
 
           <div className="mt-8">
-            <h3 className="eyebrow mb-4">Posting cadence</h3>
+            <h3 className="eyebrow mb-4">Posting cadence — {month}</h3>
             <div className="artifact p-6 space-y-4">
-              <Cadence label="Posts per week" value="4" />
-              <Cadence label="Reels per week" value="1" />
-              <Cadence label="Stories per day" value="1" />
-              <Cadence label="Booking-driven posts" value="2 / week" />
+              {(() => {
+                const weeks = Math.max(1, Math.ceil(daysInMonth / 7));
+                const reelCount = entries.filter(e => e.type?.toLowerCase() === "reel").length;
+                const storyCount = entries.filter(e => e.type?.toLowerCase() === "story").length;
+                const bookingDriven = contentItems.filter(c =>
+                  c.sourceAppointmentId && (c.status === "Scheduled" || c.status === "Approved")
+                ).length;
+                return (
+                  <>
+                    <Cadence label="Posts per week" value={entries.length > 0 ? `${Math.round(entries.length / weeks)}` : "0"} />
+                    <Cadence label="Reels per week" value={reelCount > 0 ? `${Math.round(reelCount / weeks)}` : "0"} />
+                    <Cadence label="Stories this month" value={`${storyCount}`} />
+                    <Cadence label="Booking-driven posts" value={bookingDriven > 0 ? `${Math.round(bookingDriven / 4)} / week` : "0"} />
+                  </>
+                );
+              })()}
             </div>
           </div>
         </section>

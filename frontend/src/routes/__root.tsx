@@ -1,6 +1,7 @@
 import { createRootRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { AuthProvider } from "@/lib/providers/auth-provider";
+import { NotificationsProvider } from "@/lib/providers/notifications-provider";
 import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
@@ -24,8 +25,10 @@ function NotFoundComponent() {
 export const Route = createRootRoute({
   component: () => (
     <AuthProvider>
-      <AppShell />
-      <Toaster />
+      <NotificationsProvider>
+        <AppShell />
+        <Toaster />
+      </NotificationsProvider>
     </AuthProvider>
   ),
   notFoundComponent: NotFoundComponent,

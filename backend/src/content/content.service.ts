@@ -36,6 +36,9 @@ export class ContentService {
               client: { select: { firstName: true, lastName: true } },
             },
           },
+          generationJob: {
+            select: { jobPayload: true },
+          },
         },
         skip,
         take: pageSize,
@@ -58,7 +61,18 @@ export class ContentService {
       }
     }
 
-    const data = rows.map(r => ({ ...r, processedImageUrlFeed: imageUrlMap[r.id] ?? null }));
+    const data = rows.map(r => {
+      const pv = r.platformVariants as any;
+      let postFormat = 'caption';
+      if (r.reelScript) postFormat = 'reel';
+      else if (pv?.type === 'carousel') postFormat = 'carousel';
+      else if (pv?.type === 'story') postFormat = 'story';
+
+      const jobPayload = r.generationJob?.jobPayload as any;
+      const goal = jobPayload?.goal ?? null;
+
+      return { ...r, processedImageUrlFeed: imageUrlMap[r.id] ?? null, postFormat, goal };
+    });
     return data;
   }
 
