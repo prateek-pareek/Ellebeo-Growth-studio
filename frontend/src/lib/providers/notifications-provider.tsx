@@ -51,6 +51,43 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     }
   }, []);
 
+  // Proactively refresh the access token 2 minutes before it expires so the
+  // WebSocket connection never drops mid-generation due to a stale token.
+  useEffect(() => {
+    const getExpiry = () => {
+      try {
+        const t = localStorage.getItem('accessToken');
+        if (!t) return null;
+        const payload = JSON.parse(atob(t.split('.')[1]));
+        return typeof payload.exp === 'number' ? payload.exp * 1000 : null;
+      } catch { return null; }
+    };
+
+    const scheduleRefresh = () => {
+      const exp = getExpiry();
+      if (!exp) return;
+      const msUntilRefresh = exp - Date.now() - 2 * 60 * 1000; // 2 min before expiry
+      if (msUntilRefresh <= 0) return; // already past threshold
+      return setTimeout(async () => {
+        try {
+          const res = await axios.post(
+            `${(import.meta as any).env?.VITE_API_URL ?? 'http://localhost:3001'}/auth/refresh`,
+            {},
+            { withCredentials: true },
+          );
+          const { accessToken } = res.data?.data ?? res.data;
+          if (accessToken) {
+            localStorage.setItem('accessToken', accessToken);
+            scheduleRefresh(); // reschedule for the new token
+          }
+        } catch { /* silent — connect_error handler will retry */ }
+      }, msUntilRefresh);
+    };
+
+    const timer = scheduleRefresh();
+    return () => { if (timer) clearTimeout(timer); };
+  }, []);
+
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
     if (!token) return;
@@ -101,14 +138,22 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       console.warn('[Notifications] WebSocket disconnected:', reason);
     });
 
-    socket.on('notification:new', (notif: Notification) => {
+    socket.on('notification:new', (notif: Notification & { isReplay?: boolean }) => {
       console.log('[Notifications] notification:new received:', notif);
-      setNotifications(prev => [notif, ...prev]);
-      setUnreadCount(c => c + 1);
-      toast(notif.title ?? 'New notification', {
-        description: notif.body ?? undefined,
-        duration: 5000,
+      const { isReplay, ...clean } = notif;
+      setNotifications(prev => {
+        // Avoid duplicates when the same notification arrives from both the live
+        // emit and the missed-notifications replay on reconnect.
+        if (prev.some(n => n.id === clean.id)) return prev;
+        return [clean, ...prev];
       });
+      setUnreadCount(c => c + 1);
+      if (!isReplay) {
+        toast(clean.title ?? 'New notification', {
+          description: clean.body ?? undefined,
+          duration: 5000,
+        });
+      }
     });
 
     return () => {
