@@ -96,29 +96,135 @@ export class ScheduleService {
 
   async getSocialAccounts(tenantId: string) {
     return this.prisma.socialAccount.findMany({
-      where: { tenantId }
+      where: { tenantId },
     });
   }
 
-  // Real OAuth flow would redirect and capture codes. Mocks for now.
-  async connectPlatform(tenantId: string, platform: 'instagram' | 'facebook', authCode?: string) {
-    // If authCode is provided, we'd exchange it. For now, mock the connection.
-    if (!authCode) {
-      return { redirectUrl: `https://mock.auth.url/oauth2?platform=${platform}` };
+  // ── Instagram OAuth ──────────────────────────────────────────────────────
+
+  getInstagramOAuthUrl(tenantId: string): string {
+    const state = Buffer.from(JSON.stringify({ tenantId })).toString('base64url');
+    const params = new URLSearchParams({
+      client_id:     process.env.INSTAGRAM_CLIENT_ID!,
+      redirect_uri:  process.env.INSTAGRAM_REDIRECT_URI!,
+      scope:         'instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement',
+      response_type: 'code',
+      state,
+    });
+    return `https://www.facebook.com/v21.0/dialog/oauth?${params.toString()}`;
+  }
+
+  async handleInstagramCallback(code: string, stateRaw: string): Promise<void> {
+    const { tenantId } = JSON.parse(Buffer.from(stateRaw, 'base64url').toString()) as { tenantId: string };
+
+    const clientId     = process.env.INSTAGRAM_CLIENT_ID!;
+    const clientSecret = process.env.INSTAGRAM_CLIENT_SECRET!;
+    const redirectUri  = process.env.INSTAGRAM_REDIRECT_URI!;
+
+    // 1 — Exchange code for short-lived token
+    const tokenUrl = `https://graph.facebook.com/v21.0/oauth/access_token?${new URLSearchParams({
+      client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri, code,
+    })}`;
+    const tokenRes  = await fetch(tokenUrl);
+    const tokenData = await tokenRes.json() as any;
+    if (!tokenData.access_token) throw new Error(tokenData.error?.message ?? 'Token exchange failed');
+    const shortToken = tokenData.access_token;
+
+    // 2 — Exchange for long-lived token (~60 days)
+    const longUrl = `https://graph.facebook.com/v21.0/oauth/access_token?${new URLSearchParams({
+      grant_type: 'fb_exchange_token', client_id: clientId, client_secret: clientSecret,
+      fb_exchange_token: shortToken,
+    })}`;
+    const longRes  = await fetch(longUrl);
+    const longData = await longRes.json() as any;
+    const longToken  = longData.access_token ?? shortToken;
+    const expiresIn  = longData.expires_in  ?? 5184000; // 60 days fallback
+
+    // 3 — Get Facebook Pages with Instagram Business Account
+    const pagesUrl = `https://graph.facebook.com/v21.0/me/accounts?${new URLSearchParams({
+      access_token: longToken,
+      fields: 'id,name,access_token,instagram_business_account',
+    })}`;
+    const pagesData = await (await fetch(pagesUrl)).json() as any;
+    const pages: any[] = pagesData.data ?? [];
+
+    let igAccountId: string | null       = null;
+    let pageAccessToken: string | null   = null;
+
+    for (const page of pages) {
+      if (page.instagram_business_account?.id) {
+        igAccountId     = page.instagram_business_account.id;
+        pageAccessToken = page.access_token;
+        break;
+      }
     }
 
-    return this.prisma.socialAccount.upsert({
-      where: { unique_platform_per_tenant: { tenantId, platform } },
-      update: { status: 'connected', tokenRefreshedAt: new Date() },
+    if (!igAccountId || !pageAccessToken) {
+      throw new Error('No Instagram Business account found. Please link an Instagram Professional account to a Facebook Page first.');
+    }
+
+    // 4 — Fetch Instagram account details
+    const igUrl  = `https://graph.facebook.com/v21.0/${igAccountId}?${new URLSearchParams({
+      fields: 'id,username,name,profile_picture_url',
+      access_token: pageAccessToken,
+    })}`;
+    const igData = await (await fetch(igUrl)).json() as any;
+
+    const expiresAt = new Date(Date.now() + expiresIn * 1000);
+
+    // 5 — Upsert into DB
+    await this.prisma.socialAccount.upsert({
+      where:  { unique_platform_per_tenant: { tenantId, platform: 'instagram' } },
+      update: {
+        status:              'connected',
+        platformAccountId:   igAccountId,
+        accountName:         igData.name     ?? igData.username ?? 'Instagram Account',
+        accountHandle:       igData.username ? `@${igData.username}` : null,
+        profilePictureUrl:   igData.profile_picture_url ?? null,
+        accessToken:         pageAccessToken,
+        tokenExpiresAt:      expiresAt,
+        tokenRefreshedAt:    new Date(),
+        scopesGranted:       ['instagram_basic', 'instagram_content_publish', 'pages_show_list', 'pages_read_engagement'],
+      },
       create: {
         tenantId,
-        platform,
-        platformAccountId: `mock_id_${platform}`,
-        accountName: `Mock ${platform} Page`,
-        status: 'connected',
-      }
+        platform:            'instagram',
+        platformAccountId:   igAccountId,
+        accountName:         igData.name     ?? igData.username ?? 'Instagram Account',
+        accountHandle:       igData.username ? `@${igData.username}` : null,
+        profilePictureUrl:   igData.profile_picture_url ?? null,
+        status:              'connected',
+        accessToken:         pageAccessToken,
+        tokenExpiresAt:      expiresAt,
+        tokenRefreshedAt:    new Date(),
+        scopesGranted:       ['instagram_basic', 'instagram_content_publish', 'pages_show_list', 'pages_read_engagement'],
+      },
     });
   }
+
+  async refreshInstagramToken(tenantId: string, id: string) {
+    const account = await this.prisma.socialAccount.findUnique({ where: { id } });
+    if (!account || account.tenantId !== tenantId) throw new NotFoundException('Account not found');
+    if (!account.accessToken) throw new BadRequestException('No access token stored — reconnect the account');
+
+    const url = `https://graph.facebook.com/v21.0/oauth/access_token?${new URLSearchParams({
+      grant_type:        'fb_exchange_token',
+      client_id:         process.env.INSTAGRAM_CLIENT_ID!,
+      client_secret:     process.env.INSTAGRAM_CLIENT_SECRET!,
+      fb_exchange_token: account.accessToken,
+    })}`;
+    const data = await (await fetch(url)).json() as any;
+    if (!data.access_token) throw new BadRequestException('Token refresh failed — reconnect the account');
+
+    const expiresAt = new Date(Date.now() + (data.expires_in ?? 5184000) * 1000);
+    await this.prisma.socialAccount.update({
+      where: { id },
+      data:  { accessToken: data.access_token, tokenExpiresAt: expiresAt, tokenRefreshedAt: new Date(), status: 'connected' },
+    });
+    return { success: true };
+  }
+
+  // ── Disconnect ───────────────────────────────────────────────────────────
 
   async disconnectSocialAccount(tenantId: string, id: string) {
     const account = await this.prisma.socialAccount.findUnique({ where: { id } });
@@ -126,7 +232,7 @@ export class ScheduleService {
 
     return this.prisma.socialAccount.update({
       where: { id },
-      data: { status: 'disconnected', accessToken: null, refreshToken: null }
+      data:  { status: 'disconnected', accessToken: null, refreshToken: null },
     });
   }
 }

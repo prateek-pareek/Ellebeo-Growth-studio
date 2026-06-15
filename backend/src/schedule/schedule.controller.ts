@@ -41,22 +41,8 @@ export class ScheduleController {
 
   @Post('social-accounts/connect/instagram')
   connectInstagram(@Req() req: any) {
-    return this.scheduleService.connectPlatform(req.user.tenantId, 'instagram');
-  }
-
-  @Get('social-accounts/connect/instagram/callback')
-  connectInstagramCallback(@Req() req: any, @Query('code') code: string) {
-    return this.scheduleService.connectPlatform(req.user.tenantId, 'instagram', code);
-  }
-
-  @Post('social-accounts/connect/facebook')
-  connectFacebook(@Req() req: any) {
-    return this.scheduleService.connectPlatform(req.user.tenantId, 'facebook');
-  }
-
-  @Get('social-accounts/connect/facebook/callback')
-  connectFacebookCallback(@Req() req: any, @Query('code') code: string) {
-    return this.scheduleService.connectPlatform(req.user.tenantId, 'facebook', code);
+    const redirectUrl = this.scheduleService.getInstagramOAuthUrl(req.user.tenantId);
+    return { redirectUrl };
   }
 
   @Delete('social-accounts/:id')
@@ -66,7 +52,6 @@ export class ScheduleController {
 
   @Post('social-accounts/:id/refresh-token')
   refreshSocialToken(@Req() req: any, @Param('id') id: string) {
-    // Mock refresh logic
-    return { success: true, message: 'Token refreshed' };
+    return this.scheduleService.refreshInstagramToken(req.user.tenantId, id);
   }
 }
