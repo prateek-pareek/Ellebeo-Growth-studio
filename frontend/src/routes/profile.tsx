@@ -297,12 +297,16 @@ function ConnectedAccounts() {
   const handleConnect = async (platform: string) => {
     setBusy(platform);
     try {
-      await api.get(`/social-accounts/connect/${platform}/callback`, { params: { code: "mock_connect" } });
-      toast.success(`${platform.charAt(0).toUpperCase() + platform.slice(1)} connected`);
-      fetchAccounts();
+      const res = await api.post(`/social-accounts/connect/${platform}`);
+      const redirectUrl = res.data?.redirectUrl ?? res.data?.data?.redirectUrl;
+      if (redirectUrl) {
+        window.location.href = redirectUrl;
+      } else {
+        toast.error("Could not get OAuth URL. Try again.");
+        setBusy(null);
+      }
     } catch {
       toast.error("Connection failed. Try again.");
-    } finally {
       setBusy(null);
     }
   };
