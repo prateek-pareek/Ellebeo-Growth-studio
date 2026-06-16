@@ -328,6 +328,12 @@ function ProfilePage() {
         >
           Add photos from appointments
         </Link>
+        <Link
+          to="/plans"
+          className="inline-flex items-center gap-2 border border-border bg-card text-xs font-medium text-foreground px-4 py-2.5 rounded-full shadow-sm hover:bg-nude/30 hover:shadow-md active:scale-[0.97] transition-all"
+        >
+          View plans & billing
+        </Link>
       </motion.div>
 
     </motion.div>

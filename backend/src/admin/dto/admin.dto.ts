@@ -1,4 +1,4 @@
-import { IsString, IsEnum, IsBoolean, IsOptional } from 'class-validator';
+import { IsString, IsEnum, IsBoolean, IsOptional, IsNumber, Min } from 'class-validator';
 
 export enum TenantStatus {
   ACTIVE = 'active',
@@ -15,4 +15,16 @@ export class UpdateTenantStatusDto {
 export class ResolveFailedJobDto {
   @IsString()
   resolutionNotes: string;
+}
+
+export class UpdatePlanSettingsDto {
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  priceUsd?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  generationsIncluded?: number;
 }

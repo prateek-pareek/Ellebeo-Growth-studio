@@ -3,6 +3,7 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
+import express from 'express';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
@@ -15,7 +16,19 @@ import { PrismaService } from './prisma/prisma.service';
 import { startNotificationsWorker } from './notifications/notifications.worker';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // Body parser disabled globally so the Stripe webhook route can access the
+  // raw request body (required for signature verification). Re-applied below
+  // for every other route.
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
+
+  app.use((req: any, res: any, next: any) => {
+    if (req.originalUrl === '/api/v1/billing/webhook') {
+      express.raw({ type: 'application/json' })(req, res, next);
+    } else {
+      express.json()(req, res, next);
+    }
+  });
+  app.use(express.urlencoded({ extended: true }));
 
   // Security Middleware
   app.use(helmet());
