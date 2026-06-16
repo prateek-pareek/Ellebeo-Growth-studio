@@ -70,6 +70,8 @@ function GeneratePage() {
   const [format, setFormat] = useState<Format>(initialFormat);
   
   const [showPaywall, setShowPaywall] = useState(false);
+  const [showTrialPaywall, setShowTrialPaywall] = useState(false);
+  const [paywallReason, setPaywallReason] = useState<"TRIAL_EXHAUSTED" | "PLAN_EXHAUSTED">("TRIAL_EXHAUSTED");
 
   useEffect(() => {
     if (!profileLoading && !technician.hasGrowthStudioAccess) {
@@ -184,7 +186,13 @@ function GeneratePage() {
     } catch (e: any) {
       setGenerating(false);
       setStep("format");
-      toast.error(e.response?.data?.message || "Failed to start generation");
+      const errorCode = e.response?.data?.error?.code;
+      if (errorCode === "TRIAL_EXHAUSTED" || errorCode === "PLAN_EXHAUSTED") {
+        setPaywallReason(errorCode);
+        setShowTrialPaywall(true);
+      } else {
+        toast.error(e.response?.data?.message || e.response?.data?.error?.message || "Failed to start generation");
+      }
     }
   };
 
@@ -201,6 +209,30 @@ function GeneratePage() {
             </p>
             <button className="w-full bg-foreground text-offwhite px-6 py-4 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors mb-4">
               Unlock Now
+            </button>
+            <Link to="/" className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
+              Go Back
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {showTrialPaywall && (
+        <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border hairline p-8 max-w-md w-full text-center shadow-xl">
+            <h2 className="font-serif text-3xl mb-4 text-foreground">
+              {paywallReason === "PLAN_EXHAUSTED" ? "Buy More Generations" : "Unlock the Studio"}
+            </h2>
+            <p className="text-taupe mb-8 text-sm leading-relaxed">
+              {paywallReason === "PLAN_EXHAUSTED"
+                ? "You've used all your purchased generations. Buy more to keep turning appointments into content."
+                : "You've used your 2 free generations. Choose a plan to keep turning appointments into content."}
+            </p>
+            <button
+              onClick={() => navigate({ to: "/plans" })}
+              className="w-full bg-foreground text-offwhite px-6 py-4 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors mb-4"
+            >
+              {paywallReason === "PLAN_EXHAUSTED" ? "Buy More" : "Choose a Plan"}
             </button>
             <Link to="/" className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
               Go Back

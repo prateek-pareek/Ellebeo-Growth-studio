@@ -42,6 +42,13 @@ export class AdminService {
     });
   }
 
+  async resetTrialUsage(id: string) {
+    return this.prisma.tenant.update({
+      where: { id },
+      data: { trialGenerationsUsed: 0, planGenerationsTotal: 0, planGenerationsUsed: 0 },
+    });
+  }
+
   async getFlaggedContent() {
     return this.prisma.contentItem.findMany({
       where: { status: 'flagged' },
@@ -109,5 +116,60 @@ export class AdminService {
 
   async getAbuseFlags() {
     return this.prisma.contentItem.count({ where: { status: 'flagged' } });
+  }
+
+  // ── Plan settings (single purchasable plan) ────────────────────────────────
+
+  // Used only when there's no real generation-cost history yet (e.g. fresh
+  // install) — blended from known model pricing: ~$0.001 caption text +
+  // ~$0.045 gpt-image-1 feed image. Real measured average takes over once
+  // generation jobs with estimatedCostUsd exist.
+  private static readonly FALLBACK_COST_PER_GENERATION = 0.046;
+
+  private async buildPlanSettingsView(row: { priceUsd: number; generationsIncluded: number }) {
+    const costAgg = await this.prisma.generationJob.aggregate({
+      _avg: { estimatedCostUsd: true },
+      where: { estimatedCostUsd: { not: null } },
+    });
+
+    const avgCostPerGeneration = costAgg._avg.estimatedCostUsd ?? AdminService.FALLBACK_COST_PER_GENERATION;
+    const estimatedCost = avgCostPerGeneration * row.generationsIncluded;
+    const estimatedMargin = row.priceUsd - estimatedCost;
+    const marginPercent = row.priceUsd > 0 ? (estimatedMargin / row.priceUsd) * 100 : 0;
+
+    return {
+      priceUsd: row.priceUsd,
+      generationsIncluded: row.generationsIncluded,
+      avgCostPerGeneration,
+      isCostMeasured: costAgg._avg.estimatedCostUsd !== null,
+      estimatedCost,
+      estimatedMargin,
+      marginPercent,
+    };
+  }
+
+  async getPlanSettings() {
+    const row = await this.prisma.planSettings.upsert({
+      where: { id: 'default' },
+      update: {},
+      create: { id: 'default' },
+    });
+    return this.buildPlanSettingsView(row);
+  }
+
+  async updatePlanSettings(dto: { priceUsd?: number; generationsIncluded?: number }) {
+    const row = await this.prisma.planSettings.upsert({
+      where: { id: 'default' },
+      update: {
+        ...(dto.priceUsd !== undefined ? { priceUsd: dto.priceUsd } : {}),
+        ...(dto.generationsIncluded !== undefined ? { generationsIncluded: dto.generationsIncluded } : {}),
+      },
+      create: {
+        id: 'default',
+        priceUsd: dto.priceUsd ?? 50,
+        generationsIncluded: dto.generationsIncluded ?? 100,
+      },
+    });
+    return this.buildPlanSettingsView(row);
   }
 }

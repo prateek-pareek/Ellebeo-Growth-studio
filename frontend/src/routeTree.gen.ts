@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as PlansRouteImport } from './routes/plans'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LandingRouteImport } from './routes/landing'
 import { Route as GenerateRouteImport } from './routes/generate'
@@ -39,6 +40,11 @@ const SignupRoute = SignupRouteImport.update({
 const ProfileRoute = ProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlansRoute = PlansRouteImport.update({
+  id: '/plans',
+  path: '/plans',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -119,6 +125,7 @@ export interface FileRoutesByFullPath {
   '/generate': typeof GenerateRoute
   '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
+  '/plans': typeof PlansRoute
   '/profile': typeof ProfileRoute
   '/signup': typeof SignupRoute
   '/templates': typeof TemplatesRoute
@@ -137,6 +144,7 @@ export interface FileRoutesByTo {
   '/generate': typeof GenerateRoute
   '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
+  '/plans': typeof PlansRoute
   '/profile': typeof ProfileRoute
   '/signup': typeof SignupRoute
   '/templates': typeof TemplatesRoute
@@ -156,6 +164,7 @@ export interface FileRoutesById {
   '/generate': typeof GenerateRoute
   '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
+  '/plans': typeof PlansRoute
   '/profile': typeof ProfileRoute
   '/signup': typeof SignupRoute
   '/templates': typeof TemplatesRoute
@@ -176,6 +185,7 @@ export interface FileRouteTypes {
     | '/generate'
     | '/landing'
     | '/login'
+    | '/plans'
     | '/profile'
     | '/signup'
     | '/templates'
@@ -194,6 +204,7 @@ export interface FileRouteTypes {
     | '/generate'
     | '/landing'
     | '/login'
+    | '/plans'
     | '/profile'
     | '/signup'
     | '/templates'
@@ -212,6 +223,7 @@ export interface FileRouteTypes {
     | '/generate'
     | '/landing'
     | '/login'
+    | '/plans'
     | '/profile'
     | '/signup'
     | '/templates'
@@ -231,6 +243,7 @@ export interface RootRouteChildren {
   GenerateRoute: typeof GenerateRoute
   LandingRoute: typeof LandingRoute
   LoginRoute: typeof LoginRoute
+  PlansRoute: typeof PlansRoute
   ProfileRoute: typeof ProfileRoute
   SignupRoute: typeof SignupRoute
   TemplatesRoute: typeof TemplatesRoute
@@ -258,6 +271,13 @@ declare module '@tanstack/react-router' {
       path: '/profile'
       fullPath: '/profile'
       preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/plans': {
+      id: '/plans'
+      path: '/plans'
+      fullPath: '/plans'
+      preLoaderRoute: typeof PlansRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -376,6 +396,7 @@ const rootRouteChildren: RootRouteChildren = {
   GenerateRoute: GenerateRoute,
   LandingRoute: LandingRoute,
   LoginRoute: LoginRoute,
+  PlansRoute: PlansRoute,
   ProfileRoute: ProfileRoute,
   SignupRoute: SignupRoute,
   TemplatesRoute: TemplatesRoute,

@@ -33,14 +33,16 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Auto-mark all as read 1s after panel opens so the user sees the dot briefly
   useEffect(() => {
     if (!open) return;
+    const t = setTimeout(() => { if (unreadCount > 0) markAllRead(); }, 1000);
     function handleClick(e: MouseEvent) {
       if (panelRef.current && !panelRef.current.contains(e.target as Node)) setOpen(false);
     }
     document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [open]);
+    return () => { clearTimeout(t); document.removeEventListener('mousedown', handleClick); };
+  }, [open, unreadCount, markAllRead]);
 
   return (
     <div className="relative" ref={panelRef}>

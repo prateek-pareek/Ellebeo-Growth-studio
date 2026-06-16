@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Patch, Body, Param, Req, UseGuards } from '@nestjs/common';
 import { AdminService } from './admin.service';
-import { UpdateTenantStatusDto, ResolveFailedJobDto } from './dto/admin.dto';
+import { UpdateTenantStatusDto, ResolveFailedJobDto, UpdatePlanSettingsDto } from './dto/admin.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
 
@@ -32,6 +32,11 @@ export class AdminController {
   @Post('tenants/:id/suspend-generation')
   suspendGeneration(@Param('id') id: string) {
     return this.adminService.suspendGeneration(id, true);
+  }
+
+  @Post('tenants/:id/reset-trial-usage')
+  resetTrialUsage(@Param('id') id: string) {
+    return this.adminService.resetTrialUsage(id);
   }
 
   @Get('flagged-content')
@@ -82,5 +87,15 @@ export class AdminController {
   @Get('metrics/abuse-flags')
   getAbuseFlags() {
     return this.adminService.getAbuseFlags();
+  }
+
+  @Get('growth-studio/plan-settings')
+  getPlanSettings() {
+    return this.adminService.getPlanSettings();
+  }
+
+  @Patch('growth-studio/plan-settings')
+  updatePlanSettings(@Body() dto: UpdatePlanSettingsDto) {
+    return this.adminService.updatePlanSettings(dto);
   }
 }
