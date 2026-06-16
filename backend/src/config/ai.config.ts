@@ -272,6 +272,13 @@ export const AI_CONFIG = {
     'gpt-4o': { inputPer1k: 0.005, outputPer1k: 0.015 },
     'claude-3-5-sonnet-20241022': { inputPer1k: 0.003, outputPer1k: 0.015 },
   },
+
+  // gpt-image-1 (1024x1024, medium quality) isn't billed per-token in the same
+  // way as text models, so it's tracked as a flat per-image estimate instead.
+  // Update if OpenAI's image pricing changes or quality setting is adjusted.
+  imageCosts: {
+    'gpt-image-1-1024': 0.045,
+  },
 } as const;
 
 export type AIConfig = typeof AI_CONFIG;

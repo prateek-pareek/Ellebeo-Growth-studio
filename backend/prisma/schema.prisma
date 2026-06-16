@@ -172,6 +172,9 @@ model Tenant {
   lastAbuseFlagAt       DateTime?        @map("last_abuse_flag_at") @db.Timestamptz
   stripeCustomerId      String?          @map("stripe_customer_id") @db.VarChar(255)
   stripeSubscriptionId  String?          @map("stripe_subscription_id") @db.VarChar(255)
+  trialGenerationsUsed  Int              @default(0) @map("trial_generations_used")
+  planGenerationsTotal  Int              @default(0) @map("plan_generations_total")
+  planGenerationsUsed   Int              @default(0) @map("plan_generations_used")
   timezone              String           @default("UTC") @db.VarChar(100)
   locale                String           @default("en-AU") @db.VarChar(20)
   avatarUrl             String?          @map("avatar_url") @db.VarChar(2000)
@@ -208,6 +211,19 @@ model Tenant {
   @@index([status])
   @@index([subscriptionTier])
   @@map("tenants")
+  @@schema("platform")
+}
+
+// Singleton row (id = "default") holding the one purchasable plan's price and
+// generation allowance. Admin-editable so the business can tune it against
+// real OpenAI cost data without a redeploy.
+model PlanSettings {
+  id                  String   @id @default("default")
+  priceUsd             Float    @default(50) @map("price_usd")
+  generationsIncluded  Int      @default(100) @map("generations_included")
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("plan_settings")
   @@schema("platform")
 }
 

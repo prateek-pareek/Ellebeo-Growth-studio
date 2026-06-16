@@ -45,4 +45,9 @@ export class GenerationController {
   getRateLimitStatus(@Req() req: any) {
     return this.generationService.getRateLimitStatus(req.user.tenantId);
   }
+
+  @Get('plan-info')
+  getPlanInfo() {
+    return this.generationService.getPlanInfo();
+  }
 }
