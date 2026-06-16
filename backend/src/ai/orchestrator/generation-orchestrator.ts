@@ -23,6 +23,7 @@ import { AiImageGenerationService } from '../services/ai-image-generation.servic
 import { LogoOverlayService } from '../services/logo-overlay.service';
 import { ReelShotChain, type ReelShotResult } from '../chains/reel-shot.chain';
 import { extractBrandVoice } from '../config/brand-voice';
+import { AI_CONFIG } from '../../config/ai.config';
 import { ElevenLabsService } from '../services/elevenlabs.service';
 import { OpenAiTtsService } from '../services/openai-tts.service';
 import type { GenerationJobPayload } from '../types/job-payload.types';
@@ -291,6 +292,7 @@ export class GenerationOrchestrator {
 
     // ── Step 5.5: Image Processing ────────────────────────────────────────────
     let imageResult: ImageProcessingResult | null = null;
+    let aiImageCostUSD = 0;
     if (payload.imageAssets.length > 0) {
       const primaryAsset = payload.imageAssets[0]!;
       const consentShowFace = !!(consentCheck.activeRestrictions as any)?.show_face;
@@ -396,6 +398,7 @@ Requirements:
               aiFeedUrl = await this.logoOverlay.applyLogo({ imageUrl: aiFeedUrl, logoUrl: brandDNA.logoUrl, position: brandDNA.logoPosition, tenantId });
             }
             imageResult = { ...imageResult, variants: { ...imageResult.variants, feedUrl: aiFeedUrl } };
+            aiImageCostUSD = AI_CONFIG.imageCosts['gpt-image-1-1024'];
             console.log(`[Orchestrator] AI feed image generated for job ${jobId}`);
           }
         }
@@ -584,7 +587,12 @@ Requirements:
     });
 
     // ── Step 7: Final State Transition ────────────────────────────────────────
+    const totalCostUSD = this.modelRouter.estimateCost(llmConfig.modelId, totalTokensIn, totalTokensOut) + aiImageCostUSD;
     await this.transitionState(jobId, 'generating_text', 'completed');
+    await this.prisma.generationJob.update({
+      where: { id: jobId },
+      data: { estimatedCostUsd: totalCostUSD },
+    }).catch(() => {});
     await this.progressEmitter.emit(jobId, tenantId, 'completed');
 
     // ── Step 8: Notify tenant ────────────────────────────────────────────────
@@ -613,9 +621,7 @@ Requirements:
       modelUsed,
       totalTokensInput: totalTokensIn,
       totalTokensOutput: totalTokensOut,
-      estimatedCostUSD: this.modelRouter.estimateCost(
-        llmConfig.modelId, totalTokensIn, totalTokensOut
-      ),
+      estimatedCostUSD: totalCostUSD,
       totalProcessingTimeMs: processingMs,
       brandVoiceConfidenceScore: captionResult?.brandVoiceConfidenceScore ?? 0,
       completedAt: new Date().toISOString(),

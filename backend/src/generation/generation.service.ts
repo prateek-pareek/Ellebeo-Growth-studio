@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, HttpException, HttpStatus } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GenerateContentDto, TweakContentDto } from './dto/generation.dto';
 import { GenerationGateway } from './generation.gateway';
@@ -46,6 +46,35 @@ export class GenerationService {
     const usage = await this.getTodayUsage(tenantId);
 
     // Rate limit enforcement disabled for demo
+
+    // Lifetime free-trial gate — 2 generations, then must buy generations via
+    // the one-time-purchase plan. TRIAL_LIMIT_BYPASS lets us demo without
+    // hitting either gate.
+    const TRIAL_LIMIT = 2;
+    const trialBypassed = process.env.TRIAL_LIMIT_BYPASS === 'true';
+    const trialUsed = tenant?.trialGenerationsUsed ?? 0;
+    const trialAvailable = trialUsed < TRIAL_LIMIT;
+
+    const planTotal = tenant?.planGenerationsTotal ?? 0;
+    const planUsed = tenant?.planGenerationsUsed ?? 0;
+    const planAvailable = planUsed < planTotal;
+
+    let usingPlanGeneration = false;
+    if (!trialBypassed) {
+      if (trialAvailable) {
+        // still within the 2 free generations — nothing to deduct from yet
+      } else if (planAvailable) {
+        usingPlanGeneration = true;
+      } else {
+        throw new ForbiddenException({
+          error: planTotal > 0 ? 'PLAN_EXHAUSTED' : 'TRIAL_EXHAUSTED',
+          message: planTotal > 0
+            ? "You've used all your purchased generations. Buy more to keep creating content."
+            : "You've used your 2 free generations. Choose a plan to keep creating content.",
+        });
+      }
+    }
+
     const isReel = (dto.outputFormats as string[]).some(f => f === 'reel');
 
     // Create the generation job
@@ -65,6 +94,20 @@ export class GenerationService {
         state: 'created',
       }
     });
+
+    if (!trialBypassed) {
+      if (usingPlanGeneration) {
+        await this.prisma.tenant.update({
+          where: { id: tenantId },
+          data: { planGenerationsUsed: { increment: 1 } },
+        });
+      } else if (trialAvailable) {
+        await this.prisma.tenant.update({
+          where: { id: tenantId },
+          data: { trialGenerationsUsed: { increment: 1 } },
+        });
+      }
+    }
 
     // Check Growth Studio's own image_assets table first
     const imageAssetRecords = await this.prisma.imageAsset.findMany({
@@ -185,6 +228,9 @@ export class GenerationService {
     const limits = this.getTierLimits(tenant?.subscriptionTier ?? 'free');
     const usage = await this.getTodayUsage(tenantId);
 
+    const TRIAL_LIMIT = 2;
+    const isFreeTier = (tenant?.subscriptionTier ?? 'free') === 'free';
+
     return {
       generationsLimit: limits.generations,
       generationsUsed: usage.generations,
@@ -193,7 +239,29 @@ export class GenerationService {
       reelsUsed: usage.reels,
       reelsRemaining: Math.max(0, limits.reels - usage.reels),
       resetsAt: this.getNextMidnightUTC(),
+      trial: {
+        active: isFreeTier,
+        limit: TRIAL_LIMIT,
+        used: tenant?.trialGenerationsUsed ?? 0,
+        remaining: isFreeTier ? Math.max(0, TRIAL_LIMIT - (tenant?.trialGenerationsUsed ?? 0)) : null,
+      },
+      plan: {
+        total: tenant?.planGenerationsTotal ?? 0,
+        used: tenant?.planGenerationsUsed ?? 0,
+        remaining: Math.max(0, (tenant?.planGenerationsTotal ?? 0) - (tenant?.planGenerationsUsed ?? 0)),
+      },
     };
+  }
+
+  // Public-safe plan info for the /plans page — price + generation count only,
+  // no cost/margin data (that's admin-only via AdminController).
+  async getPlanInfo() {
+    const settings = await this.prisma.planSettings.upsert({
+      where: { id: 'default' },
+      update: {},
+      create: { id: 'default' },
+    });
+    return { priceUsd: settings.priceUsd, generationsIncluded: settings.generationsIncluded };
   }
 
   private getTierLimits(tier: string): { generations: number; reels: number } {

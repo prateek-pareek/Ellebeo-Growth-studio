@@ -28,7 +28,17 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
       const secret = this.config.get<string>('JWT_ACCESS_SECRET');
       if (!secret) { client.disconnect(); return; }
 
-      const payload = jwt.verify(token, secret) as any;
+      // Use ignoreExpiration so the WebSocket stays connected while the client
+      // is refreshing its access token. We still verify the signature (tamper-proof)
+      // and enforce a hard 30-minute grace window beyond the stated expiry.
+      const payload = jwt.verify(token, secret, { ignoreExpiration: true }) as any;
+      const now = Math.floor(Date.now() / 1000);
+      if (payload.exp && payload.exp < now - 1800) {
+        // Token expired more than 30 minutes ago — reject
+        client.disconnect();
+        return;
+      }
+
       const tenantId = payload.tenantId;
       if (!tenantId) { client.disconnect(); return; }
 
@@ -56,6 +66,7 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
           body: n.body,
           data: n.data,
           createdAt: n.createdAt,
+          isReplay: true,   // ← suppresses toast on the frontend
         });
       }
     } catch (e) {
