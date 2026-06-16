@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Check, Sparkles, ArrowLeft, RefreshCw, CheckCircle2, ArrowRight } from "lucide-react";
+import { Check, Sparkles, ArrowLeft, RefreshCw, CheckCircle2, ArrowRight, XCircle } from "lucide-react";
 import { z } from "zod";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -31,6 +31,7 @@ function PlansPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [purchaseSuccess, setPurchaseSuccess] = useState(false);
+  const [purchaseCanceled, setPurchaseCanceled] = useState(false);
   const [generationsRemaining, setGenerationsRemaining] = useState<number | null>(null);
 
   useEffect(() => {
@@ -62,7 +63,7 @@ function PlansPage() {
       };
       poll();
     }
-    if (search.canceled) toast("Checkout canceled. You can buy anytime.");
+    if (search.canceled) setPurchaseCanceled(true);
   }, [search.success, search.canceled]);
 
   const handleBuy = async () => {
@@ -89,16 +90,20 @@ function PlansPage() {
           <ArrowLeft className="size-3" /> Back to generator
         </Link>
         <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-taupe mb-3">
-          {purchaseSuccess ? "Payment confirmed" : "Unlock the studio"}
+          {purchaseSuccess ? "Payment confirmed" : purchaseCanceled ? "Checkout canceled" : "Unlock the studio"}
         </p>
         <h1 className="font-serif text-4xl sm:text-5xl leading-[1.05] tracking-tight">
           {purchaseSuccess
             ? <>You're all <span className="italic text-taupe">set</span>.</>
+            : purchaseCanceled
+            ? <>No charge <span className="italic text-taupe">made</span>.</>
             : <>Buy generations to keep <span className="italic text-taupe">creating</span>.</>}
         </h1>
         <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[48ch] mx-auto">
           {purchaseSuccess
             ? "Your purchase went through. You're ready to turn more appointments into content."
+            : purchaseCanceled
+            ? "You backed out before paying — nothing was charged. You can try again whenever you're ready."
             : "A single one-time purchase unlocks a batch of AI generations for turning appointments into content."}
         </p>
       </header>
@@ -125,6 +130,29 @@ function PlansPage() {
               className="w-full bg-foreground text-offwhite py-3.5 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors inline-flex items-center justify-center gap-2"
             >
               Start creating <ArrowRight className="size-3.5" />
+            </button>
+          </div>
+        </motion.div>
+      ) : purchaseCanceled ? (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden flex flex-col"
+        >
+          <div className="h-1.5 bg-gradient-to-r from-taupe/40 via-border to-taupe/40" />
+          <div className="p-8 flex flex-col items-center text-center">
+            <div className="size-14 rounded-full bg-muted flex items-center justify-center mb-5">
+              <XCircle className="size-7 text-taupe" />
+            </div>
+            <h2 className="font-serif text-2xl mb-2">Checkout canceled</h2>
+            <p className="text-sm text-taupe mb-6 leading-relaxed">
+              Nothing was charged. Whenever you're ready, you can try again.
+            </p>
+            <button
+              onClick={() => setPurchaseCanceled(false)}
+              className="w-full bg-foreground text-offwhite py-3.5 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors"
+            >
+              Try again
             </button>
           </div>
         </motion.div>
