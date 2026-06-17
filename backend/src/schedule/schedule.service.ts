@@ -102,11 +102,11 @@ export class ScheduleService {
 
   // ── Instagram OAuth ──────────────────────────────────────────────────────
 
-  getInstagramOAuthUrl(tenantId: string): string {
-    const state = Buffer.from(JSON.stringify({ tenantId })).toString('base64url');
+  getInstagramOAuthUrl(tenantId: string, redirectUri: string): string {
+    const state = Buffer.from(JSON.stringify({ tenantId, redirectUri })).toString('base64url');
     const params = new URLSearchParams({
       client_id:     process.env.INSTAGRAM_CLIENT_ID!,
-      redirect_uri:  process.env.INSTAGRAM_REDIRECT_URI!,
+      redirect_uri:  redirectUri,
       scope:         'instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement',
       response_type: 'code',
       state,
@@ -115,11 +115,11 @@ export class ScheduleService {
   }
 
   async handleInstagramCallback(code: string, stateRaw: string): Promise<void> {
-    const { tenantId } = JSON.parse(Buffer.from(stateRaw, 'base64url').toString()) as { tenantId: string };
+    const { tenantId, redirectUri: decodedRedirectUri } = JSON.parse(Buffer.from(stateRaw, 'base64url').toString()) as { tenantId: string; redirectUri?: string };
 
     const clientId     = process.env.INSTAGRAM_CLIENT_ID!;
     const clientSecret = process.env.INSTAGRAM_CLIENT_SECRET!;
-    const redirectUri  = process.env.INSTAGRAM_REDIRECT_URI!;
+    const redirectUri  = decodedRedirectUri ?? process.env.INSTAGRAM_REDIRECT_URI!;
 
     // 1 — Exchange code for short-lived token
     const tokenUrl = `https://graph.facebook.com/v21.0/oauth/access_token?${new URLSearchParams({
@@ -204,11 +204,11 @@ export class ScheduleService {
 
   // ── Facebook OAuth ───────────────────────────────────────────────────────
 
-  getFacebookOAuthUrl(tenantId: string): string {
-    const state = Buffer.from(JSON.stringify({ tenantId, platform: 'facebook' })).toString('base64url');
+  getFacebookOAuthUrl(tenantId: string, redirectUri: string): string {
+    const state = Buffer.from(JSON.stringify({ tenantId, platform: 'facebook', redirectUri })).toString('base64url');
     const params = new URLSearchParams({
       client_id:     process.env.INSTAGRAM_CLIENT_ID!, // same Facebook App
-      redirect_uri:  process.env.FACEBOOK_REDIRECT_URI!,
+      redirect_uri:  redirectUri,
       scope:         'pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_metadata',
       response_type: 'code',
       state,
@@ -217,11 +217,11 @@ export class ScheduleService {
   }
 
   async handleFacebookCallback(code: string, stateRaw: string): Promise<void> {
-    const { tenantId } = JSON.parse(Buffer.from(stateRaw, 'base64url').toString()) as { tenantId: string };
+    const { tenantId, redirectUri: decodedRedirectUri } = JSON.parse(Buffer.from(stateRaw, 'base64url').toString()) as { tenantId: string; platform?: string; redirectUri?: string };
 
     const clientId     = process.env.INSTAGRAM_CLIENT_ID!;
     const clientSecret = process.env.INSTAGRAM_CLIENT_SECRET!;
-    const redirectUri  = process.env.FACEBOOK_REDIRECT_URI!;
+    const redirectUri  = decodedRedirectUri ?? process.env.FACEBOOK_REDIRECT_URI!;
 
     // 1 — Exchange code for short-lived token
     const tokenUrl  = `https://graph.facebook.com/v21.0/oauth/access_token?${new URLSearchParams({
