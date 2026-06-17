@@ -46,8 +46,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
         errorResponse.message = res;
       }
     } else if (exception instanceof Error) {
+      console.error('[HttpExceptionFilter] Unhandled error:', exception.stack ?? exception.message);
       errorResponse.message = exception.message;
-      // In production, you might not want to send the stack trace
       if (process.env.NODE_ENV !== 'production') {
         errorResponse.details = exception.stack;
       }

@@ -127,12 +127,18 @@ export class AdminService {
   private static readonly FALLBACK_COST_PER_GENERATION = 0.046;
 
   private async buildPlanSettingsView(row: { priceUsd: number; generationsIncluded: number }) {
-    const costAgg = await this.prisma.generationJob.aggregate({
-      _avg: { estimatedCostUsd: true },
-      where: { estimatedCostUsd: { not: null } },
-    });
+    // $queryRaw bypasses the PrismaService tenant-isolation middleware (which
+    // blocks aggregate without tenantId) — this is intentionally platform-wide.
+    const [costRow] = await this.prisma.$queryRaw<[{ avg: number | null }]>`
+      SELECT AVG(estimated_cost_usd) AS avg
+      FROM platform.generation_jobs
+      WHERE estimated_cost_usd IS NOT NULL
+    `;
 
-    const avgCostPerGeneration = costAgg._avg.estimatedCostUsd ?? AdminService.FALLBACK_COST_PER_GENERATION;
+    const avgCostPerGeneration = (costRow?.avg ?? null) !== null
+      ? Number(costRow.avg)
+      : AdminService.FALLBACK_COST_PER_GENERATION;
+    const isCostMeasured = costRow?.avg !== null;
     const estimatedCost = avgCostPerGeneration * row.generationsIncluded;
     const estimatedMargin = row.priceUsd - estimatedCost;
     const marginPercent = row.priceUsd > 0 ? (estimatedMargin / row.priceUsd) * 100 : 0;
@@ -141,7 +147,7 @@ export class AdminService {
       priceUsd: row.priceUsd,
       generationsIncluded: row.generationsIncluded,
       avgCostPerGeneration,
-      isCostMeasured: costAgg._avg.estimatedCostUsd !== null,
+      isCostMeasured,
       estimatedCost,
       estimatedMargin,
       marginPercent,

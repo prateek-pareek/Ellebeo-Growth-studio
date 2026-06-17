@@ -40,15 +40,30 @@ export class ScheduleController {
   }
 
   @Post('social-accounts/connect/instagram')
-  connectInstagram(@Req() req: any) {
-    const redirectUrl = this.scheduleService.getInstagramOAuthUrl(req.user.tenantId);
+  connectInstagram(@Req() req: any, @Body('redirectUri') redirectUri: string) {
+    const uri = redirectUri || process.env.INSTAGRAM_REDIRECT_URI!;
+    const redirectUrl = this.scheduleService.getInstagramOAuthUrl(req.user.tenantId, uri);
     return { redirectUrl };
   }
 
   @Post('social-accounts/connect/facebook')
-  connectFacebook(@Req() req: any) {
-    const redirectUrl = this.scheduleService.getFacebookOAuthUrl(req.user.tenantId);
+  connectFacebook(@Req() req: any, @Body('redirectUri') redirectUri: string) {
+    const uri = redirectUri || process.env.FACEBOOK_REDIRECT_URI!;
+    const redirectUrl = this.scheduleService.getFacebookOAuthUrl(req.user.tenantId, uri);
     return { redirectUrl };
+  }
+
+  // Called by the frontend after Meta redirects back with ?code=&state=
+  @Post('social-accounts/connect/instagram/exchange')
+  async exchangeInstagram(@Body('code') code: string, @Body('state') state: string) {
+    await this.scheduleService.handleInstagramCallback(code, state);
+    return { connected: true };
+  }
+
+  @Post('social-accounts/connect/facebook/exchange')
+  async exchangeFacebook(@Body('code') code: string, @Body('state') state: string) {
+    await this.scheduleService.handleFacebookCallback(code, state);
+    return { connected: true };
   }
 
   @Delete('social-accounts/:id')
