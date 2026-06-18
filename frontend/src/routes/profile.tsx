@@ -7,8 +7,8 @@ import { useAuth } from "@/lib/providers/auth-provider";
 import {
   Camera, LogOut, Instagram, Facebook,
   Star, MessageSquare, Clock, BarChart2,
-  Image, Layers, Bell, ChevronRight,
-  TrendingUp, Zap, CheckCircle2, AlertCircle,
+  Image, Layers, ChevronRight,
+  TrendingUp, Zap, CheckCircle2,
   Link2, RefreshCw, Shield, Sparkles,
 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -253,11 +253,8 @@ function ProfilePage() {
         </div>
       </motion.div>
 
-      {/* ── Connected accounts + Notification settings ────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <motion.div variants={fadeUp}><ConnectedAccounts /></motion.div>
-        <motion.div variants={fadeUp}><NotificationSettings /></motion.div>
-      </div>
+      {/* ── Connected accounts ───────────────────────────────────────────── */}
+      <motion.div variants={fadeUp}><ConnectedAccounts /></motion.div>
 
       {/* ── Recommendations ──────────────────────────────────────────────── */}
       <motion.div variants={fadeUp} className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
@@ -537,110 +534,3 @@ function ConnectedAccounts() {
   );
 }
 
-// ─── Notification settings ─────────────────────────────────────────────────────
-
-function NotificationSettings() {
-  const [phone,  setPhone]  = useState("");
-  const [saving, setSaving] = useState(false);
-  const [saved,  setSaved]  = useState(false);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    api.get("/tenant/profile")
-      .then((res) => {
-        const data = res.data?.data ?? res.data;
-        setPhone(data?.phone ?? "");
-      })
-      .catch(() => {})
-      .finally(() => setLoaded(true));
-  }, []);
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await api.patch("/tenant/profile", { phone });
-      toast.success("Phone number saved.");
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
-    } catch {
-      toast.error("Failed to save. Try again.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (!loaded) return null;
-
-  return (
-    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden h-full flex flex-col">
-      {/* header */}
-      <div className="px-5 py-4 border-b border-border flex items-center gap-2.5">
-        <div className="size-7 rounded-lg bg-foreground/5 flex items-center justify-center">
-          <Bell className="size-3.5 text-taupe" />
-        </div>
-        <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground">Notifications</h2>
-      </div>
-
-      <div className="flex-1 p-5 flex flex-col gap-5">
-        <p className="text-xs text-taupe leading-relaxed">
-          Receive SMS alerts when content is ready to review or generation fails.
-        </p>
-
-        {/* input */}
-        <div className="space-y-2">
-          <label className="block text-[9px] font-bold uppercase tracking-widest text-taupe">
-            Phone number <span className="text-taupe/40">(with country code)</span>
-          </label>
-          <div className="flex items-stretch gap-2">
-            <div className="relative flex-1">
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => { setPhone(e.target.value); setSaved(false); }}
-                placeholder="+91 00000 00000"
-                className="w-full border border-border bg-muted/40 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-foreground/30 placeholder:text-taupe/30 transition-colors"
-              />
-              <AnimatePresence>
-                {saved && (
-                  <motion.span
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2"
-                  >
-                    <CheckCircle2 className="size-4 text-sage" />
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </div>
-            <button
-              onClick={handleSave}
-              disabled={saving || !phone.trim()}
-              className="inline-flex items-center gap-1.5 bg-foreground text-offwhite text-xs font-semibold px-5 py-2.5 rounded-xl hover:opacity-90 active:scale-[0.97] transition-all disabled:opacity-40 shrink-0"
-            >
-              {saving ? <RefreshCw className="size-3.5 animate-spin" /> : null}
-              {saving ? "Saving…" : "Save"}
-            </button>
-          </div>
-        </div>
-
-        {/* alert types */}
-        <div className="rounded-xl border border-border/60 bg-muted/30 divide-y divide-border/60 overflow-hidden">
-          {[
-            { icon: Sparkles, label: "Content ready",     note: "When AI finishes generating" },
-            { icon: AlertCircle, label: "Generation failed", note: "If something goes wrong"   },
-          ].map(({ icon: Icon, label, note }) => (
-            <div key={label} className="flex items-center gap-3 px-4 py-3">
-              <Icon className="size-3.5 text-taupe shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium">{label}</p>
-                <p className="text-[10px] text-taupe">{note}</p>
-              </div>
-              <span className="text-[9px] uppercase tracking-widest text-taupe/50 border border-border/60 px-2 py-0.5 rounded-full">SMS</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
