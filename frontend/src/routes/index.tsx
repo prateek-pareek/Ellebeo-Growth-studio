@@ -354,12 +354,6 @@ function HomePage() {
                 </p>
               )}
 
-              <Link
-                to="/campaigns"
-                className="text-[10px] uppercase tracking-widest text-foreground border-b border-foreground/40 pb-0.5 hover:border-foreground transition-colors"
-              >
-                Start a campaign →
-              </Link>
             </div>
           </section>
         </div>
