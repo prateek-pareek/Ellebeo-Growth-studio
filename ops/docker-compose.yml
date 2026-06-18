@@ -33,7 +33,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.growth-studio-api-blue.rule=Host(`${GROWTH_STUDIO_DOMAIN}`) && PathPrefix(`/api`)"
-      - "traefik.http.routers.growth-studio-api-blue.priority=${TRAEFIK_PRIORITY:-100}"
+      - "traefik.http.routers.growth-studio-api-blue.priority=${TRAEFIK_PRIORITY:-500}"
       - "traefik.http.routers.growth-studio-api-blue.entrypoints=websecure"
       - "traefik.http.routers.growth-studio-api-blue.tls.certresolver=letsencrypt"
       - "traefik.http.services.growth-studio-api-blue.loadbalancer.server.port=3000"
@@ -62,7 +62,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.growth-studio-api-green.rule=Host(`${GROWTH_STUDIO_DOMAIN}`) && PathPrefix(`/api`)"
-      - "traefik.http.routers.growth-studio-api-green.priority=${TRAEFIK_PRIORITY:-100}"
+      - "traefik.http.routers.growth-studio-api-green.priority=${TRAEFIK_PRIORITY:-500}"
       - "traefik.http.routers.growth-studio-api-green.entrypoints=websecure"
       - "traefik.http.routers.growth-studio-api-green.tls.certresolver=letsencrypt"
       - "traefik.http.services.growth-studio-api-green.loadbalancer.server.port=3000"
