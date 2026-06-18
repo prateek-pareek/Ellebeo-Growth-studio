@@ -15,7 +15,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   async validate(payload: any) {
     // Main admin portal issues { roles: string[] }; Growth Studio issues { role: string }
-    const role = payload.role ?? (Array.isArray(payload.roles) ? payload.roles[0] : undefined);
+    const rawRole = payload.role ?? (Array.isArray(payload.roles) ? payload.roles[0] : undefined);
+    const role = typeof rawRole === 'string' ? rawRole.toLowerCase() : rawRole;
     return { userId: payload.sub, role, tenantId: payload.tenantId };
   }
 }

@@ -377,12 +377,44 @@ function ConnectedAccounts() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Handle OAuth callback: Meta redirects back to /profile?code=...&state=...
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code  = params.get("code");
+    const state = params.get("state");
+    if (!code || !state) return;
+
+    // Clean URL immediately so a refresh doesn't re-trigger
+    window.history.replaceState({}, "", window.location.pathname);
+
+    let platform = "instagram";
+    try {
+      const decoded = JSON.parse(Buffer.from(state, "base64url").toString());
+      if (decoded.platform === "facebook") platform = "facebook";
+    } catch {}
+
+    api.post(`/social-accounts/connect/${platform}/exchange`, { code, state })
+      .then(() => {
+        toast.success(`${platform.charAt(0).toUpperCase() + platform.slice(1)} connected!`);
+        fetchAccounts();
+      })
+      .catch(() => toast.error("Connection failed. Try again."));
+  }, [fetchAccounts]);
+
   useEffect(() => { fetchAccounts(); }, [fetchAccounts]);
+
+  const getRedirectUri = () => {
+    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+      return (import.meta.env.VITE_OAUTH_REDIRECT_URI as string) || `${window.location.origin}/profile`;
+    }
+    return `${window.location.origin}/profile`;
+  };
 
   const handleConnect = async (platform: string) => {
     setBusy(platform);
     try {
-      const res = await api.post(`/social-accounts/connect/${platform}`);
+      const redirectUri = getRedirectUri();
+      const res = await api.post(`/social-accounts/connect/${platform}`, { redirectUri });
       const redirectUrl = res.data?.redirectUrl ?? res.data?.data?.redirectUrl;
       if (redirectUrl) {
         window.location.href = redirectUrl;
