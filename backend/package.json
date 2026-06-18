@@ -94,5 +94,11 @@
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "overrides": {
+    "@smithy/protocol-http": "^5.3.14",
+    "@smithy/signature-v4": "^5.3.14",
+    "@smithy/util-utf8": "^3.0.0",
+    "@smithy/eventstream-codec": "^3.0.0"
   }
 }
