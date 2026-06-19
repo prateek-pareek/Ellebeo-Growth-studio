@@ -36,6 +36,7 @@ function AppointmentsPage() {
 
   // Form state
   const [clientName, setClientName]   = useState("");
+  const [clientPhone, setClientPhone] = useState("");
   const [serviceName, setServiceName] = useState("");
   const [category, setCategory]       = useState("hair_cut_style");
   const [isAdding, setIsAdding]       = useState(false);
@@ -85,7 +86,11 @@ function AppointmentsPage() {
       const firstName = parts[0] || clientName;
       const lastName  = parts.slice(1).join(" ") || "Client";
 
-      const clientRes = await api.post("/clients", { firstName, lastName });
+      const clientRes = await api.post("/clients", {
+        firstName,
+        lastName,
+        ...(clientPhone.trim() ? { phone: clientPhone.trim() } : {}),
+      });
       const clientId  = clientRes.data.data.id;
 
       const res  = await api.post("/appointments", {
@@ -115,6 +120,7 @@ function AppointmentsPage() {
 
       toast.success("Appointment created successfully");
       setClientName("");
+      setClientPhone("");
       setServiceName("");
       setBeforeFile(null);
       setAfterFile(null);
@@ -177,6 +183,20 @@ function AppointmentsPage() {
                 onChange={(e) => setClientName(e.target.value)}
                 placeholder="e.g. Sarah J."
                 required
+                className="block w-full border border-border bg-muted/30 px-3 py-2.5 text-sm text-foreground placeholder:text-taupe/60 outline-none focus:border-taupe focus:ring-2 focus:ring-taupe/10 transition-all"
+              />
+            </div>
+
+            {/* Client phone */}
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                Client phone <span className="normal-case tracking-normal font-normal text-taupe/50">(optional, for SMS)</span>
+              </label>
+              <input
+                value={clientPhone}
+                onChange={(e) => setClientPhone(e.target.value)}
+                placeholder="e.g. +919876543210"
+                type="tel"
                 className="block w-full border border-border bg-muted/30 px-3 py-2.5 text-sm text-foreground placeholder:text-taupe/60 outline-none focus:border-taupe focus:ring-2 focus:ring-taupe/10 transition-all"
               />
             </div>
