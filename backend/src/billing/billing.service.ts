@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, BadRequestException, InternalServerErrorException, Logger } from '@nestjs/common';
 import Stripe from 'stripe';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -12,6 +12,7 @@ type StripeCheckoutSession = Awaited<ReturnType<StripeClient['checkout']['sessio
 
 @Injectable()
 export class BillingService {
+  private readonly logger = new Logger(BillingService.name);
   private stripe: StripeClient | null = null;
 
   constructor(private prisma: PrismaService) {
@@ -20,7 +21,7 @@ export class BillingService {
     if (secretKey) {
       this.stripe = new Stripe(secretKey);
     } else {
-      console.warn('[BillingService] STRIPE_API_KEY not set — billing disabled');
+      this.logger.warn('STRIPE_API_KEY not set — billing disabled');
     }
   }
 
@@ -87,7 +88,7 @@ export class BillingService {
             stripeCustomerId: typeof session.customer === 'string' ? session.customer : session.customer?.id,
           },
         });
-        console.log(`[BillingService] Tenant ${tenantId} purchased ${generationsIncluded} generations for $${(session.amount_total ?? 0) / 100}`);
+        this.logger.log(`Tenant ${tenantId} purchased ${generationsIncluded} generations for $${(session.amount_total ?? 0) / 100}`);
       }
     }
   }

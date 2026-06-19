@@ -108,12 +108,12 @@ function CalendarPage() {
           <button className="px-5 py-2.5 text-[11px] uppercase tracking-[0.2em] bg-foreground text-offwhite">
             Month
           </button>
-          <Link
+          {/* <Link
             to="/campaigns"
             className="px-5 py-2.5 text-[11px] uppercase tracking-[0.2em] border hairline hover:bg-card"
           >
             Campaigns
-          </Link>
+          </Link> */}
         </div>
       </header>
 

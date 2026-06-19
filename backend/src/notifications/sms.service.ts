@@ -12,14 +12,12 @@ export class SmsService {
     const apiKey     = this.config.get<string>('TWILIO_API_KEY');
     const apiSecret  = this.config.get<string>('TWILIO_API_SECRET');
 
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const twilio = require('twilio');
     if (accountSid && apiKey && apiSecret) {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const twilio = require('twilio');
       this.client = twilio(apiKey, apiSecret, { accountSid });
       this.logger.log('Twilio initialized with API Key');
     } else if (accountSid && authToken) {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const twilio = require('twilio');
       this.client = twilio(accountSid, authToken);
       this.logger.log('Twilio initialized with Auth Token');
     } else {

@@ -383,12 +383,12 @@ const PLATFORMS: {
     gradient: "from-pink-500 via-rose-500 to-orange-400",
     iconColor: "text-white",
   },
-  {
-    id: "facebook", label: "Facebook", note: "Page posts & Stories",
-    icon: Facebook,
-    gradient: "from-blue-600 to-blue-500",
-    iconColor: "text-white",
-  },
+  // {
+  //   id: "facebook", label: "Facebook", note: "Page posts & Stories",
+  //   icon: Facebook,
+  //   gradient: "from-blue-600 to-blue-500",
+  //   iconColor: "text-white",
+  // },
 ];
 
 function ConnectedAccounts() {
