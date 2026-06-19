@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Req, Res, Get, UseGuards, HttpCode, HttpStatus, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Controller, Post, Body, Req, Res, Get, UseGuards, HttpCode, HttpStatus, UploadedFile, UseInterceptors, UnauthorizedException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
@@ -35,11 +35,7 @@ export class AuthController {
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const oldRefreshToken = req.cookies['refresh_token'];
     if (!oldRefreshToken) {
-      res.status(HttpStatus.UNAUTHORIZED).json({
-        success: false,
-        error: { code: 'NO_TOKEN', message: 'No refresh token provided' },
-      });
-      return;
+      throw new UnauthorizedException('No refresh token provided');
     }
 
     const ipAddress = req.ip;
