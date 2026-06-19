@@ -22,7 +22,7 @@ ACTIVE_PRIORITY=$(docker inspect \
     --format "{{ index .Config.Labels \"traefik.http.routers.growth-studio-api-${ACTIVE_ENV}.priority\" }}" \
     "growth-studio-backend-${ACTIVE_ENV}" 2>/dev/null || echo "")
 if ! [[ "$ACTIVE_PRIORITY" =~ ^[0-9]+$ ]]; then
-    ACTIVE_PRIORITY=100
+    ACTIVE_PRIORITY=500
 fi
 export TRAEFIK_PRIORITY=$((ACTIVE_PRIORITY + 10))
 
@@ -64,7 +64,7 @@ docker compose run --rm migrate
 # 4. Start new environment and workers
 echo "Starting $TARGET_ENV environment..."
 docker compose --profile $TARGET_ENV up -d "${SERVICES[@]}"
-docker compose up -d "${WORKERS[@]}"
+docker compose up -d --force-recreate "${WORKERS[@]}"
 
 # 5. Wait and Validate Health
 echo "Waiting for health checks on backend-$TARGET_ENV..."
