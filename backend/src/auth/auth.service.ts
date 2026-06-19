@@ -165,15 +165,23 @@ export class AuthService {
       include: { user: { include: { tenant: true } } }
     });
 
+    // Token not found — session has expired or was cleared (e.g. after a DB
+    // migration). Simply reject without wiping other users' sessions.
     if (!storedToken) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Token found but already revoked — genuine reuse attempt. Revoke all
+    // tokens for THIS user only to force them to re-authenticate.
+    if (storedToken.revokedAt) {
       await this.prisma.refreshToken.updateMany({
-        where: { revokedAt: null },
+        where: { userId: storedToken.userId, revokedAt: null },
         data: { revokedAt: new Date() },
       });
       throw new UnauthorizedException('Refresh token reuse detected. Please log in again.');
     }
 
-    if (storedToken.revokedAt || storedToken.expiresAt < new Date()) {
+    if (storedToken.expiresAt < new Date()) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 

@@ -177,6 +177,14 @@ jobs:
             JWT_ACCESS_TTL_SECONDS=${{ vars.JWT_ACCESS_TTL_SECONDS }}
             JWT_REFRESH_TTL_SECONDS=${{ vars.JWT_REFRESH_TTL_SECONDS }}
             ADMIN_PORTAL_URL=${{ vars.ADMIN_PORTAL_URL }}
+            TWILIO_ACCOUNT_SID=${{ vars.TWILIO_ACCOUNT_SID }}
+            TWILIO_AUTH_TOKEN=${{ vars.TWILIO_AUTH_TOKEN }}
+            TWILIO_PHONE_NUMBER=${{ vars.TWILIO_PHONE_NUMBER }}
+            TWILIO_VERIFY_SERVICE_SID=${{ vars.TWILIO_VERIFY_SERVICE_SID }}
+            INSTAGRAM_CLIENT_ID=${{ vars.INSTAGRAM_CLIENT_ID }}
+            INSTAGRAM_CLIENT_SECRET=${{ vars.INSTAGRAM_CLIENT_SECRET }}
+            INSTAGRAM_REDIRECT_URI=${{ vars.INSTAGRAM_REDIRECT_URI }}
+            FACEBOOK_REDIRECT_URI=${{ vars.FACEBOOK_REDIRECT_URI }}
             EOF
  
             # Secure the environment file so only the owner can read it
