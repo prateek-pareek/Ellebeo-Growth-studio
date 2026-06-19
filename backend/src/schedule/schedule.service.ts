@@ -1,9 +1,11 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SchedulePostDto, UpdateScheduledPostDto } from './dto/schedule.dto';
 
 @Injectable()
 export class ScheduleService {
+  private readonly logger = new Logger(ScheduleService.name);
+
   constructor(private prisma: PrismaService) {}
 
   async getCalendar(tenantId: string, from: string, to: string) {
@@ -118,13 +120,15 @@ export class ScheduleService {
         data: { publishStatus: 'published', publishedAt: new Date() },
       });
 
+      this.logger.log(`Post ${id} published to ${account.platform}`);
       return { message: 'Published successfully' };
     } catch (err: any) {
+      this.logger.error(`Failed to publish post ${id}: ${err.message}`);
       await this.prisma.scheduledPost.update({
         where: { id },
         data: { publishStatus: 'failed' },
       });
-      throw new BadRequestException(err.message ?? 'Publishing failed');
+      throw err instanceof BadRequestException ? err : new BadRequestException(err.message ?? 'Publishing failed');
     }
   }
 
@@ -193,8 +197,7 @@ export class ScheduleService {
       state,
     });
     const url = `https://www.instagram.com/oauth/authorize?${params.toString()}`;
-    console.log('[Instagram OAuth] redirectUri:', redirectUri);
-    console.log('[Instagram OAuth] full URL:', url);
+    this.logger.log(`Instagram OAuth URL generated for tenant ${tenantId}`);
     return url;
   }
 
