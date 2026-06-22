@@ -73,7 +73,6 @@ async function bootstrap() {
 
   const port = process.env.PORT || 8080;
   await app.listen(port);
-  console.log(`Growth Studio API is running on port ${port}`);
 
   // Start BullMQ workers after server is live (so WebSocket servers are ready)
   const generationGateway = app.get(GenerationGateway);
@@ -85,13 +84,11 @@ async function bootstrap() {
   };
 
   startContentGenerationWorker(generationGateway.server, notifyFn);
-  console.log('Content generation worker started');
 
   const notificationsGateway = app.get(NotificationsGateway);
   const smsService = app.get(SmsService);
   const prismaService = app.get(PrismaService);
   startNotificationsWorker(prismaService as any, notificationsGateway, smsService);
-  console.log('Notifications worker started');
 }
 
 bootstrap();

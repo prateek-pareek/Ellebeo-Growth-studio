@@ -54,10 +54,7 @@ export function startNotificationsWorker(
     { connection: notificationQueueConnection, concurrency: 10 },
   );
 
-  worker.on('failed', (job, err) =>
-    console.error(`[Notifications] Job ${job?.id} failed:`, err.message),
-  );
+  worker.on('failed', () => {});
 
-  console.log('[Notifications] Worker started');
   return worker;
 }

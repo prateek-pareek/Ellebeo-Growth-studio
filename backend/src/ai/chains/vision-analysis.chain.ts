@@ -98,8 +98,7 @@ export class VisionAnalysisChain {
     if (cachedResult) {
       try {
         const parsed = JSON.parse(cachedResult) as VisionAnalysisResult;
-        console.log(`[VisionCache] HIT (in-memory payload cache)`);
-        return { result: parsed, fromCache: true };
+          return { result: parsed, fromCache: true };
       } catch {
         // Corrupted cache — fall through to DB check
       }
@@ -109,11 +108,8 @@ export class VisionAnalysisChain {
     const finalHash = imageHash || createHash('sha256').update(storagePath).digest('hex');
     const dbCached = await this.checkDBCache(finalHash);
     if (dbCached) {
-      console.log(`[VisionCache] HIT for hash ${finalHash}`);
       return { result: dbCached, fromCache: true };
     }
-
-    console.log(`[VisionCache] MISS for hash ${finalHash} — calling GPT-4o Vision`);
 
     // 3. No cache hit — call GPT-4o Vision
     const result = await this.callVisionModel(imageUrl);
@@ -161,10 +157,6 @@ Return ONLY valid JSON with no markdown, no explanation.`;
       : JSON.stringify(response.content);
 
     const usage = (response as { usage_metadata?: { input_tokens?: number; output_tokens?: number } }).usage_metadata;
-    if (usage) {
-      console.log(`[TokenDebug] VisionAnalysisChain (gpt-4o vision): Used ${usage.input_tokens} input tokens, ${usage.output_tokens} output tokens.`);
-    }
-
     return parseVisionOutput(content);
   }
 
@@ -182,13 +174,11 @@ Return ONLY valid JSON with no markdown, no explanation.`;
 
       // Validate that the cached record matches our current model & prompt version
       if (record.model !== this.cfg.modelId || record.promptVersion !== VISION_PROMPT_VERSION) {
-        console.log(`[VisionCache] MISS (version mismatch) — expected ${this.cfg.modelId}@${VISION_PROMPT_VERSION}, got ${record.model}@${record.promptVersion}`);
         return null;
       }
 
       return record.result as unknown as VisionAnalysisResult;
-    } catch (err) {
-      console.warn('[VisionCache] Failed to read from cache table:', err);
+    } catch {
       return null;
     }
   }
@@ -212,8 +202,8 @@ Return ONLY valid JSON with no markdown, no explanation.`;
           promptVersion: VISION_PROMPT_VERSION,
         },
       });
-    } catch (err) {
-      console.warn('[VisionCache] Failed to save to cache table:', err);
+    } catch {
+      // non-fatal
     }
   }
 }

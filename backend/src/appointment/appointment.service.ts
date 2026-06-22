@@ -21,8 +21,6 @@ export class AppointmentService {
     const bucketName = this.configService.get<string>('FIREBASE_STORAGE_BUCKET');
     if (bucketName && this.firebaseAdmin) {
       this.bucket = getStorage(this.firebaseAdmin).bucket(bucketName);
-    } else {
-      console.warn('FIREBASE_STORAGE_BUCKET or Firebase credentials not configured. Upload features will be disabled.');
     }
   }
 

@@ -32,8 +32,6 @@ export function startVideoAssemblyWorker(): Worker<VideoAssemblyJobPayload> {
         includeMusic, brandMoodTag,
       } = job.data;
 
-      console.log(`[Worker:video] Assembling Reel for job ${jobId}`);
-
       // Update reel_status to processing
       await prisma.$executeRaw`
         UPDATE content_items
@@ -92,7 +90,6 @@ export function startVideoAssemblyWorker(): Worker<VideoAssemblyJobPayload> {
         includeMusic,
       });
 
-      console.log(`[Worker:video] Reel assembled for job ${jobId}: ${result.cdnUrl}`);
       return result;
     },
     {
@@ -106,9 +103,8 @@ export function startVideoAssemblyWorker(): Worker<VideoAssemblyJobPayload> {
   // CRITICAL: Reel failure marks reel_status failed but does NOT fail content pack
   // --------------------------------------------------------------------------
 
-  worker.on('failed', async (job, err) => {
+  worker.on('failed', async (job, _err) => {
     if (!job) return;
-    console.error(`[Worker:video] Reel job ${job.id} failed:`, err.message);
 
     // Mark ONLY reel_status as failed — caption and image remain valid
     const prismaInstance = new PrismaClient();
@@ -123,9 +119,9 @@ export function startVideoAssemblyWorker(): Worker<VideoAssemblyJobPayload> {
     }
   });
 
-  worker.on('error', (err) => console.error('[Worker:video] Error:', err));
+  worker.on('error', () => {});
 
-  console.log(`[Worker:video] Started — concurrency: ${AI_CONFIG.queues.videoAssembly.concurrency}`);
+
   return worker;
 }
 

@@ -97,7 +97,7 @@ export class CaptionGenerationChain {
 
     const openAiPromise = this.generate({ assembledPrompt, llmConfig: openAiConfig, brandDNABlacklist, allowRetry })
       .then(result => ({ ...result, generatedBy: 'ChatGPT' }))
-      .catch(err => { console.error('[CaptionChain] OpenAI failed:', err); return null; });
+      .catch(() => null);
 
     // Option 2: Use Gemini when a key is configured.
     // As of June 2026, Google AI Studio issues Auth keys with an AQ. prefix (not AIzaSy...).
@@ -108,10 +108,7 @@ export class CaptionGenerationChain {
     const secondPromise = geminiUsable
       ? this.callGemini(assembledPrompt, brandDNABlacklist)
           .then(result => ({ ...result, generatedBy: 'Gemini' }))
-          .catch(err => {
-            console.error('[CaptionChain] Gemini failed, falling back to GPT-4o-mini:', err);
-            return this.generateGpt4oMiniOption(assembledPrompt, brandDNABlacklist, allowRetry);
-          })
+          .catch(() => this.generateGpt4oMiniOption(assembledPrompt, brandDNABlacklist, allowRetry))
       : this.generateGpt4oMiniOption(assembledPrompt, brandDNABlacklist, allowRetry);
 
     const results = await Promise.all([openAiPromise, secondPromise]);
@@ -140,7 +137,7 @@ export class CaptionGenerationChain {
     const gpt4oMiniConfig: LLMConfig = { provider: 'openai', modelId: 'gpt-4o-mini', temperature: 0.85, maxTokens: 1024, timeoutMs: 45000, systemPromptCacheKey: null };
     return this.generate({ assembledPrompt, llmConfig: gpt4oMiniConfig, brandDNABlacklist, allowRetry })
       .then(result => ({ ...result, generatedBy: 'GPT-4o-mini' }))
-      .catch(err => { console.error('[CaptionChain] GPT-4o-mini fallback failed:', err); return null; });
+      .catch(() => null);
   }
 
   // --------------------------------------------------------------------------
@@ -169,7 +166,6 @@ export class CaptionGenerationChain {
     const inputTokens = usage?.promptTokenCount ?? estimateTokens(`${prompt.systemPrompt}\n${prompt.userPrompt}`);
     const outputTokens = usage?.candidatesTokenCount ?? estimateTokens(raw);
     result.tokenUsage = { inputTokens, outputTokens };
-    console.log(`[TokenDebug] CaptionChain (Gemini): Used ${inputTokens} input tokens, ${outputTokens} output tokens.`);
     this.checkBlacklist(result.caption, blacklist);
     return result;
   }
@@ -198,7 +194,6 @@ export class CaptionGenerationChain {
       inputTokens: usage?.input_tokens ?? estimateTokens(promptText),
       outputTokens: usage?.output_tokens ?? estimateTokens(content),
     };
-    console.log(`[TokenDebug] CaptionChain (${model._modelType()}): Used ${parsed.tokenUsage.inputTokens} input tokens, ${parsed.tokenUsage.outputTokens} output tokens.`);
     return parsed;
   }
 
