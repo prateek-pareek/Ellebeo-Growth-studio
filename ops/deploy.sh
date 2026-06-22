@@ -24,10 +24,11 @@ ACTIVE_PRIORITY=$(docker inspect \
 if ! [[ "$ACTIVE_PRIORITY" =~ ^[0-9]+$ ]]; then
     ACTIVE_PRIORITY=500
 fi
-export TRAEFIK_PRIORITY=$((ACTIVE_PRIORITY + 10))
+export TRAEFIK_PRIORITY_BACKEND=$((ACTIVE_PRIORITY + 10))
+export TRAEFIK_PRIORITY_FRONTEND=$((ACTIVE_PRIORITY - 400)) # Keep frontend strictly lower than backend
 
 echo "Current active environment is ${ACTIVE_ENV^^} (priority $ACTIVE_PRIORITY)."
-echo "Deploying to ${TARGET_ENV^^} with priority $TRAEFIK_PRIORITY."
+echo "Deploying to ${TARGET_ENV^^} with backend priority $TRAEFIK_PRIORITY_BACKEND and frontend priority $TRAEFIK_PRIORITY_FRONTEND."
 
 # 2. Export environment variables for Docker Compose
 export BACKEND_IMAGE=$1
