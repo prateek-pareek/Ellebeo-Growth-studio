@@ -52,7 +52,7 @@ export interface CreateGenerationJobInput {
 // ---------------------------------------------------------------------------
 
 class RateLimiter {
-  constructor(private readonly redis: Redis) {}
+  constructor(private readonly redis: Redis) { }
 
   async checkAndIncrement(
     key: string,
@@ -169,7 +169,7 @@ export class JobFactory {
 
     // 1e. Image generation limits (carousel + story each generate multiple images)
     const hasImageGen = generationOptions.outputFormats.includes('carousel') ||
-                        generationOptions.outputFormats.includes('story');
+      generationOptions.outputFormats.includes('story');
     if (hasImageGen) {
       const imgGenKey = AI_CONFIG.redisKeys.rateLimitImageGen(tenantId);
       const imgGenCheck = await this.rateLimiter.checkAndIncrement(
