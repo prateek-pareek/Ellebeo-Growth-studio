@@ -33,9 +33,6 @@ export class NotificationsService {
       },
     });
 
-    console.log(`[Notifications] send() called — type:${dto.type} tenant:${dto.tenantId} gateway:${!!this.gateway} server:${!!(this.gateway as any)?.server}`);
-
-    // Emit WebSocket immediately — no queue delay
     try {
       this.gateway?.emit(dto.tenantId, {
         id: notif.id,
@@ -45,8 +42,8 @@ export class NotificationsService {
         data: notif.data,
         createdAt: notif.createdAt,
       });
-    } catch (e) {
-      console.error('[Notifications] WebSocket emit failed:', e);
+    } catch {
+      // non-fatal
     }
 
     // Queue only for SMS delivery (async, non-blocking)

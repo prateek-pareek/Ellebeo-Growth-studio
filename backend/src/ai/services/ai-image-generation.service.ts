@@ -233,9 +233,7 @@ export class AiImageGenerationService {
             ...rest,
           });
           return { url, title: concept.title, label: `SLIDE ${String(concept.index).padStart(2, '0')}` };
-        } catch (err) {
-          console.error(`[AiImageGen] Slide ${concept.index} failed:`, err);
-          // Return null — orchestrator will fall back to Cloudinary
+        } catch {
           return null;
         }
       })
@@ -279,8 +277,7 @@ export class AiImageGenerationService {
             ...rest,
           });
           return { url, title: frame.title, label: `FRAME ${String(frame.index).padStart(2, '0')}` };
-        } catch (err) {
-          console.error(`[AiImageGen] Frame ${frame.index} failed:`, err);
+        } catch {
           return null;
         }
       })

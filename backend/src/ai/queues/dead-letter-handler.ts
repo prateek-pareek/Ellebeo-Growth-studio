@@ -23,9 +23,7 @@ export function startDLQMonitor(io: SocketServer): QueueEvents {
     { connection: bullMQConnection }
   );
 
-  // Fire when a job lands in the DLQ
   dlqEvents.on('added', async ({ jobId }) => {
-    console.error(`[DLQ] Job landed in Dead Letter Queue: ${jobId}`);
 
     // Fetch the job details from the failed_jobs table
     const prismaInstance = new PrismaClient();
@@ -60,25 +58,12 @@ export function startDLQMonitor(io: SocketServer): QueueEvents {
         },
       });
 
-      // Log structured event for OpenTelemetry
-      console.error(JSON.stringify({
-        event: 'job_dlq',
-        jobId,
-        tenantId: record.tenant_id,
-        appointmentId: record.appointment_id,
-        failedAtStep: record.failed_at_step,
-        errorMessage: record.error_message,
-        timestamp: new Date().toISOString(),
-      }));
     } finally {
       await prismaInstance.$disconnect();
     }
   });
 
-  dlqEvents.on('error', (err) => {
-    console.error('[DLQ] QueueEvents error:', err);
-  });
+  dlqEvents.on('error', () => {});
 
-  console.log('[DLQ] Monitor started — waiting for failed jobs...');
   return dlqEvents;
 }

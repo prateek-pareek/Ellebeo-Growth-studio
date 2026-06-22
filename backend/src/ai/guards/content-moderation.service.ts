@@ -43,7 +43,6 @@ export class ContentModerationService {
 
   private getClient(): OpenAI | null {
     if (!process.env['OPENAI_API_KEY']) {
-      console.warn('[ContentModeration] OPENAI_API_KEY not set — image moderation skipped');
       return null;
     }
     if (!this.client) {
@@ -72,21 +71,14 @@ export class ContentModerationService {
       });
 
       const text = response.choices[0]?.message?.content ?? '';
-      console.log('[ContentModeration] Raw response:', text);
-
-      // Extract JSON even if model adds surrounding text
       const jsonMatch = text.match(/\{[\s\S]*"safe"[\s\S]*\}/);
       if (!jsonMatch) {
-        console.error('[ContentModeration] No JSON in response — rejecting');
         return { safe: false, reason: 'Could not verify image safety' };
       }
 
       const result = JSON.parse(jsonMatch[0]) as ModerationResult;
-      console.log(`[ContentModeration] ${result.safe ? '✓ PASS' : '✗ REJECT'}: ${result.reason}`);
       return { safe: Boolean(result.safe), reason: String(result.reason ?? '') };
-    } catch (err: any) {
-      console.error('[ContentModeration] API error:', err.message);
-      // Fail open — don't block legitimate uploads due to moderation service errors
+    } catch {
       return { safe: true, reason: 'Moderation service error — defaulting to safe' };
     }
   }

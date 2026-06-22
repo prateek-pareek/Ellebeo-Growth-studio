@@ -95,11 +95,6 @@ Return exactly this JSON shape:
           ? response.content
           : JSON.stringify(response.content);
           
-      const usage = (response as { usage_metadata?: { input_tokens?: number; output_tokens?: number } }).usage_metadata;
-      if (usage) {
-        console.log(`[TokenDebug] CarouselConceptChain (gpt-4o-mini): Used ${usage.input_tokens} input tokens, ${usage.output_tokens} output tokens.`);
-      }
-
       const cleaned = content
         .replace(/^```(?:json)?\n?/m, '')
         .replace(/\n?```$/m, '')
@@ -108,8 +103,8 @@ Return exactly this JSON shape:
       if (Array.isArray(parsed.concepts) && parsed.concepts.length >= 3) {
         return { concepts: parsed.concepts.slice(0, 5) };
       }
-    } catch (err) {
-      console.error('[CarouselConceptChain] Generation failed, using fallback:', err);
+    } catch {
+      // fallback below
     }
 
     // Fallback: deterministic 4-slide structure
