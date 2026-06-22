@@ -70,8 +70,7 @@ export class LogoOverlayService {
       });
 
       return finalUrl;
-    } catch (err) {
-      console.warn('[LogoOverlay] Failed, returning original image:', (err as Error).message);
+    } catch {
       return imageUrl;
     }
   }

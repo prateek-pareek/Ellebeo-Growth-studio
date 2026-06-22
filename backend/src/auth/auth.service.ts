@@ -406,8 +406,7 @@ export class AuthService {
         });
         return tx.user.findUnique({ where: { id: newUser.id }, include: { tenant: true } });
       });
-    } catch (err) {
-      console.error('[Auth] CRM fallback error:', err);
+    } catch {
       return null;
     } finally {
       await client.end();

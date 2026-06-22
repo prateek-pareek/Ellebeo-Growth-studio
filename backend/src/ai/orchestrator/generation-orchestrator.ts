@@ -1,5 +1,5 @@
-// ============================================================================
-// generation-orchestrator.ts — Assembles All Chains Into the Full Pipeline
+﻿// ============================================================================
+// generation-orchestrator.ts â€” Assembles All Chains Into the Full Pipeline
 // Manages state transitions, partial success, and component-level tracking.
 // ============================================================================
 
@@ -93,7 +93,7 @@ export class GenerationOrchestrator {
   // --------------------------------------------------------------------------
 
   async run(payload: GenerationJobPayload): Promise<GenerationResult> {
-    // Tweak jobs only carry { jobId } in the BullMQ payload — detect and delegate
+    // Tweak jobs only carry { jobId } in the BullMQ payload â€” detect and delegate
     if (!payload.tenantId) {
       return this.runTweak(payload.jobId);
     }
@@ -101,7 +101,7 @@ export class GenerationOrchestrator {
     const { jobId, tenantId, clientId, consentSnapshot, brandDNA, generationOptions } = payload;
     const jobStart = Date.now();
 
-    // ── Checkpoint 2: Consent re-validation inside worker ──
+    // â”€â”€ Checkpoint 2: Consent re-validation inside worker â”€â”€
     const consentCheck = await this.consentGuard.validateAtProcessing(
       consentSnapshot,
       clientId
@@ -128,11 +128,11 @@ export class GenerationOrchestrator {
     let totalTokensOut = 0;
     let modelUsed = AI_CONFIG_MODEL_LABEL(payload);
 
-    // ── Step 1: Vision Analysis ──────────────────────────────────────────────
+    // â”€â”€ Step 1: Vision Analysis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     await this.transitionState(jobId, 'queued', 'processing_image');
     await this.progressEmitter.emit(jobId, tenantId, 'processing_image');
 
-    // Always advance through processing_vision — required by state machine regardless of whether images exist
+    // Always advance through processing_vision â€” required by state machine regardless of whether images exist
     await this.transitionState(jobId, 'processing_image', 'processing_vision');
 
     if (payload.imageAssets.length > 0) {
@@ -143,7 +143,7 @@ export class GenerationOrchestrator {
                                primaryImage.rawStoragePath.startsWith('http://127.');
 
       if (!isLocalVisionUrl) try {
-        // Only use Cloudinary URL if we have an actual cloudinaryPublicId — otherwise fall back to rawStoragePath
+        // Only use Cloudinary URL if we have an actual cloudinaryPublicId â€” otherwise fall back to rawStoragePath
         const imageUrl = (process.env['CLOUDINARY_CLOUD_NAME'] && primaryImage.cloudinaryPublicId)
           ? `https://res.cloudinary.com/${process.env['CLOUDINARY_CLOUD_NAME']}/image/upload/${primaryImage.cloudinaryPublicId}`
           : primaryImage.rawStoragePath;
@@ -155,12 +155,11 @@ export class GenerationOrchestrator {
         });
         visionResult = visionAnalysis.result;
       } catch (err) {
-        // Vision failure is non-fatal — caption still generated from appointment context
-        console.error(`[Orchestrator] Vision analysis failed for job ${jobId}:`, err);
+        // Vision failure is non-fatal â€” caption still generated from appointment context
       }
     }
 
-    // ── Step 2: Prompt Building ──────────────────────────────────────────────
+    // â”€â”€ Step 2: Prompt Building â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     await this.transitionState(jobId, 'processing_vision', 'building_prompt');
     await this.progressEmitter.emit(jobId, tenantId, 'building_prompt');
 
@@ -201,7 +200,7 @@ export class GenerationOrchestrator {
       },
     });
 
-    // ── Step 3: Caption Generation ───────────────────────────────────────────
+    // â”€â”€ Step 3: Caption Generation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     await this.transitionState(jobId, 'building_prompt', 'generating_text');
     await this.progressEmitter.emit(jobId, tenantId, 'generating_text');
 
@@ -251,17 +250,16 @@ export class GenerationOrchestrator {
       totalTokensIn += captionResult.tokenUsage?.inputTokens ?? 0;
       totalTokensOut += captionResult.tokenUsage?.outputTokens ?? 0;
 
-      // Emit partial result — send caption to frontend as soon as it's ready
+      // Emit partial result â€” send caption to frontend as soon as it's ready
       await this.progressEmitter.emitPartialResult(jobId, tenantId, {
         caption: captionResult.caption,
         hashtags: captionResult.hashtags,
       });
     } catch (err) {
       componentStatus.caption = 'failed';
-      console.error(`[Orchestrator] Caption generation failed for job ${jobId}:`, err);
     }
 
-    // ── Step 4: Platform Variants (conditional) ───────────────────────────────
+    // â”€â”€ Step 4: Platform Variants (conditional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (captionResult && generationOptions.platform.length > 1) {
       try {
         platformVariants = await this.platformVariantChain.generateVariants({
@@ -270,12 +268,11 @@ export class GenerationOrchestrator {
           brandDNA,
         });
       } catch (err) {
-        console.error(`[Orchestrator] Platform variant generation failed for job ${jobId}:`, err);
-        // Non-fatal — primary caption is still valid
+        // Non-fatal â€” primary caption is still valid
       }
     }
 
-    // ── Step 5: Reel Script (conditional) ────────────────────────────────────
+    // â”€â”€ Step 5: Reel Script (conditional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (captionResult && generationOptions.outputFormats.includes('reel')) {
       try {
         reelScriptResult = await this.reelScriptChain.generate({
@@ -286,18 +283,17 @@ export class GenerationOrchestrator {
         componentStatus.reel = 'completed';
       } catch (err) {
         componentStatus.reel = 'failed';
-        console.error(`[Orchestrator] Reel script generation failed for job ${jobId}:`, err);
       }
     }
 
-    // ── Step 5.5: Image Processing ────────────────────────────────────────────
+    // â”€â”€ Step 5.5: Image Processing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     let imageResult: ImageProcessingResult | null = null;
     let aiImageCostUSD = 0;
     if (payload.imageAssets.length > 0) {
       const primaryAsset = payload.imageAssets[0]!;
       const consentShowFace = !!(consentCheck.activeRestrictions as any)?.show_face;
 
-      // Localhost URLs can't be reached by Cloudinary/OpenAI — use Sharp instead
+      // Localhost URLs can't be reached by Cloudinary/OpenAI â€” use Sharp instead
       const isLocalUrl = primaryAsset.rawStoragePath.startsWith('http://localhost') ||
                          primaryAsset.rawStoragePath.startsWith('http://127.');
       const useCloudinary = !!process.env['CLOUDINARY_CLOUD_NAME'] && !isLocalUrl;
@@ -331,18 +327,16 @@ export class GenerationOrchestrator {
               const cloudinaryId = await this.imagePipeline.uploadUrl(imageResult.variants.feedUrl, tenantId);
               imageResult = { ...imageResult, cloudinaryPublicId: cloudinaryId };
             } catch (err) {
-              console.error(`[Orchestrator] Cloudinary re-upload failed for job ${jobId}:`, err);
             }
           }
         }
         componentStatus.image = 'completed';
       } catch (err) {
         componentStatus.image = 'failed';
-        console.error(`[Orchestrator] Image processing failed for job ${jobId}:`, err);
       }
     }
 
-    // ── Step 5.55: AI-designed feed image (gpt-image-1) ─────────────────────
+    // â”€â”€ Step 5.55: AI-designed feed image (gpt-image-1) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const feedPhotoUrl = payload.imageAssets.find(a => a.isAfterPhoto)?.rawStoragePath
       ?? payload.imageAssets[0]?.rawStoragePath;
 
@@ -353,9 +347,9 @@ Brand colors: ${brandDNA.primaryBrandColor ?? '#1a1a1a'} and ${brandDNA.secondar
 Aesthetic: ${brandDNA.aestheticDirection ?? 'minimal editorial premium beauty'}.
 Caption hook: "${captionResult.hookSentence || captionResult.caption.slice(0, 80)}"
 Requirements:
-- Keep the real photo as the main visual — preserve the person/hair authentically
+- Keep the real photo as the main visual â€” preserve the person/hair authentically
 - Add subtle brand-matched design: clean typography, brand color accents
-- Minimal overlay — let the photo shine
+- Minimal overlay â€” let the photo shine
 - Professional beauty industry aesthetic
 - Square format, Instagram-ready`;
 
@@ -399,15 +393,13 @@ Requirements:
             }
             imageResult = { ...imageResult, variants: { ...imageResult.variants, feedUrl: aiFeedUrl } };
             aiImageCostUSD = AI_CONFIG.imageCosts['gpt-image-1-1024'];
-            console.log(`[Orchestrator] AI feed image generated for job ${jobId}`);
           }
         }
       } catch (err) {
-        console.warn(`[Orchestrator] AI feed image failed, using original:`, (err as Error).message);
       }
     }
 
-    // ── Step 5.6: Carousel Slides (conditional) ───────────────────────────────
+    // â”€â”€ Step 5.6: Carousel Slides (conditional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Upload before photo to Cloudinary for before/after alternation
     let beforeCloudinaryId: string | undefined;
     const beforeAsset = payload.imageAssets.find(a => a.isBeforePhoto && a.rawStoragePath);
@@ -455,10 +447,8 @@ Requirements:
             ? await Promise.all(aiSlides.map(async s => ({ ...s, url: await this.logoOverlay.applyLogo({ imageUrl: s.url, logoUrl: brandDNA.logoUrl, position: brandDNA.logoPosition, tenantId }) })))
             : aiSlides;
           carouselSlides = { type: 'carousel', slides: slidesWithLogo };
-          console.log(`[Orchestrator] Carousel: ${aiSlides.length} AI-generated slides for job ${jobId}`);
         } catch (aiErr) {
           // Fallback to Cloudinary if AI generation fails
-          console.warn(`[Orchestrator] AI image gen failed, falling back to Cloudinary:`, aiErr);
           if (imageResult?.cloudinaryPublicId) {
             carouselSlides = this.carouselPipeline.generate({
               cloudinaryPublicId: imageResult.cloudinaryPublicId,
@@ -469,11 +459,10 @@ Requirements:
           }
         }
       } catch (err) {
-        console.error(`[Orchestrator] Carousel generation failed for job ${jobId}:`, err);
       }
     }
 
-    // ── Step 5.65: Story Frames (conditional) ────────────────────────────────
+    // â”€â”€ Step 5.65: Story Frames (conditional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     let storyOutput: StoryOutput | null = null;
     const isStory = (generationOptions.outputFormats as string[]).includes('story');
     if (isStory && afterPhotoUrl && captionResult) {
@@ -504,9 +493,7 @@ Requirements:
             ? await Promise.all(aiFrames.map(async f => ({ ...f, url: await this.logoOverlay.applyLogo({ imageUrl: f.url, logoUrl: brandDNA.logoUrl, position: brandDNA.logoPosition, tenantId }) })))
             : aiFrames;
           storyOutput = { type: 'story', frames: framesWithLogo };
-          console.log(`[Orchestrator] Story: ${aiFrames.length} AI-generated frames for job ${jobId}`);
         } catch (aiErr) {
-          console.warn(`[Orchestrator] AI story gen failed, falling back to Cloudinary:`, aiErr);
           if (imageResult?.cloudinaryPublicId) {
             storyOutput = this.storyPipeline.generate({
               cloudinaryPublicId: imageResult.cloudinaryPublicId,
@@ -516,13 +503,11 @@ Requirements:
             });
           }
         }
-        console.log(`[Orchestrator] Story: 4 frames generated for job ${jobId}`);
       } catch (err) {
-        console.error(`[Orchestrator] Story frame generation failed for job ${jobId}:`, err);
       }
     }
 
-    // ── Step 5.66: Reel Shot Storyboard (conditional) ────────────────────────
+    // â”€â”€ Step 5.66: Reel Shot Storyboard (conditional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     let reelShotResult: ReelShotResult | null = null;
     const isReel = (generationOptions.outputFormats as string[]).includes('reel');
     if (isReel && captionResult) {
@@ -536,13 +521,11 @@ Requirements:
           brandName: brandDNA.businessName,
           brandVoice: extractBrandVoice(brandDNA),
         });
-        console.log(`[Orchestrator] Reel storyboard: ${reelShotResult.shots.length} shots for job ${jobId}`);
       } catch (err) {
-        console.error(`[Orchestrator] Reel shot generation failed for job ${jobId}:`, err);
       }
     }
 
-    // ── Step 5.7: Voiceover (conditional) ────────────────────────────────────
+    // â”€â”€ Step 5.7: Voiceover (conditional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     let voiceoverResult: VoiceoverResult | null = null;
     if (reelScriptResult && generationOptions.outputFormats.includes('reel')) {
       try {
@@ -561,11 +544,10 @@ Requirements:
           });
         }
       } catch (err) {
-        console.error(`[Orchestrator] Voiceover generation failed for job ${jobId}:`, err);
       }
     }
 
-    // ── Step 6: Persist Result ────────────────────────────────────────────────
+    // â”€â”€ Step 6: Persist Result â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const processingMs = Date.now() - jobStart;
     const contentItemId = await this.persistResult({
       payload,
@@ -586,7 +568,7 @@ Requirements:
       reelShotResult,
     });
 
-    // ── Step 7: Final State Transition ────────────────────────────────────────
+    // â”€â”€ Step 7: Final State Transition â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const totalCostUSD = this.modelRouter.estimateCost(llmConfig.modelId, totalTokensIn, totalTokensOut) + aiImageCostUSD;
     await this.transitionState(jobId, 'generating_text', 'completed');
     await this.prisma.generationJob.update({
@@ -595,7 +577,7 @@ Requirements:
     }).catch(() => {});
     await this.progressEmitter.emit(jobId, tenantId, 'completed');
 
-    // ── Step 8: Notify tenant ────────────────────────────────────────────────
+    // â”€â”€ Step 8: Notify tenant â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     this.notify?.({
       tenantId,
       type: 'content_generation_complete',
@@ -633,7 +615,7 @@ Requirements:
   // --------------------------------------------------------------------------
 
   // --------------------------------------------------------------------------
-  // Tweak Pipeline — lightweight caption-only refinement
+  // Tweak Pipeline â€” lightweight caption-only refinement
   // --------------------------------------------------------------------------
 
   private async runTweak(jobId: string): Promise<GenerationResult> {
@@ -792,7 +774,7 @@ Requirements:
       },
     });
 
-    // Persist image URL if available (column not in Prisma model — use raw SQL)
+    // Persist image URL if available (column not in Prisma model â€” use raw SQL)
     if (params.imageResult) {
       await this.prisma.$executeRaw`
         UPDATE platform.content_items

@@ -30,21 +30,18 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const tenantId = decoded.tenantId;
       if (tenantId) {
         client.join(`tenant_${tenantId}`);
-        console.log(`Client ${client.id} joined room tenant_${tenantId}`);
       }
 
       if (decoded.role === 'admin' || decoded.role === 'super_admin') {
         client.join('admin_room');
       }
 
-    } catch (e: any) {
-      console.log(`Connection failed for client ${client.id}:`, e.message);
+    } catch {
       client.disconnect();
     }
   }
 
-  handleDisconnect(client: Socket) {
-    console.log(`Client disconnected: ${client.id}`);
+  handleDisconnect(_client: Socket) {
   }
 
   emitToTenant(tenantId: string, event: string, payload: any) {

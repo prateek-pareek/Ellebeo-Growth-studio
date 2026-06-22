@@ -43,7 +43,6 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
       if (!tenantId) { client.disconnect(); return; }
 
       client.join(`tenant:${tenantId}`);
-      console.log(`[NotificationsGateway] Client ${client.id} joined tenant:${tenantId}`);
 
       // Push any unread notifications created in the last 10 minutes they may have missed
       const missed = await this.prisma.notification.findMany({
@@ -56,9 +55,7 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
         take: 10,
       });
 
-      console.log(`[NotificationsGateway] Missed notifications for tenant:${tenantId}: ${missed.length}`);
       for (const n of missed) {
-        console.log(`[NotificationsGateway] Pushing missed notification ${n.id} type:${n.type}`);
         client.emit('notification:new', {
           id: n.id,
           type: n.type,
@@ -69,8 +66,7 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
           isReplay: true,   // ← suppresses toast on the frontend
         });
       }
-    } catch (e) {
-      console.error('[NotificationsGateway] Auth failed:', e);
+    } catch {
       client.disconnect();
     }
   }
@@ -81,7 +77,6 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
 
   emit(tenantId: string, notification: any) {
     if (!this.server) {
-      console.warn('[NotificationsGateway] server not ready yet, skipping emit');
       return;
     }
     this.server.to(`tenant:${tenantId}`).emit('notification:new', notification);

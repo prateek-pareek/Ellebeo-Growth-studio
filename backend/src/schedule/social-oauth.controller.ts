@@ -27,8 +27,7 @@ export class SocialOAuthController {
     try {
       await this.scheduleService.handleInstagramCallback(code, state);
       return res.redirect(`${frontendUrl}/profile?connected=instagram`);
-    } catch (e: any) {
-      console.error('[Instagram OAuth] callback error:', e?.message);
+    } catch {
       return res.redirect(`${frontendUrl}/profile?error=instagram_connect_failed`);
     }
   }
@@ -49,8 +48,7 @@ export class SocialOAuthController {
     try {
       await this.scheduleService.handleFacebookCallback(code, state);
       return res.redirect(`${frontendUrl}/profile?connected=facebook`);
-    } catch (e: any) {
-      console.error('[Facebook OAuth] callback error:', e?.message);
+    } catch {
       return res.redirect(`${frontendUrl}/profile?error=facebook_connect_failed`);
     }
   }

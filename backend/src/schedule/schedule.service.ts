@@ -204,9 +204,10 @@ export class ScheduleService {
   async handleInstagramCallback(code: string, stateRaw: string): Promise<void> {
     const { tenantId, redirectUri: decodedRedirectUri } = JSON.parse(Buffer.from(stateRaw, 'base64url').toString()) as { tenantId: string; redirectUri?: string };
 
-    const clientId     = process.env.INSTAGRAM_CLIENT_ID!;
-    const clientSecret = process.env.INSTAGRAM_CLIENT_SECRET!;
-    const redirectUri  = decodedRedirectUri ?? process.env.INSTAGRAM_REDIRECT_URI!;
+    const clientId     = process.env.INSTAGRAM_CLIENT_ID;
+    const clientSecret = process.env.INSTAGRAM_CLIENT_SECRET;
+    const redirectUri  = decodedRedirectUri ?? process.env.INSTAGRAM_REDIRECT_URI;
+    if (!clientId || !clientSecret) throw new Error('INSTAGRAM_CLIENT_ID or INSTAGRAM_CLIENT_SECRET env var not set on server');
 
     // 1 — Exchange code for short-lived token
     const tokenForm = new URLSearchParams({
