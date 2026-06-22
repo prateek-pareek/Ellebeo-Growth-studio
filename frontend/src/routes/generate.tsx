@@ -127,7 +127,6 @@ function GeneratePage() {
         }
       } catch (e) {
         errorCount++;
-        console.error("Polling error", e);
         if (errorCount >= MAX_ERRORS) {
           clearInterval(pollRef.current!);
           setGenerating(false);

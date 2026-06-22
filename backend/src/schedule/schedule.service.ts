@@ -1,9 +1,11 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SchedulePostDto, UpdateScheduledPostDto } from './dto/schedule.dto';
 
 @Injectable()
 export class ScheduleService {
+  private readonly logger = new Logger(ScheduleService.name);
+
   constructor(private prisma: PrismaService) {}
 
   async getCalendar(tenantId: string, from: string, to: string) {
@@ -81,17 +83,100 @@ export class ScheduleService {
   }
 
   async publishNow(tenantId: string, id: string) {
-    const post = await this.prisma.scheduledPost.findUnique({ where: { id } });
+    const post = await this.prisma.scheduledPost.findUnique({
+      where: { id },
+      include: {
+        contentItem: {
+          select: {
+            caption: true,
+            processedImageUrlFeed: true,
+            reelThumbnailUrl: true,
+          },
+        },
+      },
+    });
     if (!post || post.tenantId !== tenantId) throw new NotFoundException('Post not found');
+    if (post.publishStatus !== 'pending') throw new BadRequestException('Only pending posts can be published');
 
-    if (post.publishStatus !== 'pending') {
-      throw new BadRequestException('Only pending posts can be published');
+    const account = await this.prisma.socialAccount.findUnique({ where: { id: post.socialAccountId } });
+    if (!account || account.status !== 'connected' || !account.accessToken) {
+      throw new BadRequestException('Social account not connected — reconnect and try again');
     }
 
-    // Here we would enqueue a job to the publishing worker
-    // this.publisherQueue.add('publish', { postId: post.id });
+    const caption  = post.contentItem?.caption ?? '';
+    const imageUrl = post.contentItem?.processedImageUrlFeed ?? post.contentItem?.reelThumbnailUrl ?? null;
 
-    return { message: 'Publishing initiated' };
+    try {
+      if (account.platform === 'instagram') {
+        await this.publishToInstagram(account.platformAccountId!, account.accessToken, imageUrl, caption, post.postFormat);
+      } else if (account.platform === 'facebook') {
+        await this.publishToFacebook(account.platformAccountId!, account.accessToken, imageUrl, caption);
+      } else {
+        throw new BadRequestException(`Publishing not supported for platform: ${account.platform}`);
+      }
+
+      await this.prisma.scheduledPost.update({
+        where: { id },
+        data: { publishStatus: 'published', publishedAt: new Date() },
+      });
+
+      this.logger.log(`Post ${id} published to ${account.platform}`);
+      return { message: 'Published successfully' };
+    } catch (err: any) {
+      this.logger.error(`Failed to publish post ${id}: ${err.message}`);
+      await this.prisma.scheduledPost.update({
+        where: { id },
+        data: { publishStatus: 'failed' },
+      });
+      throw err instanceof BadRequestException ? err : new BadRequestException(err.message ?? 'Publishing failed');
+    }
+  }
+
+  private async publishToInstagram(igUserId: string, accessToken: string, imageUrl: string | null, caption: string, format: string) {
+    if (!imageUrl) throw new Error('No image URL available for publishing');
+
+    // Step 1 — create media container
+    const isReel = format === 'reel';
+    const containerParams: Record<string, string> = {
+      caption,
+      access_token: accessToken,
+    };
+
+    if (isReel) {
+      containerParams.media_type = 'REELS';
+      containerParams.video_url  = imageUrl;
+    } else {
+      containerParams.image_url  = imageUrl;
+    }
+
+    const containerRes  = await fetch(`https://graph.instagram.com/v21.0/${igUserId}/media`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(containerParams),
+    });
+    const containerData = await containerRes.json() as any;
+    if (!containerData.id) throw new Error(containerData.error?.message ?? 'Failed to create media container');
+
+    // Step 2 — publish container
+    const publishRes  = await fetch(`https://graph.instagram.com/v21.0/${igUserId}/media_publish`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ creation_id: containerData.id, access_token: accessToken }),
+    });
+    const publishData = await publishRes.json() as any;
+    if (!publishData.id) throw new Error(publishData.error?.message ?? 'Failed to publish to Instagram');
+  }
+
+  private async publishToFacebook(pageId: string, pageToken: string, imageUrl: string | null, caption: string) {
+    if (!imageUrl) throw new Error('No image URL available for publishing');
+
+    const res  = await fetch(`https://graph.facebook.com/v21.0/${pageId}/photos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: imageUrl, caption, access_token: pageToken }),
+    });
+    const data = await res.json() as any;
+    if (!data.id) throw new Error(data.error?.message ?? 'Failed to publish to Facebook');
   }
 
   async getSocialAccounts(tenantId: string) {
@@ -112,8 +197,7 @@ export class ScheduleService {
       state,
     });
     const url = `https://www.instagram.com/oauth/authorize?${params.toString()}`;
-    console.log('[Instagram OAuth] redirectUri:', redirectUri);
-    console.log('[Instagram OAuth] full URL:', url);
+    this.logger.log(`Instagram OAuth URL generated for tenant ${tenantId}`);
     return url;
   }
 

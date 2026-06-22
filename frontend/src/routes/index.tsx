@@ -17,12 +17,18 @@ export const Route = createFileRoute("/")({
   component: HomePage,
 });
 
+function Skeleton({ className }: { className?: string }) {
+  return <div className={`animate-pulse bg-muted rounded ${className ?? ""}`} />;
+}
+
 function HomePage() {
-  const { technician } = useProfile();
+  const { technician, loading: profileLoading } = useProfile();
   const { data: brandDNA } = useBrandDna();
-  const { data: appointments } = useAppointments();
-  const { items: contentItems } = useContentItems();
+  const { data: appointments, loading: apptLoading } = useAppointments();
+  const { items: contentItems, loading: contentLoading } = useContentItems();
   const { entries: calendarEntries } = useCalendar();
+
+  const isLoading = profileLoading || apptLoading || contentLoading;
 
   const now = new Date();
   const hour = now.getHours();
@@ -70,6 +76,23 @@ function HomePage() {
     const isToday   = d.toISOString().slice(0, 10) === todayISO;
     return { label, hasContent, isToday };
   });
+
+  if (isLoading) {
+    return (
+      <div className="mt-6 lg:mt-10 space-y-6">
+        <div className="mb-8">
+          <Skeleton className="h-3 w-48 mb-4" />
+          <Skeleton className="h-10 w-72 mb-2" />
+          <Skeleton className="h-4 w-40" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}
+        </div>
+        <Skeleton className="h-40 rounded-2xl" />
+        <Skeleton className="h-48 rounded-2xl" />
+      </div>
+    );
+  }
 
   return (
     <div>
