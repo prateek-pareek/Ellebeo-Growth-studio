@@ -92,7 +92,7 @@ done
 # 6. Traffic Switch and Teardown
 if [ "$HEALTHY" = true ]; then
     echo "Deployment successful! $TARGET_ENV is healthy."
-    echo "Traefik is automatically routing traffic to $TARGET_ENV (priority $TRAEFIK_PRIORITY)."
+    echo "Traefik is automatically routing traffic to $TARGET_ENV (backend priority $TRAEFIK_PRIORITY_BACKEND, frontend priority $TRAEFIK_PRIORITY_FRONTEND)."
     
     # Wait a few seconds for Traefik to pick up the changes and drain old connections
     sleep 10 

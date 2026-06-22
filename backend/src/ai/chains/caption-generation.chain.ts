@@ -149,7 +149,7 @@ export class CaptionGenerationChain {
     // Use the technician's system prompt as a real systemInstruction (not concatenated
     // into the user turn) so Gemini weights it the same way OpenAI does.
     const model = genAI.getGenerativeModel({
-      model: process.env['GEMINI_MODEL'] || 'gemini-1.5-pro',
+      model: process.env['GEMINI_MODEL'] || 'gemini-2.5-flash',
       systemInstruction: wrapSystemPrompt(prompt.systemPrompt),
       generationConfig: {
         // Match the OpenAI standard-text config so the two options compare fairly.
