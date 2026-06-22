@@ -358,10 +358,7 @@ function HomePage() {
                   </div>
                   {bookingShortfall > 0 ? (
                     <p className="text-xs text-taupe mb-5">
-                      {bookingShortfall} booking{bookingShortfall !== 1 ? "s" : ""} short of target.{" "}
-                      <Link to="/campaigns" className="text-foreground underline underline-offset-2 hover:text-taupe">
-                        Try a campaign to fill quiet weekdays.
-                      </Link>
+                      {bookingShortfall} booking{bookingShortfall !== 1 ? "s" : ""} short of target.
                     </p>
                   ) : (
                     <p className="text-xs text-sage mb-5">On track to meet your weekly target.</p>
