@@ -196,7 +196,7 @@ export class ScheduleService {
       response_type: 'code',
       state,
     });
-    const url = `https://www.instagram.com/oauth/authorize?${params.toString()}&scope=instagram_business_basic,instagram_business_content_publish`;
+    const url = `https://www.instagram.com/oauth/authorize?${params.toString()}&scope=instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_content_publish,instagram_business_manage_insights`;
     this.logger.log(`Instagram OAuth URL generated for tenant ${tenantId}`);
     return url;
   }
