@@ -193,11 +193,10 @@ export class ScheduleService {
     const params = new URLSearchParams({
       client_id:     process.env.INSTAGRAM_CLIENT_ID!,
       redirect_uri:  redirectUri,
-      scope:         'instagram_business_basic,instagram_content_publish',
       response_type: 'code',
       state,
     });
-    const url = `https://www.instagram.com/oauth/authorize?${params.toString()}`;
+    const url = `https://www.instagram.com/oauth/authorize?${params.toString()}&scope=instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_content_publish,instagram_business_manage_insights`;
     this.logger.log(`Instagram OAuth URL generated for tenant ${tenantId}`);
     return url;
   }
