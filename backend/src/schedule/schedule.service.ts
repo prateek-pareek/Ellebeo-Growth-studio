@@ -97,7 +97,7 @@ export class ScheduleService {
       },
     });
     if (!post || post.tenantId !== tenantId) throw new NotFoundException('Post not found');
-    if (post.publishStatus !== 'pending') throw new BadRequestException('Only pending posts can be published');
+    if (!['pending', 'failed'].includes(post.publishStatus)) throw new BadRequestException('Only pending posts can be published');
 
     const account = await this.prisma.socialAccount.findUnique({ where: { id: post.socialAccountId } });
     if (!account || account.status !== 'connected' || !account.accessToken) {
