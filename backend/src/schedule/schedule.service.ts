@@ -55,6 +55,7 @@ export class ScheduleService {
         ...dto,
         tenantId,
         scheduledFor: new Date(dto.scheduledFor),
+        hashtagsOverride: dto.hashtagsOverride ?? [],
       }
     });
   }
@@ -96,7 +97,7 @@ export class ScheduleService {
       },
     });
     if (!post || post.tenantId !== tenantId) throw new NotFoundException('Post not found');
-    if (post.publishStatus !== 'pending') throw new BadRequestException('Only pending posts can be published');
+    if (!['pending', 'failed'].includes(post.publishStatus)) throw new BadRequestException('Only pending posts can be published');
 
     const account = await this.prisma.socialAccount.findUnique({ where: { id: post.socialAccountId } });
     if (!account || account.status !== 'connected' || !account.accessToken) {
@@ -192,7 +193,7 @@ export class ScheduleService {
     const params = new URLSearchParams({
       client_id:     process.env.INSTAGRAM_CLIENT_ID!,
       redirect_uri:  redirectUri,
-      scope:         'instagram_business_basic',
+      scope:         'instagram_business_basic,instagram_content_publish',
       response_type: 'code',
       state,
     });
