@@ -87,7 +87,7 @@ export class BookingImportService {
           tenantId,
           clientId: client.id,
           appointmentId: appointment.id,
-          status: 'granted',
+          status: allowMarketingContent ? 'granted' : 'declined',
           allowShowFace,
           allowUseName,
           allowTagSocial,
@@ -95,7 +95,7 @@ export class BookingImportService {
           allowInternalUse: false,
           allowMarketingContent,
           consentMethod: 'crm',
-          grantedAt: new Date(),
+          grantedAt: allowMarketingContent ? new Date() : undefined,
           crmBookingId: bookingId,
         },
       });
