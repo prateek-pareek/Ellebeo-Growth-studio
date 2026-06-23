@@ -1,6 +1,7 @@
 import {
   Injectable,
   Logger,
+  BadRequestException,
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
@@ -30,6 +31,10 @@ export class BookingImportService {
     const booking = await this.crmReader.getBookingById(bookingId);
     if (!booking) {
       throw new NotFoundException(`CRM booking ${bookingId} not found`);
+    }
+
+    if (booking.confirmedStartTime && booking.confirmedStartTime > new Date()) {
+      throw new BadRequestException('Cannot import an upcoming booking — wait until the appointment is completed');
     }
 
     const questionnaire = await this.crmReader.getQuestionnaireForBooking(bookingId);
