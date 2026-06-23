@@ -193,7 +193,7 @@ export class ScheduleService {
     const params = new URLSearchParams({
       client_id:     process.env.INSTAGRAM_CLIENT_ID!,
       redirect_uri:  redirectUri,
-      scope:         'instagram_business_basic',
+      scope:         'instagram_business_basic,instagram_content_publish',
       response_type: 'code',
       state,
     });
