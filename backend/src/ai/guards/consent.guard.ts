@@ -31,7 +31,7 @@ export class ConsentGuard {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly io?: SocketServer    // optional — only needed for handleConsentWithdrawal
-  ) {}
+  ) { }
 
   // --------------------------------------------------------------------------
   // Checkpoint 1 — Called at API layer before job creation
