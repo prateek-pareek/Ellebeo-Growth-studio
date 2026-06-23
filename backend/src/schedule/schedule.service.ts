@@ -55,6 +55,7 @@ export class ScheduleService {
         ...dto,
         tenantId,
         scheduledFor: new Date(dto.scheduledFor),
+        hashtagsOverride: dto.hashtagsOverride ?? [],
       }
     });
   }
