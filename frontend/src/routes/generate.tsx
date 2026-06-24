@@ -13,6 +13,7 @@ const searchSchema = z.object({
   appointment: z.string().optional(),
   templateGoal: z.string().optional(),
   templateFormat: z.string().optional(),
+  templateCategories: z.string().optional(),
 });
 
 export const Route = createFileRoute("/generate")({
@@ -63,6 +64,9 @@ function GeneratePage() {
 
   const initialGoal = (GOALS.find((g) => g.id === search.templateGoal)?.id ?? "showcase") as Goal;
   const initialFormat = (FORMATS.find((f) => f.id === search.templateFormat)?.id ?? "Carousel") as Format;
+  const templateCategories = search.templateCategories
+    ? search.templateCategories.split(',').map((s) => s.trim()).filter(Boolean)
+    : [];
 
   const [appointment, setAppointment] = useState<Appointment | null>(requestedMatch);
   const [step, setStep] = useState<Step>(requestedMatch ? "consent" : "select");
@@ -277,6 +281,7 @@ function GeneratePage() {
               {step === "select" && (
                 <SelectAppointment
                   appointments={appointments}
+                  templateCategories={templateCategories}
                   onPick={(a) => {
                     setAppointment(a);
                     setStep("consent");
@@ -485,13 +490,29 @@ function ContextStrip({ appointment }: { appointment: Appointment }) {
   );
 }
 
+function normalizeTplCategory(cat: string): string {
+  const lower = cat.toLowerCase();
+  if (lower === 'injector') return 'medical aesthetics';
+  return lower;
+}
+
+function appointmentMatchesCategories(apptCategory: string, templateCategories: string[]): boolean {
+  if (templateCategories.length === 0) return true;
+  const apptNorm = apptCategory.toLowerCase();
+  return templateCategories.some((tc) => normalizeTplCategory(tc) === apptNorm);
+}
+
 function SelectAppointment({
   appointments,
+  templateCategories = [],
   onPick,
 }: {
   appointments: Appointment[];
+  templateCategories?: string[];
   onPick: (a: Appointment) => void;
 }) {
+  const hasFilter = templateCategories.length > 0;
+
   return (
     <div>
       {/* Header */}
@@ -503,9 +524,22 @@ function SelectAppointment({
         </p>
       </div>
 
+      {/* Template category filter notice */}
+      {hasFilter && (
+        <div className="mb-4 flex items-start gap-3 bg-card border hairline px-4 py-3">
+          <span className="size-1.5 rounded-full bg-taupe shrink-0 mt-1.5" />
+          <p className="text-[11px] text-taupe leading-relaxed">
+            This template is designed for{" "}
+            <span className="text-foreground font-medium">{templateCategories.join(", ")}</span>.
+            {" "}Appointments from a different category are disabled.
+          </p>
+        </div>
+      )}
+
       {/* Appointment cards */}
       <div className="space-y-2">
         {appointments.map((a) => {
+          const matches = appointmentMatchesCategories(a.category, templateCategories);
           const initials = a.clientName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
           const consentColor =
             a.consent === "granted"  ? "bg-sage/10 text-sage border-sage/20" :
@@ -520,12 +554,19 @@ function SelectAppointment({
           return (
             <button
               key={a.id}
-              onClick={() => onPick(a)}
-              className="w-full text-left group rounded-2xl border-2 border-border bg-card p-4 flex items-center gap-4 hover:border-foreground/30 hover:bg-nude/20 hover:shadow-sm transition-all duration-200"
+              onClick={() => matches ? onPick(a) : undefined}
+              disabled={!matches}
+              title={!matches ? `This template is for ${templateCategories.join(", ")} — not compatible with ${a.category}` : undefined}
+              className={
+                "w-full text-left group rounded-2xl border-2 p-4 flex items-center gap-4 transition-all duration-200 " +
+                (matches
+                  ? "border-border bg-card hover:border-foreground/30 hover:bg-nude/20 hover:shadow-sm cursor-pointer"
+                  : "border-border bg-muted/30 opacity-50 cursor-not-allowed")
+              }
             >
               {/* Initials avatar */}
-              <div className="size-10 rounded-xl bg-muted flex items-center justify-center shrink-0 group-hover:bg-nude/40 transition-colors">
-                <span className="text-[11px] font-semibold text-taupe group-hover:text-foreground tracking-wide transition-colors">
+              <div className={"size-10 rounded-xl flex items-center justify-center shrink-0 transition-colors " + (matches ? "bg-muted group-hover:bg-nude/40" : "bg-muted")}>
+                <span className={"text-[11px] font-semibold tracking-wide transition-colors " + (matches ? "text-taupe group-hover:text-foreground" : "text-taupe/50")}>
                   {initials}
                 </span>
               </div>
@@ -546,13 +587,19 @@ function SelectAppointment({
                 </div>
               </div>
 
-              {/* Consent badge */}
-              <span className={`shrink-0 text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full border ${consentColor}`}>
-                {consentLabel}
-              </span>
+              {/* Category mismatch badge or consent badge */}
+              {!matches ? (
+                <span className="shrink-0 text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full border bg-border text-taupe/50 border-border">
+                  Wrong category
+                </span>
+              ) : (
+                <span className={`shrink-0 text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full border ${consentColor}`}>
+                  {consentLabel}
+                </span>
+              )}
 
               {/* Arrow */}
-              <ChevronRight className="size-4 text-taupe/40 group-hover:text-foreground shrink-0 transition-colors" />
+              {matches && <ChevronRight className="size-4 text-taupe/40 group-hover:text-foreground shrink-0 transition-colors" />}
             </button>
           );
         })}
