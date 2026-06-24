@@ -51,13 +51,46 @@ export class BillingService {
         quantity: 1,
       }],
       client_reference_id: tenantId,
-      success_url: `${frontendUrl}/plans?success=true`,
+      success_url: `${frontendUrl}/plans?success=true&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${frontendUrl}/plans?canceled=true`,
       metadata: { tenantId, generationsIncluded: String(settings.generationsIncluded) },
     });
 
     if (!session.url) throw new InternalServerErrorException('Stripe did not return a checkout URL');
     return { url: session.url };
+  }
+
+  async verifySession(tenantId: string, sessionId: string): Promise<{ applied: boolean; generationsAdded: number }> {
+    if (!this.stripe) throw new InternalServerErrorException('Payments are not configured');
+
+    const session = await this.stripe.checkout.sessions.retrieve(sessionId);
+
+    // Must belong to this tenant and be paid
+    if (session.client_reference_id !== tenantId) throw new BadRequestException('Session does not belong to this account');
+    if (session.payment_status !== 'paid') return { applied: false, generationsAdded: 0 };
+
+    const generationsIncluded = Number(session.metadata?.generationsIncluded ?? 0);
+    if (generationsIncluded === 0) return { applied: false, generationsAdded: 0 };
+
+    // Idempotency: only apply if this session hasn't been applied yet
+    const existing = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { appliedStripeSessionIds: true },
+    });
+    const applied = existing?.appliedStripeSessionIds ?? [];
+    if (applied.includes(sessionId)) return { applied: true, generationsAdded: 0 };
+
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        planGenerationsTotal: { increment: generationsIncluded },
+        stripeCustomerId: typeof session.customer === 'string' ? session.customer : (session.customer as any)?.id,
+        appliedStripeSessionIds: { push: sessionId },
+      },
+    });
+
+    this.logger.log(`Tenant ${tenantId} session ${sessionId} verified — added ${generationsIncluded} generations`);
+    return { applied: true, generationsAdded: generationsIncluded };
   }
 
   async handleWebhookEvent(rawBody: Buffer, signature: string): Promise<void> {
