@@ -211,15 +211,16 @@ export function useContentItems(): UseContentItemsResult {
 
   const refresh = () => {
     const id = ++reqId.current;
-    setState((prev) => ({ ...prev, loading: true }));
     fetchCloudContent().then((res) => {
       if (id !== reqId.current) return;
       if (res.kind === "ok") {
         setState({ items: res.items, appointmentsById: res.appointmentsById, loading: false, source: "cloud", isEmpty: false, error: false });
+      } else if (res.kind === "empty") {
+        setState({ items: [], appointmentsById: new Map(), loading: false, source: "cloud", isEmpty: true, error: false });
       } else {
-        setState((prev) => ({ ...prev, loading: false }));
+        setState((prev) => ({ ...prev, loading: false, error: true }));
       }
-    }).catch(() => setState((prev) => ({ ...prev, loading: false })));
+    }).catch(() => setState((prev) => ({ ...prev, loading: false, error: true })));
   };
 
   return { ...state, refresh };
