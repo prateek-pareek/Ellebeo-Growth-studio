@@ -40,7 +40,10 @@ export class BookingImportService {
 
     const questionnaire =
       await this.crmReader.getQuestionnaireForBooking(bookingId);
-    if (booking.confirmedStartTime && booking.confirmedStartTime > new Date()) {
+    if (!booking.confirmedStartTime) {
+      throw new BadRequestException('Cannot import an unconfirmed booking — it has no confirmed start time yet');
+    }
+    if (booking.confirmedStartTime > new Date()) {
       throw new BadRequestException('Cannot import an upcoming booking — wait until the appointment is completed');
     }
 
