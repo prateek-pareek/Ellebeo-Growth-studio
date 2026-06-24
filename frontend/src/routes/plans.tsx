@@ -9,6 +9,7 @@ import { toast } from "sonner";
 const searchSchema = z.object({
   success: z.union([z.boolean(), z.string()]).optional(),
   canceled: z.union([z.boolean(), z.string()]).optional(),
+  session_id: z.string().optional(),
 });
 
 export const Route = createFileRoute("/plans")({
@@ -51,27 +52,40 @@ function PlansPage() {
   useEffect(() => {
     if (search.success) {
       setPurchaseSuccess(true);
-      // Webhook usually finishes before this redirect lands, but poll briefly
-      // in case it's still in flight.
-      let attempts = 0;
-      const poll = () => {
-        api.get("/generation/rate-limit-status")
-          .then((res) => {
-            const data = res.data?.data ?? res.data;
-            const remaining = (data?.plan?.remaining ?? 0) + (data?.trial?.remaining ?? 0);
-            if (remaining > 0 || attempts >= 5) {
-              setGenerationsRemaining(remaining);
-            } else {
-              attempts += 1;
-              setTimeout(poll, 1500);
-            }
-          })
-          .catch(() => {});
+      const sessionId = search.session_id;
+      // First: call verify-session to ensure the DB is updated even if the
+      // Stripe webhook hasn't fired yet (common on deployed environments where
+      // the webhook endpoint isn't configured in the Stripe Dashboard).
+      const verifyThenPoll = async () => {
+        if (sessionId) {
+          try {
+            await api.post("/billing/verify-session", { sessionId });
+          } catch {
+            // Ignore — webhook may have already applied it
+          }
+        }
+        // Then poll for the updated balance
+        let attempts = 0;
+        const poll = () => {
+          api.get("/generation/rate-limit-status")
+            .then((res) => {
+              const data = res.data?.data ?? res.data;
+              const remaining = (data?.plan?.remaining ?? 0) + (data?.trial?.remaining ?? 0);
+              if (remaining > 0 || attempts >= 5) {
+                setGenerationsRemaining(remaining);
+              } else {
+                attempts += 1;
+                setTimeout(poll, 1500);
+              }
+            })
+            .catch(() => {});
+        };
+        poll();
       };
-      poll();
+      verifyThenPoll();
     }
     if (search.canceled) setPurchaseCanceled(true);
-  }, [search.success, search.canceled]);
+  }, [search.success, search.canceled, search.session_id]);
 
   const handleBuy = async () => {
     setBusy(true);

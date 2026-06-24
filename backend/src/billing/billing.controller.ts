@@ -1,4 +1,4 @@
-import { Controller, Post, Req, Res, Headers, UseGuards, HttpCode } from '@nestjs/common';
+import { Controller, Post, Body, Req, Res, Headers, UseGuards, HttpCode } from '@nestjs/common';
 import { Response } from 'express';
 import { BillingService } from './billing.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -12,6 +12,12 @@ export class BillingController {
   @Post('checkout-session')
   createCheckoutSession(@Req() req: any) {
     return this.billingService.createCheckoutSession(req.user.tenantId);
+  }
+
+  @UseGuards(JwtAuthGuard, TenantStatusGuard)
+  @Post('verify-session')
+  verifySession(@Req() req: any, @Body('sessionId') sessionId: string) {
+    return this.billingService.verifySession(req.user.tenantId, sessionId);
   }
 
   // Stripe calls this directly — no JWT available. Signature verification
