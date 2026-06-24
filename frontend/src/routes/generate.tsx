@@ -204,42 +204,121 @@ function GeneratePage() {
   return (
     <div className="relative">
       {showPaywall && (
-        <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border hairline p-8 max-w-md w-full text-center shadow-xl">
-            <h2 className="font-serif text-3xl mb-4 text-foreground">Upgrade to Growth Studio</h2>
-            <p className="text-taupe mb-8 text-sm leading-relaxed">
-              Unlock AI-powered content generation, automated captions, and reels tailored to your exact Brand DNA.
-            </p>
-            <button className="w-full bg-foreground text-offwhite px-6 py-4 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors mb-4">
-              Unlock Now
-            </button>
-            <Link to="/" className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
-              Go Back
+        <div className="fixed inset-0 z-50 flex">
+          {/* Left — decorative */}
+          <div className="hidden lg:flex lg:w-1/2 bg-foreground flex-col justify-between p-12 relative overflow-hidden">
+            <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle at 30% 70%, white 1px, transparent 1px), radial-gradient(circle at 70% 30%, white 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-[0.4em] text-nude/60 mb-8">Elle.Be.O · Growth Studio</p>
+              <h2 className="font-serif text-5xl xl:text-6xl leading-[1.05] text-offwhite">
+                Your brand.<br /><span className="italic text-nude">Amplified.</span>
+              </h2>
+            </div>
+            <div className="space-y-4">
+              {["AI-generated captions shaped by your Brand DNA", "Reels, carousels, stories — every format", "Auto-hashtags, hooks & CTAs included"].map((f) => (
+                <div key={f} className="flex items-center gap-3">
+                  <span className="size-1.5 rounded-full bg-nude shrink-0" />
+                  <p className="text-sm text-offwhite/70">{f}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* Right — CTA */}
+          <div className="flex-1 bg-background flex flex-col justify-center px-8 sm:px-16 lg:px-20 relative">
+            <Link to="/" className="absolute top-6 right-6 text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
+              ← Back
             </Link>
+            <p className="text-[9px] font-bold uppercase tracking-[0.4em] text-taupe mb-6">Access required</p>
+            <h2 className="font-serif text-4xl sm:text-5xl leading-tight mb-4 text-foreground">
+              Unlock Growth Studio
+            </h2>
+            <p className="text-taupe text-base leading-relaxed mb-10 max-w-sm">
+              Upgrade to start turning every appointment into polished, on-brand content — automatically.
+            </p>
+            <button className="bg-foreground text-offwhite px-8 py-4 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors w-full sm:w-auto">
+              Unlock Now →
+            </button>
           </div>
         </div>
       )}
 
       {showTrialPaywall && (
-        <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border hairline p-8 max-w-md w-full text-center shadow-xl">
-            <h2 className="font-serif text-3xl mb-4 text-foreground">
-              {paywallReason === "PLAN_EXHAUSTED" ? "Buy More Generations" : "Unlock the Studio"}
-            </h2>
-            <p className="text-taupe mb-8 text-sm leading-relaxed">
-              {paywallReason === "PLAN_EXHAUSTED"
-                ? "You've used all your purchased generations. Buy more to keep turning appointments into content."
-                : "You've used your 2 free generations. Choose a plan to keep turning appointments into content."}
-            </p>
-            <button
-              onClick={() => navigate({ to: "/plans" })}
-              className="w-full bg-foreground text-offwhite px-6 py-4 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors mb-4"
-            >
-              {paywallReason === "PLAN_EXHAUSTED" ? "Buy More" : "Choose a Plan"}
-            </button>
-            <Link to="/" className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
-              Go Back
+        <div className="fixed inset-0 z-50 flex">
+          {/* Left — decorative */}
+          <div className="hidden lg:flex lg:w-1/2 bg-foreground flex-col justify-between p-12 relative overflow-hidden">
+            <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle at 30% 70%, white 1px, transparent 1px), radial-gradient(circle at 70% 30%, white 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-[0.4em] text-nude/60 mb-8">Elle.Be.O · Growth Studio</p>
+              {paywallReason === "PLAN_EXHAUSTED" ? (
+                <h2 className="font-serif text-5xl xl:text-6xl leading-[1.05] text-offwhite">
+                  You're on a<br /><span className="italic text-nude">roll.</span>
+                </h2>
+              ) : (
+                <h2 className="font-serif text-5xl xl:text-6xl leading-[1.05] text-offwhite">
+                  Your 2 free<br /><span className="italic text-nude">are done.</span>
+                </h2>
+              )}
+            </div>
+            <div className="space-y-4">
+              {["Unlimited content generation", "Every format — reels, carousels, stories", "Shaped by your Brand DNA, every time"].map((f) => (
+                <div key={f} className="flex items-center gap-3">
+                  <span className="size-1.5 rounded-full bg-nude shrink-0" />
+                  <p className="text-sm text-offwhite/70">{f}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Right — CTA */}
+          <div className="flex-1 bg-background flex flex-col justify-center px-8 sm:px-16 lg:px-20 relative">
+            <Link to="/" className="absolute top-6 right-6 text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
+              ← Back
             </Link>
+
+            {paywallReason === "PLAN_EXHAUSTED" ? (
+              <>
+                <p className="text-[9px] font-bold uppercase tracking-[0.4em] text-taupe mb-6">Generations used up</p>
+                <h2 className="font-serif text-4xl sm:text-5xl leading-tight mb-4 text-foreground">
+                  Ready for more?
+                </h2>
+                <p className="text-taupe text-base leading-relaxed mb-10 max-w-sm">
+                  You've used all your purchased generations. Top up to keep the momentum going.
+                </p>
+                <button
+                  onClick={() => navigate({ to: "/plans" })}
+                  className="bg-foreground text-offwhite px-8 py-4 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors w-full sm:w-auto"
+                >
+                  Buy More Generations →
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-3 mb-8">
+                  <div className="flex gap-1.5">
+                    <span className="size-2.5 rounded-full bg-foreground" />
+                    <span className="size-2.5 rounded-full bg-foreground" />
+                    <span className="size-2.5 rounded-full bg-border" />
+                    <span className="size-2.5 rounded-full bg-border" />
+                  </div>
+                  <p className="text-[10px] uppercase tracking-widest text-taupe">2 of 2 free generations used</p>
+                </div>
+                <h2 className="font-serif text-4xl sm:text-5xl leading-tight mb-4 text-foreground">
+                  Keep creating.<br />Choose a plan.
+                </h2>
+                <p className="text-taupe text-base leading-relaxed mb-10 max-w-sm">
+                  Your free trial is complete. Unlock unlimited AI content generation with a Silver or Gold plan.
+                </p>
+                <button
+                  onClick={() => navigate({ to: "/plans" })}
+                  className="bg-foreground text-offwhite px-8 py-4 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors w-full sm:w-auto mb-4"
+                >
+                  Choose a Plan →
+                </button>
+                <p className="text-[10px] uppercase tracking-widest text-taupe">
+                  Silver from $29 · Gold from $59 · Cancel anytime
+                </p>
+              </>
+            )}
           </div>
         </div>
       )}
