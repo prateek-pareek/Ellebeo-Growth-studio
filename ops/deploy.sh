@@ -22,12 +22,13 @@ ACTIVE_PRIORITY=$(docker inspect \
     --format "{{ index .Config.Labels \"traefik.http.routers.growth-studio-api-${ACTIVE_ENV}.priority\" }}" \
     "growth-studio-backend-${ACTIVE_ENV}" 2>/dev/null || echo "")
 if ! [[ "$ACTIVE_PRIORITY" =~ ^[0-9]+$ ]]; then
-    ACTIVE_PRIORITY=100
+    ACTIVE_PRIORITY=500
 fi
-export TRAEFIK_PRIORITY=$((ACTIVE_PRIORITY + 10))
+export TRAEFIK_PRIORITY_BACKEND=$((ACTIVE_PRIORITY + 10))
+export TRAEFIK_PRIORITY_FRONTEND=$((ACTIVE_PRIORITY - 400)) # Keep frontend strictly lower than backend
 
 echo "Current active environment is ${ACTIVE_ENV^^} (priority $ACTIVE_PRIORITY)."
-echo "Deploying to ${TARGET_ENV^^} with priority $TRAEFIK_PRIORITY."
+echo "Deploying to ${TARGET_ENV^^} with backend priority $TRAEFIK_PRIORITY_BACKEND and frontend priority $TRAEFIK_PRIORITY_FRONTEND."
 
 # 2. Export environment variables for Docker Compose
 export BACKEND_IMAGE=$1
@@ -64,7 +65,7 @@ docker compose run --rm migrate
 # 4. Start new environment and workers
 echo "Starting $TARGET_ENV environment..."
 docker compose --profile $TARGET_ENV up -d "${SERVICES[@]}"
-docker compose up -d "${WORKERS[@]}"
+docker compose up -d --force-recreate "${WORKERS[@]}"
 
 # 5. Wait and Validate Health
 echo "Waiting for health checks on backend-$TARGET_ENV..."
@@ -91,7 +92,7 @@ done
 # 6. Traffic Switch and Teardown
 if [ "$HEALTHY" = true ]; then
     echo "Deployment successful! $TARGET_ENV is healthy."
-    echo "Traefik is automatically routing traffic to $TARGET_ENV (priority $TRAEFIK_PRIORITY)."
+    echo "Traefik is automatically routing traffic to $TARGET_ENV (backend priority $TRAEFIK_PRIORITY_BACKEND, frontend priority $TRAEFIK_PRIORITY_FRONTEND)."
     
     # Wait a few seconds for Traefik to pick up the changes and drain old connections
     sleep 10 

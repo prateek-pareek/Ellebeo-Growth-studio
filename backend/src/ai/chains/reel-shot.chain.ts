@@ -93,8 +93,8 @@ Return:
       const cleaned = content.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
       const parsed = JSON.parse(cleaned) as ReelShotResult;
       if (Array.isArray(parsed.shots) && parsed.shots.length >= 4) return parsed;
-    } catch (err) {
-      console.error('[ReelShotChain] Generation failed, using fallback:', err);
+    } catch {
+      // fallback below
     }
 
     return {

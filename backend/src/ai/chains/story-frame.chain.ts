@@ -81,16 +81,11 @@ Return exactly:
       ]);
       const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
       
-      const usage = (response as { usage_metadata?: { input_tokens?: number; output_tokens?: number } }).usage_metadata;
-      if (usage) {
-        console.log(`[TokenDebug] StoryFrameChain (gpt-4o-mini): Used ${usage.input_tokens} input tokens, ${usage.output_tokens} output tokens.`);
-      }
-
       const cleaned = content.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
       const parsed = JSON.parse(cleaned) as StoryFrameResult;
       if (Array.isArray(parsed.frames) && parsed.frames.length === 4) return parsed;
-    } catch (err) {
-      console.error('[StoryFrameChain] Generation failed, using fallback:', err);
+    } catch {
+      // fallback below
     }
 
     return {

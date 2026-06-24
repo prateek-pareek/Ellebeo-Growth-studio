@@ -67,7 +67,7 @@ function CalendarPage() {
   const totalCells = Math.ceil((startOffset + daysInMonth) / 7) * 7;
 
   const upcoming = contentItems
-    .filter((c) => c.status === "Scheduled" || c.status === "Approved")
+    .filter((c) => c.status === "Scheduled" && !!c.scheduledFor)
     .slice(0, 4);
 
   return (
@@ -108,12 +108,12 @@ function CalendarPage() {
           <button className="px-5 py-2.5 text-[11px] uppercase tracking-[0.2em] bg-foreground text-offwhite">
             Month
           </button>
-          <Link
+          {/* <Link
             to="/campaigns"
             className="px-5 py-2.5 text-[11px] uppercase tracking-[0.2em] border hairline hover:bg-card"
           >
             Campaigns
-          </Link>
+          </Link> */}
         </div>
       </header>
 
@@ -252,7 +252,7 @@ function CalendarPage() {
                 const reelCount = entries.filter(e => e.type?.toLowerCase() === "reel").length;
                 const storyCount = entries.filter(e => e.type?.toLowerCase() === "story").length;
                 const bookingDriven = contentItems.filter(c =>
-                  c.sourceAppointmentId && (c.status === "Scheduled" || c.status === "Approved")
+                  c.sourceAppointmentId && c.status === "Scheduled" && !!c.scheduledFor
                 ).length;
                 return (
                   <>
@@ -269,11 +269,11 @@ function CalendarPage() {
 
         {/* Upcoming queue */}
         <section className="col-span-12 lg:col-span-7">
-          <h2 className="eyebrow mb-6">Scheduled and approved</h2>
+          <h2 className="eyebrow mb-6">Upcoming scheduled</h2>
           <div className="space-y-px bg-border">
             {upcoming.length === 0 ? (
               <div className="bg-card p-6 text-sm text-taupe italic">
-                No scheduled content yet. Generate and approve content to see it here.
+                No scheduled content yet. Approve content and schedule it to see it here.
               </div>
             ) : upcoming.map((c) => {
               const whenLabel = c.scheduledFor

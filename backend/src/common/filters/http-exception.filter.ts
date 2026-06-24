@@ -46,7 +46,6 @@ export class HttpExceptionFilter implements ExceptionFilter {
         errorResponse.message = res;
       }
     } else if (exception instanceof Error) {
-      console.error('[HttpExceptionFilter] Unhandled error:', exception.stack ?? exception.message);
       errorResponse.message = exception.message;
       if (process.env.NODE_ENV !== 'production') {
         errorResponse.details = exception.stack;

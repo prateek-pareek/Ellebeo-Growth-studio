@@ -33,7 +33,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.growth-studio-api-blue.rule=Host(`${GROWTH_STUDIO_DOMAIN}`) && PathPrefix(`/api`)"
-      - "traefik.http.routers.growth-studio-api-blue.priority=${TRAEFIK_PRIORITY:-100}"
+      - "traefik.http.routers.growth-studio-api-blue.priority=${TRAEFIK_PRIORITY_BACKEND:-500}"
       - "traefik.http.routers.growth-studio-api-blue.entrypoints=websecure"
       - "traefik.http.routers.growth-studio-api-blue.tls.certresolver=letsencrypt"
       - "traefik.http.services.growth-studio-api-blue.loadbalancer.server.port=3000"
@@ -46,7 +46,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.growth-studio-web-blue.rule=Host(`${GROWTH_STUDIO_DOMAIN}`)"
-      - "traefik.http.routers.growth-studio-web-blue.priority=${TRAEFIK_PRIORITY:-100}"
+      - "traefik.http.routers.growth-studio-web-blue.priority=${TRAEFIK_PRIORITY_FRONTEND:-100}"
       - "traefik.http.routers.growth-studio-web-blue.entrypoints=websecure"
       - "traefik.http.routers.growth-studio-web-blue.tls.certresolver=letsencrypt"
       - "traefik.http.services.growth-studio-web-blue.loadbalancer.server.port=3000"
@@ -62,7 +62,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.growth-studio-api-green.rule=Host(`${GROWTH_STUDIO_DOMAIN}`) && PathPrefix(`/api`)"
-      - "traefik.http.routers.growth-studio-api-green.priority=${TRAEFIK_PRIORITY:-100}"
+      - "traefik.http.routers.growth-studio-api-green.priority=${TRAEFIK_PRIORITY_BACKEND:-500}"
       - "traefik.http.routers.growth-studio-api-green.entrypoints=websecure"
       - "traefik.http.routers.growth-studio-api-green.tls.certresolver=letsencrypt"
       - "traefik.http.services.growth-studio-api-green.loadbalancer.server.port=3000"
@@ -75,7 +75,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.growth-studio-web-green.rule=Host(`${GROWTH_STUDIO_DOMAIN}`)"
-      - "traefik.http.routers.growth-studio-web-green.priority=${TRAEFIK_PRIORITY:-100}"
+      - "traefik.http.routers.growth-studio-web-green.priority=${TRAEFIK_PRIORITY_FRONTEND:-100}"
       - "traefik.http.routers.growth-studio-web-green.entrypoints=websecure"
       - "traefik.http.routers.growth-studio-web-green.tls.certresolver=letsencrypt"
       - "traefik.http.services.growth-studio-web-green.loadbalancer.server.port=3000"

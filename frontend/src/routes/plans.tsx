@@ -23,11 +23,13 @@ export const Route = createFileRoute("/plans")({
 });
 
 type PlanInfo = { priceUsd: number; generationsIncluded: number };
+type UsageInfo = { total: number; used: number; remaining: number };
 
 function PlansPage() {
   const search = Route.useSearch();
   const navigate = useNavigate();
   const [plan, setPlan] = useState<PlanInfo | null>(null);
+  const [usage, setUsage] = useState<UsageInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [purchaseSuccess, setPurchaseSuccess] = useState(false);
@@ -35,9 +37,14 @@ function PlansPage() {
   const [generationsRemaining, setGenerationsRemaining] = useState<number | null>(null);
 
   useEffect(() => {
-    api.get("/generation/plan-info")
-      .then((res) => setPlan(res.data?.data ?? res.data))
-      .catch(() => toast.error("Could not load plan details."))
+    Promise.all([
+      api.get("/generation/plan-info"),
+      api.get("/generation/rate-limit-status"),
+    ]).then(([planRes, usageRes]) => {
+      setPlan(planRes.data?.data ?? planRes.data);
+      const d = usageRes.data?.data ?? usageRes.data;
+      if (d?.plan) setUsage(d.plan);
+    }).catch(() => toast.error("Could not load plan details."))
       .finally(() => setLoading(false));
   }, []);
 
@@ -90,13 +97,15 @@ function PlansPage() {
           <ArrowLeft className="size-3" /> Back to generator
         </Link>
         <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-taupe mb-3">
-          {purchaseSuccess ? "Payment confirmed" : purchaseCanceled ? "Checkout canceled" : "Unlock the studio"}
+          {purchaseSuccess ? "Payment confirmed" : purchaseCanceled ? "Checkout canceled" : usage && usage.total > 0 ? "Your plan" : "Unlock the studio"}
         </p>
         <h1 className="font-serif text-4xl sm:text-5xl leading-[1.05] tracking-tight">
           {purchaseSuccess
             ? <>You're all <span className="italic text-taupe">set</span>.</>
             : purchaseCanceled
             ? <>No charge <span className="italic text-taupe">made</span>.</>
+            : usage && usage.total > 0
+            ? <>Your <span className="italic text-taupe">generations</span>.</>
             : <>Buy generations to keep <span className="italic text-taupe">creating</span>.</>}
         </h1>
         <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[48ch] mx-auto">
@@ -104,6 +113,8 @@ function PlansPage() {
             ? "Your purchase went through. You're ready to turn more appointments into content."
             : purchaseCanceled
             ? "You backed out before paying — nothing was charged. You can try again whenever you're ready."
+            : usage && usage.total > 0
+            ? "You have an active plan. See your usage below and top up anytime."
             : "A single one-time purchase unlocks a batch of AI generations for turning appointments into content."}
         </p>
       </header>
@@ -162,47 +173,90 @@ function PlansPage() {
         </div>
       ) : plan ? (
         <motion.div
-          whileHover={{ y: -3 }}
-          className="rounded-2xl border border-border bg-card shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col"
+          className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden flex flex-col"
+          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
         >
           <div className="h-1.5 bg-gradient-to-r from-taupe via-nude to-sage" />
           <div className="p-8 flex flex-col">
-            <div className="flex items-center gap-3 mb-5">
+            <div className="flex items-center gap-3 mb-6">
               <div className="size-10 rounded-xl bg-gradient-to-br from-taupe to-sage flex items-center justify-center shadow-sm">
                 <Sparkles className="size-5 text-white" />
               </div>
               <h2 className="font-serif text-2xl">Growth Studio Plan</h2>
             </div>
 
-            <div className="flex items-end gap-1 mb-1">
-              <span className="font-serif text-5xl tabular-nums">${plan.priceUsd}</span>
-              <span className="text-sm text-taupe mb-2">one-time</span>
-            </div>
-            <p className="text-sm text-taupe mb-6">
-              Unlocks <span className="font-semibold text-foreground">{plan.generationsIncluded} generations</span>
-            </p>
-
-            <ul className="space-y-2.5 mb-8">
-              {[
-                `${plan.generationsIncluded} AI content generations`,
-                "Brand DNA-aware captions & images",
-                "No expiry — use them whenever",
-                "Buy again anytime once they run out",
-              ].map((f) => (
-                <li key={f} className="flex items-start gap-2 text-sm text-foreground/90">
-                  <Check className="size-3.5 text-sage shrink-0 mt-0.5" />
-                  {f}
-                </li>
-              ))}
-            </ul>
-
-            <button
-              onClick={handleBuy}
-              disabled={busy}
-              className="w-full bg-foreground text-offwhite py-3.5 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors disabled:opacity-50"
-            >
-              {busy ? "Redirecting…" : `Buy ${plan.generationsIncluded} generations — $${plan.priceUsd}`}
-            </button>
+            {usage && usage.total > 0 ? (
+              <>
+                {/* Active plan — show usage */}
+                <div className="rounded-xl border border-sage/30 bg-sage/5 p-5 mb-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <CheckCircle2 className="size-4 text-sage" />
+                    <span className="text-xs font-semibold text-sage uppercase tracking-widest">Active plan</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4 mb-4">
+                    <div className="text-center">
+                      <p className="font-serif text-3xl tabular-nums">{usage.total}</p>
+                      <p className="text-[10px] uppercase tracking-widest text-taupe mt-1">Total</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="font-serif text-3xl tabular-nums">{usage.used}</p>
+                      <p className="text-[10px] uppercase tracking-widest text-taupe mt-1">Used</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="font-serif text-3xl tabular-nums text-sage">{usage.remaining}</p>
+                      <p className="text-[10px] uppercase tracking-widest text-taupe mt-1">Remaining</p>
+                    </div>
+                  </div>
+                  <div className="h-2 bg-border rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-sage transition-all duration-700 rounded-full"
+                      style={{ width: `${Math.min(100, (usage.used / usage.total) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-taupe mb-6 text-center">
+                  Running low? Top up anytime — new generations are added to your balance.
+                </p>
+                <button
+                  onClick={handleBuy}
+                  disabled={busy}
+                  className="w-full bg-foreground text-offwhite py-3.5 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors disabled:opacity-50"
+                >
+                  {busy ? "Redirecting…" : `Top up ${plan.generationsIncluded} more — $${plan.priceUsd}`}
+                </button>
+              </>
+            ) : (
+              <>
+                {/* No plan — show buy */}
+                <div className="flex items-end gap-1 mb-1">
+                  <span className="font-serif text-5xl tabular-nums">${plan.priceUsd}</span>
+                  <span className="text-sm text-taupe mb-2">one-time</span>
+                </div>
+                <p className="text-sm text-taupe mb-6">
+                  Unlocks <span className="font-semibold text-foreground">{plan.generationsIncluded} generations</span>
+                </p>
+                <ul className="space-y-2.5 mb-8">
+                  {[
+                    `${plan.generationsIncluded} AI content generations`,
+                    "Brand DNA-aware captions & images",
+                    "No expiry — use them whenever",
+                    "Buy again anytime once they run out",
+                  ].map((f) => (
+                    <li key={f} className="flex items-start gap-2 text-sm text-foreground/90">
+                      <Check className="size-3.5 text-sage shrink-0 mt-0.5" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  onClick={handleBuy}
+                  disabled={busy}
+                  className="w-full bg-foreground text-offwhite py-3.5 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors disabled:opacity-50"
+                >
+                  {busy ? "Redirecting…" : `Buy ${plan.generationsIncluded} generations — $${plan.priceUsd}`}
+                </button>
+              </>
+            )}
           </div>
         </motion.div>
       ) : (

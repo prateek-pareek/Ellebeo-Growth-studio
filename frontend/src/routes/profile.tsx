@@ -253,8 +253,38 @@ function ProfilePage() {
         </div>
       </motion.div>
 
-      {/* ── Connected accounts ───────────────────────────────────────────── */}
-      <motion.div variants={fadeUp}><ConnectedAccounts /></motion.div>
+      {/* ── Connected accounts + Billing ────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <motion.div variants={fadeUp}><ConnectedAccounts /></motion.div>
+        <motion.div variants={fadeUp}>
+          <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden h-full flex flex-col">
+            <div className="px-5 py-4 border-b border-border flex items-center gap-2.5">
+              <div className="size-7 rounded-lg bg-foreground/5 flex items-center justify-center">
+                <Zap className="size-3.5 text-taupe" />
+              </div>
+              <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground">Plan &amp; Billing</h2>
+            </div>
+            <div className="flex-1 p-5 flex flex-col gap-4">
+              <p className="text-xs text-taupe leading-relaxed">
+                Upgrade your plan to unlock unlimited AI content generation for your studio.
+              </p>
+              <div className="rounded-xl border border-border/60 bg-muted/30 px-4 py-3 flex items-center gap-3">
+                <Sparkles className="size-4 text-taupe shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium">Growth Studio Plan</p>
+                  <p className="text-[10px] text-taupe">Unlock unlimited AI content generation</p>
+                </div>
+              </div>
+              <Link
+                to="/plans"
+                className="inline-flex items-center justify-center gap-1.5 bg-foreground text-offwhite text-xs font-semibold px-5 py-2.5 rounded-xl hover:opacity-90 active:scale-[0.97] transition-all mt-auto"
+              >
+                View plans →
+              </Link>
+            </div>
+          </div>
+        </motion.div>
+      </div>
 
       {/* ── Recommendations ──────────────────────────────────────────────── */}
       <motion.div variants={fadeUp} className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
@@ -353,12 +383,12 @@ const PLATFORMS: {
     gradient: "from-pink-500 via-rose-500 to-orange-400",
     iconColor: "text-white",
   },
-  {
-    id: "facebook", label: "Facebook", note: "Page posts & Stories",
-    icon: Facebook,
-    gradient: "from-blue-600 to-blue-500",
-    iconColor: "text-white",
-  },
+  // {
+  //   id: "facebook", label: "Facebook", note: "Page posts & Stories",
+  //   icon: Facebook,
+  //   gradient: "from-blue-600 to-blue-500",
+  //   iconColor: "text-white",
+  // },
 ];
 
 function ConnectedAccounts() {

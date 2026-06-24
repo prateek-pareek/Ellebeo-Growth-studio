@@ -27,8 +27,6 @@ export function startImageProcessingWorker(): Worker<ImageProcessingJobPayload> 
               brandPrimaryColour, brandSecondaryColour, outputFormats,
               cloudinaryPublicId } = job.data;
 
-      console.log(`[Worker:image] Processing image for job ${jobId}`);
-
       // Update image_status to processing
       await prisma.$executeRaw`
         UPDATE content_items
@@ -47,7 +45,6 @@ export function startImageProcessingWorker(): Worker<ImageProcessingJobPayload> 
         tenantId,
       });
 
-      console.log(`[Worker:image] Image processed for job ${jobId}. Face blurred: ${result.faceBlurred}`);
       return result;
     },
     {
@@ -57,9 +54,8 @@ export function startImageProcessingWorker(): Worker<ImageProcessingJobPayload> 
     }
   );
 
-  worker.on('failed', async (job, err) => {
+  worker.on('failed', async (job, _err) => {
     if (!job) return;
-    console.error(`[Worker:image] Job ${job.id} failed:`, err.message);
 
     // Mark image_status as failed — does NOT fail the entire content pack
     const prismaInstance = new PrismaClient();
@@ -74,9 +70,9 @@ export function startImageProcessingWorker(): Worker<ImageProcessingJobPayload> 
     }
   });
 
-  worker.on('error', (err) => console.error('[Worker:image] Error:', err));
+  worker.on('error', () => {});
 
-  console.log(`[Worker:image] Started — concurrency: ${AI_CONFIG.queues.imageProcessing.concurrency}`);
+
   return worker;
 }
 

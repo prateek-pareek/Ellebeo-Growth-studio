@@ -17,7 +17,6 @@ export class AppointmentController {
   @Post('check-image')
   @UseInterceptors(FileInterceptor('file'))
   async checkImage(@UploadedFile() file: Express.Multer.File) {
-    console.log('[check-image] hit — file:', file?.originalname ?? 'NO FILE RECEIVED');
     if (!file) return { safe: true, reason: 'No file provided' };
     // Convert buffer to base64 data URL so Claude can analyse it without Firebase
     const base64 = file.buffer.toString('base64');

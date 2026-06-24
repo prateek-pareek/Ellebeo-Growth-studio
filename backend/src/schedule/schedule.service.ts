@@ -1,9 +1,11 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SchedulePostDto, UpdateScheduledPostDto } from './dto/schedule.dto';
 
 @Injectable()
 export class ScheduleService {
+  private readonly logger = new Logger(ScheduleService.name);
+
   constructor(private prisma: PrismaService) {}
 
   async getCalendar(tenantId: string, from: string, to: string) {
@@ -53,6 +55,7 @@ export class ScheduleService {
         ...dto,
         tenantId,
         scheduledFor: new Date(dto.scheduledFor),
+        hashtagsOverride: dto.hashtagsOverride ?? [],
       }
     });
   }
@@ -81,17 +84,155 @@ export class ScheduleService {
   }
 
   async publishNow(tenantId: string, id: string) {
-    const post = await this.prisma.scheduledPost.findUnique({ where: { id } });
+    const post = await this.prisma.scheduledPost.findUnique({
+      where: { id },
+      include: {
+        contentItem: {
+          select: {
+            caption: true,
+            processedImageUrlFeed: true,
+            reelThumbnailUrl: true,
+            finalVideoUrl: true,
+            platformVariants: true,
+          },
+        },
+      },
+    });
     if (!post || post.tenantId !== tenantId) throw new NotFoundException('Post not found');
+    if (!['pending', 'failed'].includes(post.publishStatus)) throw new BadRequestException('Only pending posts can be published');
 
-    if (post.publishStatus !== 'pending') {
-      throw new BadRequestException('Only pending posts can be published');
+    const account = await this.prisma.socialAccount.findUnique({ where: { id: post.socialAccountId } });
+    if (!account || account.status !== 'connected' || !account.accessToken) {
+      throw new BadRequestException('Social account not connected — reconnect and try again');
     }
 
-    // Here we would enqueue a job to the publishing worker
-    // this.publisherQueue.add('publish', { postId: post.id });
+    const caption        = post.contentItem?.caption ?? '';
+    const imageUrl       = post.contentItem?.processedImageUrlFeed ?? null;
+    const videoUrl       = post.contentItem?.finalVideoUrl ?? null;
+    const platformVariants = post.contentItem?.platformVariants as any;
+    const carouselUrls   = platformVariants?.type === 'carousel'
+      ? (platformVariants.slides as { url: string }[]).map(s => s.url)
+      : null;
 
-    return { message: 'Publishing initiated' };
+    try {
+      if (account.platform === 'instagram') {
+        await this.publishToInstagram(account.platformAccountId!, account.accessToken, imageUrl, videoUrl, carouselUrls, caption, post.postFormat);
+      } else if (account.platform === 'facebook') {
+        await this.publishToFacebook(account.platformAccountId!, account.accessToken, imageUrl, caption);
+      } else {
+        throw new BadRequestException(`Publishing not supported for platform: ${account.platform}`);
+      }
+
+      await this.prisma.scheduledPost.update({
+        where: { id },
+        data: { publishStatus: 'published', publishedAt: new Date() },
+      });
+
+      this.logger.log(`Post ${id} published to ${account.platform}`);
+      return { message: 'Published successfully' };
+    } catch (err: any) {
+      this.logger.error(`Failed to publish post ${id}: ${err.message}`);
+      await this.prisma.scheduledPost.update({
+        where: { id },
+        data: { publishStatus: 'failed' },
+      });
+      throw err instanceof BadRequestException ? err : new BadRequestException(err.message ?? 'Publishing failed');
+    }
+  }
+
+  private async publishToInstagram(igUserId: string, accessToken: string, imageUrl: string | null, videoUrl: string | null, carouselUrls: string[] | null, caption: string, format: string) {
+    const isReel     = format === 'reel';
+    const isStory    = format === 'story';
+    const isCarousel = format === 'carousel' && carouselUrls && carouselUrls.length > 1;
+
+    // ── Carousel ────────────────────────────────────────────────────────────
+    if (isCarousel) {
+      const childIds: string[] = [];
+      for (const url of carouselUrls!) {
+        const res  = await fetch(`https://graph.instagram.com/v21.0/${igUserId}/media`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image_url: url, is_carousel_item: true, access_token: accessToken }),
+        });
+        const data = await res.json() as any;
+        if (!data.id) throw new Error(data.error?.message ?? 'Failed to create carousel item');
+        childIds.push(data.id);
+      }
+
+      const parentRes  = await fetch(`https://graph.instagram.com/v21.0/${igUserId}/media`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ media_type: 'CAROUSEL', caption, children: childIds.join(','), access_token: accessToken }),
+      });
+      const parentData = await parentRes.json() as any;
+      if (!parentData.id) throw new Error(parentData.error?.message ?? 'Failed to create carousel container');
+
+      const publishRes  = await fetch(`https://graph.instagram.com/v21.0/${igUserId}/media_publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creation_id: parentData.id, access_token: accessToken }),
+      });
+      const publishData = await publishRes.json() as any;
+      if (!publishData.id) throw new Error(publishData.error?.message ?? 'Failed to publish carousel');
+      return;
+    }
+
+    const mediaUrl = isReel ? videoUrl : imageUrl;
+    if (!mediaUrl) throw new Error('No media URL available for publishing');
+
+    // Step 1 — create media container
+    const containerParams: Record<string, string> = { access_token: accessToken };
+    if (!isStory) containerParams.caption = caption;
+
+    if (isReel) {
+      containerParams.media_type = 'REELS';
+      containerParams.video_url  = mediaUrl;
+    } else if (isStory) {
+      containerParams.media_type = 'STORIES';
+      containerParams.image_url  = mediaUrl;
+    } else {
+      containerParams.image_url  = mediaUrl;
+    }
+
+    const containerRes  = await fetch(`https://graph.instagram.com/v21.0/${igUserId}/media`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(containerParams),
+    });
+    const containerData = await containerRes.json() as any;
+    if (!containerData.id) throw new Error(containerData.error?.message ?? 'Failed to create media container');
+
+    // Step 2 — poll status for reels (video needs processing time)
+    if (isReel) {
+      for (let i = 0; i < 10; i++) {
+        await new Promise(r => setTimeout(r, 5000));
+        const statusRes  = await fetch(`https://graph.instagram.com/v21.0/${containerData.id}?fields=status_code&access_token=${accessToken}`);
+        const statusData = await statusRes.json() as any;
+        if (statusData.status_code === 'FINISHED') break;
+        if (statusData.status_code === 'ERROR') throw new Error('Reel processing failed on Instagram');
+      }
+    }
+
+    // Step 3 — publish container
+    const publishRes  = await fetch(`https://graph.instagram.com/v21.0/${igUserId}/media_publish`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ creation_id: containerData.id, access_token: accessToken }),
+    });
+    const publishData = await publishRes.json() as any;
+    if (!publishData.id) throw new Error(publishData.error?.message ?? 'Failed to publish to Instagram');
+  }
+
+  private async publishToFacebook(pageId: string, pageToken: string, imageUrl: string | null, caption: string) {
+    if (!imageUrl) throw new Error('No image URL available for publishing');
+
+    const res  = await fetch(`https://graph.facebook.com/v21.0/${pageId}/photos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: imageUrl, caption, access_token: pageToken }),
+    });
+    const data = await res.json() as any;
+    if (!data.id) throw new Error(data.error?.message ?? 'Failed to publish to Facebook');
   }
 
   async getSocialAccounts(tenantId: string) {
@@ -107,22 +248,21 @@ export class ScheduleService {
     const params = new URLSearchParams({
       client_id:     process.env.INSTAGRAM_CLIENT_ID!,
       redirect_uri:  redirectUri,
-      scope:         'instagram_business_basic',
       response_type: 'code',
       state,
     });
-    const url = `https://www.instagram.com/oauth/authorize?${params.toString()}`;
-    console.log('[Instagram OAuth] redirectUri:', redirectUri);
-    console.log('[Instagram OAuth] full URL:', url);
+    const url = `https://www.instagram.com/oauth/authorize?${params.toString()}&scope=instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_content_publish,instagram_business_manage_insights`;
+    this.logger.log(`Instagram OAuth URL generated for tenant ${tenantId}`);
     return url;
   }
 
   async handleInstagramCallback(code: string, stateRaw: string): Promise<void> {
     const { tenantId, redirectUri: decodedRedirectUri } = JSON.parse(Buffer.from(stateRaw, 'base64url').toString()) as { tenantId: string; redirectUri?: string };
 
-    const clientId     = process.env.INSTAGRAM_CLIENT_ID!;
-    const clientSecret = process.env.INSTAGRAM_CLIENT_SECRET!;
-    const redirectUri  = decodedRedirectUri ?? process.env.INSTAGRAM_REDIRECT_URI!;
+    const clientId     = process.env.INSTAGRAM_CLIENT_ID;
+    const clientSecret = process.env.INSTAGRAM_CLIENT_SECRET;
+    const redirectUri  = decodedRedirectUri ?? process.env.INSTAGRAM_REDIRECT_URI ?? '';
+    if (!clientId || !clientSecret) throw new Error('INSTAGRAM_CLIENT_ID or INSTAGRAM_CLIENT_SECRET env var not set on server');
 
     // 1 — Exchange code for short-lived token
     const tokenForm = new URLSearchParams({

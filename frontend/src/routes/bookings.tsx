@@ -453,7 +453,8 @@ function BookingRow({
           ) : (
             <button
               onClick={onImport}
-              disabled={importing}
+              disabled={importing || (!!booking.confirmedStartTime && new Date(booking.confirmedStartTime) > new Date())}
+              title={booking.confirmedStartTime && new Date(booking.confirmedStartTime) > new Date() ? "Cannot import upcoming booking" : undefined}
               className="inline-flex items-center gap-1.5 bg-foreground text-offwhite text-xs font-medium px-3.5 py-2 shadow-sm hover:opacity-90 hover:shadow-md active:scale-[0.97] transition-all disabled:opacity-50"
             >
               {importing ? (

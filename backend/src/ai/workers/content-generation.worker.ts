@@ -1,6 +1,6 @@
-// ============================================================================
-// content-generation.worker.ts — Primary BullMQ Worker
-// Handles the main AI pipeline: vision → prompt → caption → variants → script
+﻿// ============================================================================
+// content-generation.worker.ts â€” Primary BullMQ Worker
+// Handles the main AI pipeline: vision â†’ prompt â†’ caption â†’ variants â†’ script
 // Concurrency: 10 | Rate: 50/min | Retry: 3x exponential
 // ============================================================================
 
@@ -49,7 +49,6 @@ export function startContentGenerationWorker(io: SocketServer, notifyFn?: Notify
       });
       await notificationsQueue.add('deliver', { notificationId: notif.id });
     } catch (e) {
-      console.error('[Worker:content] Failed to send notification:', e);
     }
   });
 
@@ -68,36 +67,30 @@ export function startContentGenerationWorker(io: SocketServer, notifyFn?: Notify
       const payload = job.data;
       const { jobId, tenantId } = payload;
 
-      console.log(`[Worker:content] Processing job ${jobId} for tenant ${tenantId}`);
 
       try {
-        // Check job TTL — discard silently if job is too old (no retry)
+        // Check job TTL â€” discard silently if job is too old (no retry)
         const ageMs = Date.now() - new Date(payload.createdAt).getTime();
         if (ageMs > AI_CONFIG.queues.contentGeneration.jobTTLMs) {
-          console.warn(`[Worker:content] Job ${jobId} expired (age: ${Math.round(ageMs / 1000)}s) — discarding without retry`);
           await progressEmitter.emit(jobId, tenantId, 'failed');
-          return; // return instead of throw — BullMQ won't retry
+          return; // return instead of throw â€” BullMQ won't retry
         }
 
         const result = await orchestrator.run(payload);
 
-        console.log(`[Worker:content] Job ${jobId} completed in ${result.totalProcessingTimeMs}ms. Cost: $${result.estimatedCostUSD.toFixed(5)}`);
 
         return result;
       } catch (err) {
         const error = err as Error;
 
-        // Consent block → BLOCKED state, not FAILED
+        // Consent block â†’ BLOCKED state, not FAILED
         if (err instanceof ConsentBlockedError) {
           await progressEmitter.emitBlocked(jobId, tenantId);
-          // Don't rethrow — BullMQ would retry. Mark as blocked and swallow.
-          console.warn(`[Worker:content] Job ${jobId} blocked due to consent withdrawal`);
-          return; // Job "succeeds" from BullMQ's perspective — it just terminates cleanly
+          // Don't rethrow â€” BullMQ would retry. Mark as blocked and swallow.
+          return; // Job "succeeds" from BullMQ's perspective â€” it just terminates cleanly
         }
 
-        // All other errors — emit user-friendly message
-        console.error(`[Worker:content] Job ${jobId} failed with error: ${error.message}`);
-        console.error(error.stack);
+        // All other errors â€” emit user-friendly message
         const userMessage = mapErrorToUserMessage(error);
         await progressEmitter.emitError(jobId, tenantId, error.name, userMessage);
 
@@ -133,8 +126,6 @@ export function startContentGenerationWorker(io: SocketServer, notifyFn?: Notify
 
     const maxAttempts = AI_CONFIG.queues.contentGeneration.defaultJobOptions.attempts;
     if (job.attemptsMade >= maxAttempts) {
-      console.error(`[Worker:content] Job ${job.id} sent to DLQ after ${job.attemptsMade} attempts. Error: ${err.message}`);
-      console.error(err.stack);
 
       const dlqPayload: DLQJobPayload = {
         originalJobId: job.data.jobId,
@@ -174,16 +165,14 @@ export function startContentGenerationWorker(io: SocketServer, notifyFn?: Notify
   });
 
   worker.on('error', (err) => {
-    console.error('[Worker:content] Worker error:', err);
   });
 
-  console.log(`[Worker:content] Started — concurrency: ${AI_CONFIG.queues.contentGeneration.concurrency}`);
 
   return worker;
 }
 
 // ---------------------------------------------------------------------------
-// Error → User Message Mapping
+// Error â†’ User Message Mapping
 // ---------------------------------------------------------------------------
 
 function mapErrorToUserMessage(error: Error): string {
