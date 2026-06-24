@@ -13,6 +13,7 @@ export type Category =
 
 export type Appointment = {
   id: string;
+  clientId: string | null;
   clientName: string;
   service: string;
   category: Category;
@@ -89,6 +90,7 @@ async function fetchCloudAppointments(): Promise<
         const validDate = apptDate && !isNaN(apptDate.getTime()) ? apptDate : null;
         return {
           id: row.id,
+          clientId: row.clientId ?? null,
           clientName: row.clientName || "Client",
           service: row.serviceName,
           category: mapCategory(row.serviceCategory, row.serviceName),
