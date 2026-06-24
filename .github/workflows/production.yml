@@ -185,6 +185,10 @@ jobs:
             INSTAGRAM_CLIENT_SECRET=${{ vars.INSTAGRAM_CLIENT_SECRET }}
             INSTAGRAM_REDIRECT_URI=${{ vars.INSTAGRAM_REDIRECT_URI }}
             FACEBOOK_REDIRECT_URI=${{ vars.FACEBOOK_REDIRECT_URI }}
+            STRIPE_API_KEY=${{ vars.STRIPE_API_KEY }}
+            STRIPE_WEBHOOK_SECRET=${{ vars.STRIPE_WEBHOOK_SECRET }}
+            STRIPE_PUBLISHABLE_KEY=${{ vars.STRIPE_PUBLISHABLE_KEY }}
+            DELAYED_PAYOUT_HOURS=${{ vars.DELAYED_PAYOUT_HOURS }}
             EOF
  
             # Secure the environment file so only the owner can read it

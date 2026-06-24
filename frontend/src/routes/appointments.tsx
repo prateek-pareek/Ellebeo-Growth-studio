@@ -385,6 +385,9 @@ function PhotoUpload({
 
 function AppointmentRow({ a, onReminderSent }: { a: Appointment; onReminderSent?: () => void }) {
   const [sending, setSending] = useState(false);
+  const [showPhoneInput, setShowPhoneInput] = useState(false);
+  const [phone, setPhone] = useState("");
+  const [savingPhone, setSavingPhone] = useState(false);
 
   const handleSendReminder = async () => {
     setSending(true);
@@ -392,7 +395,8 @@ function AppointmentRow({ a, onReminderSent }: { a: Appointment; onReminderSent?
       const res = await api.post(`/appointments/${a.id}/send-consent-reminder`);
       const data = res.data?.data ?? res.data;
       if (data?.sent === false) {
-        toast.warning(data.reason ?? "Could not send reminder — client has no phone number.");
+        setShowPhoneInput(true);
+        toast.warning("No phone number on file — add one below to send SMS.");
       } else {
         toast.success("Consent reminder sent via SMS.");
         onReminderSent?.();
@@ -401,6 +405,28 @@ function AppointmentRow({ a, onReminderSent }: { a: Appointment; onReminderSent?
       toast.error(e.response?.data?.message ?? "Failed to send reminder.");
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleSavePhone = async () => {
+    if (!phone.trim() || !a.clientId) return;
+    setSavingPhone(true);
+    try {
+      await api.patch(`/clients/${a.clientId}`, { phone: phone.trim() });
+      toast.success("Phone number saved.");
+      setShowPhoneInput(false);
+      setPhone("");
+      // Now retry sending the reminder
+      const res = await api.post(`/appointments/${a.id}/send-consent-reminder`);
+      const data = res.data?.data ?? res.data;
+      if (data?.sent !== false) {
+        toast.success("Consent reminder sent via SMS.");
+        onReminderSent?.();
+      }
+    } catch (e: any) {
+      toast.error(e.response?.data?.message ?? "Failed to save phone number.");
+    } finally {
+      setSavingPhone(false);
     }
   };
 
@@ -453,6 +479,24 @@ function AppointmentRow({ a, onReminderSent }: { a: Appointment; onReminderSent?
 
       {/* Action */}
       <td className="px-5 py-4 text-right">
+        {showPhoneInput && (
+          <div className="flex items-center gap-2 mb-2 justify-end">
+            <input
+              type="tel"
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              placeholder="+91 98765 43210"
+              className="border border-border bg-muted/30 px-2 py-1.5 text-xs text-foreground placeholder:text-taupe/50 outline-none focus:border-taupe w-36"
+            />
+            <button
+              onClick={handleSavePhone}
+              disabled={!phone.trim() || savingPhone}
+              className="text-[10px] uppercase tracking-widest bg-foreground text-offwhite px-3 py-1.5 disabled:opacity-50"
+            >
+              {savingPhone ? "Saving…" : "Save & Send"}
+            </button>
+          </div>
+        )}
         {a.consent === "granted" ? (
           <Link
             to="/generate"
