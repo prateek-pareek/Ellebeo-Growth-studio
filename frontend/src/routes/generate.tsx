@@ -310,13 +310,10 @@ function GeneratePage() {
                 </p>
                 <button
                   onClick={() => navigate({ to: "/plans" })}
-                  className="bg-foreground text-offwhite px-8 py-4 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors w-full sm:w-auto mb-4"
+                  className="bg-foreground text-offwhite px-8 py-4 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors w-full sm:w-auto"
                 >
                   Choose a Plan →
                 </button>
-                <p className="text-[10px] uppercase tracking-widest text-taupe">
-                  Silver from $29 · Gold from $59 · Cancel anytime
-                </p>
               </>
             )}
           </div>
