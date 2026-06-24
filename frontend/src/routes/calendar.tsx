@@ -2,7 +2,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useCalendar, type CalendarEntry } from "@/lib/providers/calendar-provider";
 import { useContentItems, type ContentItem } from "@/lib/providers/content-provider";
-import { useCampaigns } from "@/lib/providers/campaign-provider";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -28,7 +27,6 @@ const STATUS_DOT: Record<string, string> = {
 function CalendarPage() {
   const { entries, month, year, monthIndex, loading, error, goNext, goPrev, refresh } = useCalendar();
   const { items: contentItems } = useContentItems();
-  const { data: campaigns } = useCampaigns();
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [selectedEntry, setSelectedEntry] = useState<CalendarEntry | null>(null);
   const [dragOverDay, setDragOverDay] = useState<number | null>(null);
@@ -215,55 +213,26 @@ function CalendarPage() {
       </div>
 
       <div className="grid grid-cols-12 gap-8 lg:gap-12">
-        {/* Campaigns */}
+        {/* Posting cadence */}
         <section className="col-span-12 lg:col-span-5">
-          <div className="flex items-baseline justify-between mb-6">
-            <h2 className="eyebrow">Active campaigns</h2>
-            <Link to="/campaigns" className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground">
-              All →
-            </Link>
-          </div>
-          <div className="space-y-px bg-border">
-            {campaigns.length === 0 ? (
-               <div className="bg-card p-6 text-sm text-taupe italic">No active campaigns.</div>
-            ) : campaigns.map((c) => (
-              <div key={c.id} className="bg-card p-6">
-                <div className="flex items-baseline justify-between mb-2">
-                  <p className="font-serif text-xl">{c.name}</p>
-                  <span className="text-[10px] uppercase tracking-widest text-sage">{c.status}</span>
-                </div>
-                <p className="text-xs text-taupe mb-3">{c.goal}</p>
-                <div className="flex items-baseline justify-between text-[10px] uppercase tracking-widest text-taupe mb-2">
-                  <span>{c.window}</span>
-                  <span>{c.posts} posts</span>
-                </div>
-                <div className="h-px bg-border relative">
-                  <div className="absolute inset-y-0 left-0 bg-foreground" style={{ width: `${c.progress * 100}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-8">
-            <h3 className="eyebrow mb-4">Posting cadence — {month}</h3>
-            <div className="artifact p-6 space-y-4">
-              {(() => {
-                const weeks = Math.max(1, Math.ceil(daysInMonth / 7));
-                const reelCount = entries.filter(e => e.type?.toLowerCase() === "reel").length;
-                const storyCount = entries.filter(e => e.type?.toLowerCase() === "story").length;
-                const bookingDriven = contentItems.filter(c =>
-                  c.sourceAppointmentId && c.status === "Scheduled" && !!c.scheduledFor
-                ).length;
-                return (
-                  <>
-                    <Cadence label="Posts per week" value={entries.length > 0 ? `${Math.round(entries.length / weeks)}` : "0"} />
-                    <Cadence label="Reels per week" value={reelCount > 0 ? `${Math.round(reelCount / weeks)}` : "0"} />
-                    <Cadence label="Stories this month" value={`${storyCount}`} />
-                    <Cadence label="Booking-driven posts" value={bookingDriven > 0 ? `${Math.round(bookingDriven / 4)} / week` : "0"} />
-                  </>
-                );
-              })()}
-            </div>
+          <h3 className="eyebrow mb-4">Posting cadence — {month}</h3>
+          <div className="artifact p-6 space-y-4">
+            {(() => {
+              const weeks = Math.max(1, Math.ceil(daysInMonth / 7));
+              const reelCount = entries.filter(e => e.type?.toLowerCase() === "reel").length;
+              const storyCount = entries.filter(e => e.type?.toLowerCase() === "story").length;
+              const bookingDriven = contentItems.filter(c =>
+                c.sourceAppointmentId && c.status === "Scheduled" && !!c.scheduledFor
+              ).length;
+              return (
+                <>
+                  <Cadence label="Posts per week" value={entries.length > 0 ? `${Math.round(entries.length / weeks)}` : "0"} />
+                  <Cadence label="Reels per week" value={reelCount > 0 ? `${Math.round(reelCount / weeks)}` : "0"} />
+                  <Cadence label="Stories this month" value={`${storyCount}`} />
+                  <Cadence label="Booking-driven posts" value={bookingDriven > 0 ? `${Math.round(bookingDriven / 4)} / week` : "0"} />
+                </>
+              );
+            })()}
           </div>
         </section>
 
