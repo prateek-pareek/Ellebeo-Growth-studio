@@ -15,7 +15,10 @@
     "test": "jest",
     "test:load": "artillery run tests/load/generation.yml",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:push": "prisma db push",
+    "db:push": "prisma db push",
+    "db:seed": "npx ts-node prisma/seed.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.20.0",
@@ -100,5 +103,8 @@
     "@smithy/signature-v4": "^5.3.14",
     "@smithy/util-utf8": "^3.0.0",
     "@smithy/eventstream-codec": "^3.0.0"
+  },
+  "prisma": {
+    "seed": "npx ts-node prisma/seed.ts"
   }
 }
