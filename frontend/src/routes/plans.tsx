@@ -105,181 +105,224 @@ function PlansPage() {
   };
 
   return (
-    <div className="max-w-lg mx-auto pb-16">
-      <header className="mt-6 lg:mt-10 mb-10 text-center">
-        <Link to="/generate" className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors mb-6">
-          <ArrowLeft className="size-3" /> Back to generator
-        </Link>
-        <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-taupe mb-3">
-          {purchaseSuccess ? "Payment confirmed" : purchaseCanceled ? "Checkout canceled" : usage && usage.total > 0 ? "Your plan" : "Unlock the studio"}
-        </p>
-        <h1 className="font-serif text-4xl sm:text-5xl leading-[1.05] tracking-tight">
-          {purchaseSuccess
-            ? <>You're all <span className="italic text-taupe">set</span>.</>
-            : purchaseCanceled
-            ? <>No charge <span className="italic text-taupe">made</span>.</>
-            : usage && usage.total > 0
-            ? <>Your <span className="italic text-taupe">generations</span>.</>
-            : <>Buy generations to keep <span className="italic text-taupe">creating</span>.</>}
-        </h1>
-        <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[48ch] mx-auto">
-          {purchaseSuccess
-            ? "Your purchase went through. You're ready to turn more appointments into content."
-            : purchaseCanceled
-            ? "You backed out before paying — nothing was charged. You can try again whenever you're ready."
-            : usage && usage.total > 0
-            ? "You have an active plan. See your usage below and top up anytime."
-            : "A single one-time purchase unlocks a batch of AI generations for turning appointments into content."}
-        </p>
-      </header>
+    <div className="min-h-[calc(100vh-4rem)] pb-24">
+      <div className="max-w-4xl mx-auto px-6">
 
-      {purchaseSuccess ? (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl border border-sage/30 bg-card shadow-sm overflow-hidden flex flex-col"
-        >
-          <div className="h-1.5 bg-gradient-to-r from-sage via-sage to-sage/60" />
-          <div className="p-8 flex flex-col items-center text-center">
-            <div className="size-14 rounded-full bg-sage/10 flex items-center justify-center mb-5">
-              <CheckCircle2 className="size-7 text-sage" />
-            </div>
-            <h2 className="font-serif text-2xl mb-2">Purchase complete</h2>
-            <p className="text-sm text-taupe mb-6 leading-relaxed">
-              {generationsRemaining === null
-                ? "Confirming your balance…"
-                : <>You now have <span className="font-semibold text-foreground">{generationsRemaining} generation{generationsRemaining !== 1 ? "s" : ""}</span> ready to use.</>}
-            </p>
-            <button
-              onClick={() => navigate({ to: "/generate" })}
-              className="w-full bg-foreground text-offwhite py-3.5 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors inline-flex items-center justify-center gap-2"
-            >
-              Start creating <ArrowRight className="size-3.5" />
-            </button>
-          </div>
-        </motion.div>
-      ) : purchaseCanceled ? (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden flex flex-col"
-        >
-          <div className="h-1.5 bg-gradient-to-r from-taupe/40 via-border to-taupe/40" />
-          <div className="p-8 flex flex-col items-center text-center">
-            <div className="size-14 rounded-full bg-muted flex items-center justify-center mb-5">
-              <XCircle className="size-7 text-taupe" />
-            </div>
-            <h2 className="font-serif text-2xl mb-2">Checkout canceled</h2>
-            <p className="text-sm text-taupe mb-6 leading-relaxed">
-              Nothing was charged. Whenever you're ready, you can try again.
-            </p>
-            <button
-              onClick={() => setPurchaseCanceled(false)}
-              className="w-full bg-foreground text-offwhite py-3.5 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors"
-            >
-              Try again
-            </button>
-          </div>
-        </motion.div>
-      ) : loading ? (
-        <div className="flex items-center justify-center py-16">
-          <RefreshCw className="size-5 text-taupe animate-spin" />
+        {/* Back link */}
+        <div className="pt-8 mb-8">
+          <Link
+            to="/generate"
+            className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="size-3" /> Back to generator
+          </Link>
         </div>
-      ) : plan ? (
-        <motion.div
-          className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden flex flex-col"
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-        >
-          <div className="h-1.5 bg-gradient-to-r from-taupe via-nude to-sage" />
-          <div className="p-8 flex flex-col">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="size-10 rounded-xl bg-gradient-to-br from-taupe to-sage flex items-center justify-center shadow-sm">
-                <Sparkles className="size-5 text-white" />
-              </div>
-              <h2 className="font-serif text-2xl">Growth Studio Plan</h2>
-            </div>
 
-            {usage && usage.total > 0 ? (
-              <>
-                {/* Active plan — show usage */}
-                <div className="rounded-xl border border-sage/30 bg-sage/5 p-5 mb-6">
-                  <div className="flex items-center gap-2 mb-4">
+        {/* Page header */}
+        <header className="mb-12">
+          <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-taupe mb-3">
+            {purchaseSuccess
+              ? "Payment confirmed"
+              : purchaseCanceled
+              ? "Checkout canceled"
+              : usage && usage.total > 0
+              ? "Your plan"
+              : "Unlock the studio"}
+          </p>
+          <h1 className="font-serif text-5xl sm:text-6xl leading-[1.05] tracking-tight">
+            {purchaseSuccess
+              ? <>You're all <span className="italic text-taupe">set</span>.</>
+              : purchaseCanceled
+              ? <>No charge <span className="italic text-taupe">made</span>.</>
+              : usage && usage.total > 0
+              ? <>Your <span className="italic text-taupe">generations</span>.</>
+              : <>Power your <span className="italic text-taupe">studio</span>.</>}
+          </h1>
+          <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[52ch]">
+            {purchaseSuccess
+              ? "Your purchase went through. You're ready to turn more appointments into content."
+              : purchaseCanceled
+              ? "You backed out before paying — nothing was charged. You can try again whenever you're ready."
+              : usage && usage.total > 0
+              ? "You have an active plan. See your usage below and top up anytime."
+              : "A single one-time purchase unlocks a batch of AI generations for turning appointments into content."}
+          </p>
+        </header>
+
+        {/* States */}
+        {purchaseSuccess ? (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl overflow-hidden border border-sage/20"
+          >
+            <div className="bg-foreground text-offwhite p-10 lg:p-12 flex flex-col lg:flex-row items-center gap-8 lg:gap-12">
+              <div className="size-20 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="size-10 text-sage" />
+              </div>
+              <div className="flex-1 text-center lg:text-left">
+                <h2 className="font-serif text-3xl mb-2">Purchase complete</h2>
+                <p className="text-offwhite/70 leading-relaxed">
+                  {generationsRemaining === null
+                    ? "Confirming your balance…"
+                    : <>You now have <span className="text-white font-semibold">{generationsRemaining} generation{generationsRemaining !== 1 ? "s" : ""}</span> ready to use.</>}
+                </p>
+              </div>
+              <button
+                onClick={() => navigate({ to: "/generate" })}
+                className="shrink-0 bg-white text-foreground px-8 py-3.5 text-[11px] uppercase tracking-[0.22em] hover:bg-offwhite transition-colors inline-flex items-center gap-2 rounded-none"
+              >
+                Start creating <ArrowRight className="size-3.5" />
+              </button>
+            </div>
+          </motion.div>
+
+        ) : purchaseCanceled ? (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl border border-border bg-card overflow-hidden"
+          >
+            <div className="p-10 lg:p-12 flex flex-col lg:flex-row items-center gap-8 lg:gap-12">
+              <div className="size-20 rounded-full bg-muted flex items-center justify-center shrink-0">
+                <XCircle className="size-10 text-taupe" />
+              </div>
+              <div className="flex-1 text-center lg:text-left">
+                <h2 className="font-serif text-3xl mb-2">Checkout canceled</h2>
+                <p className="text-taupe leading-relaxed">Nothing was charged. Whenever you're ready, you can try again.</p>
+              </div>
+              <button
+                onClick={() => setPurchaseCanceled(false)}
+                className="shrink-0 bg-foreground text-offwhite px-8 py-3.5 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors"
+              >
+                Try again
+              </button>
+            </div>
+          </motion.div>
+
+        ) : loading ? (
+          <div className="flex items-center justify-center py-32">
+            <RefreshCw className="size-5 text-taupe animate-spin" />
+          </div>
+
+        ) : plan ? (
+          usage && usage.total > 0 ? (
+            /* Active plan — usage dashboard */
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-4"
+            >
+              {/* Stats row */}
+              <div className="grid grid-cols-3 gap-4">
+                {[
+                  { label: "Total", value: usage.total, accent: false },
+                  { label: "Used", value: usage.used, accent: false },
+                  { label: "Remaining", value: usage.remaining, accent: true },
+                ].map(({ label, value, accent }) => (
+                  <div key={label} className="rounded-2xl border border-border bg-card p-6 sm:p-8 text-center">
+                    <p className={`font-serif text-5xl sm:text-6xl tabular-nums ${accent ? "text-sage" : ""}`}>{value}</p>
+                    <p className="text-[10px] uppercase tracking-widest text-taupe mt-2">{label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Progress bar */}
+              <div className="rounded-2xl border border-border bg-card px-8 py-6">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
                     <CheckCircle2 className="size-4 text-sage" />
                     <span className="text-xs font-semibold text-sage uppercase tracking-widest">Active plan</span>
                   </div>
-                  <div className="grid grid-cols-3 gap-4 mb-4">
-                    <div className="text-center">
-                      <p className="font-serif text-3xl tabular-nums">{usage.total}</p>
-                      <p className="text-[10px] uppercase tracking-widest text-taupe mt-1">Total</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="font-serif text-3xl tabular-nums">{usage.used}</p>
-                      <p className="text-[10px] uppercase tracking-widest text-taupe mt-1">Used</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="font-serif text-3xl tabular-nums text-sage">{usage.remaining}</p>
-                      <p className="text-[10px] uppercase tracking-widest text-taupe mt-1">Remaining</p>
-                    </div>
-                  </div>
-                  <div className="h-2 bg-border rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-sage transition-all duration-700 rounded-full"
-                      style={{ width: `${Math.min(100, (usage.used / usage.total) * 100)}%` }}
-                    />
-                  </div>
+                  <span className="text-xs text-taupe">{usage.used} of {usage.total} used</span>
                 </div>
-                <p className="text-xs text-taupe mb-6 text-center">
-                  Running low? Top up anytime — new generations are added to your balance.
-                </p>
+                <div className="h-2 bg-border rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-sage transition-all duration-700 rounded-full"
+                    style={{ width: `${Math.min(100, (usage.used / usage.total) * 100)}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Top-up */}
+              <div className="rounded-2xl border border-border bg-card p-8 flex flex-col lg:flex-row items-center gap-6">
+                <div className="flex-1 text-center lg:text-left">
+                  <h3 className="font-serif text-2xl mb-1">Running low?</h3>
+                  <p className="text-sm text-taupe">Top up anytime — new generations are added to your balance.</p>
+                </div>
                 <button
                   onClick={handleBuy}
                   disabled={busy}
-                  className="w-full bg-foreground text-offwhite py-3.5 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors disabled:opacity-50"
+                  className="shrink-0 bg-foreground text-offwhite px-8 py-3.5 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors disabled:opacity-50 inline-flex items-center gap-2"
                 >
                   {busy ? "Redirecting…" : `Top up ${plan.generationsIncluded} more — $${plan.priceUsd}`}
                 </button>
-              </>
-            ) : (
-              <>
-                {/* No plan — show buy */}
-                <div className="flex items-end gap-1 mb-1">
-                  <span className="font-serif text-5xl tabular-nums">${plan.priceUsd}</span>
-                  <span className="text-sm text-taupe mb-2">one-time</span>
+              </div>
+            </motion.div>
+
+          ) : (
+            /* No plan — purchase */
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="grid lg:grid-cols-2 rounded-2xl overflow-hidden border border-border"
+            >
+              {/* Left: dark features panel */}
+              <div className="bg-foreground text-offwhite p-10 flex flex-col">
+                <div className="size-11 rounded-xl bg-white/10 flex items-center justify-center mb-8">
+                  <Sparkles className="size-5 text-white" />
                 </div>
-                <p className="text-sm text-taupe mb-6">
-                  Unlocks <span className="font-semibold text-foreground">{plan.generationsIncluded} generations</span>
+                <h2 className="font-serif text-3xl mb-3">Growth Studio</h2>
+                <p className="text-offwhite/60 text-sm mb-10 leading-relaxed">
+                  Everything you need to turn appointments into scroll-stopping content.
                 </p>
-                <ul className="space-y-2.5 mb-8">
+                <ul className="space-y-4 mt-auto">
                   {[
                     `${plan.generationsIncluded} AI content generations`,
                     "Brand DNA-aware captions & images",
                     "No expiry — use them whenever",
                     "Buy again anytime once they run out",
                   ].map((f) => (
-                    <li key={f} className="flex items-start gap-2 text-sm text-foreground/90">
+                    <li key={f} className="flex items-start gap-3 text-sm text-offwhite/80">
                       <Check className="size-3.5 text-sage shrink-0 mt-0.5" />
                       {f}
                     </li>
                   ))}
                 </ul>
-                <button
-                  onClick={handleBuy}
-                  disabled={busy}
-                  className="w-full bg-foreground text-offwhite py-3.5 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors disabled:opacity-50"
-                >
-                  {busy ? "Redirecting…" : `Buy ${plan.generationsIncluded} generations — $${plan.priceUsd}`}
-                </button>
-              </>
-            )}
-          </div>
-        </motion.div>
-      ) : (
-        <p className="text-center text-sm text-taupe">Plan details unavailable right now.</p>
-      )}
+              </div>
 
-      <p className="text-center text-[10px] text-taupe/60 mt-8">
-        Payments processed securely by Stripe. One-time charge, no subscription.
-      </p>
+              {/* Right: pricing + CTA */}
+              <div className="bg-card p-10 flex flex-col justify-between">
+                <div>
+                  <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-taupe mb-8">One-time purchase</p>
+                  <div className="flex items-end gap-2 mb-2">
+                    <span className="font-serif text-7xl tabular-nums leading-none">${plan.priceUsd}</span>
+                  </div>
+                  <p className="text-sm text-taupe mt-2 mb-10">
+                    for <span className="font-semibold text-foreground">{plan.generationsIncluded} generations</span>
+                  </p>
+                </div>
+                <div className="space-y-3">
+                  <button
+                    onClick={handleBuy}
+                    disabled={busy}
+                    className="w-full bg-foreground text-offwhite py-4 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors disabled:opacity-50 inline-flex items-center justify-center gap-2"
+                  >
+                    {busy ? "Redirecting…" : <>Buy now <ArrowRight className="size-3.5" /></>}
+                  </button>
+                  <p className="text-center text-[10px] text-taupe/60">
+                    Secure payment via Stripe · No subscription
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          )
+
+        ) : (
+          <p className="text-center text-sm text-taupe py-16">Plan details unavailable right now.</p>
+        )}
+
+      </div>
     </div>
   );
 }
