@@ -92,6 +92,8 @@ export class ScheduleService {
             caption: true,
             processedImageUrlFeed: true,
             reelThumbnailUrl: true,
+            finalVideoUrl: true,
+            platformVariants: true,
           },
         },
       },
@@ -104,12 +106,17 @@ export class ScheduleService {
       throw new BadRequestException('Social account not connected — reconnect and try again');
     }
 
-    const caption  = post.contentItem?.caption ?? '';
-    const imageUrl = post.contentItem?.processedImageUrlFeed ?? post.contentItem?.reelThumbnailUrl ?? null;
+    const caption        = post.contentItem?.caption ?? '';
+    const imageUrl       = post.contentItem?.processedImageUrlFeed ?? null;
+    const videoUrl       = post.contentItem?.finalVideoUrl ?? null;
+    const platformVariants = post.contentItem?.platformVariants as any;
+    const carouselUrls   = platformVariants?.type === 'carousel'
+      ? (platformVariants.slides as { url: string }[]).map(s => s.url)
+      : null;
 
     try {
       if (account.platform === 'instagram') {
-        await this.publishToInstagram(account.platformAccountId!, account.accessToken, imageUrl, caption, post.postFormat);
+        await this.publishToInstagram(account.platformAccountId!, account.accessToken, imageUrl, videoUrl, carouselUrls, caption, post.postFormat);
       } else if (account.platform === 'facebook') {
         await this.publishToFacebook(account.platformAccountId!, account.accessToken, imageUrl, caption);
       } else {
@@ -133,21 +140,58 @@ export class ScheduleService {
     }
   }
 
-  private async publishToInstagram(igUserId: string, accessToken: string, imageUrl: string | null, caption: string, format: string) {
-    if (!imageUrl) throw new Error('No image URL available for publishing');
+  private async publishToInstagram(igUserId: string, accessToken: string, imageUrl: string | null, videoUrl: string | null, carouselUrls: string[] | null, caption: string, format: string) {
+    const isReel     = format === 'reel';
+    const isStory    = format === 'story';
+    const isCarousel = format === 'carousel' && carouselUrls && carouselUrls.length > 1;
+
+    // ── Carousel ────────────────────────────────────────────────────────────
+    if (isCarousel) {
+      const childIds: string[] = [];
+      for (const url of carouselUrls!) {
+        const res  = await fetch(`https://graph.instagram.com/v21.0/${igUserId}/media`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image_url: url, is_carousel_item: true, access_token: accessToken }),
+        });
+        const data = await res.json() as any;
+        if (!data.id) throw new Error(data.error?.message ?? 'Failed to create carousel item');
+        childIds.push(data.id);
+      }
+
+      const parentRes  = await fetch(`https://graph.instagram.com/v21.0/${igUserId}/media`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ media_type: 'CAROUSEL', caption, children: childIds.join(','), access_token: accessToken }),
+      });
+      const parentData = await parentRes.json() as any;
+      if (!parentData.id) throw new Error(parentData.error?.message ?? 'Failed to create carousel container');
+
+      const publishRes  = await fetch(`https://graph.instagram.com/v21.0/${igUserId}/media_publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creation_id: parentData.id, access_token: accessToken }),
+      });
+      const publishData = await publishRes.json() as any;
+      if (!publishData.id) throw new Error(publishData.error?.message ?? 'Failed to publish carousel');
+      return;
+    }
+
+    const mediaUrl = isReel ? videoUrl : imageUrl;
+    if (!mediaUrl) throw new Error('No media URL available for publishing');
 
     // Step 1 — create media container
-    const isReel = format === 'reel';
-    const containerParams: Record<string, string> = {
-      caption,
-      access_token: accessToken,
-    };
+    const containerParams: Record<string, string> = { access_token: accessToken };
+    if (!isStory) containerParams.caption = caption;
 
     if (isReel) {
       containerParams.media_type = 'REELS';
-      containerParams.video_url  = imageUrl;
+      containerParams.video_url  = mediaUrl;
+    } else if (isStory) {
+      containerParams.media_type = 'STORIES';
+      containerParams.image_url  = mediaUrl;
     } else {
-      containerParams.image_url  = imageUrl;
+      containerParams.image_url  = mediaUrl;
     }
 
     const containerRes  = await fetch(`https://graph.instagram.com/v21.0/${igUserId}/media`, {
@@ -158,7 +202,18 @@ export class ScheduleService {
     const containerData = await containerRes.json() as any;
     if (!containerData.id) throw new Error(containerData.error?.message ?? 'Failed to create media container');
 
-    // Step 2 — publish container
+    // Step 2 — poll status for reels (video needs processing time)
+    if (isReel) {
+      for (let i = 0; i < 10; i++) {
+        await new Promise(r => setTimeout(r, 5000));
+        const statusRes  = await fetch(`https://graph.instagram.com/v21.0/${containerData.id}?fields=status_code&access_token=${accessToken}`);
+        const statusData = await statusRes.json() as any;
+        if (statusData.status_code === 'FINISHED') break;
+        if (statusData.status_code === 'ERROR') throw new Error('Reel processing failed on Instagram');
+      }
+    }
+
+    // Step 3 — publish container
     const publishRes  = await fetch(`https://graph.instagram.com/v21.0/${igUserId}/media_publish`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

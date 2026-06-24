@@ -28,7 +28,14 @@ export class AppointmentService {
     const safePage = Number.isFinite(page) ? Math.max(1, Number(page)) : 1;
     const safePageSize = Number.isFinite(pageSize) ? Math.min(100, Math.max(1, Number(pageSize))) : 20;
     const rows = await this.prisma.appointment.findMany({
-      where: { tenantId, deletedAt: null },
+      where: {
+        tenantId,
+        deletedAt: null,
+        OR: [
+          { source: { not: 'crm' } },
+          { contentItems: { some: { deletedAt: null } } },
+        ],
+      },
       orderBy: { createdAt: 'desc' },
       skip: (safePage - 1) * safePageSize,
       take: safePageSize,
