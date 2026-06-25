@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useSearch, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, useRef } from "react";
-import { Sparkles, BookOpen, TrendingUp, Clock, Heart, Layers, Play, Zap, Image, Music, ChevronRight, Calendar } from "lucide-react";
+import { Sparkles, BookOpen, TrendingUp, Clock, Heart, Layers, Play, Zap, Image, ChevronRight, Calendar } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAppointments, type Appointment } from "@/lib/providers/appointments-provider";
 import { useBrandDna } from "@/lib/providers/brand-dna-provider";
@@ -29,7 +29,7 @@ export const Route = createFileRoute("/generate")({
 });
 
 type Goal = "showcase" | "educate" | "convert" | "availability" | "trust";
-type Format = "Carousel" | "Reel" | "Story" | "Caption" | "TikTok";
+type Format = "Carousel" | "Reel" | "Story" | "Caption";
 type Step = "select" | "consent" | "goal" | "format" | "review";
 
 const GOALS: { id: Goal; name: string; help: string }[] = [
@@ -45,7 +45,6 @@ const FORMATS: { id: Format; name: string; help: string }[] = [
   { id: "Reel", name: "Reel", help: "15–30s vertical video." },
   { id: "Story", name: "Story", help: "4-frame sequence, 24h." },
   { id: "Caption", name: "Caption", help: "Single image + caption." },
-  { id: "TikTok", name: "TikTok", help: "Short vertical video." },
 ];
 
 function GeneratePage() {
@@ -155,7 +154,6 @@ function GeneratePage() {
       'Reel': 'reel',
       'Story': 'story',
       'Caption': 'feed',
-      'TikTok': 'reel'
     };
 
     const goalMap: Record<Goal, string> = {
@@ -171,7 +169,6 @@ function GeneratePage() {
       'Reel': ['instagram'],
       'Story': ['instagram'],
       'Caption': ['instagram'],
-      'TikTok': ['instagram', 'tiktok'],
     };
 
     const activeFormat = selectedFormat ?? format;
@@ -921,7 +918,6 @@ const FORMAT_ICONS: Record<Format, React.ComponentType<{ className?: string }>> 
   Reel:     Play,
   Story:    Zap,
   Caption:  Image,
-  TikTok:   Music,
 };
 
 function FormatStep({
