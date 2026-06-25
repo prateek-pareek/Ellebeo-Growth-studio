@@ -5,6 +5,8 @@ import { useContentItems, type ContentItem } from "@/lib/providers/content-provi
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { ChevronUp, ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/calendar")({
   head: () => ({
@@ -38,11 +40,15 @@ function CalendarPage() {
     setDragOverDay(null);
     if (!entry?.scheduledPostId || !entry.scheduledFor) return;
     const src = new Date(entry.scheduledFor);
-    if (src.getDate() === targetDay && src.getMonth() === monthIndex && src.getFullYear() === year) return;
-    const newDate = new Date(year, monthIndex, targetDay, src.getHours(), src.getMinutes(), 0, 0);
+    const srcAU = _auParts(src);
+    if (srcAU.day === targetDay && srcAU.month === monthIndex + 1 && srcAU.year === year) return;
+    const auH = srcAU.hour === 24 ? 0 : srcAU.hour;
+    const mm = String(monthIndex + 1).padStart(2, "0");
+    const dd = String(targetDay).padStart(2, "0");
+    const newISO = auLocalToUTC(`${year}-${mm}-${dd}T${String(auH).padStart(2, "0")}:${String(srcAU.minute).padStart(2, "0")}`);
     try {
       await api.patch(`/schedule/${entry.scheduledPostId}`, {
-        scheduledFor: newDate.toISOString(),
+        scheduledFor: newISO,
       });
       toast.success(`Moved to ${String(targetDay).padStart(2, "0")} ${month.split(" ")[0]}`);
       refresh();
@@ -246,9 +252,9 @@ function CalendarPage() {
               </div>
             ) : upcoming.map((c) => {
               const whenLabel = c.scheduledFor
-                ? new Date(c.scheduledFor).toLocaleDateString("en-GB", { weekday: "short" }) +
+                ? new Date(c.scheduledFor).toLocaleDateString("en-GB", { weekday: "short", timeZone: AU_TZ }) +
                   " · " +
-                  new Date(c.scheduledFor).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+                  new Date(c.scheduledFor).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: AU_TZ })
                 : null;
               return (
                 <div key={c.id} className="bg-card p-5 flex items-start gap-5">
@@ -303,10 +309,35 @@ function Cadence({ label, value }: { label: string; value: string }) {
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
+const AU_TZ = "Australia/Sydney";
+
+const _auFmt = new Intl.DateTimeFormat("en-CA", {
+  timeZone: AU_TZ,
+  year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", hour12: false,
+});
+
+function _auParts(d: Date): Record<string, number> {
+  return Object.fromEntries(_auFmt.formatToParts(d).map(({ type, value }) => [type, Number(value)]));
+}
+
+/** UTC ISO string → datetime-local value in Australia/Sydney time */
 function toDatetimeLocal(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const p = _auParts(new Date(iso));
+  const h = p.hour === 24 ? 0 : p.hour;
+  return `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}T${String(h).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}`;
+}
+
+/** "YYYY-MM-DDTHH:MM" interpreted as Australia/Sydney → UTC ISO string */
+function auLocalToUTC(s: string): string {
+  const [date, time] = s.split("T");
+  const [y, mo, d] = date.split("-").map(Number);
+  const [h, mi] = time.split(":").map(Number);
+  const asUTC = Date.UTC(y, mo - 1, d, h, mi);
+  const p = _auParts(new Date(asUTC));
+  const ph = p.hour === 24 ? 0 : p.hour;
+  const pAsUTC = Date.UTC(p.year, p.month - 1, p.day, ph, p.minute);
+  return new Date(2 * asUTC - pAsUTC).toISOString();
 }
 
 // ─── EntryDetailModal ────────────────────────────────────────────────────────
@@ -341,14 +372,14 @@ function EntryDetailModal({ entry, dayEntries, contentItems, onClose, onMutated 
 
   const handleReschedule = async () => {
     if (!active?.scheduledPostId || !rescheduleTime) return;
-    if (new Date(rescheduleTime) <= new Date()) {
+    if (auLocalToUTC(rescheduleTime) <= new Date().toISOString()) {
       toast.error("Please pick a future date and time.");
       return;
     }
     setRescheduling(true);
     try {
       await api.patch(`/schedule/${active.scheduledPostId}`, {
-        scheduledFor: new Date(rescheduleTime).toISOString(),
+        scheduledFor: auLocalToUTC(rescheduleTime),
       });
       toast.success("Rescheduled");
       onMutated();
@@ -390,8 +421,8 @@ function EntryDetailModal({ entry, dayEntries, contentItems, onClose, onMutated 
   const scheduledLabel = active?.scheduledFor
     ? new Date(active.scheduledFor).toLocaleString("en-GB", {
         weekday: "short", day: "numeric", month: "short",
-        hour: "2-digit", minute: "2-digit",
-      })
+        hour: "2-digit", minute: "2-digit", timeZone: AU_TZ,
+      }) + " AEST"
     : null;
 
   const showList = dayEntries.length > 1;
@@ -412,7 +443,7 @@ function EntryDetailModal({ entry, dayEntries, contentItems, onClose, onMutated 
               {dayEntries.map((e, i) => {
                 const isActive = active?.scheduledPostId === e.scheduledPostId;
                 const timeLabel = e.scheduledFor
-                  ? new Date(e.scheduledFor).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+                  ? new Date(e.scheduledFor).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: AU_TZ })
                   : null;
                 return (
                   <button
@@ -481,30 +512,26 @@ function EntryDetailModal({ entry, dayEntries, contentItems, onClose, onMutated 
           )}
         </DialogHeader>
 
-        <div className="px-6 py-5 space-y-5 max-h-60 overflow-y-auto">
+        <div className="px-6 py-5 space-y-5 max-h-[70vh] overflow-y-auto">
           {contentItem?.caption && (
             <p className="text-sm text-taupe leading-relaxed line-clamp-3">{contentItem.caption}</p>
           )}
 
           {active?.status !== "published" && (
-            <div>
-              <label className="text-[10px] uppercase tracking-widest text-taupe block mb-2">Reschedule</label>
-              <div className="flex gap-2">
-                <input
-                  type="datetime-local"
-                  value={rescheduleTime}
-                  onChange={(e) => setRescheduleTime(e.target.value)}
-                  className="flex-1 border hairline bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
-                />
-                <button
-                  type="button"
-                  onClick={handleReschedule}
-                  disabled={!rescheduleTime || rescheduling}
-                  className="px-4 py-2.5 text-[10px] uppercase tracking-widest border hairline hover:bg-card disabled:opacity-40"
-                >
-                  {rescheduling ? "Saving…" : "Save"}
-                </button>
-              </div>
+            <div className="space-y-3">
+              <label className="text-[10px] uppercase tracking-widest text-taupe block">
+                Reschedule
+                <span className="ml-1 normal-case tracking-normal font-normal text-taupe/50">(Australian Eastern Time)</span>
+              </label>
+              <DateTimePicker value={rescheduleTime} onChange={setRescheduleTime} />
+              <button
+                type="button"
+                onClick={handleReschedule}
+                disabled={!rescheduleTime || rescheduling}
+                className="w-full py-3 text-[10px] uppercase tracking-widest bg-foreground text-offwhite hover:bg-taupe transition-colors disabled:opacity-40"
+              >
+                {rescheduling ? "Saving…" : "Save new time"}
+              </button>
             </div>
           )}
         </div>
@@ -538,6 +565,146 @@ function EntryDetailModal({ entry, dayEntries, contentItems, onClose, onMutated 
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ─── DateTimePicker ──────────────────────────────────────────────────────────
+
+type DateTimePickerProps = {
+  value: string; // "YYYY-MM-DDTHH:MM"
+  onChange: (v: string) => void;
+};
+
+const TODAY = new Date().toISOString().slice(0, 10);
+
+function DateTimePicker({ value, onChange }: DateTimePickerProps) {
+  const [datePart, timePart] = value.split("T");
+  const [hStr, mStr] = (timePart ?? "09:00").split(":");
+  const h24    = Number(hStr) || 9;
+  const minute = Math.max(0, Math.min(59, Number(mStr) || 0));
+  const isPM   = h24 >= 12;
+  const hour12 = h24 % 12 || 12;
+
+  const selectedDate = datePart
+    ? (() => { const [y, m, d] = datePart.split("-").map(Number); return new Date(y, m - 1, d); })()
+    : undefined;
+
+  const dateInputRef = useRef<HTMLInputElement>(null);
+
+  const update = (dp: string, newH24: number, newM: number) =>
+    onChange(`${dp}T${String(newH24).padStart(2, "0")}:${String(newM).padStart(2, "0")}`);
+
+  const stepHour = (dir: 1 | -1) => {
+    const next = ((hour12 - 1 + dir + 12) % 12) + 1;
+    update(datePart, next % 12 + (isPM ? 12 : 0), minute);
+  };
+
+  const stepMinute = (dir: 1 | -1) => {
+    update(datePart, h24, (minute + dir + 60) % 60);
+  };
+
+  const toggleAmPm = () =>
+    update(datePart, isPM ? h24 - 12 : h24 + 12, minute);
+
+  const dateLabel = selectedDate
+    ? selectedDate.toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "long", year: "numeric" })
+    : "Tap to select a date";
+
+  return (
+    <div className="relative overflow-hidden bg-card border hairline">
+
+      {/* ── Date card ── */}
+      <button
+        type="button"
+        onClick={() => { try { dateInputRef.current?.showPicker(); } catch { dateInputRef.current?.click(); } }}
+        className="w-full text-left flex items-center justify-between gap-4 bg-foreground text-offwhite border-b hairline px-4 py-3 hover:bg-foreground/90 transition-colors select-none"
+      >
+        <div className="flex items-center gap-3">
+          <span className="font-serif text-4xl tabular-nums leading-none">
+            {selectedDate ? String(selectedDate.getDate()).padStart(2, "0") : "—"}
+          </span>
+          <div>
+            <p className="text-sm font-medium leading-snug">
+              {selectedDate
+                ? selectedDate.toLocaleDateString("en-AU", { month: "long", year: "numeric" })
+                : <span className="text-offwhite/40">Select a date</span>}
+            </p>
+            <p className="text-[9px] uppercase tracking-widest text-offwhite/35 mt-0.5">
+              {selectedDate
+                ? selectedDate.toLocaleDateString("en-AU", { weekday: "long" }) + " · AEST"
+                : "Tap to pick"}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1 shrink-0 border border-offwhite/20 px-2 py-1">
+          <svg className="size-3 text-offwhite/50" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+            <path d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+          </svg>
+          <span className="text-[9px] uppercase tracking-widest text-offwhite/50">Change</span>
+        </div>
+      </button>
+      {/* 1×1 visible pixel — required for showPicker() to work in all browsers */}
+      <input
+        ref={dateInputRef}
+        type="date"
+        value={datePart ?? ""}
+        min={TODAY}
+        onChange={(e) => update(e.target.value, h24, minute)}
+        tabIndex={-1}
+        className="absolute opacity-0 w-px h-px top-0 left-0 pointer-events-none"
+      />
+
+      {/* ── Time stepper ── */}
+      <div className="flex items-stretch divide-x divide-border">
+
+        {/* Hour */}
+        <div className="flex-1 flex flex-col items-center gap-0.5 py-2">
+          <button type="button" onClick={() => stepHour(1)}
+            className="p-1 text-taupe hover:text-foreground transition-colors">
+            <ChevronUp className="size-3" />
+          </button>
+          <span className="font-serif text-2xl tabular-nums leading-none">{String(hour12).padStart(2, "0")}</span>
+          <button type="button" onClick={() => stepHour(-1)}
+            className="p-1 text-taupe hover:text-foreground transition-colors">
+            <ChevronDown className="size-3" />
+          </button>
+          <span className="text-[7px] uppercase tracking-widest text-taupe/40">hr</span>
+        </div>
+
+        <div className="flex items-center px-1 self-center pb-4">
+          <span className="font-serif text-base text-taupe/20">:</span>
+        </div>
+
+        {/* Minute */}
+        <div className="flex-1 flex flex-col items-center gap-0.5 py-2">
+          <button type="button" onClick={() => stepMinute(1)}
+            className="p-1 text-taupe hover:text-foreground transition-colors">
+            <ChevronUp className="size-3" />
+          </button>
+          <span className="font-serif text-2xl tabular-nums leading-none">{String(minute).padStart(2, "0")}</span>
+          <button type="button" onClick={() => stepMinute(-1)}
+            className="p-1 text-taupe hover:text-foreground transition-colors">
+            <ChevronDown className="size-3" />
+          </button>
+          <span className="text-[7px] uppercase tracking-widest text-taupe/40">min</span>
+        </div>
+
+        {/* AM / PM */}
+        <div className="flex flex-col w-11 self-stretch">
+          <button type="button" onClick={() => isPM && toggleAmPm()}
+            className={cn(
+              "flex-1 text-[10px] font-semibold uppercase tracking-wider transition-colors border-b hairline",
+              !isPM ? "bg-foreground text-offwhite" : "text-taupe hover:bg-nude/20",
+            )}>AM</button>
+          <button type="button" onClick={() => !isPM && toggleAmPm()}
+            className={cn(
+              "flex-1 text-[10px] font-semibold uppercase tracking-wider transition-colors",
+              isPM ? "bg-foreground text-offwhite" : "text-taupe hover:bg-nude/20",
+            )}>PM</button>
+        </div>
+      </div>
+
+    </div>
   );
 }
 
@@ -606,7 +773,7 @@ function ScheduleModal({ open, onClose, day, year, monthIndex, contentItems, onS
 
   const handleSubmit = async () => {
     if (!selectedItem || !scheduleTime) return;
-    if (new Date(scheduleTime) <= new Date()) {
+    if (auLocalToUTC(scheduleTime) <= new Date().toISOString()) {
       toast.error("Please pick a future date and time.");
       return;
     }
@@ -615,17 +782,18 @@ function ScheduleModal({ open, onClose, day, year, monthIndex, contentItems, onS
       return;
     }
     setSubmitting(true);
+    const scheduledForISO = auLocalToUTC(scheduleTime);
     try {
       await api.post("/schedule", {
         contentItemId: selectedItem.id,
         socialAccountId: connected.id,
         platform: connected.platform,
         postFormat,
-        scheduledFor: new Date(scheduleTime).toISOString(),
+        scheduledFor: scheduledForISO,
       });
-      const label = new Date(scheduleTime).toLocaleString("en-GB", {
-        day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
-      });
+      const label = new Date(scheduledForISO).toLocaleString("en-GB", {
+        day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: AU_TZ,
+      }) + " AEST";
       toast.success(`Scheduled for ${label}`);
       onScheduled();
       onClose();
@@ -651,15 +819,13 @@ function ScheduleModal({ open, onClose, day, year, monthIndex, contentItems, onS
         </DialogHeader>
 
         <div className="px-6 py-5 space-y-5 max-h-[70vh] overflow-y-auto">
-          {/* Time */}
+          {/* Date & Time */}
           <div>
-            <label className="text-[10px] uppercase tracking-widest text-taupe block mb-2">Time</label>
-            <input
-              type="datetime-local"
-              value={scheduleTime}
-              onChange={(e) => setScheduleTime(e.target.value)}
-              className="w-full border hairline bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
-            />
+            <label className="text-[10px] uppercase tracking-widest text-taupe block mb-3">
+              Date & Time
+              <span className="ml-1 normal-case tracking-normal font-normal text-taupe/50">(Australian Eastern Time)</span>
+            </label>
+            <DateTimePicker value={scheduleTime} onChange={setScheduleTime} />
           </div>
 
           {/* Content picker */}
