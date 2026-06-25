@@ -1398,19 +1398,21 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep, onRe
                 ))}
               </div>
 
-              {/* Main image — fills rectangle completely */}
+              {/* Main image — 9:16 story ratio */}
               <div className="relative flex-1 flex items-center justify-center bg-nude/10 p-4">
-                <div className="relative w-full overflow-hidden shadow-lg" style={{ maxWidth: '420px' }}>
+                <div className="relative overflow-hidden shadow-lg" style={{ maxWidth: '240px', width: '100%' }}>
+                  <div className="aspect-[9/16] relative overflow-hidden">
                   <img
                     src={storyFrames[safeFrame]?.url}
                     alt={storyFrames[safeFrame]?.label}
-                    className="w-full h-auto block"
+                    className="absolute inset-0 w-full h-full object-cover"
                   />
                   <div className="absolute top-2 left-2 bg-foreground/70 px-2 py-0.5">
                     <p className="text-[9px] uppercase tracking-widest text-offwhite">{safeFrame + 1} / {storyFrames.length}</p>
                   </div>
                   <div className="absolute top-2 right-2 bg-foreground/70 px-2 py-0.5">
                     <p className="text-[9px] uppercase tracking-widest text-nude">{storyFrames[safeFrame]?.label}</p>
+                  </div>
                   </div>
                 </div>
               </div>
@@ -1494,8 +1496,8 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep, onRe
             {/* LEFT — full-width image preview + storyboard strip */}
             <div className="bg-[#0d0d0d] flex flex-col">
 
-              {/* Main image — full column width, portrait height */}
-              <div className="relative h-80 overflow-hidden">
+              {/* Main image — 9:16 reel ratio */}
+              <div className="relative aspect-[9/16] max-h-[480px] overflow-hidden">
                 {singleImageUrl ? (
                   <img src={singleImageUrl} alt="Reel preview" className="absolute inset-0 w-full h-full object-cover object-center" />
                 ) : (
@@ -1622,12 +1624,12 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep, onRe
             {/* LEFT — main slide viewer + thumbnail strip */}
             <div className="bg-nude/10 flex flex-col">
 
-              {/* Main slide */}
-              <div className="relative">
+              {/* Main slide — 1:1 square carousel ratio */}
+              <div className="relative aspect-square overflow-hidden">
                 <img
                   src={carouselSlides[safeSlide]?.url}
                   alt={carouselSlides[safeSlide]?.label ?? `Slide ${safeSlide + 1}`}
-                  className="w-full object-cover max-h-[360px]"
+                  className="absolute inset-0 w-full h-full object-cover"
                 />
 
                 {/* Slide counter badge */}

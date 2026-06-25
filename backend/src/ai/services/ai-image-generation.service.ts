@@ -112,11 +112,11 @@ CONTENT SAFETY (non-negotiable):
     return `${base}
 
 COVER SLIDE — this must stop the scroll immediately:
-- Full-bleed photo with dramatic cinematic crop — subject fills the frame powerfully
+- Show the full photo without any cropping — the entire subject must be visible from head to toe (or full frame as captured)
 - Oversized headline "${overlayText}" placed low in the frame, ultra-bold or ultra-light weight (pick one for impact), with a deep shadow that gives it 3D float
 - Glassmorphism bottom bar: frosted panel spanning the lower 20% of the image, brand color tint, the business name "${businessName}" in tiny all-caps tracking above the headline
 - One bold brand-color geometric accent: a thin vertical line left of the text, or a glowing underline stroke beneath the headline
-- Cinematic letterbox crop feel — add a very subtle dark vignette at top and bottom edges
+- Add a very subtle dark vignette at the edges for depth — do NOT crop or letterbox the photo
 - This should look like a Netflix original series title card meets high-end beauty campaign`;
   }
 
@@ -161,6 +161,7 @@ export class AiImageGenerationService {
     secondaryColor?: string;
     aesthetic?: string;
     serviceType?: string;
+    outputSize?: '1024x1024' | '1024x1536';
   }): Promise<string> {
     const {
       photoUrl, overlayText, index, isFirst, isLast, isBeforePhoto,
@@ -168,6 +169,7 @@ export class AiImageGenerationService {
       secondaryColor = '#f5f0eb',
       aesthetic = 'minimal editorial premium beauty',
       serviceType = 'beauty treatment',
+      outputSize = '1024x1024' as '1024x1024' | '1024x1536',
     } = params;
 
     const prompt = isBeforePhoto
@@ -190,7 +192,7 @@ export class AiImageGenerationService {
       model: 'gpt-image-1',
       image: imageFile,
       prompt,
-      size: '1024x1024',
+      size: outputSize,
     });
 
     const base64 = response.data?.[0]?.b64_json;
@@ -230,6 +232,7 @@ export class AiImageGenerationService {
             isFirst,
             isLast,
             isBeforePhoto: usingBefore,
+            outputSize: '1024x1024',
             ...rest,
           });
           return { url, title: concept.title, label: `SLIDE ${String(concept.index).padStart(2, '0')}` };
@@ -274,6 +277,7 @@ export class AiImageGenerationService {
             isFirst,
             isLast,
             isBeforePhoto: usingBefore,
+            outputSize: '1024x1536',
             ...rest,
           });
           return { url, title: frame.title, label: `FRAME ${String(frame.index).padStart(2, '0')}` };
