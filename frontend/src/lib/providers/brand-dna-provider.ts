@@ -46,6 +46,7 @@ export type UseBrandDnaResult = {
   source: "cloud";
   isEmpty: boolean;
   error: boolean;
+  refresh: () => void;
 };
 
 function mapCloudRow(dna: any): BrandDnaView {
@@ -135,7 +136,8 @@ async function fetchCloudBrandDna(): Promise<
 }
 
 export function useBrandDna(): UseBrandDnaResult {
-  const [state, setState] = useState<UseBrandDnaResult>({
+  const [tick, setTick] = useState(0);
+  const [state, setState] = useState<Omit<UseBrandDnaResult, "refresh">>({
     data: null,
     loading: true,
     source: "cloud",
@@ -163,7 +165,7 @@ export function useBrandDna(): UseBrandDnaResult {
         if (id !== reqId.current) return;
         setState({ data: null, loading: false, source: "cloud", isEmpty: true, error: true });
       });
-  }, []);
+  }, [tick]);
 
-  return state;
+  return { ...state, refresh: () => setTick((t) => t + 1) };
 }

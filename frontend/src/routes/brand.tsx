@@ -1,4 +1,5 @@
 import { createFileRoute, Link, Outlet, useLocation } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { useBrandDna } from "@/lib/providers/brand-dna-provider";
 
 export const Route = createFileRoute("/brand")({
@@ -13,15 +14,17 @@ export const Route = createFileRoute("/brand")({
 });
 
 function BrandPage() {
-  const { data: brandDNA, loading, isEmpty, error } = useBrandDna();
+  const { data: brandDNA, loading, isEmpty, error, refresh } = useBrandDna();
   const location = useLocation();
+
+  useEffect(() => {
+    if (location.pathname === "/brand") {
+      refresh();
+    }
+  }, [location.pathname]);
 
   if (location.pathname !== "/brand") {
     return <Outlet />;
-  }
-
-  if (isEmpty) {
-    return <BrandEmptyState />;
   }
 
   if (loading && !brandDNA) {
@@ -30,6 +33,10 @@ function BrandPage() {
         Loading your Brand DNA…
       </div>
     );
+  }
+
+  if (isEmpty) {
+    return <BrandEmptyState />;
   }
 
   if (!brandDNA) return null;
