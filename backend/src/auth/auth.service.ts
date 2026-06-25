@@ -417,7 +417,7 @@ export class AuthService {
     const payload = { sub: userId, role, tenantId };
 
     const accessToken = this.jwtService.sign(payload, {
-      expiresIn: '15m',
+      expiresIn: (this.configService.get<string>('JWT_ACCESS_EXPIRY') || '1d') as any,
     });
 
     const refreshTokenValue = uuidv4();
