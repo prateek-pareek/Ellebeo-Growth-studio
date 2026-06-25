@@ -26,14 +26,14 @@ export class AuthController {
 
     this.setRefreshTokenCookie(res, refreshToken);
 
-    return { accessToken };
+    return { accessToken, refreshToken };
   }
 
   @Post('refresh')
   @Throttle({ default: { limit: 20, ttl: 60_000 * 15 } })
   @HttpCode(HttpStatus.OK)
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const oldRefreshToken = req.cookies['refresh_token'];
+    const oldRefreshToken = req.cookies['refresh_token'] || req.body.refreshToken;
     if (!oldRefreshToken) {
       throw new UnauthorizedException('No refresh token provided');
     }
@@ -44,7 +44,7 @@ export class AuthController {
 
     this.setRefreshTokenCookie(res, refreshToken);
 
-    return { accessToken };
+    return { accessToken, refreshToken };
   }
 
   @Post('logout')
@@ -68,7 +68,7 @@ export class AuthController {
       firebaseIdToken, req.ip, req.headers['user-agent'],
     );
     this.setRefreshTokenCookie(res, refreshToken);
-    return { accessToken };
+    return { accessToken, refreshToken };
   }
 
   @Post('apple')
@@ -82,7 +82,7 @@ export class AuthController {
       firebaseIdToken, req.ip, req.headers['user-agent'],
     );
     this.setRefreshTokenCookie(res, refreshToken);
-    return { accessToken };
+    return { accessToken, refreshToken };
   }
 
   @Post('verify-email')

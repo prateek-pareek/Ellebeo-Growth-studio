@@ -10,6 +10,7 @@ export interface CrmBooking {
   category: string | null;
   serviceName: string | null;
   confirmedStartTime: Date | null;
+  status: string | null;
   recipientConsentData: Record<string, unknown> | null;
   recipientIntakeData: Record<string, unknown> | null;
   marketingImageConsent: boolean;
@@ -50,6 +51,7 @@ export class CrmReaderService {
         COALESCE(b."recipientEmail", ru.email, bu.email)          AS "recipientEmail",
         b."recipientMobile" AS "recipientPhone",
         b.category::text AS category,
+        b.status::text   AS status,
         ts."title" AS "serviceName",
         b."confirmedStartTime",
         b."recipientConsentData",
@@ -78,6 +80,7 @@ export class CrmReaderService {
         COALESCE(b."recipientEmail", ru.email, bu.email)          AS "recipientEmail",
         b."recipientMobile" AS "recipientPhone",
         b.category::text AS category,
+        b.status::text   AS status,
         ts."title" AS "serviceName",
         b."confirmedStartTime",
         b."recipientConsentData",

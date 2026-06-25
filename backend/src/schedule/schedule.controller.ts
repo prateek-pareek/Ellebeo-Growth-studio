@@ -40,16 +40,24 @@ export class ScheduleController {
   }
 
   @Post('social-accounts/connect/instagram')
-  connectInstagram(@Req() req: any, @Body('redirectUri') redirectUri: string) {
+  connectInstagram(
+    @Req() req: any,
+    @Body('redirectUri') redirectUri: string,
+    @Body('mobileRedirectUri') mobileRedirectUri?: string,
+  ) {
     const uri = redirectUri || process.env.INSTAGRAM_REDIRECT_URI!;
-    const redirectUrl = this.scheduleService.getInstagramOAuthUrl(req.user.tenantId, uri);
+    const redirectUrl = this.scheduleService.getInstagramOAuthUrl(req.user.tenantId, uri, mobileRedirectUri);
     return { redirectUrl };
   }
 
   @Post('social-accounts/connect/facebook')
-  connectFacebook(@Req() req: any, @Body('redirectUri') redirectUri: string) {
+  connectFacebook(
+    @Req() req: any,
+    @Body('redirectUri') redirectUri: string,
+    @Body('mobileRedirectUri') mobileRedirectUri?: string,
+  ) {
     const uri = redirectUri || process.env.FACEBOOK_REDIRECT_URI!;
-    const redirectUrl = this.scheduleService.getFacebookOAuthUrl(req.user.tenantId, uri);
+    const redirectUrl = this.scheduleService.getFacebookOAuthUrl(req.user.tenantId, uri, mobileRedirectUri);
     return { redirectUrl };
   }
 

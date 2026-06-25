@@ -7,7 +7,10 @@ export const Route = createFileRoute("/bookings")({
   head: () => ({
     meta: [
       { title: "CRM Bookings — Elle.Be.O Growth" },
-      { name: "description", content: "Browse and import bookings from your Client CRM into Growth Studio." },
+      {
+        name: "description",
+        content: "Browse and import bookings from your Client CRM into Growth Studio.",
+      },
     ],
   }),
   component: CrmPage,
@@ -41,23 +44,23 @@ type FilterTab = "all" | "available" | "imported";
 const PAGE_SIZE = 20;
 
 function CrmPage() {
-  const [tab, setTab]                     = useState<FilterTab>("all");
-  const [bookings, setBookings]           = useState<CrmBooking[]>([]);
-  const [total, setTotal]                 = useState(0);
+  const [tab, setTab] = useState<FilterTab>("all");
+  const [bookings, setBookings] = useState<CrmBooking[]>([]);
+  const [total, setTotal] = useState(0);
   const [technicianFound, setTechnicianFound] = useState(true);
-  const [loading, setLoading]             = useState(true);
-  const [error, setError]                 = useState<string | null>(null);
-  const [offset, setOffset]               = useState(0);
-  const [importingId, setImportingId]     = useState<string | null>(null);
-  const [importingAll, setImportingAll]   = useState(false);
-  const [expandedId, setExpandedId]       = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [offset, setOffset] = useState(0);
+  const [importingId, setImportingId] = useState<string | null>(null);
+  const [importingAll, setImportingAll] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const fetchBookings = useCallback(async (off = 0) => {
     setLoading(true);
     setError(null);
     try {
       const res = await api.get<{ data: ListResponse }>(
-        `/crm/bookings?limit=${PAGE_SIZE}&offset=${off}`
+        `/crm/bookings?limit=${PAGE_SIZE}&offset=${off}`,
       );
       const body = res.data.data;
       setBookings(body.bookings);
@@ -71,7 +74,9 @@ function CrmPage() {
     }
   }, []);
 
-  useEffect(() => { fetchBookings(0); }, [fetchBookings]);
+  useEffect(() => {
+    fetchBookings(0);
+  }, [fetchBookings]);
 
   const handleImport = async (bookingId: string) => {
     setImportingId(bookingId);
@@ -92,8 +97,8 @@ function CrmPage() {
       const res = await api.post<{ data: { status: string }[] }>("/crm/bookings/import-all");
       const results = res.data.data ?? [];
       const imported = results.filter((r) => r.status === "imported").length;
-      const skipped  = results.filter((r) => r.status === "already_imported").length;
-      const failed   = results.filter((r) => r.status === "failed").length;
+      const skipped = results.filter((r) => r.status === "already_imported").length;
+      const failed = results.filter((r) => r.status === "failed").length;
       toast.success(`${imported} imported · ${skipped} already done · ${failed} failed`);
       fetchBookings(offset);
     } catch (e: any) {
@@ -105,14 +110,14 @@ function CrmPage() {
 
   const filtered = bookings.filter((b) => {
     if (tab === "available") return !b.imported;
-    if (tab === "imported")  return b.imported;
+    if (tab === "imported") return b.imported;
     return true;
   });
 
   const counts = {
-    all:       bookings.length,
+    all: bookings.length,
     available: bookings.filter((b) => !b.imported).length,
-    imported:  bookings.filter((b) => b.imported).length,
+    imported: bookings.filter((b) => b.imported).length,
   };
 
   return (
@@ -120,7 +125,9 @@ function CrmPage() {
       {/* ── Page header ──────────────────────────────────────────────────── */}
       <header className="mt-6 lg:mt-10 mb-8">
         <div className="flex items-center gap-2.5 mb-4">
-          <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-taupe">Bookings</span>
+          <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-taupe">
+            Bookings
+          </span>
           <span className="text-taupe/30">·</span>
           <span className="inline-flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-sage bg-sage/10 border border-sage/25 px-2.5 py-1 rounded-full">
             <span className="size-1.5 rounded-full bg-sage animate-pulse" />
@@ -154,7 +161,9 @@ function CrmPage() {
               <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-muted-foreground group-hover:text-taupe transition-colors">
                 Available to import
               </p>
-              <p className="mt-2 font-serif text-4xl tabular-nums text-foreground">{counts.available}</p>
+              <p className="mt-2 font-serif text-4xl tabular-nums text-foreground">
+                {counts.available}
+              </p>
             </div>
             <div className="px-6 py-5 group hover:bg-nude/20 transition-colors cursor-default">
               <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-muted-foreground group-hover:text-taupe transition-colors">
@@ -168,8 +177,19 @@ function CrmPage() {
                 disabled={importingAll || counts.available === 0}
                 className="inline-flex items-center gap-2 bg-foreground text-offwhite text-xs font-medium px-4 py-2.5 shadow-sm hover:opacity-90 hover:shadow-md active:scale-[0.97] transition-all disabled:opacity-40"
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
                 </svg>
                 {importingAll ? "Importing…" : "Import all"}
               </button>
@@ -184,8 +204,8 @@ function CrmPage() {
           <p className="eyebrow mb-3">No CRM account linked</p>
           <p className="font-serif text-2xl mb-3">Account not found in Client CRM.</p>
           <p className="text-sm text-taupe max-w-[48ch] mx-auto leading-relaxed">
-            Your Growth Studio login email doesn't match any technician in the Client
-            CRM. Ask your admin to ensure both accounts share the same email address.
+            Your Growth Studio login email doesn't match any technician in the Client CRM. Ask your
+            admin to ensure both accounts share the same email address.
           </p>
         </div>
       )}
@@ -218,8 +238,18 @@ function CrmPage() {
                 onClick={() => fetchBookings(offset)}
                 className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors flex items-center gap-1.5"
               >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="23 4 23 10 17 10" />
+                  <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
                 </svg>
                 Refresh
               </button>
@@ -281,7 +311,18 @@ function CrmPage() {
                 disabled={offset === 0 || loading}
                 className="inline-flex items-center gap-1.5 border border-border bg-card text-xs font-medium text-foreground px-3.5 py-2 shadow-sm hover:bg-muted hover:shadow-md active:scale-[0.97] transition-all disabled:opacity-30"
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M19 12H5M12 5l-7 7 7 7" />
+                </svg>
                 Previous
               </button>
               <span className="text-[10px] uppercase tracking-widest text-taupe">
@@ -293,7 +334,18 @@ function CrmPage() {
                 className="inline-flex items-center gap-1.5 border border-border bg-card text-xs font-medium text-foreground px-3.5 py-2 shadow-sm hover:bg-muted hover:shadow-md active:scale-[0.97] transition-all disabled:opacity-30"
               >
                 Next
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M5 12h14M12 5l7 7-7 7" />
+                </svg>
               </button>
             </div>
           )}
@@ -318,7 +370,9 @@ function BookingRow({
 }) {
   const date = booking.confirmedStartTime
     ? new Date(booking.confirmedStartTime).toLocaleDateString("en-AU", {
-        day: "numeric", month: "short", year: "numeric",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
       })
     : "Date TBC";
 
@@ -331,10 +385,12 @@ function BookingRow({
       <tr className="hover:bg-nude/20 transition-colors">
         {/* Status dot */}
         <td className="px-5 py-4">
-          <span className={
-            "size-2.5 rounded-full block shrink-0 " +
-            (booking.imported ? "bg-sage" : "bg-foreground")
-          } />
+          <span
+            className={
+              "size-2.5 rounded-full block shrink-0 " +
+              (booking.imported ? "bg-sage" : "bg-foreground")
+            }
+          />
         </td>
 
         {/* Client · Service */}
@@ -342,9 +398,7 @@ function BookingRow({
           <p className="font-serif text-base leading-tight mb-0.5">
             {booking.recipientName ?? "Unknown client"}
           </p>
-          <p className="text-xs text-taupe truncate max-w-[24ch]">
-            {booking.serviceName ?? "—"}
-          </p>
+          <p className="text-xs text-taupe truncate max-w-[24ch]">{booking.serviceName ?? "—"}</p>
           {booking.recipientEmail && (
             <p className="text-[10px] text-taupe/70 mt-0.5 truncate max-w-[24ch]">
               {booking.recipientEmail}
@@ -362,12 +416,12 @@ function BookingRow({
 
         {/* Consent */}
         <td className="px-5 py-4">
-          <span className={
-            "inline-block text-[10px] uppercase tracking-widest px-2 py-0.5 mb-1 " +
-            (booking.marketingImageConsent
-              ? "text-sage bg-sage/10"
-              : "text-taupe bg-taupe/10")
-          }>
+          <span
+            className={
+              "inline-block text-[10px] uppercase tracking-widest px-2 py-0.5 mb-1 " +
+              (booking.marketingImageConsent ? "text-sage bg-sage/10" : "text-taupe bg-taupe/10")
+            }
+          >
             {booking.marketingImageConsent ? "Consent granted" : "No consent"}
           </span>
           {consentKeys.length > 0 && (
@@ -406,15 +460,37 @@ function BookingRow({
               {importing ? (
                 <>
                   <svg className="animate-spin size-3" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                    />
                   </svg>
                   Importing…
                 </>
               ) : (
                 <>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
                   </svg>
                   Import
                 </>
@@ -440,22 +516,31 @@ function BookingRow({
                 <div className="divide-y divide-border">
                   <div className="px-4 py-2.5 flex items-center justify-between">
                     <span className="text-xs text-taupe">Marketing image use</span>
-                    <span className={
-                      "text-[10px] uppercase tracking-widest px-2 py-0.5 " +
-                      (booking.marketingImageConsent ? "text-sage bg-sage/10" : "text-taupe bg-taupe/10")
-                    }>
+                    <span
+                      className={
+                        "text-[10px] uppercase tracking-widest px-2 py-0.5 " +
+                        (booking.marketingImageConsent
+                          ? "text-sage bg-sage/10"
+                          : "text-taupe bg-taupe/10")
+                      }
+                    >
                       {booking.marketingImageConsent ? "Allowed" : "Denied"}
                     </span>
                   </div>
                   {consentKeys.map(([key, val]) => (
                     <div key={key} className="px-4 py-2.5 flex items-center justify-between">
                       <span className="text-xs text-taupe capitalize">
-                        {key.replace(/_/g, " ").replace(/([A-Z])/g, " $1").trim()}
+                        {key
+                          .replace(/_/g, " ")
+                          .replace(/([A-Z])/g, " $1")
+                          .trim()}
                       </span>
-                      <span className={
-                        "text-[10px] uppercase tracking-widest px-2 py-0.5 " +
-                        (val ? "text-sage bg-sage/10" : "text-taupe bg-taupe/10")
-                      }>
+                      <span
+                        className={
+                          "text-[10px] uppercase tracking-widest px-2 py-0.5 " +
+                          (val ? "text-sage bg-sage/10" : "text-taupe bg-taupe/10")
+                        }
+                      >
                         {val ? "Allowed" : "Denied"}
                       </span>
                     </div>

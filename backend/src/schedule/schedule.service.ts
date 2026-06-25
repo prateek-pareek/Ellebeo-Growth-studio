@@ -243,8 +243,13 @@ export class ScheduleService {
 
   // ── Instagram OAuth ──────────────────────────────────────────────────────
 
-  getInstagramOAuthUrl(tenantId: string, redirectUri: string): string {
-    const state = Buffer.from(JSON.stringify({ tenantId, redirectUri })).toString('base64url');
+  getInstagramOAuthUrl(tenantId: string, redirectUri: string, mobileRedirectUri?: string): string {
+    const statePayload: Record<string, string> = { tenantId, redirectUri };
+    if (mobileRedirectUri) {
+      // Embedded so the OAuth callback controller can redirect back to the native app
+      statePayload.mobileRedirectUri = mobileRedirectUri;
+    }
+    const state = Buffer.from(JSON.stringify(statePayload)).toString('base64url');
     const params = new URLSearchParams({
       client_id:     process.env.INSTAGRAM_CLIENT_ID!,
       redirect_uri:  redirectUri,
@@ -324,8 +329,12 @@ export class ScheduleService {
 
   // ── Facebook OAuth ───────────────────────────────────────────────────────
 
-  getFacebookOAuthUrl(tenantId: string, redirectUri: string): string {
-    const state = Buffer.from(JSON.stringify({ tenantId, platform: 'facebook', redirectUri })).toString('base64url');
+  getFacebookOAuthUrl(tenantId: string, redirectUri: string, mobileRedirectUri?: string): string {
+    const statePayload: Record<string, string> = { tenantId, platform: 'facebook', redirectUri };
+    if (mobileRedirectUri) {
+      statePayload.mobileRedirectUri = mobileRedirectUri;
+    }
+    const state = Buffer.from(JSON.stringify(statePayload)).toString('base64url');
     const params = new URLSearchParams({
       client_id:     process.env.INSTAGRAM_CLIENT_ID!, // same Facebook App
       redirect_uri:  redirectUri,
