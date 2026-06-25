@@ -75,6 +75,7 @@ function GeneratePage() {
   const [showPaywall, setShowPaywall] = useState(false);
   const [showTrialPaywall, setShowTrialPaywall] = useState(false);
   const [paywallReason, setPaywallReason] = useState<"TRIAL_EXHAUSTED" | "PLAN_EXHAUSTED">("TRIAL_EXHAUSTED");
+  const [pendingFormat, setPendingFormat] = useState<Format | null>(null);
 
   useEffect(() => {
     if (!profileLoading && !technician.hasGrowthStudioAccess) {
@@ -94,6 +95,27 @@ function GeneratePage() {
         setStep("consent");
     }
   }, [requestedMatch]);
+
+  // Auto-trigger generation after returning from payment
+  useEffect(() => {
+    if (loading || !appointments.length) return;
+    const raw = localStorage.getItem("pendingGeneration");
+    if (!raw) return;
+    try {
+      const { appointmentId, format: savedFormat, goal: savedGoal } = JSON.parse(raw);
+      const match = appointments.find((a) => a.id === appointmentId);
+      if (!match) return;
+      localStorage.removeItem("pendingGeneration");
+      setAppointment(match);
+      setFormat(savedFormat as Format);
+      setGoal(savedGoal as Goal);
+      setStep("review");
+      // Small delay so state settles before generating
+      setTimeout(() => handleGenerate(savedFormat as Format), 300);
+    } catch {
+      localStorage.removeItem("pendingGeneration");
+    }
+  }, [loading, appointments]);
 
   useEffect(() => {
     if (!jobId || !generating) return;
@@ -189,6 +211,7 @@ function GeneratePage() {
       const errorCode = e.response?.data?.error?.code;
       if (errorCode === "TRIAL_EXHAUSTED" || errorCode === "PLAN_EXHAUSTED") {
         setPaywallReason(errorCode);
+        setPendingFormat(activeFormat);
         setShowTrialPaywall(true);
       } else {
         toast.error(e.response?.data?.message || e.response?.data?.error?.message || "Failed to start generation");
@@ -282,7 +305,15 @@ function GeneratePage() {
                   You've used all your purchased generations. Top up to keep the momentum going.
                 </p>
                 <button
-                  onClick={() => navigate({ to: "/plans" })}
+                  onClick={() => {
+                    if (appointment) {
+                      localStorage.setItem("postPurchaseReturn", `/generate?appointment=${appointment.id}`);
+                      localStorage.setItem("pendingGeneration", JSON.stringify({ appointmentId: appointment.id, format: pendingFormat ?? format, goal }));
+                    } else {
+                      localStorage.setItem("postPurchaseReturn", window.location.pathname + window.location.search);
+                    }
+                    navigate({ to: "/plans" });
+                  }}
                   className="bg-foreground text-offwhite px-8 py-4 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors w-full sm:w-auto"
                 >
                   Buy More Generations →
@@ -306,7 +337,15 @@ function GeneratePage() {
                   Your free trial is complete. Unlock unlimited AI content generation with a Silver or Gold plan.
                 </p>
                 <button
-                  onClick={() => navigate({ to: "/plans" })}
+                  onClick={() => {
+                    if (appointment) {
+                      localStorage.setItem("postPurchaseReturn", `/generate?appointment=${appointment.id}`);
+                      localStorage.setItem("pendingGeneration", JSON.stringify({ appointmentId: appointment.id, format: pendingFormat ?? format, goal }));
+                    } else {
+                      localStorage.setItem("postPurchaseReturn", window.location.pathname + window.location.search);
+                    }
+                    navigate({ to: "/plans" });
+                  }}
                   className="bg-foreground text-offwhite px-8 py-4 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors w-full sm:w-auto"
                 >
                   Choose a Plan →

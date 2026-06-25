@@ -73,6 +73,11 @@ function PlansPage() {
               const remaining = (data?.plan?.remaining ?? 0) + (data?.trial?.remaining ?? 0);
               if (remaining > 0 || attempts >= 5) {
                 setGenerationsRemaining(remaining);
+                const returnUrl = localStorage.getItem("postPurchaseReturn");
+                if (returnUrl) {
+                  localStorage.removeItem("postPurchaseReturn");
+                  setTimeout(() => navigate({ to: returnUrl as any }), 2000);
+                }
               } else {
                 attempts += 1;
                 setTimeout(poll, 1500);
@@ -169,7 +174,7 @@ function PlansPage() {
                 </p>
               </div>
               <button
-                onClick={() => navigate({ to: "/generate" })}
+                onClick={() => { const r = localStorage.getItem("postPurchaseReturn"); localStorage.removeItem("postPurchaseReturn"); navigate({ to: (r as any) || "/generate" }); }}
                 className="shrink-0 bg-white text-foreground px-8 py-3.5 text-[11px] uppercase tracking-[0.22em] hover:bg-offwhite transition-colors inline-flex items-center gap-2 rounded-none"
               >
                 Start creating <ArrowRight className="size-3.5" />
