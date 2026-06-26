@@ -342,9 +342,20 @@ export class AuthService {
             hasGrowthStudioAccess: user.tenant.hasGrowthStudioAccess,
             subscriptionTier: user.tenant.subscriptionTier,
             status: user.tenant.status,
+            termsAcceptedAt: user.tenant.termsAcceptedAt ?? null,
           }
         : null,
     };
+  }
+
+  async acceptTerms(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, include: { tenant: true } });
+    if (!user?.tenant) throw new UnauthorizedException('Tenant not found');
+    await this.prisma.tenant.update({
+      where: { id: user.tenant.id },
+      data: { termsAcceptedAt: new Date() },
+    });
+    return { message: 'Terms accepted' };
   }
 
   async uploadAvatar(userId: string, file: Express.Multer.File) {

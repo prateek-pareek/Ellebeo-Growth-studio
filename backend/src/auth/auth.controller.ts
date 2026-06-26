@@ -113,6 +113,13 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Post('accept-terms')
+  @HttpCode(HttpStatus.OK)
+  async acceptTerms(@Req() req: any) {
+    return this.authService.acceptTerms(req.user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Post('upload-avatar')
   @UseInterceptors(FileInterceptor('file'))
   async uploadAvatar(@Req() req: any, @UploadedFile() file: Express.Multer.File) {

@@ -182,6 +182,7 @@ model Tenant {
   phone                 String?          @db.VarChar(50)
   onboardingCompleted   Boolean          @default(false) @map("onboarding_completed")
   onboardingStep        Int              @default(1) @map("onboarding_step")
+  termsAcceptedAt       DateTime?        @map("terms_accepted_at") @db.Timestamptz
   createdAt             DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt             DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   deletedAt             DateTime?        @map("deleted_at") @db.Timestamptz

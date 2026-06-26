@@ -9,6 +9,7 @@ type User = {
   tenant?: {
     id: string;
     businessName: string;
+    termsAcceptedAt?: string | null;
   };
 };
 
