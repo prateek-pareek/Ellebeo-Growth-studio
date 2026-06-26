@@ -808,8 +808,8 @@ function ScheduleModal({ open, onClose, day, year, monthIndex, contentItems, onS
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-lg p-0 overflow-hidden">
-        <DialogHeader className="px-6 pt-6 pb-0">
+      <DialogContent className="max-w-lg p-0 overflow-hidden flex flex-col max-h-[90vh]">
+        <DialogHeader className="px-6 pt-6 pb-0 shrink-0">
           <DialogTitle className="font-serif text-2xl font-normal">
             Schedule for {String(day).padStart(2, "0")} {monthLabel}
           </DialogTitle>
@@ -818,7 +818,7 @@ function ScheduleModal({ open, onClose, day, year, monthIndex, contentItems, onS
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-6 py-5 space-y-5 max-h-[70vh] overflow-y-auto">
+        <div className="px-6 py-5 space-y-5 flex-1 min-h-0 overflow-y-auto">
           {/* Date & Time */}
           <div>
             <label className="text-[10px] uppercase tracking-widest text-taupe block mb-3">
@@ -913,7 +913,7 @@ function ScheduleModal({ open, onClose, day, year, monthIndex, contentItems, onS
           )}
         </div>
 
-        <DialogFooter className="px-6 pb-6 pt-0">
+        <DialogFooter className="px-6 pb-6 pt-0 shrink-0">
           <DialogClose asChild>
             <button
               type="button"

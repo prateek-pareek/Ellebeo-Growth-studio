@@ -26,41 +26,79 @@ const GOAL_FRAMING: Record<BusinessGoalType, string> = {
 };
 
 const PLATFORM_RULES: Record<SocialPlatform, string> = {
-  instagram: `FORMAT RULES FOR INSTAGRAM:\n- First sentence IS the hook — must stop the scroll\n- Hashtags: 5-10 hashtags only (relevant, not spammy)\n- Include one clear CTA (book, DM, link in bio)`,
-  facebook: `FORMAT RULES FOR FACEBOOK:\n- Longer, more conversational (200-400 words)\n- Hashtags: 3-5 maximum\n- No hashtag spam`,
-  tiktok: `FORMAT RULES FOR TIKTOK:\n- Hook MUST be in first 2-3 WORDS\n- Short energetic sentences\n- Hashtags: 3-5 only`,
+  instagram: `FORMAT RULES FOR INSTAGRAM:
+- Structure: Hook sentence → 1–2 body sentences → CTA → (blank line) → Hashtags below
+- Hook: Must earn a tap on "more" — name the specific result, use a number, or open a pattern interrupt. Never start with "I" or "She".
+- Body: One concrete detail (the technique, the colour, the texture) + how the client felt or what changed
+- CTA: One only — "DM to book", "book via link in bio", or "comment [WORD] for details" — make it feel like the natural next step
+- Hashtags: 8–12 total — mix niche (e.g. #sydneybalayage), mid-tier (e.g. #balayage), and broad (e.g. #haircolour) — always after a blank line, never inside the caption
+- Never use emojis mid-sentence — only at the end of a sentence, and only if the brand allows them`,
+
+  facebook: `FORMAT RULES FOR FACEBOOK:
+- Write like a personal post from the technician, not a brand broadcast — Facebook rewards authenticity
+- Open with a human story hook: "Yesterday a client came in and…" or the result upfront: "8 hours. 4 foil placements. One very happy client."
+- Longer form works well: 80–150 words. Give context, tell the micro-story of the appointment
+- Hashtags: 3–5 maximum at the very end — Facebook penalises hashtag spam
+- CTA: Drive direct messages, phone calls, or link clicks — "Message us to book" beats "DM for details" on Facebook
+- No hashtags inside the caption body`,
+
+  tiktok: `FORMAT RULES FOR TIKTOK:
+- First 3 WORDS must be the hook — TikTok shows only one line before "more" and users scroll in milliseconds
+- Write like you're speaking directly to camera: punchy, energetic, present tense
+- Short sentences only — if it can't be said in one breath, split it into two
+- Hashtags: 3–5 only — 1 trending sound/trend tag (e.g. #hairtok), 1 niche result tag (e.g. #blondebalayage), 1 location or broad tag
+- No filler, no setup — every word must earn its place`,
 };
 
 const CAPTION_LENGTH_TARGETS: Record<string, string> = {
-  short: '1–2 sentences maximum. Under 100 characters. One punchy thought.',
-  medium: '2–3 sentences. 100–200 characters. Hook + result + CTA.',
-  long: '3–4 sentences. 200–300 characters. Hook + context + result + CTA.',
+  short: '40–60 words maximum. Hook sentence + result + CTA only. Every word earns its place. No filler, no setup.',
+  medium: '60–100 words. Hook + one sentence of context or craft detail + result + CTA. Do not pad.',
+  long: '100–150 words. Hook + brief story or technical detail + transformation + CTA. Maximum depth without padding.',
 };
 
-// Positive craft guidance — what GREAT beauty content does, not just what to avoid.
-// Shared by both the default and master-prompt-driven system prompts.
-const CRAFT_RULES = `HOW TO WRITE (the craft):
-- The hook (first sentence) must be specific to THIS appointment — anchor it in the actual service and the real result from the image analysis, never a generic opener.
-- Show, don't label. Use one concrete sensory or technical detail (a colour, a texture, a technique) instead of adjectives like "beautiful" or "amazing".
-- Write the way this person actually talks. Match their rhythm, their sentence length, their level of polish — copy the cadence of their past examples if provided.
-- One clear call-to-action. Make booking feel like the natural next step, not a hard sell.
-- Earn every word. If a sentence could appear on any salon's page, rewrite it so it could only be theirs.
+const CRAFT_RULES = `HOW TO WRITE GREAT BEAUTY CONTENT:
 
-NEVER DO THIS (instant AI tells):
-- Generic AI filler: "luxurious", "transformative experience", "indulge in", "elevate your look", "self-care journey", "treat yourself", "look no further", "step into", "unlock", "say goodbye to", "we've got you covered".
-- Empty hype adjectives stacked together ("stunning, gorgeous, flawless").
-- Hashtags inside the caption body — hashtags belong ONLY in the hashtags array.
-- Any word from the Blacklisted Words list, in any form.
+HOOKS THAT STOP THE SCROLL:
+- Lead with the specific result from this appointment — use the keyVisualDetail from the image analysis to anchor it
+- Numbers stop the scroll: "12 weeks of root grow-out — gone." "4 hours. One foil placement. Zero heat damage."
+- Name the exact technique with correct industry terminology — "lived-in balayage", "root smudge", "glass skin facial", "strip lash hybrid set" — not "hair colour" or "treatment"
+- Capture the moment of reaction: "She literally grabbed my hand when she saw it in the mirror."
+- NEVER open with: "I am so excited to share", "Meet [name]!", "Can we talk about…", "She came in for a…", "Another amazing…"
 
-CONFIDENCE SCORING (brandVoiceConfidenceScore — be honest, not generous):
-- 0.90–1.00: used their exact vocabulary AND matched their tone AND a detail only they could have written.
-- 0.70–0.89: clearly on-brand but slightly generic in places.
-- 0.50–0.69: plausible but could belong to many technicians.
-- below 0.50: off-voice. A low honest score is better than an inflated one — it triggers an automatic rewrite.
+BODY (if medium or long length):
+- One concrete technical or sensory detail anchored to THIS service — the colour direction, the placement technique, the product texture, the skin tone match
+- Show what changed and how it felt — the transformation AND the human moment
+- Match the rhythm and cadence of the golden examples exactly — if they write in short punchy bursts, do the same; if they write in flowing sentences, match that
+
+CTA RULES:
+- One only — make it feel like the obvious next step, not a sales pitch
+- Great: "DM me if your balayage has been pulling brassy — I have thoughts."
+- Great: "Book via link in bio — this season is filling up."
+- Bad: "Book now! Link in bio! Don't miss out! 🙏🙏🙏"
+
+SERVICE-SPECIFIC GUIDANCE:
+- Hair colour: Name the technique + the target level/tone (e.g. "level 9 ash blonde", "cool brunette root smudge") — generic "hair colour" is wasted
+- Skin/Injectables: Focus on texture, glow, freshness, the natural look — not the procedure name or brand
+- Lashes/Brows: Describe the shape effect, the lift, the eye-opening result — lead with what the client now sees in the mirror
+- Nails: The art detail, the finish, the longevity — lead with the visual, not the product name
+
+NEVER USE (these are automatic AI tells — if any appear, score drops to 0.0):
+- "luxurious", "transformative experience", "indulge in", "elevate your look", "self-care journey"
+- "treat yourself", "glow up", "slay", "obsessed with this", "absolutely stunning", "game-changer"
+- "look no further", "step into", "unlock", "say goodbye to", "we've got you covered", "just dropped"
+- Stacked empty adjectives: "stunning, gorgeous, flawless result"
+- Hashtags anywhere inside the caption body — they go ONLY in the hashtags array
+- Any word from the Blacklisted Words list, including plurals and conjugated forms
+
+BRAND VOICE CONFIDENCE SCORE (honest self-assessment — a low honest score triggers a better rewrite):
+- 0.90–1.00: Used their vocabulary, matched their sentence rhythm, wrote a detail that could ONLY be from them
+- 0.70–0.89: Clearly on-brand but 1–2 phrases feel slightly generic
+- 0.50–0.69: Competent beauty caption but not distinctly theirs — any salon could post it
+- Below 0.50: Off-voice entirely — generic, AI-sounding, does not reflect this technician
 
 OUTPUT:
-- Always write in first person as the technician.
-- Return ONLY valid JSON — no markdown, no explanation, no preamble.`;
+- Always write in first person as the technician
+- Return ONLY valid JSON — no markdown, no explanation, no preamble`;
 
 export class PromptBuilder {
   constructor(private readonly cache: PromptCache) {}
@@ -205,35 +243,46 @@ ${CRAFT_RULES}`;
     const doNotSay = arr(dna.doNotSay);
     const painPoints = arr(dna.clientPainPoints);
 
+    const brandTierLabel: Record<string, string> = {
+      luxury: 'Luxury — premium pricing, aspirational tone, high-polish language',
+      mainstream: 'Mainstream — professional but approachable, results-focused',
+      accessible: 'Accessible — friendly, down-to-earth, community-first',
+    };
+
     return [
       `## YOUR BRAND DNA`,
       `**Business:** ${str(dna.businessName)}${dna.locationCity ? ` — ${str(dna.locationCity)}` : ''}`,
-      dna.primaryPersona ? `**Target client:** ${str(dna.primaryPersona)}` : '',
-      painPoints.length ? `**Client pain points:** ${painPoints.join(', ')}` : '',
-      dna.primaryTone ? `**Primary Tone:** ${tone(dna.primaryTone)}` : '',
-      dna.secondaryTone ? `**Secondary Tone:** ${tone(dna.secondaryTone)}` : '',
+      dna.brandTier ? `**Brand positioning:** ${brandTierLabel[str(dna.brandTier)] ?? str(dna.brandTier)}` : '',
+      dna.primaryPersona ? `**Primary client:** ${str(dna.primaryPersona)}` : '',
+      dna.secondaryPersona ? `**Secondary client:** ${str(dna.secondaryPersona)}` : '',
+      painPoints.length ? `**Client pain points to speak to:** ${painPoints.join(', ')}` : '',
+      dna.oneLiner ? `**Your one-liner (this is your voice):** "${str(dna.oneLiner)}"` : '',
       dna.uniqueSellingProposition ? `**What makes you different:** ${str(dna.uniqueSellingProposition)}` : '',
-      dna.signatureOutcome ? `**Signature result:** ${str(dna.signatureOutcome)}` : '',
-      dna.oneLiner ? `**One-liner:** ${str(dna.oneLiner)}` : '',
-      preferred.length ? `**Vocabulary you love:** ${preferred.join(', ')}` : '',
-      blacklist.length ? `**BLACKLISTED WORDS (NEVER USE):** ${blacklist.join(', ')}` : '',
-      doNotSay.length ? `**Never say:** ${doNotSay.join(', ')}` : '',
+      dna.signatureOutcome ? `**Signature result you deliver:** ${str(dna.signatureOutcome)}` : '',
+      dna.primaryTone ? `**Primary tone:** ${tone(dna.primaryTone)}` : '',
+      dna.secondaryTone ? `**Secondary tone:** ${tone(dna.secondaryTone)}` : '',
+      dna.moodTag ? `**Brand mood:** ${str(dna.moodTag)}` : '',
+      dna.aestheticDirection ? `**Aesthetic direction:** ${str(dna.aestheticDirection)}` : '',
+      dna.formattingStyle ? `**Caption style notes:** ${str(dna.formattingStyle)}` : '',
+      preferred.length ? `**Vocabulary you love (use these):** ${preferred.join(', ')}` : '',
+      blacklist.length ? `**BLACKLISTED WORDS — NEVER USE IN ANY FORM:** ${blacklist.join(', ')}` : '',
+      doNotSay.length ? `**Phrases you never say:** ${doNotSay.join(', ')}` : '',
       dna.emojiPolicy === 'none'
-        ? '**Emojis:** NEVER use emojis — not even one.'
+        ? '**Emojis:** NEVER — not even one, anywhere.'
         : dna.emojiPolicy === 'frequent'
-          ? '**Emojis:** Use emojis freely — 3–5 relevant emojis in the caption and hashtags.'
+          ? '**Emojis:** Use freely — 3–5 relevant emojis in the caption.'
           : dna.emojiPolicy === 'moderate'
-            ? '**Emojis:** Use 1–2 emojis in the caption where they feel natural.'
-            : '**Emojis:** Minimal — at most 1 emoji, only if it genuinely fits.',
+            ? '**Emojis:** 1–2 only, placed at the end of a sentence where they feel natural.'
+            : '**Emojis:** Minimal — at most 1, only if it genuinely adds something.',
     ].filter(Boolean).join('\n');
   }
 
   private buildGoldenExamplesFragment(examples: GoldenExample[]): string {
-    if (examples.length === 0) return '(No examples available — write in the brand voice described above)';
+    if (examples.length === 0) return '(No past examples yet — write entirely from the Brand DNA voice described above)';
     const exampleText = examples.slice(0, 5).map((ex, i) =>
-      `**Example ${i + 1} (${ex.platform}, quality: ${ex.qualityScore.toFixed(1)}/1.0):**\n"${ex.captionText}"\nHashtags: ${ex.hashtags.slice(0, 5).join(' ')}...`
+      `**Example ${i + 1} (${ex.platform} · quality ${ex.qualityScore.toFixed(2)}/1.00):**\n"${ex.captionText}"\nHashtags: ${ex.hashtags.join(' ')}`
     ).join('\n\n');
-    return `Study these real examples of this technician's best content. Your output must match this style:\n\n${exampleText}`;
+    return `These are this technician's real, highest-rated posts. Study the sentence length, vocabulary, punctuation style, and rhythm — then match it exactly in your output. Do not average their style; replicate it:\n\n${exampleText}`;
   }
 
   private buildAppointmentSection(
@@ -251,7 +300,16 @@ ${CRAFT_RULES}`;
   }
 
   private buildVisionSection(vision: VisionAnalysisResult): string {
-    return `**Service Performed:** ${vision.servicePerformed}\n**Technical Details:** ${vision.technicalDetails}\n**Transformation:** ${vision.transformationDescription}\n**Service Tags:** ${vision.serviceTags.join(', ')}\n**Setting:** ${vision.settingDetected}\n**Image Quality:** ${vision.imageQuality}\n**Faces Visible:** ${vision.facesDetected ? 'Yes' : 'No'}`;
+    return [
+      `**Service:** ${vision.servicePerformed}`,
+      `**Tags:** ${vision.serviceTags.join(', ')}`,
+      `**Technical detail:** ${vision.technicalDetails}`,
+      `**Transformation:** ${vision.transformationDescription}`,
+      vision.keyVisualDetail ? `**Key visual detail (anchor your hook here):** ${vision.keyVisualDetail}` : '',
+      `**Setting:** ${vision.settingDetected}`,
+      `**Image quality:** ${vision.imageQuality}`,
+      `**Faces visible:** ${vision.facesDetected ? 'Yes' : 'No'}`,
+    ].filter(Boolean).join('\n');
   }
 
   private buildConsentRestrictionsSection(restrictions?: ConsentRestrictions): string {
