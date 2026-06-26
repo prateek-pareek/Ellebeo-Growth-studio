@@ -1,8 +1,10 @@
 import { createRootRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
-import { AuthProvider } from "@/lib/providers/auth-provider";
+import { AuthProvider, useAuth } from "@/lib/providers/auth-provider";
 import { NotificationsProvider } from "@/lib/providers/notifications-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { TermsModal } from "@/components/TermsModal";
+import { useState } from "react";
 
 function NotFoundComponent() {
   return (
@@ -22,11 +24,33 @@ function NotFoundComponent() {
   );
 }
 
+function TermsGate({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  const [accepted, setAccepted] = useState(false);
+
+  const needsTerms =
+    !loading &&
+    user !== null &&
+    !accepted &&
+    !user.tenant?.termsAcceptedAt;
+
+  return (
+    <>
+      {children}
+      {needsTerms && (
+        <TermsModal onAccepted={() => setAccepted(true)} />
+      )}
+    </>
+  );
+}
+
 export const Route = createRootRoute({
   component: () => (
     <AuthProvider>
       <NotificationsProvider>
-        <AppShell />
+        <TermsGate>
+          <AppShell />
+        </TermsGate>
         <Toaster />
       </NotificationsProvider>
     </AuthProvider>
