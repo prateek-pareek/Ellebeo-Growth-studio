@@ -372,6 +372,11 @@ model ConsentRecord {
   updatedAt              DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   supersededAt           DateTime?     @map("superseded_at") @db.Timestamptz
   crmBookingId           String?       @map("crm_booking_id") @db.VarChar(255)
+  consentToken           String?       @unique @map("consent_token") @db.VarChar(255)
+  consentTokenExpiresAt  DateTime?     @map("consent_token_expires_at") @db.Timestamptz
+  consentTokenUsedAt     DateTime?     @map("consent_token_used_at") @db.Timestamptz
+  consentGrantedIp       String?       @map("consent_granted_ip") @db.VarChar(100)
+  consentGrantedDevice   String?       @map("consent_granted_device") @db.VarChar(500)
 
   tenant            Tenant          @relation(fields: [tenantId], references: [id])
   client            Client          @relation(fields: [clientId], references: [id])
