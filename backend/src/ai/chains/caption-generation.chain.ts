@@ -229,21 +229,22 @@ export class CaptionGenerationChain {
     previousResult: CaptionGenerationResult
   ): AssembledPrompt {
     const amplification = `
-⚠️ BRAND VOICE RETRY REQUIRED ⚠️
 
-Your previous attempt scored ${previousResult.brandVoiceConfidenceScore.toFixed(2)} brand voice confidence.
-This is too low. The caption must sound MORE like this specific person.
+---
+⚠️ BRAND VOICE RETRY — SCORE WAS ${previousResult.brandVoiceConfidenceScore.toFixed(2)} (TOO LOW) ⚠️
 
-Previous caption (DO NOT copy — rewrite it):
+Your previous caption failed the brand voice check. Read it critically:
 "${previousResult.caption}"
 
-What to fix:
-- Read the Brand DNA persona description again carefully
-- Use more of their preferred vocabulary
-- Match their exact tone — not a generic version of it
-- Start completely fresh — do not modify the previous caption
+Diagnose what went wrong — then fix all of it:
+1. Does it sound like something ANY beauty salon could post? → Make it specific to THIS technician
+2. Are there any generic phrases ("stunning result", "treated herself", "transformation")? → Cut every one
+3. Does the hook anchor to the specific visual detail from the image? → It must
+4. Does the vocabulary match their preferred words from Brand DNA? → Use them naturally
+5. Does the sentence rhythm match their golden examples? → Read them again and copy the cadence
 
-You MUST score your new attempt higher. Be more specific to this person's voice.`;
+Start from scratch — do NOT modify the previous caption. Write a completely new version.
+The new caption must score at least 0.75 to be accepted. Be specific. Be them.`;
 
     return {
       ...original,
