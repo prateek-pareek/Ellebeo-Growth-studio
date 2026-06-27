@@ -13,6 +13,7 @@ export interface VisionAnalysisResult {
   serviceTags: string[];
   technicalDetails: string;
   transformationDescription: string;
+  keyVisualDetail: string;
   imageQuality: 'excellent' | 'good' | 'acceptable' | 'poor';
   facesDetected: boolean;
   settingDetected: string;

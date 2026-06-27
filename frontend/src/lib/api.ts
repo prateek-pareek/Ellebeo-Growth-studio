@@ -41,9 +41,8 @@ api.interceptors.response.use(
           return api(originalRequest);
         }
       } catch (refreshError) {
-        // Refresh failed, redirect to login or clear state
         localStorage.removeItem('accessToken');
-        // window.location.href = '/login';
+        window.location.href = '/login';
         return Promise.reject(refreshError);
       }
     }

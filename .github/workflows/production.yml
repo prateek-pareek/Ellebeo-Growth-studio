@@ -108,6 +108,7 @@ jobs:
             VITE_FIREBASE_PROJECT_ID=${{ vars.VITE_FIREBASE_PROJECT_ID }}
             VITE_FIREBASE_MESSAGING_SENDER_ID=${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
             VITE_FIREBASE_APP_ID=${{ vars.VITE_FIREBASE_APP_ID }}
+            NEXT_PUBLIC_GROWTH_STUDIO_API_UR=${{ vars.NEXT_PUBLIC_GROWTH_STUDIO_API_UR }}
  
   deploy:
     needs: build-and-push
@@ -189,6 +190,8 @@ jobs:
             STRIPE_WEBHOOK_SECRET=${{ vars.STRIPE_WEBHOOK_SECRET }}
             STRIPE_PUBLISHABLE_KEY=${{ vars.STRIPE_PUBLISHABLE_KEY }}
             DELAYED_PAYOUT_HOURS=${{ vars.DELAYED_PAYOUT_HOURS }}
+            CONSENT_BASE_URL=${{ vars.CONSENT_BASE_URL }}
+            NEXT_PUBLIC_GROWTH_STUDIO_API_URL=${{ vars.NEXT_PUBLIC_GROWTH_STUDIO_API_URL }}
             EOF
  
             # Secure the environment file so only the owner can read it

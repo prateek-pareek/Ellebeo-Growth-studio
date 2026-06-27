@@ -362,9 +362,45 @@ export class AppointmentService {
       return { sent: false, reason: 'Client has no phone number on file.' };
     }
 
-    const clientName  = apt.client ? `${apt.client.firstName}` : 'your client';
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL') ?? 'http://localhost:5173';
-    const consentLink = `${frontendUrl}/consent/${apt.id}`;
+    const clientName = apt.client ? `${apt.client.firstName}` : 'your client';
+    const consentBaseUrl = this.configService.get<string>('CONSENT_BASE_URL')
+      ?? this.configService.get<string>('FRONTEND_URL')
+      ?? 'http://localhost:5173';
+
+    // Generate a unique one-time token for this consent request
+    const token = uuidv4();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    // Upsert consent record with the token
+    const existingRecord = await this.prisma.consentRecord.findFirst({
+      where: { appointmentId: apt.id },
+    });
+
+    if (existingRecord) {
+      await this.prisma.consentRecord.update({
+        where: { id: existingRecord.id },
+        data: {
+          consentToken: token,
+          consentTokenExpiresAt: expiresAt,
+          consentTokenUsedAt: null,
+          status: 'pending',
+        },
+      });
+    } else {
+      await this.prisma.consentRecord.create({
+        data: {
+          tenantId: apt.tenantId,
+          clientId: apt.clientId!,
+          appointmentId: apt.id,
+          status: 'pending',
+          consentToken: token,
+          consentTokenExpiresAt: expiresAt,
+          isCurrent: true,
+        },
+      });
+    }
+
+    const consentLink = `${consentBaseUrl}/consent?token=${token}`;
 
     const message =
       `Hi ${clientName}! Your beauty technician is waiting on your content consent ` +

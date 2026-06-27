@@ -1,5 +1,6 @@
 import { IsString, IsOptional, IsEmail, IsBoolean, IsNumber } from 'class-validator';
 import { Type } from 'class-transformer';
+import { PartialType } from '@nestjs/mapped-types';
 
 export class CreateClientDto {
   @IsString()
@@ -21,7 +22,7 @@ export class CreateClientDto {
   notes?: string;
 }
 
-export class UpdateClientDto extends CreateClientDto {}
+export class UpdateClientDto extends PartialType(CreateClientDto) {}
 
 export class UpsertConsentDto {
   @IsBoolean()

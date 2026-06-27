@@ -12,7 +12,7 @@ import type { VisionAnalysisResult } from '../types/chain-output.types';
 import type { ModelRouter } from '../orchestrator/model-router';
 import { wrapSystemPrompt } from '../config/platform-system-prompt';
 
-const VISION_PROMPT_VERSION = 'v1.0';
+const VISION_PROMPT_VERSION = 'v2.0';
 
 // Zod-validated output schema enforcer (inline for strict mode)
 function parseVisionOutput(raw: string): VisionAnalysisResult {
@@ -32,6 +32,7 @@ function parseVisionOutput(raw: string): VisionAnalysisResult {
     serviceTags: Array.isArray(obj['serviceTags']) ? (obj['serviceTags'] as string[]) : [],
     technicalDetails: String(obj['technicalDetails'] ?? ''),
     transformationDescription: String(obj['transformationDescription'] ?? ''),
+    keyVisualDetail: String(obj['keyVisualDetail'] ?? ''),
     imageQuality: validateImageQuality(obj['imageQuality']),
     facesDetected: Boolean(obj['facesDetected'] ?? false),
     settingDetected: String(obj['settingDetected'] ?? 'salon'),
@@ -125,24 +126,29 @@ export class VisionAnalysisChain {
   // --------------------------------------------------------------------------
 
   private async callVisionModel(imageUrl: string): Promise<VisionAnalysisResult> {
-    const systemPrompt = `You are an expert beauty and wellness technician analyst. 
-Analyse the provided image and extract structured information about the beauty service shown.
-Return ONLY valid JSON with no markdown, no explanation.`;
+    const systemPrompt = `You are a senior beauty industry analyst with 15 years of hands-on experience across hair colour, skin treatments, lashes, brows, nails, and injectables.
+Your job is to extract precise, technically accurate information from beauty treatment photos so a copywriter can write a specific, authentic social media caption.
+The quality of your analysis directly determines whether the caption sounds generic or genuinely expert.
+Return ONLY valid JSON — no markdown, no explanation, no preamble.`;
 
     const humanMessage = new HumanMessage({
       content: [
         {
           type: 'text',
-          text: `Analyse this beauty/wellness treatment image. Return this exact JSON structure:
+          text: `Analyse this beauty/wellness treatment image in detail. Return this exact JSON structure:
+
 {
-  "servicePerformed": "Specific service name with detail, e.g. Blonde Balayage with Ash Toning",
-  "serviceTags": ["colour", "balayage", "blonde", "toning"],
-  "technicalDetails": "Technical description of technique and application visible in image",
-  "transformationDescription": "Human-readable description of the transformation shown",
+  "servicePerformed": "Precise service name using correct industry terminology — e.g. 'Lived-In Balayage with Olaplex Toning to Level 9 Ash Blonde', not just 'Hair colour'. Be as specific as visible evidence allows.",
+  "serviceTags": ["specific technique tags — e.g. 'balayage', 'root-smudge', 'glass-skin', 'lip-flip', 'lash-lift', 'french-tip' — 3 to 6 tags, most specific first"],
+  "technicalDetails": "2–3 sentences of technically accurate craft detail: placement method, product type if inferrable, application technique, colour depth/tone/direction, tool marks visible, layering, blending — the kind of detail only an expert would notice",
+  "transformationDescription": "1–2 sentences describing the result from the client's perspective: what changed, how it looks, the emotional effect — written to be used in a social caption",
+  "keyVisualDetail": "The single most striking, specific, caption-worthy detail in this image — the one thing that makes this result stand out. One short sentence. E.g. 'The way the colour melts from a deep root shadow into a bright, icy blonde at the ends' or 'The extreme lift on her inner corners makes her eyes look dramatically wider'. This should anchor the hook sentence.",
   "imageQuality": "excellent|good|acceptable|poor",
-  "facesDetected": true|false,
-  "settingDetected": "e.g. salon chair, studio, outdoor"
-}`,
+  "facesDetected": true,
+  "settingDetected": "salon chair|nail table|treatment bed|studio|outdoor|home — be specific"
+}
+
+Be specific. Vague answers like 'hair was coloured' or 'skin looks better' are useless. Use the technical vocabulary a professional technician would use.`,
         },
         {
           type: 'image_url',

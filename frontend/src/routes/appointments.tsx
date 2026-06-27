@@ -359,11 +359,11 @@ function PhotoUpload({
       <label className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
         {label}
       </label>
-      <div className="aspect-square border border-border bg-muted/30 flex items-center justify-center relative overflow-hidden group hover:border-taupe transition-colors">
+      <div className="border border-border bg-muted/30 flex items-center justify-center relative overflow-hidden group hover:border-taupe transition-colors min-h-32">
         {file ? (
-          <img src={URL.createObjectURL(file)} className="w-full h-full object-cover" alt={label} />
+          <img src={URL.createObjectURL(file)} className="w-full h-auto block" alt={label} />
         ) : (
-          <div className="flex flex-col items-center gap-2 text-taupe group-hover:text-foreground transition-colors">
+          <div className="flex flex-col items-center gap-2 text-taupe group-hover:text-foreground transition-colors py-8">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
               <polyline points="17 8 12 3 7 8" />

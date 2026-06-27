@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useSearch, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, useRef } from "react";
-import { Sparkles, BookOpen, TrendingUp, Clock, Heart, Layers, Play, Zap, Image, Music, ChevronRight, Calendar } from "lucide-react";
+import { Sparkles, BookOpen, TrendingUp, Clock, Heart, Layers, Play, Zap, Image, ChevronRight, Calendar } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAppointments, type Appointment } from "@/lib/providers/appointments-provider";
 import { useBrandDna } from "@/lib/providers/brand-dna-provider";
@@ -29,7 +29,7 @@ export const Route = createFileRoute("/generate")({
 });
 
 type Goal = "showcase" | "educate" | "convert" | "availability" | "trust";
-type Format = "Carousel" | "Reel" | "Story" | "Caption" | "TikTok";
+type Format = "Carousel" | "Reel" | "Story" | "Caption";
 type Step = "select" | "consent" | "goal" | "format" | "review";
 
 const GOALS: { id: Goal; name: string; help: string }[] = [
@@ -45,7 +45,6 @@ const FORMATS: { id: Format; name: string; help: string }[] = [
   { id: "Reel", name: "Reel", help: "15–30s vertical video." },
   { id: "Story", name: "Story", help: "4-frame sequence, 24h." },
   { id: "Caption", name: "Caption", help: "Single image + caption." },
-  { id: "TikTok", name: "TikTok", help: "Short vertical video." },
 ];
 
 function GeneratePage() {
@@ -76,6 +75,7 @@ function GeneratePage() {
   const [showPaywall, setShowPaywall] = useState(false);
   const [showTrialPaywall, setShowTrialPaywall] = useState(false);
   const [paywallReason, setPaywallReason] = useState<"TRIAL_EXHAUSTED" | "PLAN_EXHAUSTED">("TRIAL_EXHAUSTED");
+  const [pendingFormat, setPendingFormat] = useState<Format | null>(null);
 
   useEffect(() => {
     if (!profileLoading && !technician.hasGrowthStudioAccess) {
@@ -95,6 +95,27 @@ function GeneratePage() {
         setStep("consent");
     }
   }, [requestedMatch]);
+
+  // Auto-trigger generation after returning from payment
+  useEffect(() => {
+    if (loading || !appointments.length) return;
+    const raw = localStorage.getItem("pendingGeneration");
+    if (!raw) return;
+    try {
+      const { appointmentId, format: savedFormat, goal: savedGoal } = JSON.parse(raw);
+      const match = appointments.find((a) => a.id === appointmentId);
+      if (!match) return;
+      localStorage.removeItem("pendingGeneration");
+      setAppointment(match);
+      setFormat(savedFormat as Format);
+      setGoal(savedGoal as Goal);
+      setStep("review");
+      // Small delay so state settles before generating
+      setTimeout(() => handleGenerate(savedFormat as Format), 300);
+    } catch {
+      localStorage.removeItem("pendingGeneration");
+    }
+  }, [loading, appointments]);
 
   useEffect(() => {
     if (!jobId || !generating) return;
@@ -155,7 +176,6 @@ function GeneratePage() {
       'Reel': 'reel',
       'Story': 'story',
       'Caption': 'feed',
-      'TikTok': 'reel'
     };
 
     const goalMap: Record<Goal, string> = {
@@ -171,7 +191,6 @@ function GeneratePage() {
       'Reel': ['instagram'],
       'Story': ['instagram'],
       'Caption': ['instagram'],
-      'TikTok': ['instagram', 'tiktok'],
     };
 
     const activeFormat = selectedFormat ?? format;
@@ -192,6 +211,7 @@ function GeneratePage() {
       const errorCode = e.response?.data?.error?.code;
       if (errorCode === "TRIAL_EXHAUSTED" || errorCode === "PLAN_EXHAUSTED") {
         setPaywallReason(errorCode);
+        setPendingFormat(activeFormat);
         setShowTrialPaywall(true);
       } else {
         toast.error(e.response?.data?.message || e.response?.data?.error?.message || "Failed to start generation");
@@ -285,7 +305,15 @@ function GeneratePage() {
                   You've used all your purchased generations. Top up to keep the momentum going.
                 </p>
                 <button
-                  onClick={() => navigate({ to: "/plans" })}
+                  onClick={() => {
+                    if (appointment) {
+                      localStorage.setItem("postPurchaseReturn", `/generate?appointment=${appointment.id}`);
+                      localStorage.setItem("pendingGeneration", JSON.stringify({ appointmentId: appointment.id, format: pendingFormat ?? format, goal }));
+                    } else {
+                      localStorage.setItem("postPurchaseReturn", window.location.pathname + window.location.search);
+                    }
+                    navigate({ to: "/plans" });
+                  }}
                   className="bg-foreground text-offwhite px-8 py-4 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors w-full sm:w-auto"
                 >
                   Buy More Generations →
@@ -309,7 +337,15 @@ function GeneratePage() {
                   Your free trial is complete. Unlock unlimited AI content generation with a Silver or Gold plan.
                 </p>
                 <button
-                  onClick={() => navigate({ to: "/plans" })}
+                  onClick={() => {
+                    if (appointment) {
+                      localStorage.setItem("postPurchaseReturn", `/generate?appointment=${appointment.id}`);
+                      localStorage.setItem("pendingGeneration", JSON.stringify({ appointmentId: appointment.id, format: pendingFormat ?? format, goal }));
+                    } else {
+                      localStorage.setItem("postPurchaseReturn", window.location.pathname + window.location.search);
+                    }
+                    navigate({ to: "/plans" });
+                  }}
                   className="bg-foreground text-offwhite px-8 py-4 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors w-full sm:w-auto"
                 >
                   Choose a Plan →
@@ -921,7 +957,6 @@ const FORMAT_ICONS: Record<Format, React.ComponentType<{ className?: string }>> 
   Reel:     Play,
   Story:    Zap,
   Caption:  Image,
-  TikTok:   Music,
 };
 
 function FormatStep({
@@ -1402,19 +1437,21 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep, onRe
                 ))}
               </div>
 
-              {/* Main image — fills rectangle completely */}
+              {/* Main image — 9:16 story ratio */}
               <div className="relative flex-1 flex items-center justify-center bg-nude/10 p-4">
-                <div className="relative w-full overflow-hidden shadow-lg" style={{ maxWidth: '420px' }}>
+                <div className="relative overflow-hidden shadow-lg" style={{ maxWidth: '240px', width: '100%' }}>
+                  <div className="aspect-[9/16] relative overflow-hidden">
                   <img
                     src={storyFrames[safeFrame]?.url}
                     alt={storyFrames[safeFrame]?.label}
-                    className="w-full h-auto block"
+                    className="absolute inset-0 w-full h-full object-cover"
                   />
                   <div className="absolute top-2 left-2 bg-foreground/70 px-2 py-0.5">
                     <p className="text-[9px] uppercase tracking-widest text-offwhite">{safeFrame + 1} / {storyFrames.length}</p>
                   </div>
                   <div className="absolute top-2 right-2 bg-foreground/70 px-2 py-0.5">
                     <p className="text-[9px] uppercase tracking-widest text-nude">{storyFrames[safeFrame]?.label}</p>
+                  </div>
                   </div>
                 </div>
               </div>
@@ -1498,8 +1535,8 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep, onRe
             {/* LEFT — full-width image preview + storyboard strip */}
             <div className="bg-[#0d0d0d] flex flex-col">
 
-              {/* Main image — full column width, portrait height */}
-              <div className="relative h-80 overflow-hidden">
+              {/* Main image — 9:16 reel ratio */}
+              <div className="relative aspect-[9/16] max-h-[480px] overflow-hidden">
                 {singleImageUrl ? (
                   <img src={singleImageUrl} alt="Reel preview" className="absolute inset-0 w-full h-full object-cover object-center" />
                 ) : (
@@ -1626,12 +1663,12 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep, onRe
             {/* LEFT — main slide viewer + thumbnail strip */}
             <div className="bg-nude/10 flex flex-col">
 
-              {/* Main slide */}
-              <div className="relative">
+              {/* Main slide — 1:1 square carousel ratio */}
+              <div className="relative aspect-square overflow-hidden">
                 <img
                   src={carouselSlides[safeSlide]?.url}
                   alt={carouselSlides[safeSlide]?.label ?? `Slide ${safeSlide + 1}`}
-                  className="w-full object-cover max-h-[360px]"
+                  className="absolute inset-0 w-full h-full object-cover"
                 />
 
                 {/* Slide counter badge */}
