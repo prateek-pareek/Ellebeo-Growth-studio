@@ -429,7 +429,7 @@ function EntryDetailModal({ entry, dayEntries, contentItems, onClose, onMutated 
 
   return (
     <Dialog open={entry !== null} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-lg p-0 overflow-hidden">
+      <DialogContent className="max-w-lg p-0 overflow-hidden flex flex-col max-h-[90vh]">
 
         {/* ── Entries list (shown when day has multiple posts) ── */}
         {showList && (
@@ -478,13 +478,7 @@ function EntryDetailModal({ entry, dayEntries, contentItems, onClose, onMutated 
         )}
 
         {/* ── Active entry detail ── */}
-        {contentItem?.image && (
-          <div className="h-32 w-full overflow-hidden bg-nude/30">
-            <img src={contentItem.image} alt={active?.title} className="w-full h-full object-cover" />
-          </div>
-        )}
-
-        <DialogHeader className="px-6 pt-5 pb-0">
+        <DialogHeader className="px-6 pt-5 pb-0 shrink-0">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">
@@ -512,9 +506,14 @@ function EntryDetailModal({ entry, dayEntries, contentItems, onClose, onMutated 
           )}
         </DialogHeader>
 
-        <div className="px-6 py-5 space-y-5 max-h-[70vh] overflow-y-auto">
+        <div className="px-6 py-5 space-y-5 flex-1 min-h-0 overflow-y-auto">
+          {contentItem?.image && (
+            <div className="w-full aspect-[4/5] overflow-hidden bg-nude/30">
+              <img src={contentItem.image} alt={active?.title} className="w-full h-full object-contain" />
+            </div>
+          )}
           {contentItem?.caption && (
-            <p className="text-sm text-taupe leading-relaxed line-clamp-3">{contentItem.caption}</p>
+            <p className="text-sm text-taupe leading-relaxed">{contentItem.caption}</p>
           )}
 
           {active?.status !== "published" && (
@@ -536,7 +535,7 @@ function EntryDetailModal({ entry, dayEntries, contentItems, onClose, onMutated 
           )}
         </div>
 
-        <DialogFooter className="px-6 pb-6 pt-0 flex-row justify-between">
+        <DialogFooter className="px-6 pb-6 pt-0 flex-row justify-between shrink-0">
           <button
             type="button"
             onClick={handleDelete}
@@ -808,7 +807,7 @@ function ScheduleModal({ open, onClose, day, year, monthIndex, contentItems, onS
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-lg p-0 overflow-hidden flex flex-col max-h-[90vh]">
+      <DialogContent className="max-w-lg p-0 overflow-hidden">
         <DialogHeader className="px-6 pt-6 pb-0 shrink-0">
           <DialogTitle className="font-serif text-2xl font-normal">
             Schedule for {String(day).padStart(2, "0")} {monthLabel}
@@ -818,7 +817,7 @@ function ScheduleModal({ open, onClose, day, year, monthIndex, contentItems, onS
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-6 py-5 space-y-5 flex-1 min-h-0 overflow-y-auto">
+        <div className="px-6 py-5 space-y-5 overflow-y-auto max-h-[60vh]">
           {/* Date & Time */}
           <div>
             <label className="text-[10px] uppercase tracking-widest text-taupe block mb-3">
