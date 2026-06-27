@@ -25,22 +25,33 @@ export class SmsService {
     }
   }
 
+  private normalizePhone(raw: string): string {
+    const digits = raw.replace(/\D/g, '');
+    if (raw.trimStart().startsWith('+')) return `+${digits}`;
+    if (digits.startsWith('61') && digits.length === 11) return `+${digits}`; // AU with country code
+    if (digits.startsWith('0') && digits.length === 10) return `+61${digits.slice(1)}`; // AU local 04XXXXXXXX
+    if (digits.length === 10) return `+1${digits}`;  // assume US
+    if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+    return raw;
+  }
+
   async sendSms(to: string, body: string): Promise<void> {
     if (!this.client) return;
     const from = this.config.get<string>('TWILIO_PHONE_NUMBER')
                ?? this.config.get<string>('TWILIO_FROM_NUMBER');
     const messagingServiceSid = this.config.get<string>('TWILIO_MESSAGING_SERVICE_SID');
+    const normalized = this.normalizePhone(to);
 
     try {
       await this.client.messages.create({
         body,
-        to,
+        to: normalized,
         ...(from ? { from } : {}),
         ...(messagingServiceSid ? { messagingServiceSid } : {}),
       });
-      this.logger.log(`SMS sent to ${to}`);
+      this.logger.log(`SMS sent to ${normalized} (raw: ${to})`);
     } catch (err: any) {
-      this.logger.error(`SMS failed to ${to}: ${err.message}`);
+      this.logger.error(`SMS failed to ${normalized} (raw: ${to}): ${err.message}`);
     }
   }
 }
