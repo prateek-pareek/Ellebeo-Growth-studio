@@ -21,6 +21,12 @@ export class PublicConsentController {
     return this.service.getConsentByToken(token);
   }
 
+  @Post('decline')
+  @HttpCode(HttpStatus.OK)
+  declineConsent(@Query('token') token: string) {
+    return this.service.declineByToken(token);
+  }
+
   @Post()
   @HttpCode(HttpStatus.OK)
   grantConsent(
