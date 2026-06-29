@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useTemplates, type Template } from "@/lib/providers/template-provider";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useAppointments } from "@/lib/providers/appointments-provider";
 import { Layers, Play, Zap, Image, Music } from "lucide-react";
 
 export const Route = createFileRoute("/templates")({
@@ -13,6 +14,28 @@ export const Route = createFileRoute("/templates")({
   }),
   component: TemplatesPage,
 });
+
+// Maps appointment category display names → template category strings (case-matched)
+const APPT_TO_TEMPLATE_CATEGORY: Record<string, string> = {
+  "Hairdresser":        "Hairdresser",
+  "Colourist":          "Colourist",
+  "Bridal makeup":      "Bridal Makeup",
+  "Lash & brow":        "Lash & Brow",
+  "Nail artist":        "Nail Artist",
+  "Medical Aesthetics": "Injector",
+  "Skin therapist":     "Skin Therapist",
+  "Barber":             "Barber",
+};
+
+function derivePrimaryCategory(appointments: Array<{ category: string }>): string {
+  const counts: Record<string, number> = {};
+  for (const apt of appointments) {
+    const mapped = APPT_TO_TEMPLATE_CATEGORY[apt.category];
+    if (mapped) counts[mapped] = (counts[mapped] ?? 0) + 1;
+  }
+  const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+  return top?.[0] ?? "All";
+}
 
 const PILLARS = ["All", "Transformations", "Education", "Behind the chair", "Client stories"];
 
@@ -34,9 +57,19 @@ const FORMAT_FILTERS = ["All", "Carousel", "Reel", "Story", "Caption", "TikTok"]
 
 function TemplatesPage() {
   const { templates, categories } = useTemplates();
+  const { data: appointments, loading: apptLoading } = useAppointments();
   const [pillar,   setPillar]   = useState("All");
   const [category, setCategory] = useState("All");
   const [format,   setFormat]   = useState("All");
+
+  // Auto-select the tenant's primary service category on first load
+  const initialized = useRef(false);
+  useEffect(() => {
+    if (apptLoading || appointments.length === 0 || initialized.current) return;
+    initialized.current = true;
+    const primary = derivePrimaryCategory(appointments);
+    if (primary !== "All") setCategory(primary);
+  }, [appointments, apptLoading]);
 
   const filtered = templates.filter((t) => {
     if (pillar   !== "All" && t.pillar.toLowerCase() !== pillar.toLowerCase()) return false;
