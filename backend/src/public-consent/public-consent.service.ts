@@ -100,4 +100,30 @@ export class PublicConsentService {
 
     return { success: true };
   }
+
+  async declineByToken(token: string) {
+    const record = await this.prisma.consentRecord.findUnique({
+      where: { consentToken: token },
+    });
+
+    if (!record) throw new NotFoundException('Consent link not found or invalid.');
+
+    if (record.consentTokenUsedAt) {
+      throw new BadRequestException('This consent link has already been used.');
+    }
+
+    if (record.consentTokenExpiresAt && record.consentTokenExpiresAt < new Date()) {
+      throw new BadRequestException('This consent link has expired.');
+    }
+
+    await this.prisma.consentRecord.update({
+      where: { id: record.id },
+      data: {
+        status: 'declined',
+        consentTokenUsedAt: new Date(),
+      },
+    });
+
+    return { success: true };
+  }
 }
