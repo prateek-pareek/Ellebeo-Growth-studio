@@ -577,6 +577,12 @@ function EditSidebar({
   const [saving,   setSaving]   = useState(false);
   const [approving, setApproving] = useState(false);
 
+  const platformVariants = item.platformVariants;
+  const isCarousel = platformVariants?.type === "carousel";
+  const isStory = platformVariants?.type === "story";
+  const slides = isCarousel ? (platformVariants?.slides ?? []) : isStory ? (platformVariants?.frames ?? []) : [];
+  const [activeSlide, setActiveSlide] = useState(0);
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -627,6 +633,63 @@ function EditSidebar({
 
         {/* Form */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+          {/* Visual Preview Slider */}
+          {slides.length > 0 && (
+            <div className="border border-border bg-muted/20 p-3 mb-2 rounded">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[9px] uppercase tracking-widest text-taupe">
+                  Visual Preview ({activeSlide + 1}/{slides.length})
+                </span>
+                <span className="text-[8px] uppercase tracking-widest bg-foreground/10 text-foreground px-2 py-0.5 font-semibold">
+                  {isCarousel ? "Carousel" : "Story"}
+                </span>
+              </div>
+              
+              <div className="relative aspect-square w-full overflow-hidden bg-black/5 mb-2 border border-border">
+                <img
+                  src={slides[activeSlide]?.url}
+                  alt={slides[activeSlide]?.label ?? `Slide ${activeSlide + 1}`}
+                  className="w-full h-full object-cover"
+                />
+                
+                {activeSlide > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveSlide(activeSlide - 1)}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-foreground/70 hover:bg-foreground text-white size-6 flex items-center justify-center rounded-full text-xs font-bold transition-all shadow-md"
+                  >
+                    ←
+                  </button>
+                )}
+                {activeSlide < slides.length - 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveSlide(activeSlide + 1)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-foreground/70 hover:bg-foreground text-white size-6 flex items-center justify-center rounded-full text-xs font-bold transition-all shadow-md"
+                  >
+                    →
+                  </button>
+                )}
+              </div>
+
+              {/* Thumbnails strip */}
+              <div className="flex gap-1.5 overflow-x-auto py-1 scrollbar-none">
+                {slides.map((s: any, idx: number) => (
+                  <button
+                    type="button"
+                    key={idx}
+                    onClick={() => setActiveSlide(idx)}
+                    className={`shrink-0 size-11 overflow-hidden border-2 transition-all ${
+                      idx === activeSlide ? "border-foreground scale-95" : "border-transparent opacity-60 hover:opacity-90"
+                    }`}
+                  >
+                    <img src={s.url} alt="" className="w-full h-full object-cover animate-fade-in" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="text-[10px] uppercase tracking-widest text-taupe block mb-2">Caption</label>
             <textarea

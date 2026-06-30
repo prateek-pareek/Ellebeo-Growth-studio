@@ -7,6 +7,7 @@ import OpenAI from 'openai';
 import { firebaseStorage } from '../../config/firebase.client';
 import * as https from 'https';
 import * as http from 'http';
+import { GoogleGenAI } from '@google/genai';
 
 const openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
 
@@ -175,17 +176,59 @@ export class AiImageGenerationService {
     const prompt = isBeforePhoto
       ? buildBeforeSlidePrompt({ overlayText, businessName, brandColor })
       : buildSlidePrompt({
-          overlayText,
-          businessName,
-          brandColor,
-          secondaryColor,
-          aesthetic,
-          serviceType,
-          isFirst,
-          isLast,
-        });
+        overlayText,
+        businessName,
+        brandColor,
+        secondaryColor,
+        aesthetic,
+        serviceType,
+        isFirst,
+        isLast,
+      });
 
     const imageBuffer = await downloadImageAsBuffer(photoUrl);
+
+    // Try Gemini First (as requested) if API Key is configured
+    const geminiKey = process.env['GEMINI_API_KEY'];
+    if (geminiKey && geminiKey.length > 0) {
+      try {
+        console.log(`Attempting image generation with Gemini (Nano Banana) for slide ${index}...`);
+        const aiClient = new GoogleGenAI({ apiKey: geminiKey });
+        const base64Image = imageBuffer.toString('base64');
+        const response = await aiClient.models.generateContent({
+          model: 'gemini-2.5-flash-image',
+          contents: [
+            {
+              inlineData: {
+                mimeType: 'image/jpeg',
+                data: base64Image,
+              },
+            },
+            prompt,
+          ],
+          config: {
+            responseModalities: ['image'],
+          } as any,
+        });
+
+        const outputPart = response.candidates?.[0]?.content?.parts?.find(
+          (part: any) => part.inlineData
+        );
+        const outputBase64 = outputPart?.inlineData?.data;
+
+        if (outputBase64) {
+          console.log(`Gemini image generation successful for slide ${index}!`);
+          return uploadBase64ToFirebase(outputBase64, tenantId, `slide_${index}`);
+        } else {
+          console.warn(`Gemini returned empty image data for slide ${index}. Falling back to OpenAI.`);
+        }
+      } catch (err: any) {
+        console.error(`Gemini Image Generation Error for slide ${index}:`, err);
+        console.log(`Falling back to OpenAI for slide ${index}...`);
+      }
+    }
+
+    // Default Fallback to OpenAI (Original logic kept intact)
     const imageFile = new File([imageBuffer], 'photo.jpg', { type: 'image/jpeg' });
 
     const response = await openai.images.edit({
