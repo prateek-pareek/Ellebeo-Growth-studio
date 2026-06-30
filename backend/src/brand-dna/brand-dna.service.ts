@@ -71,6 +71,15 @@ export class BrandDnaService {
           captionLengthPreference: dto.captionLengthPreference || 'medium',
           logoUrl: dto.logoUrl,
           logoPosition: dto.logoPosition || 'bottom_right',
+          moodboardUrls: dto.moodboardUrls || [],
+          moodboardLabels: dto.moodboardLabels || [],
+          lightingPreference: dto.lightingPreference,
+          texturePreference: dto.texturePreference,
+          compositionStyle: dto.compositionStyle,
+          environmentPreference: dto.environmentPreference,
+          finishPreference: dto.finishPreference,
+          audienceLifestyle: dto.audienceLifestyle,
+          commercialObjective: dto.commercialObjective,
           pillars: {
             create: dto.pillars?.map((label, i) => ({
               label,

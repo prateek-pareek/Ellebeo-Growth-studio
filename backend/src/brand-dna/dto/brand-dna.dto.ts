@@ -93,6 +93,43 @@ export class CreateBrandDnaDto {
   @IsString()
   @IsOptional()
   logoPosition?: string;
+
+  // Visual Brand DNA
+  @IsArray()
+  @IsOptional()
+  moodboardUrls?: string[];
+
+  @IsArray()
+  @IsOptional()
+  moodboardLabels?: string[];
+
+  @IsString()
+  @IsOptional()
+  lightingPreference?: string;
+
+  @IsString()
+  @IsOptional()
+  texturePreference?: string;
+
+  @IsString()
+  @IsOptional()
+  compositionStyle?: string;
+
+  @IsString()
+  @IsOptional()
+  environmentPreference?: string;
+
+  @IsString()
+  @IsOptional()
+  finishPreference?: string;
+
+  @IsString()
+  @IsOptional()
+  audienceLifestyle?: string;
+
+  @IsString()
+  @IsOptional()
+  commercialObjective?: string;
 }
 
 export class ScanInstagramDto {
