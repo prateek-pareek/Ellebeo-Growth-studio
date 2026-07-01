@@ -103,9 +103,9 @@ const IndexRoute = IndexRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 const ConsentIdRoute = ConsentIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => ConsentRoute,
+  id: '/consent/$id',
+  path: '/consent/$id',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const BrandOnboardingRoute = BrandOnboardingRouteImport.update({
   id: '/onboarding',
@@ -247,6 +247,7 @@ export interface RootRouteChildren {
   ProfileRoute: typeof ProfileRoute
   SignupRoute: typeof SignupRoute
   TemplatesRoute: typeof TemplatesRoute
+  ConsentIdRoute: typeof ConsentIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -358,10 +359,10 @@ declare module '@tanstack/react-router' {
     }
     '/consent/$id': {
       id: '/consent/$id'
-      path: '/$id'
+      path: '/consent/$id'
       fullPath: '/consent/$id'
       preLoaderRoute: typeof ConsentIdRouteImport
-      parentRoute: typeof ConsentRoute
+      parentRoute: typeof rootRouteImport
     }
     '/brand/onboarding': {
       id: '/brand/onboarding'
@@ -399,6 +400,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProfileRoute: ProfileRoute,
   SignupRoute: SignupRoute,
   TemplatesRoute: TemplatesRoute,
+  ConsentIdRoute: ConsentIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
