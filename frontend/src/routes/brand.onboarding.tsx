@@ -241,7 +241,7 @@ function OnboardingPage() {
     (v: OnboardingPayload[K]) => setForm((f) => ({ ...f, [k]: v }));
 
   const toggle = (id: string) =>
-    setOpen((o) => ({ ...o, [id]: !o[id] }));
+    setOpen((o) => ({ [id]: !o[id] }));
 
   async function handleSave(publish: boolean) {
     setSaving(true);
@@ -281,13 +281,13 @@ function OnboardingPage() {
       </div>
 
       {/* Heading */}
-      <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight mb-4">
+      <h1 className="font-serif text-5xl sm:text-6xl lg:text-7xl leading-[1.05] tracking-tight mb-5">
         Your <span className="italic">brand bible</span>, built for AI.
       </h1>
-      <p className="text-base text-taupe leading-relaxed max-w-[60ch] mb-2">
+      <p className="text-lg text-taupe leading-relaxed max-w-[60ch] mb-2">
         Complete your Brand DNA so Elle.Be.O can create content that looks, sounds and feels like your brand. Save a draft any time — nothing is lost between sessions.
       </p>
-      <p className="text-[11px] text-taupe/60 mb-8">
+      <p className="text-xs text-taupe/60 mb-8">
         Sample preview — drafts stay in this browser session.
       </p>
 
@@ -461,10 +461,12 @@ function AccordionSection({
         className="w-full flex items-start justify-between p-6 text-left hover:bg-nude/10 transition-colors"
       >
         <div>
-          <h2 className="font-serif text-xl mb-1">{title}</h2>
-          <p className="text-[11px] text-taupe leading-relaxed">{subtitle}</p>
+          <h2 className="font-serif text-2xl mb-1">{title}</h2>
+          <p className="text-sm text-taupe leading-relaxed">{subtitle}</p>
         </div>
-        <span className="text-taupe text-lg ml-4 mt-0.5 flex-shrink-0">{isOpen ? "−" : "+"}</span>
+        <span className={`ml-4 mt-0.5 flex-shrink-0 text-sm transition-opacity ${isOpen ? "text-taupe" : "text-taupe/30"}`}>
+          {isOpen ? "−" : "+"}
+        </span>
       </button>
 
       {isOpen && (
@@ -520,7 +522,7 @@ function BrandFoundationsSection({
                 type="button"
                 onClick={() => toggleCategory(cat)}
                 className={
-                  "px-4 py-1.5 text-[11px] uppercase tracking-widest border hairline transition-colors " +
+                  "px-4 py-2 text-xs uppercase tracking-widest border hairline transition-colors " +
                   (selected
                     ? "bg-foreground text-offwhite border-foreground"
                     : "bg-transparent text-foreground hover:bg-nude/30")
@@ -541,7 +543,7 @@ function BrandFoundationsSection({
             placeholder="e.g. Blonde specialist, tape extensions, editorial makeup"
             value={form.signature}
             onChange={(e) => set("signature")(e.target.value)}
-            className="w-full border hairline bg-background px-3 py-2.5 text-sm outline-none focus:border-foreground transition-colors"
+            className="w-full border hairline bg-background px-3 py-3 text-base outline-none focus:border-foreground transition-colors"
           />
         </FormField>
         <FormField label="Location">
@@ -550,7 +552,7 @@ function BrandFoundationsSection({
             placeholder="City or suburb"
             value={form.city}
             onChange={(e) => set("city")(e.target.value)}
-            className="w-full border hairline bg-background px-3 py-2.5 text-sm outline-none focus:border-foreground transition-colors"
+            className="w-full border hairline bg-background px-3 py-3 text-base outline-none focus:border-foreground transition-colors"
           />
         </FormField>
       </div>
@@ -563,7 +565,7 @@ function BrandFoundationsSection({
             placeholder="Mobile / clinic / studio…"
             value={form.serviceArea}
             onChange={(e) => set("serviceArea")(e.target.value)}
-            className="w-full border hairline bg-background px-3 py-2.5 text-sm outline-none focus:border-foreground transition-colors"
+            className="w-full border hairline bg-background px-3 py-3 text-base outline-none focus:border-foreground transition-colors"
           />
         </FormField>
         <FormField label="Strongest Reputation Asset">
@@ -572,7 +574,7 @@ function BrandFoundationsSection({
             placeholder="Technique, taste, discretion…"
             value={form.reputationAsset}
             onChange={(e) => set("reputationAsset")(e.target.value)}
-            className="w-full border hairline bg-background px-3 py-2.5 text-sm outline-none focus:border-foreground transition-colors"
+            className="w-full border hairline bg-background px-3 py-3 text-base outline-none focus:border-foreground transition-colors"
           />
         </FormField>
       </div>
@@ -584,7 +586,7 @@ function BrandFoundationsSection({
           placeholder="Natural-looking skin, calm expertise and meticulous prep."
           value={form.knownFor}
           onChange={(e) => set("knownFor")(e.target.value)}
-          className="w-full border hairline bg-background px-3 py-2.5 text-sm outline-none focus:border-foreground transition-colors resize-none"
+          className="w-full border hairline bg-background px-3 py-3 text-base outline-none focus:border-foreground transition-colors resize-none"
         />
       </FormField>
 
@@ -595,7 +597,7 @@ function BrandFoundationsSection({
           placeholder="I focus on skin that still looks like skin, not heavy coverage."
           value={form.workDifferentiation}
           onChange={(e) => set("workDifferentiation")(e.target.value)}
-          className="w-full border hairline bg-background px-3 py-2.5 text-sm outline-none focus:border-foreground transition-colors resize-none"
+          className="w-full border hairline bg-background px-3 py-3 text-base outline-none focus:border-foreground transition-colors resize-none"
         />
       </FormField>
     </div>
@@ -619,7 +621,7 @@ function BrandEssenceSection({
           placeholder="Give clients the calm confidence that they look like the best version of themselves."
           value={form.brandEssenceSentence}
           onChange={(e) => set("brandEssenceSentence")(e.target.value)}
-          className="w-full border hairline bg-background px-3 py-2.5 text-sm outline-none focus:border-foreground transition-colors resize-none"
+          className="w-full border hairline bg-background px-3 py-3 text-base outline-none focus:border-foreground transition-colors resize-none"
         />
       </FormField>
 
@@ -629,7 +631,7 @@ function BrandEssenceSection({
           placeholder="A quiet Aesop store, a Sofia Coppola interior, the pages of Cereal."
           value={form.brandWorldAnchor}
           onChange={(e) => set("brandWorldAnchor")(e.target.value)}
-          className="w-full border hairline bg-background px-3 py-2.5 text-sm outline-none focus:border-foreground transition-colors resize-none"
+          className="w-full border hairline bg-background px-3 py-3 text-base outline-none focus:border-foreground transition-colors resize-none"
         />
       </FormField>
 
@@ -637,7 +639,7 @@ function BrandEssenceSection({
         <select
           value={form.imageEnergy}
           onChange={(e) => set("imageEnergy")(e.target.value)}
-          className="w-full border hairline bg-background px-3 py-2.5 text-sm outline-none focus:border-foreground transition-colors appearance-none cursor-pointer"
+          className="w-full border hairline bg-background px-3 py-3 text-base outline-none focus:border-foreground transition-colors appearance-none cursor-pointer"
         >
           {IMAGE_ENERGY_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
@@ -735,10 +737,10 @@ function FormField({
 }) {
   return (
     <div>
-      <label className="text-[9px] uppercase tracking-[0.2em] text-taupe font-semibold block mb-1">
+      <label className="text-[10px] uppercase tracking-[0.2em] text-taupe font-semibold block mb-1">
         {label}{required && " *"}
       </label>
-      {hint && <p className="text-[11px] text-taupe/70 mb-2 leading-relaxed">{hint}</p>}
+      {hint && <p className="text-xs text-taupe/70 mb-2 leading-relaxed">{hint}</p>}
       {children}
     </div>
   );
