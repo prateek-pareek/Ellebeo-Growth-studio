@@ -67,12 +67,16 @@ export class BrandDnaService {
           brandTier: dto.brandTier as any,
           primaryBrandColor: dto.primaryBrandColor,
           secondaryBrandColor: dto.secondaryBrandColor,
+          backgroundBrandColor: dto.backgroundBrandColor,
+          accentBrandColor: dto.accentBrandColor,
+          depthBrandColor: dto.depthBrandColor,
           emojiPolicy: dto.emojiPolicy || 'minimal',
           captionLengthPreference: dto.captionLengthPreference || 'medium',
           logoUrl: dto.logoUrl,
           logoPosition: dto.logoPosition || 'bottom_right',
           moodboardUrls: dto.moodboardUrls || [],
           moodboardLabels: dto.moodboardLabels || [],
+          visualRanking: dto.visualRanking || [],
           lightingPreference: dto.lightingPreference,
           texturePreference: dto.texturePreference,
           compositionStyle: dto.compositionStyle,
@@ -80,6 +84,14 @@ export class BrandDnaService {
           finishPreference: dto.finishPreference,
           audienceLifestyle: dto.audienceLifestyle,
           commercialObjective: dto.commercialObjective,
+          clientFears: dto.clientFears,
+          clientTrustTriggers: dto.clientTrustTriggers,
+          clientVisualTaste: dto.clientVisualTaste,
+          clientBuyingTriggers: dto.clientBuyingTriggers,
+          clientEmotionalOutcome: dto.clientEmotionalOutcome,
+          brandPerceptionGoal: dto.brandPerceptionGoal,
+          brandProofStatement: dto.brandProofStatement,
+          brandNeverLooksLike: dto.brandNeverLooksLike,
           pillars: {
             create: dto.pillars?.map((label, i) => ({
               label,
@@ -150,6 +162,17 @@ export class BrandDnaService {
     const bucket = firebaseStorage.bucket();
     const ext = file.originalname.split('.').pop() || 'png';
     const filePath = `logos/${tenantId}/logo_${Date.now()}.${ext}`;
+    const fileRef = bucket.file(filePath);
+    await fileRef.save(file.buffer, { contentType: file.mimetype, public: true });
+    const url = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
+    return { url };
+  }
+
+  async uploadMoodboard(tenantId: string, file: Express.Multer.File) {
+    if (!firebaseStorage) throw new Error('Firebase storage not configured');
+    const bucket = firebaseStorage.bucket();
+    const ext = file.originalname.split('.').pop() || 'jpg';
+    const filePath = `moodboards/${tenantId}/mb_${Date.now()}.${ext}`;
     const fileRef = bucket.file(filePath);
     await fileRef.save(file.buffer, { contentType: file.mimetype, public: true });
     const url = `https://storage.googleapis.com/${bucket.name}/${filePath}`;

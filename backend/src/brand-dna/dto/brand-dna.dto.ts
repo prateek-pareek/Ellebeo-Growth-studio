@@ -72,6 +72,18 @@ export class CreateBrandDnaDto {
 
   @IsString()
   @IsOptional()
+  backgroundBrandColor?: string;
+
+  @IsString()
+  @IsOptional()
+  accentBrandColor?: string;
+
+  @IsString()
+  @IsOptional()
+  depthBrandColor?: string;
+
+  @IsString()
+  @IsOptional()
   emojiPolicy?: string;
 
   @IsString()
@@ -103,6 +115,10 @@ export class CreateBrandDnaDto {
   @IsOptional()
   moodboardLabels?: string[];
 
+  @IsArray()
+  @IsOptional()
+  visualRanking?: string[];
+
   @IsString()
   @IsOptional()
   lightingPreference?: string;
@@ -130,6 +146,40 @@ export class CreateBrandDnaDto {
   @IsString()
   @IsOptional()
   commercialObjective?: string;
+
+  // Deeper ICP
+  @IsString()
+  @IsOptional()
+  clientFears?: string;
+
+  @IsString()
+  @IsOptional()
+  clientTrustTriggers?: string;
+
+  @IsString()
+  @IsOptional()
+  clientVisualTaste?: string;
+
+  @IsString()
+  @IsOptional()
+  clientBuyingTriggers?: string;
+
+  @IsString()
+  @IsOptional()
+  clientEmotionalOutcome?: string;
+
+  // Brand perception
+  @IsString()
+  @IsOptional()
+  brandPerceptionGoal?: string;
+
+  @IsString()
+  @IsOptional()
+  brandProofStatement?: string;
+
+  @IsString()
+  @IsOptional()
+  brandNeverLooksLike?: string;
 }
 
 export class ScanInstagramDto {
