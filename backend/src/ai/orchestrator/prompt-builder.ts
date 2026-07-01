@@ -56,7 +56,10 @@ const CAPTION_LENGTH_TARGETS: Record<string, string> = {
   long: '100–150 words. Hook + brief story or technical detail + transformation + CTA. Maximum depth without padding.',
 };
 
-const CRAFT_RULES = `HOW TO WRITE GREAT BEAUTY CONTENT:
+const CRAFT_RULES = `PREMIUM CREATIVE STRATEGY RULES:
+- You are a premium creative strategist and copywriter, not a generic AI content tool.
+- Your goal is not to generate isolated posts. It is to help this beauty professional build a highly recognizable, commercially valuable, and cohesive brand presence over time.
+- Write with elevated, sophisticated, and authentic service storytelling. Avoid cheesy marketing sales-talk.
 
 HOOKS THAT STOP THE SCROLL:
 - Lead with the specific result from this appointment — use the keyVisualDetail from the image analysis to anchor it
@@ -125,8 +128,8 @@ export class PromptBuilder {
       await this.getGoldenExamplesFragment(brandDNA.tenantId, brandDNA.version, goldenExamples);
 
     const systemPrompt = masterPromptText 
-      ? this.buildDynamicSystemPrompt(masterPromptText, brandDNAFragment) 
-      : this.buildSystemPrompt(brandDNAFragment);
+      ? this.buildDynamicSystemPrompt(masterPromptText) 
+      : this.buildSystemPrompt();
       
     const visionSection = visionResult ? this.buildVisionSection(visionResult) : '';
     const goalSection = GOAL_FRAMING[businessGoal] ?? 'Generate engaging content.';
@@ -138,7 +141,24 @@ export class PromptBuilder {
 
     const appointmentSection = this.buildAppointmentSection(appointmentContext, consentRestrictions);
 
+    const isMedical = serviceCategory === 'injectables_cosmetic' || serviceCategory === 'laser_treatments';
+    const medicalComplianceSection = isMedical
+      ? `## AHPRA MEDICAL COMPLIANCE RULES (MANDATORY):
+- This is a regulated medical aesthetics service. You MUST follow AHPRA guidelines.
+- Focus ONLY on skin literacy, safety principles, consultation preparation, practitioner standards, and clinic philosophy.
+- Do NOT use testimonials, client quotes, or outcome promises.
+- Do NOT encourage immediate booking or create false urgency (e.g. no "only 2 slots left!", "book now!").
+- Do NOT frame this as transformation marketing. Focus on education and trust-building.
+- Add this mandatory clinical disclaimer to the very end of the caption: "Individual results vary. Consultation is required before treatment. All medical procedures carry risks."`
+      : '';
+
     const userPrompt = [
+      '## BRAND STYLE & AESTHETIC GUIDELINES (How the content must feel)',
+      brandDNAFragment,
+      '',
+      medicalComplianceSection ? '## AHPRA MEDICAL COMPLIANCE' : '',
+      medicalComplianceSection,
+      medicalComplianceSection ? '' : '',
       '## APPOINTMENT CONTEXT',
       appointmentSection,
       '',
@@ -216,19 +236,15 @@ Return JSON with the same structure as the original caption.`;
     return { goldenExamplesFragment: fragment, goldenExamplesCacheHit: false };
   }
 
-  private buildSystemPrompt(brandDNAFragment: string): string {
-    return `You are a specialist social media copywriter for beauty and wellness technicians.
-Your ONLY job is to write content that sounds EXACTLY like the specific technician described below — as if they wrote it themselves between clients.
-
-${brandDNAFragment}
+  private buildSystemPrompt(): string {
+    return `You are a premium creative strategist and copywriter for luxury beauty and wellness brands.
+Your goal is to help the technician build a recognizable, highly cohesive, and commercially valuable social media presence over time.
 
 ${CRAFT_RULES}`;
   }
 
-  private buildDynamicSystemPrompt(masterPromptText: string, brandDNAFragment: string): string {
+  private buildDynamicSystemPrompt(masterPromptText: string): string {
     return `${masterPromptText}
-
-${brandDNAFragment}
 
 ${CRAFT_RULES}`;
   }

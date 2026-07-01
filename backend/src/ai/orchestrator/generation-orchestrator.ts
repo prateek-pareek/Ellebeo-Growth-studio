@@ -1,4 +1,4 @@
-﻿// ============================================================================
+// ============================================================================
 // generation-orchestrator.ts â€” Assembles All Chains Into the Full Pipeline
 // Manages state transitions, partial success, and component-level tracking.
 // ============================================================================
@@ -32,6 +32,11 @@ import type { VisionAnalysisResult, CaptionGenerationResult, ReelScriptResult, P
 import { validateStateTransition } from '../types/job-payload.types';
 import type { JobState } from '../types/job-payload.types';
 
+// New services and chains
+import { TierGatingService } from '../services/tier-gating.service';
+import { ArtDirectorBriefChain } from '../chains/art-director-brief.chain';
+import { ScoringGateService } from '../services/scoring-gate.service';
+
 type NotifyFn = (dto: {
   tenantId: string;
   type: string;
@@ -60,6 +65,11 @@ export class GenerationOrchestrator {
   private readonly aiImageGen: AiImageGenerationService;
   private readonly logoOverlay: LogoOverlayService;
 
+  // New properties
+  private readonly tierGating: TierGatingService;
+  private readonly artDirectorBriefChain: ArtDirectorBriefChain;
+  private readonly scoringGate: ScoringGateService;
+
   constructor(
     private readonly prisma: PrismaClient,
     private readonly consentGuard: ConsentGuard,
@@ -86,6 +96,11 @@ export class GenerationOrchestrator {
     this.reelShotChain = new ReelShotChain();
     this.aiImageGen = new AiImageGenerationService();
     this.logoOverlay = new LogoOverlayService();
+
+    // New instantiations
+    this.tierGating = new TierGatingService(prisma);
+    this.artDirectorBriefChain = new ArtDirectorBriefChain();
+    this.scoringGate = new ScoringGateService();
   }
 
   // --------------------------------------------------------------------------
@@ -100,6 +115,11 @@ export class GenerationOrchestrator {
 
     const { jobId, tenantId, clientId, consentSnapshot, brandDNA, generationOptions } = payload;
     const jobStart = Date.now();
+
+    // Validate Subscription Tier limits and gates (Tier 1 vs Tier 2 vs Tier 3)
+    const tenantRecord = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    const isNonBooking = !payload.appointmentId;
+    await this.tierGating.validateRequest(tenantId, tenantRecord?.subscriptionTier ?? 'basic', isNonBooking);
 
     // â”€â”€ Checkpoint 2: Consent re-validation inside worker â”€â”€
     const consentCheck = await this.consentGuard.validateAtProcessing(
@@ -429,6 +449,16 @@ Requirements:
           brandVoice: extractBrandVoice(brandDNA),
         });
 
+        // Step 2 of two-step prompting: Generate bespoke visual art briefs
+        const briefResult = await this.artDirectorBriefChain.generate({
+          concepts: conceptResult.concepts,
+          businessName: brandDNA.businessName,
+          brandColor: brandDNA.primaryBrandColor ?? '#1a1a1a',
+          secondaryColor: brandDNA.secondaryBrandColor ?? '#f5f0eb',
+          aesthetic: brandDNA.aestheticDirection ?? 'minimal editorial',
+          serviceType: appointment?.serviceCategory ?? 'beauty treatment',
+        });
+
         try {
           // Try AI image generation first
           const aiSlides = await this.aiImageGen.generateCarousel({
@@ -441,6 +471,7 @@ Requirements:
             secondaryColor: brandDNA.secondaryBrandColor ?? '#f5f0eb',
             aesthetic: brandDNA.aestheticDirection ?? 'minimal editorial',
             serviceType: appointment?.serviceCategory ?? 'beauty treatment',
+            artDirectorBrief: briefResult.slides,
           });
           // Apply logo to each carousel slide
           const slidesWithLogo = brandDNA.logoUrl
@@ -477,6 +508,16 @@ Requirements:
           brandVoice: extractBrandVoice(brandDNA),
         });
 
+        // Step 2 of two-step prompting: Generate bespoke visual art briefs
+        const briefResult = await this.artDirectorBriefChain.generate({
+          concepts: storyFrames.frames,
+          businessName: brandDNA.businessName,
+          brandColor: brandDNA.primaryBrandColor ?? '#1a1a1a',
+          secondaryColor: brandDNA.secondaryBrandColor ?? '#f5f0eb',
+          aesthetic: brandDNA.aestheticDirection ?? 'minimal editorial',
+          serviceType: appointment?.serviceCategory ?? 'beauty treatment',
+        });
+
         try {
           const aiFrames = await this.aiImageGen.generateStory({
             afterPhotoUrl,
@@ -488,6 +529,7 @@ Requirements:
             secondaryColor: brandDNA.secondaryBrandColor ?? '#f5f0eb',
             aesthetic: brandDNA.aestheticDirection ?? 'minimal editorial',
             serviceType: appointment?.serviceCategory ?? 'beauty treatment',
+            artDirectorBrief: briefResult.slides,
           });
           const framesWithLogo = brandDNA.logoUrl
             ? await Promise.all(aiFrames.map(async f => ({ ...f, url: await this.logoOverlay.applyLogo({ imageUrl: f.url, logoUrl: brandDNA.logoUrl, position: brandDNA.logoPosition, tenantId }) })))
@@ -547,7 +589,18 @@ Requirements:
       }
     }
 
-    // â”€â”€ Step 6: Persist Result â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // â”€â”€ Step 6: Scoring & Compliance Gate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    const scoringResult = await this.scoringGate.evaluate({
+      caption: captionResult?.caption ?? '',
+      hashtags: captionResult?.hashtags ?? [],
+      blacklist: brandDNA.vocabularyBlacklist ?? brandDNA.blacklistedWords ?? [],
+      hasBefore: !!beforePhotoUrl,
+      beforeAfterAllowed: consentCheck.activeRestrictions?.allow_before_after !== false,
+      isCarousel: isCarousel,
+      slidesCount: carouselSlides?.slides?.length ?? 0,
+    });
+
+    // â”€â”€ Step 6.5: Persist Result â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const processingMs = Date.now() - jobStart;
     const contentItemId = await this.persistResult({
       payload,
@@ -566,16 +619,18 @@ Requirements:
       carouselSlides,
       storyOutput,
       reelShotResult,
+      scoringResult,
     });
 
     // â”€â”€ Step 7: Final State Transition â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const totalCostUSD = this.modelRouter.estimateCost(llmConfig.modelId, totalTokensIn, totalTokensOut) + aiImageCostUSD;
-    await this.transitionState(jobId, 'generating_text', 'completed');
+    const targetState = scoringResult.passed ? 'completed' : 'blocked';
+    await this.transitionState(jobId, 'generating_text', targetState);
     await this.prisma.generationJob.update({
       where: { id: jobId },
       data: { estimatedCostUsd: totalCostUSD },
     }).catch(() => {});
-    await this.progressEmitter.emit(jobId, tenantId, 'completed');
+    await this.progressEmitter.emit(jobId, tenantId, targetState);
 
     // â”€â”€ Step 8: Notify tenant â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     this.notify?.({
@@ -738,10 +793,15 @@ Requirements:
     carouselSlides: CarouselSlides | null;
     storyOutput: StoryOutput | null;
     reelShotResult: ReelShotResult | null;
+    scoringResult?: any;
   }): Promise<string> {
-    const { payload, captionResult, platformVariants, reelScriptResult, componentStatus, generationOptionsResult } = params;
+    const { payload, captionResult, platformVariants, reelScriptResult, componentStatus, generationOptionsResult, scoringResult } = params;
     const { v4: uuidv4 } = await import('uuid');
     const contentItemId = uuidv4();
+
+    const failedScoring = scoringResult && !scoringResult.passed;
+    const status = failedScoring ? 'blocked' : 'draft';
+    const blockedReason = failedScoring ? scoringResult.reason : null;
 
     await this.prisma.contentItem.create({
       data: {
@@ -749,6 +809,8 @@ Requirements:
         generationJobId: payload.jobId,
         tenantId: payload.tenantId,
         appointmentId: payload.appointmentId,
+        status: status as any,
+        blockedReason,
         captionStatus: componentStatus.caption,
         imageStatus: componentStatus.image,
         reelStatus: componentStatus.reel,
@@ -763,12 +825,12 @@ Requirements:
         platformVariants: params.carouselSlides
           ? (params.carouselSlides as unknown as Prisma.InputJsonValue)
           : params.storyOutput
-            ? (params.storyOutput as unknown as Prisma.InputJsonValue)
-            : params.reelShotResult
-              ? (params.reelShotResult as unknown as Prisma.InputJsonValue)
-              : platformVariants
-                ? (platformVariants as unknown as Prisma.InputJsonValue)
-                : Prisma.JsonNull,
+              ? (params.storyOutput as unknown as Prisma.InputJsonValue)
+              : params.reelShotResult
+                ? (params.reelShotResult as unknown as Prisma.InputJsonValue)
+                : platformVariants
+                  ? (platformVariants as unknown as Prisma.InputJsonValue)
+                  : Prisma.JsonNull,
         reelScript: reelScriptResult?.script ?? null,
         completedAt: new Date(),
       },

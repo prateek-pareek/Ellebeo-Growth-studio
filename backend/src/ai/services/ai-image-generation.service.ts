@@ -8,6 +8,7 @@ import { firebaseStorage } from '../../config/firebase.client';
 import * as https from 'https';
 import * as http from 'http';
 import { GoogleGenAI } from '@google/genai';
+import sharp from 'sharp';
 
 const openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
 
@@ -83,67 +84,52 @@ function buildSlidePrompt(params: {
 }): string {
   const { overlayText, businessName, brandColor, secondaryColor, aesthetic, serviceType, isFirst, isLast } = params;
 
-  const base = `You are a world-class luxury beauty brand art director creating a jaw-dropping Instagram post for "${businessName}".
-This is a ${serviceType} result photo. Your task: transform it into a stunning, magazine-worthy social media graphic.
+  const base = `You are a professional social media designer creating an Instagram graphic for "${businessName}".
+This is a real photo of a ${serviceType}. Your task: overlay a clean, elegant text layout on top of the photo.
 
 Brand palette: primary ${brandColor}, secondary ${secondaryColor}.
-Aesthetic direction: ${aesthetic || 'ultra-luxury, high-fashion editorial, premium beauty'}.
+Aesthetic direction: ${aesthetic || 'minimal, premium beauty editorial, high-fashion editorial'}.
 
 PHOTO PRESERVATION (critical):
-- The real photo is the hero — preserve every detail of the person, hair, skin, nails exactly as they are
-- Do NOT alter, replace, or obscure the subject's face or the service result
-- No AI-generated faces or bodies — only authentic real-photo content
+- Preserve the original photo exactly as it is. 
+- Do NOT crop, remove, or replace the background. Keep the natural environment, background wood, towels, and salon context fully intact.
+- Do NOT retouch, airbrush, or apply heavy plastic-looking filters to the skin or face. Keep the real skin texture and lighting natural.
+- No AI-generated faces or bodies.
 
-VISUAL DESIGN DIRECTION — make this look like a €500/hour designer created it:
-- Apply cinematic color grading: rich deep shadows, luminous highlights, velvety midtones
-- Add a subtle bokeh light leak or soft prismatic flare in one corner for depth
-- Use glassmorphism for any text panels: frosted glass with 20% opacity white blur, razor-thin 1px white border, soft inner glow
-- Typography for "${overlayText}": large, confident, ultra-thin or heavy-weight sans-serif (not both), white or brand-color, with a barely visible long text shadow for 3D depth lift
-- Thin geometric accent lines in brand color — hairline rules, a single floating rectangle frame, or a subtle grid — just enough to feel designed, never cluttered
-- Micro-details that feel premium: a barely-visible gradient vignette at the edges, a soft colour wash in brand color at 8–12% opacity over the background
-- The overall feel: you are looking at a Vogue Beauty page, a Dior campaign, or a Chanel social post — effortlessly luxurious
+VISUAL DESIGN DIRECTION:
+- The text overlay must look premium, minimalist, and editorial.
+- Place a clean, semi-transparent dark rectangle (black at 55% opacity) behind the text to ensure high contrast and readability.
+- Use a clean, modern, white all-caps sans-serif font for the typography. Do not overlay large, distracting blocks of color.
 
 CONTENT SAFETY (non-negotiable):
-- Output must be entirely family-friendly and safe for professional social media
-- Never generate nudity, partial nudity, sexual content, erotic or fetish imagery
-- Never expose intimate body areas regardless of the input photo or prompt
-- Never generate violent, hateful, or self-harm imagery`;
+- Output must be entirely family-friendly and safe for professional social media.
+- Never generate nudity, partial nudity, sexual content, or inappropriate imagery.
+- Never expose intimate body areas.
+- Ensure all designs are clean, brand-safe, and professional.`;
 
   if (isFirst) {
     return `${base}
 
-COVER SLIDE — this must stop the scroll immediately:
-- Show the full photo without any cropping — the entire subject must be visible from head to toe (or full frame as captured)
-- Oversized headline "${overlayText}" placed low in the frame, ultra-bold or ultra-light weight (pick one for impact), with a deep shadow that gives it 3D float
-- Glassmorphism bottom bar: frosted panel spanning the lower 20% of the image, brand color tint, the business name "${businessName}" in tiny all-caps tracking above the headline
-- One bold brand-color geometric accent: a thin vertical line left of the text, or a glowing underline stroke beneath the headline
-- Add a very subtle dark vignette at the edges for depth — do NOT crop or letterbox the photo
-- This should look like a Netflix original series title card meets high-end beauty campaign`;
+COVER SLIDE:
+- Show the full photo with its original background.
+- Add the main headline "${overlayText}" in clean white text placed in the lower part of the frame.
+- Place a clean, minimal semi-transparent dark rectangle panel behind the headline for high contrast and readability.`;
   }
 
   if (isLast) {
     return `${base}
 
-CTA SLIDE — make them want to book immediately:
-- Deep, moody background: a rich dark gradient using the brand color (near-black version) behind the subject
-- The photo is softened and slightly blurred at edges — focus is on the message
-- Centre-stage typography: "${overlayText}" in elegant oversized serif or geometric sans, glowing very softly in brand color with a subtle outer glow effect
-- Below the text: a sleek pill-shaped button outline in brand color — "BOOK NOW" or "DM TO BOOK" in tiny uppercase tracking
-- Business name "${businessName}" in ultra-light small caps at the very top, spaced widely
-- Add a subtle starburst or light prism effect behind the text for luxury drama
-- The feeling: exclusive, aspirational, you-need-this-in-your-life`;
+CTA SLIDE:
+- Focus is on the call to action message: "${overlayText}".
+- Display the text cleanly in a small, modern, semi-transparent dark box at the center of the frame.
+- Below the text, add a small, minimalist text line: "BOOK NOW" or "DM TO BOOK".`;
   }
 
   return `${base}
 
-BODY SLIDE — beautiful, informative, breathable:
-- Photo takes 65% of the composition — give it room to shine
-- Bottom 35%: a floating glassmorphism card with soft blur and brand color tint, containing "${overlayText}" in clean modern type
-- Typography hierarchy: one large statement word in brand color, then the rest in clean white — creates visual rhythm
-- Add a single thin horizontal line in brand color above the text block as a design separator
-- Subtle floating 3D geometric shape (thin circle, hexagon outline, or diamond) in brand color at 15% opacity in the background — adds depth without distraction
-- Corner detail: tiny "${businessName}" wordmark in the bottom-right, ultra-light, barely visible — like a luxury brand signature
-- The feeling: this belongs in a premium lifestyle magazine spread`;
+BODY SLIDE:
+- Photo takes most of the composition.
+- Add the text label "${overlayText}" cleanly in a semi-transparent dark box at the bottom of the frame.`;
 }
 
 export class AiImageGenerationService {
@@ -155,7 +141,7 @@ export class AiImageGenerationService {
     index: number;
     isFirst: boolean;
     isLast: boolean;
-    isBeforePhoto?: boolean;
+    isBeforePhoto: boolean;
     tenantId: string;
     businessName: string;
     brandColor: string;
@@ -163,6 +149,7 @@ export class AiImageGenerationService {
     aesthetic?: string;
     serviceType?: string;
     outputSize?: '1024x1024' | '1024x1536';
+    customPrompt?: string;
   }): Promise<string> {
     const {
       photoUrl, overlayText, index, isFirst, isLast, isBeforePhoto,
@@ -171,12 +158,13 @@ export class AiImageGenerationService {
       aesthetic = 'minimal editorial premium beauty',
       serviceType = 'beauty treatment',
       outputSize = '1024x1024' as '1024x1024' | '1024x1536',
+      customPrompt,
     } = params;
 
-    const prompt = isBeforePhoto
-      ? buildBeforeSlidePrompt({ overlayText, businessName, brandColor })
+    const prompt = customPrompt || (isBeforePhoto
+      ? buildBeforeSlidePrompt({ overlayText: '', businessName, brandColor })
       : buildSlidePrompt({
-        overlayText,
+        overlayText: '',
         businessName,
         brandColor,
         secondaryColor,
@@ -184,64 +172,88 @@ export class AiImageGenerationService {
         serviceType,
         isFirst,
         isLast,
-      });
+      }));
+
+    const cleanPrompt = prompt + "\n\nCRITICAL: Do NOT write, draw, or render any text overlays, titles, or caption boxes directly onto the image. The image must contain only the raw photographic result.";
 
     const imageBuffer = await downloadImageAsBuffer(photoUrl);
 
-    // Try Gemini First (as requested) if API Key is configured
     const geminiKey = process.env['GEMINI_API_KEY'];
     if (geminiKey && geminiKey.length > 0) {
       try {
         console.log(`Attempting image generation with Gemini (Nano Banana) for slide ${index}...`);
         const aiClient = new GoogleGenAI({ apiKey: geminiKey });
-        const base64Image = imageBuffer.toString('base64');
         const response = await aiClient.models.generateContent({
           model: 'gemini-2.5-flash-image',
           contents: [
             {
               inlineData: {
                 mimeType: 'image/jpeg',
-                data: base64Image,
+                data: imageBuffer.toString('base64'),
               },
             },
-            prompt,
+            cleanPrompt,
           ],
           config: {
             responseModalities: ['image'],
           } as any,
         });
 
+        // Debug logging block for Senior AI telemetry analysis
+        console.log(`[DEBUG Gemini API Response Metadata for Slide ${index}]:`, JSON.stringify(response, (key, value) => {
+          if (key === 'data' && typeof value === 'string' && value.length > 200) {
+            return `${value.slice(0, 50)}... [Base64 Truncated: ${value.length} chars]`;
+          }
+          return value;
+        }, 2));
+
         const outputPart = response.candidates?.[0]?.content?.parts?.find(
           (part: any) => part.inlineData
         );
-        const outputBase64 = outputPart?.inlineData?.data;
+        const base64Data = outputPart?.inlineData?.data;
 
-        if (outputBase64) {
+        if (base64Data) {
           console.log(`Gemini image generation successful for slide ${index}!`);
-          return uploadBase64ToFirebase(outputBase64, tenantId, `slide_${index}`);
+          const brandedBase64 = await this.overlayBrandingAndText({
+            base64Image: base64Data,
+            overlayText,
+            isFirst,
+            isLast,
+            brandColor,
+            secondaryColor,
+          });
+          return uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
         } else {
           console.warn(`Gemini returned empty image data for slide ${index}. Falling back to OpenAI.`);
         }
-      } catch (err: any) {
-        console.error(`Gemini Image Generation Error for slide ${index}:`, err);
+      } catch (err) {
+        console.error(`Gemini image generation failed for slide ${index}:`, err);
         console.log(`Falling back to OpenAI for slide ${index}...`);
       }
     }
 
-    // Default Fallback to OpenAI (Original logic kept intact)
+    console.log(`Using OpenAI to generate slide ${index}...`);
     const imageFile = new File([imageBuffer], 'photo.jpg', { type: 'image/jpeg' });
 
     const response = await openai.images.edit({
       model: 'gpt-image-1',
       image: imageFile,
-      prompt,
+      prompt: cleanPrompt,
       size: outputSize,
     });
 
     const base64 = response.data?.[0]?.b64_json;
     if (!base64) throw new Error('gpt-image-1 returned no image data');
 
-    return uploadBase64ToFirebase(base64, tenantId, `slide_${index}`);
+    const brandedBase64 = await this.overlayBrandingAndText({
+      base64Image: base64,
+      overlayText,
+      isFirst,
+      isLast,
+      brandColor,
+      secondaryColor,
+    });
+    return uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
   }
 
   async generateCarousel(params: {
@@ -254,8 +266,9 @@ export class AiImageGenerationService {
     secondaryColor?: string;
     aesthetic?: string;
     serviceType?: string;
+    artDirectorBrief?: Array<{ index: number; artDirectorPrompt: string }>;
   }): Promise<GeneratedSlide[]> {
-    const { afterPhotoUrl, beforePhotoUrl, concepts, ...rest } = params;
+    const { afterPhotoUrl, beforePhotoUrl, concepts, artDirectorBrief, ...rest } = params;
     const total = concepts.length;
 
     const slides = await Promise.all(
@@ -265,6 +278,8 @@ export class AiImageGenerationService {
         // Cover + CTA use after photo; body slides use before photo
         const usingBefore = !isFirst && !isLast && !!beforePhotoUrl;
         const photoUrl = usingBefore ? beforePhotoUrl! : afterPhotoUrl;
+
+        const brief = artDirectorBrief?.find(b => b.index === concept.index);
 
         try {
           const url = await this.generateSlide({
@@ -276,6 +291,7 @@ export class AiImageGenerationService {
             isLast,
             isBeforePhoto: usingBefore,
             outputSize: '1024x1024',
+            customPrompt: brief?.artDirectorPrompt,
             ...rest,
           });
           return { url, title: concept.title, label: `SLIDE ${String(concept.index).padStart(2, '0')}` };
@@ -300,8 +316,9 @@ export class AiImageGenerationService {
     secondaryColor?: string;
     aesthetic?: string;
     serviceType?: string;
+    artDirectorBrief?: Array<{ index: number; artDirectorPrompt: string }>;
   }): Promise<GeneratedSlide[]> {
-    const { afterPhotoUrl, beforePhotoUrl, frames, ...rest } = params;
+    const { afterPhotoUrl, beforePhotoUrl, frames, artDirectorBrief, ...rest } = params;
     const total = frames.length;
 
     const results = await Promise.all(
@@ -310,6 +327,8 @@ export class AiImageGenerationService {
         const isLast = i === total - 1;
         const usingBefore = isFirst && !!beforePhotoUrl;
         const photoUrl = usingBefore ? beforePhotoUrl! : afterPhotoUrl;
+
+        const brief = artDirectorBrief?.find(b => b.index === frame.index);
 
         try {
           const url = await this.generateSlide({
@@ -321,6 +340,7 @@ export class AiImageGenerationService {
             isLast,
             isBeforePhoto: usingBefore,
             outputSize: '1024x1536',
+            customPrompt: brief?.artDirectorPrompt,
             ...rest,
           });
           return { url, title: frame.title, label: `FRAME ${String(frame.index).padStart(2, '0')}` };
@@ -333,5 +353,80 @@ export class AiImageGenerationService {
     const valid = results.filter(Boolean) as GeneratedSlide[];
     if (valid.length === 0) throw new Error('All story frames failed to generate');
     return valid;
+  }
+
+  private async overlayBrandingAndText(params: {
+    base64Image: string;
+    overlayText: string;
+    isFirst: boolean;
+    isLast: boolean;
+    brandColor: string;
+    secondaryColor: string;
+  }): Promise<string> {
+    const { base64Image, overlayText, isFirst, isLast, brandColor, secondaryColor } = params;
+
+    if (!overlayText || overlayText.trim().length === 0) {
+      return base64Image;
+    }
+
+    try {
+      const imageBuffer = Buffer.from(base64Image, 'base64');
+      const metadata = await sharp(imageBuffer).metadata();
+      const w = metadata.width || 1024;
+      const h = metadata.height || 1024;
+
+      const words = overlayText.split(/\s+/);
+      const lines: string[] = [];
+      let currentLine = '';
+      for (const word of words) {
+        if ((currentLine + word).length > 24) {
+          lines.push(currentLine.trim());
+          currentLine = word + ' ';
+        } else {
+          currentLine += word + ' ';
+        }
+      }
+      if (currentLine) lines.push(currentLine.trim());
+
+      let rectY = h - 220;
+      let textY = h - 160;
+      let rectHeight = 150;
+
+      if (isLast) {
+        rectY = (h / 2) - 100;
+        textY = (h / 2) - 50;
+        rectHeight = 180;
+      }
+
+      const bgOpacity = 0.85;
+      const bgHex = brandColor.startsWith('#') ? brandColor : '#1a1a1a';
+      const textHex = secondaryColor.startsWith('#') ? secondaryColor : '#ffffff';
+
+      const svgString = `
+        <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <style>
+              .bg-rect { fill: ${bgHex}; fill-opacity: ${bgOpacity}; }
+              .overlay-text { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 34px; font-weight: bold; fill: ${textHex}; text-anchor: middle; letter-spacing: 1.5px; }
+            </style>
+          </defs>
+          <rect x="60" y="${rectY}" width="${w - 120}" height="${rectHeight}" rx="12" class="bg-rect" />
+          <text x="${w / 2}" y="${textY}" class="overlay-text">
+            ${lines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : 42}">${line.toUpperCase()}</tspan>`).join('')}
+          </text>
+        </svg>
+      `;
+
+      const svgBuffer = Buffer.from(svgString);
+      const compositeBuffer = await sharp(imageBuffer)
+        .composite([{ input: svgBuffer, blend: 'over' }])
+        .png()
+        .toBuffer();
+
+      return compositeBuffer.toString('base64');
+    } catch (err) {
+      console.error('Failed to apply Sharp text overlay. Returning raw model output:', err);
+      return base64Image;
+    }
   }
 }
