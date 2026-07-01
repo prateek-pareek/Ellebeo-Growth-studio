@@ -248,6 +248,13 @@ model BrandDNA {
   version                  Int           @default(1)
   isCurrent                Boolean       @default(true) @map("is_current")
   businessName             String        @map("business_name") @db.VarChar(255)
+  serviceCategories        String[]      @map("service_categories")
+  serviceArea              String?       @map("service_area") @db.VarChar(255)
+  reputationAsset          String?       @map("reputation_asset") @db.VarChar(500)
+  workDifferentiation      String?       @map("work_differentiation") @db.Text
+  brandEssenceSentence     String?       @map("brand_essence_sentence") @db.Text
+  brandWorldAnchor         String?       @map("brand_world_anchor") @db.Text
+  imageEnergy              String?       @map("image_energy") @db.VarChar(100)
   oneLiner                 String?       @map("one_liner") @db.Text
   uniqueSellingProposition String?       @map("unique_selling_proposition") @db.Text
   signatureOutcome         String?       @map("signature_outcome") @db.VarChar(500)

@@ -1,9 +1,21 @@
 import { api } from "@/lib/api";
 
 export type OnboardingPayload = {
+  // Brand Foundations
   displayName: string;
-  niche: string;
+  serviceCategories: string[];
+  signature: string;
   city: string;
+  serviceArea: string;
+  reputationAsset: string;
+  knownFor: string;
+  workDifferentiation: string;
+  // Brand Essence
+  brandEssenceSentence: string;
+  brandWorldAnchor: string;
+  imageEnergy: string;
+  // Legacy / other tabs
+  niche: string;
   primaryColor: string;
   secondaryColor: string;
   signatureService: string;
@@ -66,8 +78,15 @@ export async function saveBrandDna(
 
     await api.post('/brand-dna', {
       businessName: payload.displayName,
-      oneLiner: payload.niche,
-      uniqueSellingProposition: payload.signatureService,
+      serviceCategories: payload.serviceCategories || [],
+      serviceArea: payload.serviceArea || undefined,
+      reputationAsset: payload.reputationAsset || undefined,
+      workDifferentiation: payload.workDifferentiation || undefined,
+      brandEssenceSentence: payload.brandEssenceSentence || undefined,
+      brandWorldAnchor: payload.brandWorldAnchor || undefined,
+      imageEnergy: payload.imageEnergy || undefined,
+      oneLiner: payload.knownFor || payload.niche,
+      uniqueSellingProposition: payload.signature || payload.signatureService,
       primaryPersona: payload.idealClient,
       personaAge: payload.ageRange,
       personaLocation: payload.cities || payload.city,
@@ -124,8 +143,17 @@ export async function fetchBrandDnaForEditing(): Promise<OnboardingPayload | nul
 
     return {
       displayName: dna.businessName || "",
-      niche: dna.oneLiner || "",
+      serviceCategories: dna.serviceCategories || [],
+      signature: dna.uniqueSellingProposition || "",
       city: dna.locationCity || "",
+      serviceArea: dna.serviceArea || "",
+      reputationAsset: dna.reputationAsset || "",
+      knownFor: dna.oneLiner || "",
+      workDifferentiation: dna.workDifferentiation || "",
+      brandEssenceSentence: dna.brandEssenceSentence || "",
+      brandWorldAnchor: dna.brandWorldAnchor || "",
+      imageEnergy: dna.imageEnergy || "",
+      niche: dna.oneLiner || "",
       primaryColor: dna.primaryBrandColor || "",
       secondaryColor: dna.secondaryBrandColor || "",
       signatureService: dna.uniqueSellingProposition || "",

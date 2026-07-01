@@ -18,6 +18,34 @@ export class CreateBrandDnaDto {
   @IsString()
   businessName: string;
 
+  @IsArray()
+  @IsOptional()
+  serviceCategories?: string[];
+
+  @IsString()
+  @IsOptional()
+  serviceArea?: string;
+
+  @IsString()
+  @IsOptional()
+  reputationAsset?: string;
+
+  @IsString()
+  @IsOptional()
+  workDifferentiation?: string;
+
+  @IsString()
+  @IsOptional()
+  brandEssenceSentence?: string;
+
+  @IsString()
+  @IsOptional()
+  brandWorldAnchor?: string;
+
+  @IsString()
+  @IsOptional()
+  imageEnergy?: string;
+
   @IsString()
   @IsOptional()
   oneLiner?: string;
