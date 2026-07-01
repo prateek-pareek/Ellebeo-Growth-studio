@@ -281,10 +281,10 @@ function OnboardingPage() {
       </div>
 
       {/* Heading */}
-      <h1 className="font-serif text-5xl sm:text-6xl lg:text-7xl leading-[1.05] tracking-tight mb-5">
+      <h1 className="font-serif text-4xl sm:text-5xl lg:text-[3.25rem] leading-[1.05] tracking-tight mb-4">
         Your <span className="italic">brand bible</span>, built for AI.
       </h1>
-      <p className="text-lg text-taupe leading-relaxed max-w-[60ch] mb-2">
+      <p className="text-sm text-taupe leading-relaxed max-w-[60ch] mb-2">
         Complete your Brand DNA so Elle.Be.O can create content that looks, sounds and feels like your brand. Save a draft any time — nothing is lost between sessions.
       </p>
       <p className="text-xs text-taupe/60 mb-8">
@@ -302,7 +302,7 @@ function OnboardingPage() {
               (tab.id === activeTab ? "bg-foreground text-offwhite" : "bg-card hover:bg-nude/20")
             }
           >
-            <p className={`text-[9px] uppercase tracking-[0.2em] mb-0.5 ${tab.id === activeTab ? "text-nude/70" : "text-taupe"}`}>
+            <p className={`text-[10px] uppercase tracking-[0.15em] mb-0.5 ${tab.id === activeTab ? "text-nude/70" : "text-taupe"}`}>
               {tab.label}
             </p>
             <p className={`text-xs font-medium ${tab.id === activeTab ? "text-offwhite" : "text-foreground"}`}>
@@ -461,8 +461,8 @@ function AccordionSection({
         className="w-full flex items-start justify-between p-6 text-left hover:bg-nude/10 transition-colors"
       >
         <div>
-          <h2 className="font-serif text-2xl mb-1">{title}</h2>
-          <p className="text-sm text-taupe leading-relaxed">{subtitle}</p>
+          <h2 className="font-serif text-2xl mb-0.5">{title}</h2>
+          <p className="text-xs text-taupe leading-relaxed">{subtitle}</p>
         </div>
         <span className={`ml-4 mt-0.5 flex-shrink-0 text-sm transition-opacity ${isOpen ? "text-taupe" : "text-taupe/30"}`}>
           {isOpen ? "−" : "+"}
@@ -543,7 +543,7 @@ function BrandFoundationsSection({
             placeholder="e.g. Blonde specialist, tape extensions, editorial makeup"
             value={form.signature}
             onChange={(e) => set("signature")(e.target.value)}
-            className="w-full border hairline bg-background px-3 py-3 text-base outline-none focus:border-foreground transition-colors"
+            className="w-full border hairline bg-white px-3 py-2 text-sm outline-none focus:border-foreground transition-colors"
           />
         </FormField>
         <FormField label="Location">
@@ -552,7 +552,7 @@ function BrandFoundationsSection({
             placeholder="City or suburb"
             value={form.city}
             onChange={(e) => set("city")(e.target.value)}
-            className="w-full border hairline bg-background px-3 py-3 text-base outline-none focus:border-foreground transition-colors"
+            className="w-full border hairline bg-white px-3 py-2 text-sm outline-none focus:border-foreground transition-colors"
           />
         </FormField>
       </div>
@@ -565,7 +565,7 @@ function BrandFoundationsSection({
             placeholder="Mobile / clinic / studio…"
             value={form.serviceArea}
             onChange={(e) => set("serviceArea")(e.target.value)}
-            className="w-full border hairline bg-background px-3 py-3 text-base outline-none focus:border-foreground transition-colors"
+            className="w-full border hairline bg-white px-3 py-2 text-sm outline-none focus:border-foreground transition-colors"
           />
         </FormField>
         <FormField label="Strongest Reputation Asset">
@@ -574,7 +574,7 @@ function BrandFoundationsSection({
             placeholder="Technique, taste, discretion…"
             value={form.reputationAsset}
             onChange={(e) => set("reputationAsset")(e.target.value)}
-            className="w-full border hairline bg-background px-3 py-3 text-base outline-none focus:border-foreground transition-colors"
+            className="w-full border hairline bg-white px-3 py-2 text-sm outline-none focus:border-foreground transition-colors"
           />
         </FormField>
       </div>
@@ -586,7 +586,7 @@ function BrandFoundationsSection({
           placeholder="Natural-looking skin, calm expertise and meticulous prep."
           value={form.knownFor}
           onChange={(e) => set("knownFor")(e.target.value)}
-          className="w-full border hairline bg-background px-3 py-3 text-base outline-none focus:border-foreground transition-colors resize-none"
+          className="w-full border hairline bg-white px-3 py-2 text-sm outline-none focus:border-foreground transition-colors resize-none"
         />
       </FormField>
 
@@ -597,7 +597,7 @@ function BrandFoundationsSection({
           placeholder="I focus on skin that still looks like skin, not heavy coverage."
           value={form.workDifferentiation}
           onChange={(e) => set("workDifferentiation")(e.target.value)}
-          className="w-full border hairline bg-background px-3 py-3 text-base outline-none focus:border-foreground transition-colors resize-none"
+          className="w-full border hairline bg-white px-3 py-2 text-sm outline-none focus:border-foreground transition-colors resize-none"
         />
       </FormField>
     </div>
@@ -621,7 +621,7 @@ function BrandEssenceSection({
           placeholder="Give clients the calm confidence that they look like the best version of themselves."
           value={form.brandEssenceSentence}
           onChange={(e) => set("brandEssenceSentence")(e.target.value)}
-          className="w-full border hairline bg-background px-3 py-3 text-base outline-none focus:border-foreground transition-colors resize-none"
+          className="w-full border hairline bg-white px-3 py-2 text-sm outline-none focus:border-foreground transition-colors resize-none"
         />
       </FormField>
 
@@ -631,7 +631,7 @@ function BrandEssenceSection({
           placeholder="A quiet Aesop store, a Sofia Coppola interior, the pages of Cereal."
           value={form.brandWorldAnchor}
           onChange={(e) => set("brandWorldAnchor")(e.target.value)}
-          className="w-full border hairline bg-background px-3 py-3 text-base outline-none focus:border-foreground transition-colors resize-none"
+          className="w-full border hairline bg-white px-3 py-2 text-sm outline-none focus:border-foreground transition-colors resize-none"
         />
       </FormField>
 
@@ -639,7 +639,7 @@ function BrandEssenceSection({
         <select
           value={form.imageEnergy}
           onChange={(e) => set("imageEnergy")(e.target.value)}
-          className="w-full border hairline bg-background px-3 py-3 text-base outline-none focus:border-foreground transition-colors appearance-none cursor-pointer"
+          className="w-full border hairline bg-white px-3 py-2 text-sm outline-none focus:border-foreground transition-colors appearance-none cursor-pointer"
         >
           {IMAGE_ENERGY_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
@@ -667,14 +667,14 @@ function BrandStrengthSection({
         <p className="text-[9px] uppercase tracking-[0.2em] text-taupe/50">Guidance only — saving is never blocked</p>
       </div>
       <div className="flex items-baseline gap-1 mb-1">
-        <span className="font-serif text-5xl">{strength}</span>
-        <span className="font-serif text-2xl text-taupe">%</span>
-        <span className="ml-3 text-sm text-taupe">{strengthLabel(strength)}.</span>
+        <span className="font-serif text-4xl">{strength}</span>
+        <span className="font-serif text-xl text-taupe">%</span>
+        <span className="ml-3 text-xs text-taupe">{strengthLabel(strength)}.</span>
       </div>
-      <div className="h-0.5 bg-border mb-4 relative">
+      <div className="h-px bg-border mb-4 relative">
         <div className="absolute inset-y-0 left-0 bg-foreground transition-all duration-500" style={{ width: `${strength}%` }} />
       </div>
-      <p className="text-sm text-taupe mb-6">
+      <p className="text-xs text-taupe mb-5">
         Your Brand DNA is being shaped. Add a few core fields to unlock basic content.
       </p>
 
@@ -692,27 +692,31 @@ function BrandStrengthSection({
       </div>
 
       {/* Checklist */}
-      <p className="text-[9px] uppercase tracking-[0.2em] text-taupe font-semibold mb-3">What we look for</p>
-      <div className="space-y-0 border hairline divide-y divide-border">
+      <p className="text-xs uppercase tracking-[0.2em] text-taupe font-semibold mb-4">What we look for</p>
+      <div className="space-y-3">
         {items.map((item) => {
           const pct = Math.round((item.score / item.max) * 100);
           const status = pct === 0 ? "NOT STARTED" : pct >= 100 ? "COMPLETE" : "IN PROGRESS";
-          const statusColor = pct === 0 ? "text-taupe" : pct >= 100 ? "text-sage" : "text-amber-600";
+          const statusColor = pct === 0 ? "text-taupe/50" : pct >= 100 ? "text-sage" : "text-taupe";
+          const dotColor = pct >= 100 ? "bg-sage" : pct > 0 ? "bg-foreground" : "bg-border";
           return (
-            <div key={item.key} className="px-4 py-3">
-              <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-2">
-                  <span className={`size-1.5 rounded-full flex-shrink-0 ${pct >= 100 ? "bg-sage" : pct > 0 ? "bg-amber-500" : "bg-border"}`} />
-                  <span className="text-sm font-medium">{item.label}</span>
+            <div key={item.key} className="border hairline bg-background p-4">
+              <div className="flex items-center justify-between gap-4 mb-2">
+                <div className="flex items-center gap-2.5">
+                  <span className={`size-2 rounded-full flex-shrink-0 ${dotColor}`} />
+                  <span className="text-sm font-semibold">{item.label}</span>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className={`text-[9px] uppercase tracking-[0.15em] ${statusColor}`}>{status}</span>
-                  <span className="text-[10px] text-taupe tabular-nums w-7 text-right">{pct}%</span>
+                <div className="flex items-center gap-2.5 flex-shrink-0">
+                  <span className={`text-[9px] uppercase tracking-[0.15em] font-medium ${statusColor}`}>{status}</span>
+                  <span className="text-xs font-semibold tabular-nums text-foreground">{pct}%</span>
                 </div>
               </div>
-              <p className="text-[11px] text-taupe leading-relaxed ml-3.5">{item.description}</p>
-              <div className="h-px bg-border mt-2 ml-3.5 relative">
-                <div className="absolute inset-y-0 left-0 bg-foreground/30 transition-all" style={{ width: `${pct}%` }} />
+              <p className="text-xs text-taupe leading-relaxed ml-[18px] mb-2.5">{item.description}</p>
+              <div className="h-px bg-border ml-[18px] overflow-hidden">
+                <div
+                  className="h-full transition-all duration-500 bg-foreground"
+                  style={{ width: `${pct}%` }}
+                />
               </div>
             </div>
           );
