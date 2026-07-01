@@ -22,6 +22,12 @@ export class BrandDnaController {
     return this.brandDnaService.uploadMoodboard(req.user.tenantId, file);
   }
 
+  @Post('upload-asset')
+  @UseInterceptors(FileInterceptor('file'))
+  uploadAsset(@Req() req: any, @UploadedFile() file: Express.Multer.File) {
+    return this.brandDnaService.uploadAsset(req.user.tenantId, file);
+  }
+
   @Get()
   getCurrentDna(@Req() req: any) {
     return this.brandDnaService.getCurrentDna(req.user.tenantId);

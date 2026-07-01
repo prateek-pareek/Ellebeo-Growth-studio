@@ -248,6 +248,7 @@ model BrandDNA {
   version                  Int           @default(1)
   isCurrent                Boolean       @default(true) @map("is_current")
   businessName             String        @map("business_name") @db.VarChar(255)
+  brandDnaV2               Json?         @map("brand_dna_v2")
   serviceCategories        String[]      @map("service_categories")
   serviceArea              String?       @map("service_area") @db.VarChar(255)
   reputationAsset          String?       @map("reputation_asset") @db.VarChar(500)

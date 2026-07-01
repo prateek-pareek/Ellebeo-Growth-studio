@@ -18,6 +18,9 @@ export class CreateBrandDnaDto {
   @IsString()
   businessName: string;
 
+  @IsOptional()
+  brandDnaV2?: Record<string, any>;
+
   @IsArray()
   @IsOptional()
   serviceCategories?: string[];

@@ -53,6 +53,7 @@ export class BrandDnaService {
           tenantId,
           version: nextVersion,
           businessName: dto.businessName,
+          brandDnaV2: dto.brandDnaV2 ?? undefined,
           serviceCategories: dto.serviceCategories || [],
           serviceArea: dto.serviceArea,
           reputationAsset: dto.reputationAsset,
@@ -180,6 +181,17 @@ export class BrandDnaService {
     const bucket = firebaseStorage.bucket();
     const ext = file.originalname.split('.').pop() || 'jpg';
     const filePath = `moodboards/${tenantId}/mb_${Date.now()}.${ext}`;
+    const fileRef = bucket.file(filePath);
+    await fileRef.save(file.buffer, { contentType: file.mimetype, public: true });
+    const url = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
+    return { url };
+  }
+
+  async uploadAsset(tenantId: string, file: Express.Multer.File) {
+    if (!firebaseStorage) throw new Error('Firebase storage not configured');
+    const bucket = firebaseStorage.bucket();
+    const ext = file.originalname.split('.').pop() || 'jpg';
+    const filePath = `assets/${tenantId}/asset_${Date.now()}.${ext}`;
     const fileRef = bucket.file(filePath);
     await fileRef.save(file.buffer, { contentType: file.mimetype, public: true });
     const url = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
