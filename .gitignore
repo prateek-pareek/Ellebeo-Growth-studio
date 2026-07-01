@@ -39,3 +39,6 @@ logs/
 # Miscellaneous
 tmp/
 temp/
+
+# Claude session context (local only — never push)
+CLAUDE.md
