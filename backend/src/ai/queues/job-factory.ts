@@ -120,7 +120,7 @@ export class JobFactory {
   ): Promise<JobAcceptedResponse> {
     const { tenantId, appointmentId, clientId, generationOptions } = input;
     const tier: UserTier = generationOptions.userTier;
-    const limits = AI_CONFIG.rateLimits[tier];
+    const limits = (AI_CONFIG.rateLimits as Record<string, any>)[tier] ?? AI_CONFIG.rateLimits.free;
     const ym = currentYearMonth();
     const DAY_SEC = AI_CONFIG.cache.rateLimitWindowSec;   // 24h
     const MONTH_SEC = 31 * 24 * 3600;                     // ~31 days
@@ -292,7 +292,7 @@ export class JobFactory {
   ): Promise<void> {
     const tweakKey = AI_CONFIG.redisKeys.rateLimitTweaks(tenantId, contentItemId);
     const tier = await this.fetchTenantTier(tenantId);
-    const limit = AI_CONFIG.rateLimits[tier].maxTweaksPerContentItem;
+    const limit = ((AI_CONFIG.rateLimits as Record<string, any>)[tier] ?? AI_CONFIG.rateLimits.free).maxTweaksPerContentItem;
 
     // Tweaks use a counter rather than a time window
     const count = await this.redis.incr(tweakKey);
