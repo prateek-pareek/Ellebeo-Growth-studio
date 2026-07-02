@@ -150,6 +150,7 @@ export class AiImageGenerationService {
     serviceType?: string;
     outputSize?: '1024x1024' | '1024x1536';
     customPrompt?: string;
+    totalSlides?: number;
   }): Promise<string> {
     const {
       photoUrl, overlayText, index, isFirst, isLast, isBeforePhoto,
@@ -159,6 +160,7 @@ export class AiImageGenerationService {
       serviceType = 'beauty treatment',
       outputSize = '1024x1024' as '1024x1024' | '1024x1536',
       customPrompt,
+      totalSlides = 4,
     } = params;
 
     const prompt = customPrompt || (isBeforePhoto
@@ -221,6 +223,9 @@ export class AiImageGenerationService {
             isLast,
             brandColor,
             secondaryColor,
+            businessName,
+            index,
+            totalSlides,
           });
           return uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
         } else {
@@ -252,6 +257,9 @@ export class AiImageGenerationService {
       isLast,
       brandColor,
       secondaryColor,
+      businessName,
+      index,
+      totalSlides,
     });
     return uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
   }
@@ -266,7 +274,7 @@ export class AiImageGenerationService {
     secondaryColor?: string;
     aesthetic?: string;
     serviceType?: string;
-    artDirectorBrief?: Array<{ index: number; artDirectorPrompt: string }>;
+    artDirectorBrief?: any[];
   }): Promise<GeneratedSlide[]> {
     const { afterPhotoUrl, beforePhotoUrl, concepts, artDirectorBrief, ...rest } = params;
     const total = concepts.length;
@@ -293,6 +301,9 @@ export class AiImageGenerationService {
             outputSize: '1024x1024',
             customPrompt: brief?.artDirectorPrompt,
             ...rest,
+            brandColor: brief?.panelHexColor || rest.brandColor,
+            secondaryColor: brief?.textColorHex || rest.secondaryColor,
+            totalSlides: total,
           });
           return { url, title: concept.title, label: `SLIDE ${String(concept.index).padStart(2, '0')}` };
         } catch {
@@ -316,7 +327,7 @@ export class AiImageGenerationService {
     secondaryColor?: string;
     aesthetic?: string;
     serviceType?: string;
-    artDirectorBrief?: Array<{ index: number; artDirectorPrompt: string }>;
+    artDirectorBrief?: any[];
   }): Promise<GeneratedSlide[]> {
     const { afterPhotoUrl, beforePhotoUrl, frames, artDirectorBrief, ...rest } = params;
     const total = frames.length;
@@ -342,6 +353,9 @@ export class AiImageGenerationService {
             outputSize: '1024x1536',
             customPrompt: brief?.artDirectorPrompt,
             ...rest,
+            brandColor: brief?.panelHexColor || rest.brandColor,
+            secondaryColor: brief?.textColorHex || rest.secondaryColor,
+            totalSlides: total,
           });
           return { url, title: frame.title, label: `FRAME ${String(frame.index).padStart(2, '0')}` };
         } catch {
@@ -362,8 +376,11 @@ export class AiImageGenerationService {
     isLast: boolean;
     brandColor: string;
     secondaryColor: string;
+    businessName?: string;
+    index?: number;
+    totalSlides?: number;
   }): Promise<string> {
-    const { base64Image, overlayText, isFirst, isLast, brandColor, secondaryColor } = params;
+    const { base64Image, overlayText, isFirst, isLast, brandColor, secondaryColor, businessName, index, totalSlides } = params;
 
     if (!overlayText || overlayText.trim().length === 0) {
       return base64Image;
@@ -379,7 +396,7 @@ export class AiImageGenerationService {
       const lines: string[] = [];
       let currentLine = '';
       for (const word of words) {
-        if ((currentLine + word).length > 24) {
+        if ((currentLine + word).length > 28) {
           lines.push(currentLine.trim());
           currentLine = word + ' ';
         } else {
@@ -388,32 +405,50 @@ export class AiImageGenerationService {
       }
       if (currentLine) lines.push(currentLine.trim());
 
-      let rectY = h - 220;
-      let textY = h - 160;
-      let rectHeight = 150;
+      let rectY = h - 250;
+      let textY = h - 195;
+      let rectHeight = 130;
 
       if (isLast) {
-        rectY = (h / 2) - 100;
-        textY = (h / 2) - 50;
-        rectHeight = 180;
+        rectY = h - 275;
+        textY = h - 220;
+        rectHeight = 165;
       }
 
-      const bgOpacity = 0.85;
-      const bgHex = brandColor.startsWith('#') ? brandColor : '#1a1a1a';
-      const textHex = secondaryColor.startsWith('#') ? secondaryColor : '#ffffff';
+      const bgOpacity = 0.65;
+      const panelBg = '#161616';
+      const borderStroke = brandColor.startsWith('#') ? brandColor : '#1a1a1a';
+      const dividerStroke = secondaryColor.startsWith('#') ? secondaryColor : '#c28d75';
+
+      const rawName = (businessName || 'RAW CANVAS').trim().toUpperCase();
+      const spacedName = rawName.split('').join(' ');
+
+      const slideNumText = String(index || 1).padStart(2, '0');
+      const totalSlidesText = String(totalSlides || 4).padStart(2, '0');
 
       const svgString = `
         <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <style>
-              .bg-rect { fill: ${bgHex}; fill-opacity: ${bgOpacity}; }
-              .overlay-text { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 34px; font-weight: bold; fill: ${textHex}; text-anchor: middle; letter-spacing: 1.5px; }
+              .bg-rect { fill: ${panelBg}; fill-opacity: ${bgOpacity}; stroke: ${borderStroke}; stroke-width: 2px; }
+              .overlay-text { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 28px; font-weight: bold; fill: #ffffff; text-anchor: middle; letter-spacing: 1.5px; }
+              .footer-bg { fill: #161616; }
+              .footer-line { stroke: ${dividerStroke}; stroke-width: 1.5px; }
+              .footer-brand { font-family: 'Georgia', Times, serif; font-size: 16px; font-weight: bold; fill: #ffffff; letter-spacing: 4px; text-anchor: start; }
+              .footer-tracker { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 14px; font-weight: normal; fill: #ffffff; letter-spacing: 1px; text-anchor: end; }
             </style>
           </defs>
-          <rect x="60" y="${rectY}" width="${w - 120}" height="${rectHeight}" rx="12" class="bg-rect" />
+          <!-- Text Panel above footer -->
+          <rect x="60" y="${rectY}" width="${w - 120}" height="${rectHeight}" rx="10" class="bg-rect" />
           <text x="${w / 2}" y="${textY}" class="overlay-text">
-            ${lines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : 42}">${line.toUpperCase()}</tspan>`).join('')}
+            ${lines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : 36}">${line.toUpperCase()}</tspan>`).join('')}
           </text>
+
+          <!-- Editorial Footer -->
+          <rect x="0" y="${h - 80}" width="${w}" height="80" class="footer-bg" />
+          <line x1="0" y1="${h - 80}" x2="${w}" y2="${h - 80}" class="footer-line" />
+          <text x="60" y="${h - 35}" class="footer-brand">${spacedName}</text>
+          <text x="${w - 60}" y="${h - 35}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>
         </svg>
       `;
 

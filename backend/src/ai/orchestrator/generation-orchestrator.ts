@@ -36,6 +36,8 @@ import type { JobState } from '../types/job-payload.types';
 import { TierGatingService } from '../services/tier-gating.service';
 import { ArtDirectorBriefChain } from '../chains/art-director-brief.chain';
 import { ScoringGateService } from '../services/scoring-gate.service';
+import { BrandStrategistChain } from '../chains/brand-strategist.chain';
+import { CreativeDirectorChain } from '../chains/creative-director.chain';
 
 type NotifyFn = (dto: {
   tenantId: string;
@@ -69,6 +71,8 @@ export class GenerationOrchestrator {
   private readonly tierGating: TierGatingService;
   private readonly artDirectorBriefChain: ArtDirectorBriefChain;
   private readonly scoringGate: ScoringGateService;
+  private readonly brandStrategistChain: BrandStrategistChain;
+  private readonly creativeDirectorChain: CreativeDirectorChain;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -101,6 +105,8 @@ export class GenerationOrchestrator {
     this.tierGating = new TierGatingService(prisma);
     this.artDirectorBriefChain = new ArtDirectorBriefChain();
     this.scoringGate = new ScoringGateService();
+    this.brandStrategistChain = new BrandStrategistChain();
+    this.creativeDirectorChain = new CreativeDirectorChain();
   }
 
   // --------------------------------------------------------------------------
@@ -137,6 +143,7 @@ export class GenerationOrchestrator {
     let generationOptionsResult: (CaptionGenerationResult & { generatedBy: string })[] = [];
     let reelScriptResult: ReelScriptResult | null = null;
     let platformVariants: PlatformVariantResult[] | null = null;
+    let strategistOutput: any = null;
 
     const componentStatus: {
       caption: ComponentStatus;
@@ -220,7 +227,7 @@ export class GenerationOrchestrator {
       },
     });
 
-    // â”€â”€ Step 3: Caption Generation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Step 3: Caption Generation ──────────────────────────────────────────
     await this.transitionState(jobId, 'building_prompt', 'generating_text');
     await this.progressEmitter.emit(jobId, tenantId, 'generating_text');
 
@@ -232,14 +239,54 @@ export class GenerationOrchestrator {
     modelUsed = `${llmConfig.provider}/${llmConfig.modelId}`;
 
     try {
-      const multiResult = await this.captionChain.generateMultipleOptions({
+      const blacklist = brandDNA.vocabularyBlacklist ?? brandDNA.blacklistedWords ?? [];
+
+      // Generate Option 1: Technical & Clinical copy
+      const opt1 = await this.brandStrategistChain.generate({
         assembledPrompt,
-        brandDNABlacklist: brandDNA.vocabularyBlacklist ?? brandDNA.blacklistedWords ?? [],
-        allowRetry: true,
+        brandDNABlacklist: blacklist,
+        llmConfig,
+        angle: 'technical',
       });
-      captionResult = multiResult.primary;
-      generationOptionsResult = multiResult.options;
-      
+
+      // Generate Option 2: Empathetic & Warm copy
+      const opt2 = await this.brandStrategistChain.generate({
+        assembledPrompt,
+        brandDNABlacklist: blacklist,
+        llmConfig,
+        angle: 'empathetic',
+      });
+
+      captionResult = {
+        caption: opt1.caption,
+        hookSentence: opt1.hookSentence,
+        callToAction: opt1.callToAction,
+        hashtags: opt1.hashtags,
+        altText: `Beauty treatment image showing skin clinical details for ${brandDNA.businessName}`,
+        estimatedReadTime: Math.max(1, Math.ceil(opt1.caption.length / 100)),
+        brandVoiceConfidenceScore: opt1.brandVoiceConfidenceScore,
+      };
+
+      generationOptionsResult = [
+        {
+          ...captionResult,
+          generatedBy: 'GPT-4o-Strategist (Technical)',
+        },
+        {
+          caption: opt2.caption,
+          hookSentence: opt2.hookSentence,
+          callToAction: opt2.callToAction,
+          hashtags: opt2.hashtags,
+          altText: `Beauty treatment image showing skin clinical details for ${brandDNA.businessName}`,
+          estimatedReadTime: Math.max(1, Math.ceil(opt2.caption.length / 100)),
+          brandVoiceConfidenceScore: opt2.brandVoiceConfidenceScore,
+          generatedBy: 'GPT-4o-Strategist (Empathetic)',
+        }
+      ];
+
+      // Expose the primary strategist context to the Creative Director
+      strategistOutput = opt1;
+
       componentStatus.caption = 'completed';
       const validation = await this.outputValidator.validate(
         captionResult.caption,
@@ -249,33 +296,16 @@ export class GenerationOrchestrator {
       );
       if (validation.correctedOutput) captionResult.caption = validation.correctedOutput;
       if (validation.requiresRegeneration) {
-        const retryPrompt = {
-          ...assembledPrompt,
-          userPrompt: `${assembledPrompt.userPrompt}\n\nCRITICAL REGENERATION REQUIREMENT:\nPrevious output failed validation for:\n- ${validation.hardFailures.join('\n- ')}\nDo not use any prohibited phrasing.`,
-        };
-        captionResult = await this.captionChain.generate({
-          assembledPrompt: retryPrompt,
-          llmConfig,
-          brandDNABlacklist: brandDNA.vocabularyBlacklist ?? [],
-          allowRetry: false,
-        });
-        const secondPass = await this.outputValidator.validate(
-          captionResult.caption,
-          payload.consentSnapshot,
-          'general',
-          tenantId
-        );
-        if (secondPass.requiresRegeneration) componentStatus.caption = 'failed';
+        componentStatus.caption = 'failed';
       }
-      totalTokensIn += captionResult.tokenUsage?.inputTokens ?? 0;
-      totalTokensOut += captionResult.tokenUsage?.outputTokens ?? 0;
 
-      // Emit partial result â€” send caption to frontend as soon as it's ready
+      // Emit partial result — send caption to frontend as soon as it's ready
       await this.progressEmitter.emitPartialResult(jobId, tenantId, {
         caption: captionResult.caption,
         hashtags: captionResult.hashtags,
       });
     } catch (err) {
+      console.error('[Orchestrator Step 3 Error]:', err);
       componentStatus.caption = 'failed';
     }
 
@@ -449,14 +479,11 @@ Requirements:
           brandVoice: extractBrandVoice(brandDNA),
         });
 
-        // Step 2 of two-step prompting: Generate bespoke visual art briefs
-        const briefResult = await this.artDirectorBriefChain.generate({
+        // Step 2 of two-step prompting: Generate bespoke visual design briefs via Creative Director Agent
+        const briefResult = await this.creativeDirectorChain.generate({
+          strategistOutput,
+          brandDNA,
           concepts: conceptResult.concepts,
-          businessName: brandDNA.businessName,
-          brandColor: brandDNA.primaryBrandColor ?? '#1a1a1a',
-          secondaryColor: brandDNA.secondaryBrandColor ?? '#f5f0eb',
-          aesthetic: brandDNA.aestheticDirection ?? 'minimal editorial',
-          serviceType: appointment?.serviceCategory ?? 'beauty treatment',
         });
 
         try {
@@ -479,6 +506,7 @@ Requirements:
             : aiSlides;
           carouselSlides = { type: 'carousel', slides: slidesWithLogo };
         } catch (aiErr) {
+          console.error('[Orchestrator Slide Generation Fallback]:', aiErr);
           // Fallback to Cloudinary if AI generation fails
           if (imageResult?.cloudinaryPublicId) {
             carouselSlides = this.carouselPipeline.generate({
@@ -490,6 +518,7 @@ Requirements:
           }
         }
       } catch (err) {
+        console.error('[Orchestrator Step 5.6 Error]:', err);
       }
     }
 
@@ -508,14 +537,11 @@ Requirements:
           brandVoice: extractBrandVoice(brandDNA),
         });
 
-        // Step 2 of two-step prompting: Generate bespoke visual art briefs
-        const briefResult = await this.artDirectorBriefChain.generate({
+        // Step 2 of two-step prompting: Generate bespoke visual design briefs via Creative Director Agent
+        const briefResult = await this.creativeDirectorChain.generate({
+          strategistOutput,
+          brandDNA,
           concepts: storyFrames.frames,
-          businessName: brandDNA.businessName,
-          brandColor: brandDNA.primaryBrandColor ?? '#1a1a1a',
-          secondaryColor: brandDNA.secondaryBrandColor ?? '#f5f0eb',
-          aesthetic: brandDNA.aestheticDirection ?? 'minimal editorial',
-          serviceType: appointment?.serviceCategory ?? 'beauty treatment',
         });
 
         try {
@@ -536,6 +562,7 @@ Requirements:
             : aiFrames;
           storyOutput = { type: 'story', frames: framesWithLogo };
         } catch (aiErr) {
+          console.error('[Orchestrator Story Generation Fallback]:', aiErr);
           if (imageResult?.cloudinaryPublicId) {
             storyOutput = this.storyPipeline.generate({
               cloudinaryPublicId: imageResult.cloudinaryPublicId,
@@ -546,6 +573,7 @@ Requirements:
           }
         }
       } catch (err) {
+        console.error('[Orchestrator Step 5.65 Error]:', err);
       }
     }
 

@@ -26,7 +26,7 @@ export async function saveBrandDnaRecord(
       // Mirror key scalar fields for backwards compat with AI prompt builder
       serviceCategories: record.foundations.categories,
       serviceArea: record.foundations.service_area || undefined,
-      locationCity: record.foundations.location || undefined,
+      personaLocation: record.foundations.location || undefined,
       oneLiner: record.foundations.known_for || undefined,
       brandEssenceSentence: record.essence.one_sentence || undefined,
       brandWorldAnchor: record.essence.world_anchor || undefined,
@@ -44,6 +44,8 @@ export async function saveBrandDnaRecord(
       moodboardLabels: record.moodboard.map((m) => m.usage).filter(Boolean),
       visualRanking: record.visual_identity.style_ranking,
       pillars: record.content_strategy.pillars_ranked,
+      logoUrl: record.logo_storage_path || undefined,
+      logoPosition: record.logo_position || 'bottom_right',
       goals: [
         record.content_strategy.targets.bookings_per_week
           ? { label: "bookings per week", target: record.content_strategy.targets.bookings_per_week }

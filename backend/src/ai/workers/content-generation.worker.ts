@@ -1,4 +1,4 @@
-﻿// ============================================================================
+// ============================================================================
 // content-generation.worker.ts â€” Primary BullMQ Worker
 // Handles the main AI pipeline: vision â†’ prompt â†’ caption â†’ variants â†’ script
 // Concurrency: 10 | Rate: 50/min | Retry: 3x exponential
@@ -82,6 +82,7 @@ export function startContentGenerationWorker(io: SocketServer, notifyFn?: Notify
         return result;
       } catch (err) {
         const error = err as Error;
+        console.error('[Worker Error]: Content generation job failed:', error);
 
         // Consent block â†’ BLOCKED state, not FAILED
         if (err instanceof ConsentBlockedError) {

@@ -259,6 +259,57 @@ ${CRAFT_RULES}`;
     const doNotSay = arr(dna.doNotSay);
     const painPoints = arr(dna.clientPainPoints);
 
+    // Support for new refactored brandDnaV2 JSON schema from coworker's branch
+    if (dna.brandDnaV2) {
+      try {
+        const v2 = (typeof dna.brandDnaV2 === 'string' ? JSON.parse(dna.brandDnaV2) : dna.brandDnaV2) as Record<string, any>;
+        
+        const foundations = v2.foundations || {};
+        const essence = v2.essence || {};
+        const visual = v2.visual_identity || {};
+        const voice = v2.voice_v2 || {};
+        const written = v2.written_conventions || {};
+        const commercial = v2.commercial || {};
+        const client = v2.ideal_client_v2 || {};
+        const compliance = v2.compliance || {};
+        const signature = v2.signature_system || {};
+
+        const avoidList = arr(written.avoid_phrases || blacklist);
+
+        return [
+          `## YOUR BRAND DNA (V2)`,
+          `**Business:** ${str(dna.businessName)}`,
+          foundations.professional_name ? `**Professional Name:** ${str(foundations.professional_name)}` : '',
+          foundations.niche ? `**Niche & Speciality:** ${str(foundations.niche)}` : '',
+          foundations.known_for ? `**Known For:** ${str(foundations.known_for)}` : '',
+          foundations.what_makes_different ? `**What Makes You Different:** ${str(foundations.what_makes_different)}` : '',
+          foundations.reputation_asset ? `**Reputation Asset:** ${str(foundations.reputation_asset)}` : '',
+          essence.one_sentence ? `**Brand Essence/One-Liner:** "${str(essence.one_sentence)}"` : '',
+          essence.world_anchor ? `**Brand World Anchor:** ${str(essence.world_anchor)}` : '',
+          essence.image_energy ? `**Image Energy Mood:** ${str(essence.image_energy)}` : '',
+          visual.palette ? `**Visual Palette:** Primary: ${str(visual.palette.primary)}, Secondary: ${str(visual.palette.secondary)}, Background: ${str(visual.palette.background)}, Accent: ${str(visual.palette.accent)}` : '',
+          visual.colours_to_avoid ? `**Colours to avoid in visuals:** ${str(visual.colours_to_avoid)}` : '',
+          visual.never_look_like ? `**Your brand visuals must NEVER look like:** ${str(visual.never_look_like)}` : '',
+          signature.recurring_motif ? `**Signature Motif/Device:** ${str(signature.recurring_motif)}` : '',
+          signature.colour_discipline ? `**Signature Colour Discipline:** ${str(signature.colour_discipline)}` : '',
+          voice.three_words ? `**Voice Tone (3 words):** ${str(voice.three_words)}` : '',
+          voice.perception ? `**Consumer Perception Objective:** ${str(voice.perception)}` : '',
+          voice.proof ? `**Signature Proof Pillar:** ${str(voice.proof)}` : '',
+          voice.caption_style ? `**Caption Style Notes:** ${str(voice.caption_style)}` : '',
+          voice.vocabulary ? `**Preferred Vocabulary:** ${str(voice.vocabulary)}` : '',
+          avoidList.length ? `**BLACKLISTED WORDS & PHRASES (NEVER USE):** ${avoidList.join(', ')}` : '',
+          commercial.cta_style ? `**CTA Style Rule:** ${str(commercial.cta_style)}` : '',
+          commercial.desired_outcome ? `**Desired Client Outcome:** ${str(commercial.desired_outcome)}` : '',
+          client.problem ? `**Target Client Pain Points:** ${str(client.problem)}` : '',
+          client.fears_objections ? `**Objections/Fears to address:** ${str(client.fears_objections)}` : '',
+          compliance.do_not_invent ? `**Strict Verification Rule:** ${str(compliance.do_not_invent)}` : '',
+          compliance.before_after_rules ? `**Before/After Compliance Rules:** ${str(compliance.before_after_rules)}` : '',
+        ].filter(Boolean).join('\n');
+      } catch (err) {
+        console.error('Failed to parse brandDnaV2. Falling back to v1 format:', err);
+      }
+    }
+
     const brandTierLabel: Record<string, string> = {
       luxury: 'Luxury — premium pricing, aspirational tone, high-polish language',
       mainstream: 'Mainstream — professional but approachable, results-focused',

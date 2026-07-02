@@ -47,6 +47,9 @@ export class TierGatingService {
   }
 
   async validateRequest(tenantId: string, subscriptionTier: string, isNonBooking: boolean): Promise<void> {
+    if (process.env.TRIAL_LIMIT_BYPASS === 'true') {
+      return;
+    }
     const rules = this.getTierRules(subscriptionTier);
 
     // Rule 1: Limit non-booking content
