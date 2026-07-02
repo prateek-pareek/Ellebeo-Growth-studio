@@ -21,6 +21,7 @@ export type ContentItem = {
   qualityScore?: number;
   sourceAppointmentId?: string;
   updatedAt: string;
+  platformVariants?: any;
 };
 
 export type Appointment = {
@@ -99,6 +100,7 @@ function mapRow(row: any): { item: ContentItem; appointment: Appointment | null 
     qualityScore: row.confidenceScore,
     sourceAppointmentId: row.appointmentId,
     updatedAt: row.updatedAt ? new Date(row.updatedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'Recently',
+    platformVariants: row.platformVariants || null,
   };
 
   let appointment: Appointment | null = null;

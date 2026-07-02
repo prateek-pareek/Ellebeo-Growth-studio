@@ -48,6 +48,12 @@ class EnvironmentVariables {
   OPENAI_API_KEY?: string;
 
   @IsOptional() @IsString()
+  GEMINI_API_KEY?: string;
+
+  @IsOptional() @IsString()
+  GEMINI_MODEL?: string;
+
+  @IsOptional() @IsString()
   ANTHROPIC_API_KEY?: string;
 
   @IsOptional() @IsString()

@@ -8,7 +8,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { ChatAnthropic } from '@langchain/anthropic';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import { AI_CONFIG } from '../../config/ai.config';
 import type { CaptionGenerationResult, LLMConfig, AssembledPrompt } from '../types/chain-output.types';
 import { wrapSystemPrompt } from '../config/platform-system-prompt';
@@ -107,8 +107,11 @@ export class CaptionGenerationChain {
 
     const secondPromise = geminiUsable
       ? this.callGemini(assembledPrompt, brandDNABlacklist)
-          .then(result => ({ ...result, generatedBy: 'Gemini' }))
-          .catch(() => this.generateGpt4oMiniOption(assembledPrompt, brandDNABlacklist, allowRetry))
+        .then(result => ({ ...result, generatedBy: 'Gemini' }))
+        .catch((error) => {
+          console.error("Gemini Generation Error:", error);
+          return this.generateGpt4oMiniOption(assembledPrompt, brandDNABlacklist, allowRetry);
+        })
       : this.generateGpt4oMiniOption(assembledPrompt, brandDNABlacklist, allowRetry);
 
     const results = await Promise.all([openAiPromise, secondPromise]);
@@ -154,9 +157,28 @@ export class CaptionGenerationChain {
       generationConfig: {
         // Match the OpenAI standard-text config so the two options compare fairly.
         temperature: AI_CONFIG.models.standardText.temperature,
-        maxOutputTokens: AI_CONFIG.models.standardText.maxTokens,
+        maxOutputTokens: 4096,
         responseMimeType: 'application/json',
-      },
+        thinkingConfig: {
+          thinkingBudget: 0,
+        },
+        responseSchema: {
+          type: SchemaType.OBJECT,
+          properties: {
+            caption: { type: SchemaType.STRING },
+            hookSentence: { type: SchemaType.STRING },
+            callToAction: { type: SchemaType.STRING },
+            hashtags: {
+              type: SchemaType.ARRAY,
+              items: { type: SchemaType.STRING }
+            },
+            altText: { type: SchemaType.STRING },
+            estimatedReadTime: { type: SchemaType.INTEGER },
+            brandVoiceConfidenceScore: { type: SchemaType.NUMBER }
+          },
+          required: ["caption", "hookSentence", "callToAction", "hashtags", "altText", "estimatedReadTime", "brandVoiceConfidenceScore"]
+        }
+      } as any,
     });
 
     const response = await model.generateContent(prompt.userPrompt);
