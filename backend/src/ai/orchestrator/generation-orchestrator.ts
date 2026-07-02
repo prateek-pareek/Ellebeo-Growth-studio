@@ -7,6 +7,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { ConsentGuard } from '../guards/consent.guard';
 import { ModelRouter } from './model-router';
 import { PromptBuilder } from './prompt-builder';
+import { filterDnaForTier, tierDnaLabel } from '../config/brand-dna-tier-filter';
 import { VisionAnalysisChain } from '../chains/vision-analysis.chain';
 import { CaptionGenerationChain } from '../chains/caption-generation.chain';
 import { ReelScriptChain } from '../chains/reel-script.chain';
@@ -184,8 +185,13 @@ export class GenerationOrchestrator {
     });
 
     const primaryPlatform = generationOptions.platform[0] ?? 'instagram';
+
+    // Apply tier filter — strip Brand DNA fields the tenant hasn't unlocked
+    const tieredDna = filterDnaForTier(brandDNA as unknown as Record<string, any>, generationOptions.userTier) as typeof brandDNA;
+    // log tier filter applied (observable in backend stdout)
+
     const assembledPrompt = await this.promptBuilder.assembleGenerationPrompt({
-      brandDNA,
+      brandDNA: tieredDna,
       visionResult,
       businessGoal: payload.businessGoal,
       goldenExamples: payload.goldenExamples,

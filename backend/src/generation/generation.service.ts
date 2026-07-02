@@ -12,24 +12,46 @@ export class GenerationService {
   ) {}
 
   async generate(tenantId: string, clientId: string, dto: GenerateContentDto) {
-    const appointment = await this.prisma.appointment.findUnique({
-      where: { id: dto.appointmentId },
-      include: { client: true }
-    });
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    const tier = tenant?.subscriptionTier ?? 'free';
+    const trialBypassed = process.env.TRIAL_LIMIT_BYPASS === 'true';
 
-    if (!appointment || appointment.tenantId !== tenantId) {
-      throw new NotFoundException('Appointment not found');
+    // ── Tier gate: booking-only for tier1/tier2 ──────────────────────────────
+    const bookingOnlyTiers = ['free', 'standard', 'tier1', 'tier2'];
+    const isBookingOnly = bookingOnlyTiers.includes(tier);
+    const isNonBookingPost = !dto.appointmentId || dto.postType === 'brand' || dto.postType === 'marketing';
+
+    if (isBookingOnly && isNonBookingPost) {
+      throw new ForbiddenException({
+        error: 'BOOKING_REQUIRED',
+        message: 'Your plan only supports content generated from Elle.Be.O bookings. Upgrade to Tier 3 to create brand and marketing posts.',
+      });
     }
 
-    // Resolve consent via appointment.consentRecordId (direct FK) or client's current record
-    const consentRecord = appointment.consentRecordId
-      ? await this.prisma.consentRecord.findUnique({ where: { id: appointment.consentRecordId } })
-      : await this.prisma.consentRecord.findFirst({
-          where: { clientId: appointment.clientId, tenantId, isCurrent: true },
-        });
+    // ── Appointment lookup (required for booking posts) ───────────────────────
+    let appointment: any = null;
+    let consentRecord: any = null;
 
-    if (!consentRecord || consentRecord.status !== 'granted') {
-      throw new BadRequestException('Valid consent record is required for generation');
+    if (dto.appointmentId) {
+      appointment = await this.prisma.appointment.findUnique({
+        where: { id: dto.appointmentId },
+        include: { client: true }
+      });
+
+      if (!appointment || appointment.tenantId !== tenantId) {
+        throw new NotFoundException('Appointment not found');
+      }
+
+      // Resolve consent
+      consentRecord = appointment.consentRecordId
+        ? await this.prisma.consentRecord.findUnique({ where: { id: appointment.consentRecordId } })
+        : await this.prisma.consentRecord.findFirst({
+            where: { clientId: appointment.clientId, tenantId, isCurrent: true },
+          });
+
+      if (!consentRecord || consentRecord.status !== 'granted') {
+        throw new BadRequestException('Valid consent record is required for generation');
+      }
     }
 
     const brandDna = await this.prisma.brandDNA.findUnique({
@@ -40,29 +62,31 @@ export class GenerationService {
       throw new BadRequestException('Brand DNA must be configured before generation');
     }
 
-    // Enforce rate limits before creating job
-    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
-    const limits = this.getTierLimits(tenant?.subscriptionTier ?? 'free');
+    // ── Daily limit gate for subscribed tiers (tier1/tier2) ──────────────────
+    const limits = this.getTierLimits(tier);
     const usage = await this.getTodayUsage(tenantId);
 
-    // Rate limit enforcement disabled for demo
+    if (!trialBypassed && ['tier1', 'tier2'].includes(tier)) {
+      if (usage.generations >= limits.generations) {
+        throw new ForbiddenException({
+          error: 'DAILY_LIMIT_REACHED',
+          message: `You've reached your limit of ${limits.generations} generations today. Your limit resets at midnight UTC.`,
+        });
+      }
+    }
 
-    // Lifetime free-trial gate — 2 generations, then must buy generations via
-    // the one-time-purchase plan. TRIAL_LIMIT_BYPASS lets us demo without
-    // hitting either gate.
+    // ── Trial / plan gate for free tier ──────────────────────────────────────
     const TRIAL_LIMIT = 2;
-    const trialBypassed = process.env.TRIAL_LIMIT_BYPASS === 'true';
     const trialUsed = tenant?.trialGenerationsUsed ?? 0;
     const trialAvailable = trialUsed < TRIAL_LIMIT;
-
     const planTotal = tenant?.planGenerationsTotal ?? 0;
     const planUsed = tenant?.planGenerationsUsed ?? 0;
     const planAvailable = planUsed < planTotal;
 
     let usingPlanGeneration = false;
-    if (!trialBypassed) {
+    if (!trialBypassed && tier === 'free') {
       if (trialAvailable) {
-        // still within the 2 free generations — nothing to deduct from yet
+        // still within the 2 free generations
       } else if (planAvailable) {
         usingPlanGeneration = true;
       } else {
@@ -81,10 +105,10 @@ export class GenerationService {
     const job = await this.prisma.generationJob.create({
       data: {
         tenantId,
-        appointmentId: appointment.id,
-        clientId: appointment.clientId,
+        appointmentId: appointment?.id ?? null,
+        clientId: appointment?.clientId ?? clientId,
         jobPayload: dto as any,
-        consentSnapshot: consentRecord as any,
+        consentSnapshot: (consentRecord ?? {}) as any,
         brandDnaSnapshot: brandDna as any,
         brandDnaVersion: brandDna.version,
         outputFormats: dto.outputFormats,
@@ -109,31 +133,34 @@ export class GenerationService {
       }
     }
 
-    // Check Growth Studio's own image_assets table first
-    const imageAssetRecords = await this.prisma.imageAsset.findMany({
-      where: { tenantId, appointmentId: appointment.id, deletedAt: null },
-      orderBy: [{ isAfterPhoto: 'desc' }, { createdAt: 'asc' }],
-      select: { rawUrl: true, cloudinaryPublicId: true, visionAnalysis: true, isBeforePhoto: true, isAfterPhoto: true },
-    });
+    // Check Growth Studio's own image_assets table first (only for booking posts)
+    let imageAssets: any[] = [];
+    if (appointment) {
+      const imageAssetRecords = await this.prisma.imageAsset.findMany({
+        where: { tenantId, appointmentId: appointment.id, deletedAt: null },
+        orderBy: [{ isAfterPhoto: 'desc' }, { createdAt: 'asc' }],
+        select: { rawUrl: true, cloudinaryPublicId: true, visionAnalysis: true, isBeforePhoto: true, isAfterPhoto: true },
+      });
 
-    let imageAssets = imageAssetRecords
-      .filter(a => a.rawUrl)
-      .map(a => ({
-        rawStoragePath: a.rawUrl!,
-        cloudinaryPublicId: a.cloudinaryPublicId ?? undefined,
-        visionAnalysisCache: a.visionAnalysis ? JSON.stringify(a.visionAnalysis) : undefined,
-        isBeforePhoto: a.isBeforePhoto,
-        isAfterPhoto: a.isAfterPhoto,
-      }));
+      imageAssets = imageAssetRecords
+        .filter(a => a.rawUrl)
+        .map(a => ({
+          rawStoragePath: a.rawUrl!,
+          cloudinaryPublicId: a.cloudinaryPublicId ?? undefined,
+          visionAnalysisCache: a.visionAnalysis ? JSON.stringify(a.visionAnalysis) : undefined,
+          isBeforePhoto: a.isBeforePhoto,
+          isAfterPhoto: a.isAfterPhoto,
+        }));
 
-    // Fall back to the CRM booking's after-photo if no Growth Studio image assets exist
-    if (imageAssets.length === 0 && appointment.crmBookingId) {
-      const rows = await this.prisma.$queryRaw<Array<{ recipientIntakeData: Record<string, unknown> | null }>>`
-        SELECT "recipientIntakeData" FROM public."Booking" WHERE id = ${appointment.crmBookingId}::uuid LIMIT 1
-      `;
-      const afterPhotoUrl = rows[0]?.recipientIntakeData?.['afterPhotoUrl'] as string | undefined;
-      if (afterPhotoUrl) {
-        imageAssets = [{ rawStoragePath: afterPhotoUrl, cloudinaryPublicId: undefined, visionAnalysisCache: undefined, isBeforePhoto: false, isAfterPhoto: true }];
+      // Fall back to the CRM booking's after-photo if no Growth Studio image assets exist
+      if (imageAssets.length === 0 && appointment.crmBookingId) {
+        const rows = await this.prisma.$queryRaw<Array<{ recipientIntakeData: Record<string, unknown> | null }>>`
+          SELECT "recipientIntakeData" FROM public."Booking" WHERE id = ${appointment.crmBookingId}::uuid LIMIT 1
+        `;
+        const afterPhotoUrl = rows[0]?.recipientIntakeData?.['afterPhotoUrl'] as string | undefined;
+        if (afterPhotoUrl) {
+          imageAssets = [{ rawStoragePath: afterPhotoUrl, cloudinaryPublicId: undefined, visionAnalysisCache: undefined, isBeforePhoto: false, isAfterPhoto: true }];
+        }
       }
     }
 
@@ -142,9 +169,9 @@ export class GenerationService {
       {
         jobId: job.id,
         tenantId,
-        appointmentId: appointment.id,
-        clientId: appointment.clientId,
-        consentSnapshot: consentRecord,
+        appointmentId: appointment?.id ?? null,
+        clientId: appointment?.clientId ?? clientId,
+        consentSnapshot: consentRecord ?? {},
         brandDNA: brandDna,
         businessGoal: (dto.goal as any) || 'build_brand_authority',
         imageAssets,
@@ -153,7 +180,7 @@ export class GenerationService {
           includeVoiceover: dto.includeVoiceover,
           includeMusic: dto.includeMusic,
           platform: dto.platforms as any,
-          userTier: 'standard',
+          userTier: tier as any,
         },
         goldenExamples: [],
         createdAt: new Date().toISOString(),
