@@ -24,7 +24,7 @@ export class ModelRouter {
     const anthropicConfigured = !!process.env['ANTHROPIC_API_KEY'] && process.env['USE_ANTHROPIC'] === 'true';
     const useClaude =
       anthropicConfigured &&
-      (context.userTier === 'premium' ||
+      (['premium', 'tier3', 'tier4', 'tier5'].includes(context.userTier) ||
         context.brandDNAComplexityScore > thresholds.complexityScoreThreshold ||
         (context.previousConfidenceScore !== undefined &&
           context.previousConfidenceScore < thresholds.brandVoiceConfidenceRetryThreshold));
@@ -106,7 +106,7 @@ export class ModelRouter {
   // --------------------------------------------------------------------------
 
   explainRouting(context: ModelRoutingContext): string {
-    if (context.userTier === 'premium') return 'Claude: premium tier';
+    if (['premium', 'tier3', 'tier4', 'tier5'].includes(context.userTier)) return 'Claude: premium tier';
     if (context.brandDNAComplexityScore > AI_CONFIG.routing.complexityScoreThreshold) {
       return `Claude: complexity score ${context.brandDNAComplexityScore.toFixed(2)} > ${AI_CONFIG.routing.complexityScoreThreshold}`;
     }

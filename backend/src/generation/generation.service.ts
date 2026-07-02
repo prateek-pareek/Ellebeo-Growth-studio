@@ -269,6 +269,11 @@ export class GenerationService {
       free:     { generations: 5,   reels: 2   },
       standard: { generations: 50,  reels: 10  },
       premium:  { generations: 999, reels: 999 },
+      tier1:    { generations: 2,   reels: 0   },
+      tier2:    { generations: 2,   reels: 2   },
+      tier3:    { generations: 999, reels: 20  },
+      tier4:    { generations: 999, reels: 20  },
+      tier5:    { generations: 999, reels: 999 },
     };
     return LIMITS[tier] ?? LIMITS['free'];
   }
