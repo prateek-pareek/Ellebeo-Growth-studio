@@ -84,6 +84,10 @@ async function bootstrap() {
   const smsService = app.get(SmsService);
   const prismaService = app.get(PrismaService);
   startNotificationsWorker(prismaService as any, notificationsGateway, smsService);
+  console.log("Server is running on port", port);
+  console.log("Environment:", process.env.NODE_ENV);
+  console.log("Front end url: ", process.env.FRONTEND_URL);
+  console.log("Admin portal url: ", process.env.ADMIN_PORTAL_URL);
 }
 
 bootstrap();

@@ -18,6 +18,37 @@ export class CreateBrandDnaDto {
   @IsString()
   businessName: string;
 
+  @IsOptional()
+  brandDnaV2?: Record<string, any>;
+
+  @IsArray()
+  @IsOptional()
+  serviceCategories?: string[];
+
+  @IsString()
+  @IsOptional()
+  serviceArea?: string;
+
+  @IsString()
+  @IsOptional()
+  reputationAsset?: string;
+
+  @IsString()
+  @IsOptional()
+  workDifferentiation?: string;
+
+  @IsString()
+  @IsOptional()
+  brandEssenceSentence?: string;
+
+  @IsString()
+  @IsOptional()
+  brandWorldAnchor?: string;
+
+  @IsString()
+  @IsOptional()
+  imageEnergy?: string;
+
   @IsString()
   @IsOptional()
   oneLiner?: string;
@@ -72,6 +103,18 @@ export class CreateBrandDnaDto {
 
   @IsString()
   @IsOptional()
+  backgroundBrandColor?: string;
+
+  @IsString()
+  @IsOptional()
+  accentBrandColor?: string;
+
+  @IsString()
+  @IsOptional()
+  depthBrandColor?: string;
+
+  @IsString()
+  @IsOptional()
   emojiPolicy?: string;
 
   @IsString()
@@ -93,6 +136,81 @@ export class CreateBrandDnaDto {
   @IsString()
   @IsOptional()
   logoPosition?: string;
+
+  // Visual Brand DNA
+  @IsArray()
+  @IsOptional()
+  moodboardUrls?: string[];
+
+  @IsArray()
+  @IsOptional()
+  moodboardLabels?: string[];
+
+  @IsArray()
+  @IsOptional()
+  visualRanking?: string[];
+
+  @IsString()
+  @IsOptional()
+  lightingPreference?: string;
+
+  @IsString()
+  @IsOptional()
+  texturePreference?: string;
+
+  @IsString()
+  @IsOptional()
+  compositionStyle?: string;
+
+  @IsString()
+  @IsOptional()
+  environmentPreference?: string;
+
+  @IsString()
+  @IsOptional()
+  finishPreference?: string;
+
+  @IsString()
+  @IsOptional()
+  audienceLifestyle?: string;
+
+  @IsString()
+  @IsOptional()
+  commercialObjective?: string;
+
+  // Deeper ICP
+  @IsString()
+  @IsOptional()
+  clientFears?: string;
+
+  @IsString()
+  @IsOptional()
+  clientTrustTriggers?: string;
+
+  @IsString()
+  @IsOptional()
+  clientVisualTaste?: string;
+
+  @IsString()
+  @IsOptional()
+  clientBuyingTriggers?: string;
+
+  @IsString()
+  @IsOptional()
+  clientEmotionalOutcome?: string;
+
+  // Brand perception
+  @IsString()
+  @IsOptional()
+  brandPerceptionGoal?: string;
+
+  @IsString()
+  @IsOptional()
+  brandProofStatement?: string;
+
+  @IsString()
+  @IsOptional()
+  brandNeverLooksLike?: string;
 }
 
 export class ScanInstagramDto {
