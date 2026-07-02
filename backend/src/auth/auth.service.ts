@@ -114,7 +114,7 @@ export class AuthService {
     if (!user) {
       // Fallback: check CRM public.users + public.AuthIdentity
       user = await this.tryProvisionFromCrm(loginDto.email, loginDto.password);
-      if (!user) throw new UnauthorizedException('Invalid credentials');
+      if (!user) throw new UnauthorizedException('No account found with this email. Did you mean to sign up?');
       // CRM password already validated inside tryProvisionFromCrm — skip re-check
       return this.generateTokens(user.id, user.role, user.tenant?.id, ipAddress, userAgent);
     }
@@ -142,7 +142,7 @@ export class AuthService {
         data: updateData,
       });
 
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException('Incorrect password. Please try again.');
     }
 
     // Reset failed attempts on success

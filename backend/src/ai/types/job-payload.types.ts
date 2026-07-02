@@ -70,7 +70,7 @@ export type BusinessGoalType =
 
 export type SocialPlatform = 'instagram' | 'facebook' | 'tiktok';
 export type OutputFormat = 'feed' | 'carousel' | 'story' | 'reel';
-export type UserTier = 'standard' | 'premium';
+export type UserTier = 'free' | 'standard' | 'premium' | 'tier1' | 'tier2' | 'tier3' | 'tier4' | 'tier5';
 
 export interface GoldenExample {
   exampleId: string;

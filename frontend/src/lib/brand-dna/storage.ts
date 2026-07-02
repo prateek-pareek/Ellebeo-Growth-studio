@@ -35,7 +35,8 @@ export async function uploadBrandFile(file: File, kind: BrandFileKind): Promise<
     const form = new FormData();
     form.append("file", file);
     const res = await api.post(endpoint, form, { headers: { "Content-Type": "multipart/form-data" } });
-    const url: string = res.data.data?.url || res.data.url;
+    const url: string = res.data?.data?.url ?? res.data?.url;
+    if (!url) return { kind: "error", message: "Upload succeeded but no URL returned." };
     return { kind: "ok", path: url, signedUrl: url };
   } catch (err: any) {
     if (err.response?.status === 401) return { kind: "anon" };

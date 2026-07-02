@@ -17,7 +17,12 @@ enum PlatformType {
 
 export class GenerateContentDto {
   @IsString()
-  appointmentId: string;
+  @IsOptional()
+  appointmentId?: string;
+
+  @IsString()
+  @IsOptional()
+  postType?: 'booking' | 'brand' | 'marketing';
 
   @IsArray()
   @ArrayMinSize(1)
