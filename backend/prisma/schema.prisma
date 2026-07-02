@@ -248,6 +248,14 @@ model BrandDNA {
   version                  Int           @default(1)
   isCurrent                Boolean       @default(true) @map("is_current")
   businessName             String        @map("business_name") @db.VarChar(255)
+  brandDnaV2               Json?         @map("brand_dna_v2")
+  serviceCategories        String[]      @map("service_categories")
+  serviceArea              String?       @map("service_area") @db.VarChar(255)
+  reputationAsset          String?       @map("reputation_asset") @db.VarChar(500)
+  workDifferentiation      String?       @map("work_differentiation") @db.Text
+  brandEssenceSentence     String?       @map("brand_essence_sentence") @db.Text
+  brandWorldAnchor         String?       @map("brand_world_anchor") @db.Text
+  imageEnergy              String?       @map("image_energy") @db.VarChar(100)
   oneLiner                 String?       @map("one_liner") @db.Text
   uniqueSellingProposition String?       @map("unique_selling_proposition") @db.Text
   signatureOutcome         String?       @map("signature_outcome") @db.VarChar(500)
@@ -265,6 +273,9 @@ model BrandDNA {
   moodTag                  String?       @map("mood_tag") @db.VarChar(100)
   primaryBrandColor        String?       @map("primary_brand_color") @db.VarChar(50)
   secondaryBrandColor      String?       @map("secondary_brand_color") @db.VarChar(50)
+  backgroundBrandColor     String?       @map("background_brand_color") @db.VarChar(50)
+  accentBrandColor         String?       @map("accent_brand_color") @db.VarChar(50)
+  depthBrandColor          String?       @map("depth_brand_color") @db.VarChar(50)
   brandFont                String?       @map("brand_font") @db.VarChar(100)
   locationCity             String?       @map("location_city") @db.VarChar(255)
   brandTier                BrandTier     @default(mainstream) @map("brand_tier")
@@ -274,6 +285,27 @@ model BrandDNA {
   preferredModelOverride   String?       @map("preferred_model_override") @db.VarChar(100)
   logoUrl                  String?       @map("logo_url") @db.VarChar(2000)
   logoPosition             String        @default("bottom_right") @map("logo_position") @db.VarChar(20)
+  // Visual Brand DNA fields
+  moodboardUrls            String[]      @map("moodboard_urls")
+  moodboardLabels          String[]      @map("moodboard_labels")
+  lightingPreference       String?       @map("lighting_preference") @db.VarChar(255)
+  texturePreference        String?       @map("texture_preference") @db.VarChar(255)
+  compositionStyle         String?       @map("composition_style") @db.VarChar(255)
+  environmentPreference    String?       @map("environment_preference") @db.VarChar(255)
+  finishPreference         String?       @map("finish_preference") @db.VarChar(255)
+  audienceLifestyle        String?       @map("audience_lifestyle") @db.Text
+  commercialObjective      String?       @map("commercial_objective") @db.Text
+  visualRanking            String[]      @map("visual_ranking")
+  // Deeper ICP fields
+  clientFears              String?       @map("client_fears") @db.Text
+  clientTrustTriggers      String?       @map("client_trust_triggers") @db.Text
+  clientVisualTaste        String?       @map("client_visual_taste") @db.Text
+  clientBuyingTriggers     String?       @map("client_buying_triggers") @db.Text
+  clientEmotionalOutcome   String?       @map("client_emotional_outcome") @db.Text
+  // Brand perception fields
+  brandPerceptionGoal      String?       @map("brand_perception_goal") @db.Text
+  brandProofStatement      String?       @map("brand_proof_statement") @db.Text
+  brandNeverLooksLike      String?       @map("brand_never_looks_like") @db.Text
   lastUpdatedAt            DateTime      @default(now()) @map("last_updated_at") @db.Timestamptz
   autoPopulated            Boolean       @default(false) @map("auto_populated")
   pillars                  BrandPillar[]
