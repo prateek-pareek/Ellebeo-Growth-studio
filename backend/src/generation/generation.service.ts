@@ -331,4 +331,66 @@ export class GenerationService {
     d.setUTCHours(0, 0, 0, 0);
     return d.toISOString();
   }
+
+  async previewPrompts(tenantId: string, dto: GenerateContentDto) {
+    const brandDna = await this.prisma.brandDNA.findUnique({
+      where: { unique_current_brand_dna: { tenantId, isCurrent: true } }
+    });
+    if (!brandDna) {
+      throw new BadRequestException('Brand DNA must be configured before previewing prompts');
+    }
+
+    let appointment: any = null;
+    if (dto.appointmentId) {
+      appointment = await this.prisma.appointment.findUnique({
+        where: { id: dto.appointmentId },
+        include: { client: true }
+      });
+    }
+
+    const isMedical = appointment?.serviceCategory === 'injectables_cosmetic' || 
+                      appointment?.serviceCategory === 'laser_treatments';
+    const category = isMedical ? 'medical_aesthetics' : 'general';
+
+    const masterPrompt = await this.prisma.masterPrompt.findFirst({
+      where: { category, isActive: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const { PromptBuilder } = await import('../ai/orchestrator/prompt-builder');
+    const mockCache = {
+      getBrandDNAFragment: async () => null,
+      setBrandDNAFragment: async () => {},
+      getGoldenExamplesFragment: async () => null,
+      setGoldenExamplesFragment: async () => {},
+    } as any;
+    const promptBuilder = new PromptBuilder(mockCache);
+
+    const assembledPrompt = await promptBuilder.assembleGenerationPrompt({
+      brandDNA: brandDna as any,
+      visionResult: null,
+      businessGoal: (dto.goal || 'attract_new_clients') as any,
+      goldenExamples: [],
+      platform: (dto.platforms?.[0] || 'instagram') as any,
+      serviceCategory: appointment?.serviceCategory as any,
+      masterPromptText: masterPrompt?.systemPrompt ?? undefined,
+      consentRestrictions: {
+        show_face: true,
+        use_name: true,
+        allow_tagging: true,
+        allow_before_after: true,
+        allow_extended_use: true,
+      },
+      appointmentContext: {
+        serviceName: appointment?.serviceName ?? undefined,
+        clientFirstName: appointment?.client?.firstName ?? undefined,
+        serviceCategory: appointment?.serviceCategory ?? undefined,
+      },
+    });
+
+    return {
+      systemPrompt: assembledPrompt.systemPrompt,
+      userPrompt: assembledPrompt.userPrompt,
+    };
+  }
 }

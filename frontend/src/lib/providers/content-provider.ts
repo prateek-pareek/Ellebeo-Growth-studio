@@ -84,7 +84,15 @@ function mapRow(row: any): { item: ContentItem; appointment: Appointment | null 
 
   const item: ContentItem = {
     id: row.id,
-    title: row.caption ? row.caption.slice(0, 60).split(/[.!?]/)[0] || 'New Content' : 'New Content',
+    title: row.caption 
+      ? (() => {
+          const sentence = row.caption.split(/[.!?]/)[0] || 'New Content';
+          if (sentence.length <= 60) return sentence;
+          const cutoff = sentence.substring(0, 60);
+          const lastSpace = cutoff.lastIndexOf(" ");
+          return lastSpace > 30 ? cutoff.substring(0, lastSpace) + "..." : cutoff + "...";
+        })()
+      : 'New Content',
     type: normalizeFormat(row.postFormat || apt?.serviceCategory || 'Caption') as any,
     pillar: 'General',
     category: apt?.serviceCategory || 'general',

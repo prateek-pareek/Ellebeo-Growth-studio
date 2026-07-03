@@ -15,9 +15,12 @@ export class GenerationController {
   @UseGuards(GenerationRestrictionGuard)
   @Post('generate')
   generate(@Req() req: any, @Body() dto: GenerateContentDto) {
-    // In a real scenario we'd need clientId which is linked to appointmentId
-    // We assume the service fetches it or we extract from token/client
     return this.generationService.generate(req.user.tenantId, req.user.userId, dto);
+  }
+
+  @Post('preview-prompts')
+  previewPrompts(@Req() req: any, @Body() dto: GenerateContentDto) {
+    return this.generationService.previewPrompts(req.user.tenantId, dto);
   }
 
   @Get('jobs/:jobId')
