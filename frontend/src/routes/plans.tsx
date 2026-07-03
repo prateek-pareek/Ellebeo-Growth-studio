@@ -262,7 +262,7 @@ function PlansPage() {
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-start"
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-stretch pt-6"
           >
             {TIERS.map((tier) => {
               const isCurrent = currentTier === tier.id;
@@ -270,12 +270,14 @@ function PlansPage() {
               const isRecommended = tier.recommended;
 
               return (
-                <div
+                <motion.div
                   key={tier.id}
+                  whileHover={{ y: isRecommended ? -10 : -6, scale: isRecommended ? 1.05 : 1.03 }}
+                  transition={{ type: "spring", stiffness: 350, damping: 22 }}
                   className={[
-                    "relative rounded-2xl border flex flex-col overflow-hidden transition-shadow",
+                    "relative rounded-2xl border flex flex-col",
                     isRecommended
-                      ? "border-foreground bg-foreground text-offwhite shadow-xl lg:scale-[1.03] lg:-mt-2"
+                      ? "border-foreground bg-foreground text-offwhite shadow-xl z-10"
                       : "border-border bg-card",
                   ].join(" ")}
                 >
@@ -378,7 +380,7 @@ function PlansPage() {
                         : <>Subscribe <ArrowRight className="size-3" /></>}
                     </button>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
           </motion.div>
