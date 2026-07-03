@@ -1,8 +1,9 @@
 import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/providers/auth-provider";
 import { InitialsAvatar } from "@/components/InitialsAvatar";
 import { NotificationBell } from "@/components/NotificationPanel";
+import { api } from "@/lib/api";
 import {
   Home,
   Sparkles,
@@ -34,10 +35,135 @@ const DESKTOP_NAV: Array<{ to: string; label: string }> = [
 
 const AUTH_ROUTES = ['/login', '/signup', '/auth', '/landing'];
 
+/** Safe base64url decode — works with or without the Node Buffer polyfill. */
+function decodeOAuthState(state: string): Record<string, string> | null {
+  try {
+    if (typeof Buffer !== "undefined") {
+      return JSON.parse(Buffer.from(state, "base64url").toString());
+    }
+  } catch {}
+  try {
+    const base64 = state.replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(atob(base64));
+  } catch {}
+  return null;
+}
+
 export function AppShell() {
   const { pathname } = useLocation();
   const { user, loading } = useAuth();
   const navigate = useNavigate();
+  const oauthHandled = useRef(false);
+  const [oauthProcessing, setOauthProcessing] = useState(false);
+  const [oauthStatus, setOauthStatus] = useState<"processing" | "success" | "error">("processing");
+  const [oauthMessage, setOauthMessage] = useState("Connecting your account…");
+  const [mobileUrl, setMobileUrl] = useState("");
+
+  // ── Detect OAuth callback SYNCHRONOUSLY (useMemo runs during render, before useEffect) ──
+  const oauthParams = useMemo(() => {
+    if (pathname !== "/profile") return null;
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    const state = params.get("state");
+    if (!state) return null;
+    const error = params.get("error") || params.get("error_code");
+    return { code, state, error };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Process OAuth callback (async API call) ──
+  useEffect(() => {
+    if (!oauthParams || oauthHandled.current) return;
+    oauthHandled.current = true;
+    setOauthProcessing(true);
+
+    // Clean URL so a refresh doesn't re-trigger
+    window.history.replaceState({}, "", "/profile");
+
+    const { code, state, error } = oauthParams;
+    const decoded = decodeOAuthState(state);
+    const platform = decoded?.platform === "facebook" ? "facebook" : "instagram";
+    const mobileRedirectUri = decoded?.mobileRedirectUri || "";
+    const isMobile = !!mobileRedirectUri;
+
+    // Handle denied / error
+    if (error || !code) {
+      if (isMobile) {
+        const target = `${mobileRedirectUri}?error=${platform}_denied`;
+        setMobileUrl(target);
+        setOauthStatus("success");
+        setOauthMessage("Redirecting back to the app…");
+        window.location.href = target;
+      } else {
+        setOauthStatus("error");
+        setOauthMessage("Permission was denied. Please try again.");
+      }
+      return;
+    }
+
+    // Exchange code for tokens
+    api
+      .post(`/social-accounts/connect/${platform}/exchange`, { code, state })
+      .then(() => {
+        if (isMobile) {
+          const target = `${mobileRedirectUri}?connected=${platform}`;
+          setMobileUrl(target);
+          setOauthStatus("success");
+          setOauthMessage("Connected! Returning to the app…");
+          window.location.href = target;
+        } else {
+          setOauthStatus("success");
+          setOauthMessage("Connected! Redirecting…");
+          setTimeout(() => {
+            setOauthProcessing(false);
+          }, 1500);
+        }
+      })
+      .catch(() => {
+        if (isMobile) {
+          const target = `${mobileRedirectUri}?error=${platform}_connect_failed`;
+          setMobileUrl(target);
+          setOauthStatus("error");
+          setOauthMessage("Connection failed. Redirecting back…");
+          window.location.href = target;
+        } else {
+          setOauthStatus("error");
+          setOauthMessage("Connection failed. Please try again.");
+        }
+      });
+  }, [oauthParams]);
+
+  // ── Show OAuth processing UI (bypasses auth loading + auth guard) ──
+  if (oauthParams || oauthProcessing) {
+    return (
+      <div className="min-h-dvh bg-background flex flex-col items-center justify-center gap-4 px-4 text-center">
+        {oauthStatus === "processing" && (
+          <div className="size-6 border-2 border-taupe/30 border-t-foreground rounded-full animate-spin" />
+        )}
+        {oauthStatus === "success" && (
+          <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="text-emerald-600 dark:text-emerald-400">
+              <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+        )}
+        {oauthStatus === "error" && (
+          <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-red-100 dark:bg-red-950">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="text-red-600 dark:text-red-400">
+              <path d="M6 18L18 6M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </div>
+        )}
+        <p className="text-sm text-muted-foreground max-w-xs">{oauthMessage}</p>
+        {mobileUrl && (
+          <a
+            href={mobileUrl}
+            className="inline-block rounded-md bg-zinc-900 px-4 py-2 text-xs font-bold uppercase tracking-widest text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200">
+            Open App
+          </a>
+        )}
+      </div>
+    );
+  }
 
   useEffect(() => {
     if (loading) return;
