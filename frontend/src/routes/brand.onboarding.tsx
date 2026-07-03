@@ -7,13 +7,17 @@ import { SectionBody } from "@/lib/brand-dna/sections";
 import { computeCompletion } from "@/lib/brand-dna/completion";
 import { api } from "@/lib/api";
 
-// Sections that require a minimum subscription tier to edit.
-// compliance is never gated — always accessible.
+// Hard lock — section is fully blocked below the required tier.
 const SECTION_TIER_GATE: Partial<Record<string, { minTier: number; label: string }>> = {
   moodboard:        { minTier: 3, label: "Tier 3 — Premium" },
   asset_library:    { minTier: 3, label: "Tier 3 — Premium" },
   signature_system: { minTier: 3, label: "Tier 3 — Premium" },
-  image_direction:  { minTier: 2, label: "Tier 2 — Growth" },
+};
+
+// Soft note — section is accessible but some fields are locked at the AI level.
+const SECTION_TIER_NOTE: Partial<Record<string, { minTier: number; note: string }>> = {
+  essence:         { minTier: 2, note: "Brand world anchor requires Tier 2 — your input is saved but won't reach the AI until you upgrade." },
+  image_direction: { minTier: 2, note: "Advanced visual direction (composition, finish, environment) requires Tier 2. Basic lighting and texture are active on all tiers." },
 };
 
 const TIER_RANK: Record<string, number> = {
@@ -180,7 +184,9 @@ function BrandDnaForm() {
         <div className="col-span-12 lg:col-span-8 space-y-3">
           {activeSections.map((s) => {
             const gate = SECTION_TIER_GATE[s.id];
+            const softNote = SECTION_TIER_NOTE[s.id];
             const locked = gate ? tierRank(currentTier) < gate.minTier : false;
+            const hasNote = !locked && softNote ? tierRank(currentTier) < softNote.minTier : false;
             const open = !locked && openSection === s.id;
 
             return (
@@ -199,8 +205,16 @@ function BrandDnaForm() {
                           <Lock className="size-2.5" /> {gate?.label}
                         </span>
                       )}
+                      {hasNote && (
+                        <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.15em] border border-amber-200 bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">
+                          <Lock className="size-2.5" /> Partial — Tier 2+
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-taupe mt-1 leading-relaxed">{s.help}</p>
+                    {hasNote && (
+                      <p className="text-[10px] text-amber-600/80 mt-1.5 leading-relaxed">{softNote?.note}</p>
+                    )}
                   </div>
                   {!locked && (
                     <span className={"text-sm mt-0.5 shrink-0 transition-opacity " + (open ? "text-taupe" : "text-taupe/30")} aria-hidden>
