@@ -15,9 +15,11 @@ const SECTION_TIER_GATE: Partial<Record<string, { minTier: number; label: string
 };
 
 // Soft note — section is accessible but some fields are locked at the AI level.
-const SECTION_TIER_NOTE: Partial<Record<string, { minTier: number; note: string }>> = {
-  essence:         { minTier: 2, note: "Brand world anchor requires Tier 2 — your input is saved but won't reach the AI until you upgrade." },
-  image_direction: { minTier: 2, note: "Advanced visual direction (composition, finish, environment) requires Tier 2. Basic lighting and texture are active on all tiers." },
+const SECTION_TIER_NOTE: Partial<Record<string, { minTier: number; label: string; note: string }>> = {
+  essence:          { minTier: 2, label: "Partial — Tier 2+", note: "Brand world anchor requires Tier 2 — your input is saved but won't reach the AI until you upgrade." },
+  image_direction:  { minTier: 2, label: "Partial — Tier 2+", note: "Advanced visual direction (composition, finish, environment) requires Tier 2. Basic lighting and texture are active on all tiers." },
+  ideal_client:     { minTier: 3, label: "Partial — Tier 3+", note: "Full client psychology (fears, trust triggers, buying motivation, visual taste) requires Tier 3 — these fields are saved but filtered from AI prompts below Tier 3." },
+  content_strategy: { minTier: 3, label: "Partial — Tier 3+", note: "Per-pillar content strategy treatment requires Tier 3. Your pillars are still used at all tiers." },
 };
 
 const TIER_RANK: Record<string, number> = {
@@ -207,7 +209,7 @@ function BrandDnaForm() {
                       )}
                       {hasNote && (
                         <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.15em] border border-amber-200 bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">
-                          <Lock className="size-2.5" /> Partial — Tier 2+
+                          <Lock className="size-2.5" /> {softNote?.label}
                         </span>
                       )}
                     </div>
