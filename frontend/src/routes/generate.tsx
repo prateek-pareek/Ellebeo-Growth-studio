@@ -1087,6 +1087,8 @@ const MODEL_LABELS: Record<string, string> = {
   ChatGPT: "ChatGPT · OpenAI",
   "GPT-4o": "GPT-4o · OpenAI",
   Gemini: "Gemini · Google",
+  "GPT-4o-Strategist (Technical)": "GPT-4o · Technical",
+  "GPT-4o-Strategist (Empathetic)": "Gemini · Empathetic",
 };
 
 function GeneratingScreen({ jobStatus }: { jobStatus: string }) {
