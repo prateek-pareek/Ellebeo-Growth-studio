@@ -14,9 +14,10 @@ export class TierGatingService {
   constructor(private readonly prisma: PrismaClient) {}
 
   getTierRules(tier: string): TierRules {
-    const normalized = (tier || 'basic').toLowerCase();
-    
-    if (normalized === 'premium') {
+    const normalized = (tier || 'free').toLowerCase();
+
+    // Premium: tier3, tier4, tier5, premium — full access, unlimited
+    if (['premium', 'tier3', 'tier4', 'tier5'].includes(normalized)) {
       return {
         tier: 'premium',
         maxBookingsPerDay: 999,
@@ -25,8 +26,9 @@ export class TierGatingService {
         allowsEnhancedVisuals: true,
       };
     }
-    
-    if (normalized === 'enhanced') {
+
+    // Enhanced: tier2, standard — unlimited booking posts, no brand/marketing
+    if (['enhanced', 'standard', 'tier2'].includes(normalized)) {
       return {
         tier: 'enhanced',
         maxBookingsPerDay: 999,
@@ -36,7 +38,7 @@ export class TierGatingService {
       };
     }
 
-    // Default: Basic (Tier 1)
+    // Basic: free, tier1 — 2/day, booking only
     return {
       tier: 'basic',
       maxBookingsPerDay: 2,
