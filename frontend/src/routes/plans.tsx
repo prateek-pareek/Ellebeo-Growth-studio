@@ -290,14 +290,15 @@ function PlansPage() {
                     </div>
                   )}
 
-                  {/* Current plan badge */}
+                  {/* Current plan banner */}
                   {isCurrent && (
-                    <div className="absolute top-3 right-3">
-                      <span className={[
-                        "text-[9px] font-bold uppercase tracking-[0.15em] px-2.5 py-1 rounded-full",
-                        isRecommended ? "bg-white/20 text-white" : "bg-sage/15 text-sage",
-                      ].join(" ")}>
-                        Current plan
+                    <div className={[
+                      "flex items-center gap-2 px-6 py-2.5 border-b",
+                      isRecommended ? "bg-white/10 border-white/10" : "bg-sage/10 border-sage/15",
+                    ].join(" ")}>
+                      <CheckCircle2 className={["size-3.5 shrink-0", isRecommended ? "text-sage" : "text-sage"].join(" ")} />
+                      <span className={["text-[10px] font-bold uppercase tracking-[0.2em]", isRecommended ? "text-white" : "text-sage"].join(" ")}>
+                        Your active plan
                       </span>
                     </div>
                   )}
@@ -360,8 +361,8 @@ function PlansPage() {
                         "w-full py-3 text-[10px] uppercase tracking-[0.2em] transition-colors inline-flex items-center justify-center gap-2 disabled:cursor-not-allowed",
                         isCurrent
                           ? isRecommended
-                            ? "bg-white/10 text-offwhite/50 cursor-default"
-                            : "bg-muted text-taupe/50 cursor-default"
+                            ? "border border-white/20 text-offwhite/40 cursor-default"
+                            : "border border-border text-taupe/40 cursor-default"
                           : isDowngrade
                           ? isRecommended
                             ? "bg-white/10 text-offwhite/40 cursor-not-allowed"
@@ -374,7 +375,7 @@ function PlansPage() {
                       {busy === tier.id
                         ? "Redirecting…"
                         : isCurrent
-                        ? "Current plan"
+                        ? <><CheckCircle2 className="size-3" /> Active</>
                         : isDowngrade
                         ? "Contact support to downgrade"
                         : <>Subscribe <ArrowRight className="size-3" /></>}
