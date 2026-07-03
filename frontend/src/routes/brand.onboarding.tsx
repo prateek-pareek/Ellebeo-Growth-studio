@@ -1,9 +1,29 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Lock } from "lucide-react";
 import { loadBrandDnaRecord, saveBrandDnaRecord } from "@/lib/providers/brand-dna-save";
 import { EMPTY_BRAND_DNA, SECTIONS, type BrandDnaRecord, type SectionId, type SectionDef } from "@/lib/brand-dna/schema";
 import { SectionBody } from "@/lib/brand-dna/sections";
 import { computeCompletion } from "@/lib/brand-dna/completion";
+import { api } from "@/lib/api";
+
+// Sections that require a minimum subscription tier to edit.
+// compliance is never gated — always accessible.
+const SECTION_TIER_GATE: Partial<Record<string, { minTier: number; label: string }>> = {
+  moodboard:        { minTier: 3, label: "Tier 3 — Premium" },
+  asset_library:    { minTier: 3, label: "Tier 3 — Premium" },
+  signature_system: { minTier: 3, label: "Tier 3 — Premium" },
+  image_direction:  { minTier: 2, label: "Tier 2 — Growth" },
+};
+
+const TIER_RANK: Record<string, number> = {
+  free: 0, standard: 1, premium: 3,
+  tier1: 1, tier2: 2, tier3: 3, tier4: 4, tier5: 5,
+};
+
+function tierRank(tier: string): number {
+  return TIER_RANK[tier] ?? 0;
+}
 
 export const Route = createFileRoute("/brand/onboarding")({
   head: () => ({
@@ -27,6 +47,7 @@ function BrandDnaForm() {
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [published, setPublished] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [currentTier, setCurrentTier] = useState<string>("free");
 
   const patch = useCallback(
     (partial: Partial<BrandDnaRecord>) => setRecord((prev) => ({ ...prev, ...partial })),
@@ -46,9 +67,14 @@ function BrandDnaForm() {
   }, []);
 
   useEffect(() => {
-    loadBrandDnaRecord()
-      .then((res) => { if (res.kind === "ok") setRecord(res.record); })
-      .finally(() => setLoading(false));
+    Promise.all([
+      loadBrandDnaRecord(),
+      api.get("/auth/me").catch(() => null),
+    ]).then(([dnaRes, meRes]) => {
+      if (dnaRes.kind === "ok") setRecord(dnaRes.record);
+      const tier = meRes?.data?.data?.tenant?.subscriptionTier ?? "free";
+      setCurrentTier(tier);
+    }).finally(() => setLoading(false));
   }, []);
 
   const sectionsByGroup = useMemo(() => {
@@ -153,23 +179,56 @@ function BrandDnaForm() {
         {/* Accordion sections */}
         <div className="col-span-12 lg:col-span-8 space-y-3">
           {activeSections.map((s) => {
-            const open = openSection === s.id;
+            const gate = SECTION_TIER_GATE[s.id];
+            const locked = gate ? tierRank(currentTier) < gate.minTier : false;
+            const open = !locked && openSection === s.id;
+
             return (
-              <section key={s.id} id={`section-${s.id}`} className="artifact scroll-mt-24">
+              <section key={s.id} id={`section-${s.id}`} className={"artifact scroll-mt-24 " + (locked ? "opacity-60" : "")}>
                 <button
                   type="button"
                   aria-expanded={open}
-                  onClick={() => setOpenSection(open ? "" : s.id)}
-                  className="w-full text-left flex items-start justify-between gap-4 p-5 sm:p-6 hover:bg-nude/20 transition-colors"
+                  onClick={() => !locked && setOpenSection(open ? "" : s.id)}
+                  className={"w-full text-left flex items-start justify-between gap-4 p-5 sm:p-6 transition-colors " + (locked ? "cursor-default" : "hover:bg-nude/20")}
                 >
                   <div className="flex-1">
-                    <h2 className="font-serif text-2xl leading-snug">{s.title}</h2>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="font-serif text-2xl leading-snug">{s.title}</h2>
+                      {locked && (
+                        <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.15em] border border-border bg-muted text-taupe px-2 py-0.5 rounded-full">
+                          <Lock className="size-2.5" /> {gate?.label}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-taupe mt-1 leading-relaxed">{s.help}</p>
                   </div>
-                  <span className={"text-sm mt-0.5 shrink-0 transition-opacity " + (open ? "text-taupe" : "text-taupe/30")} aria-hidden>
-                    {open ? "−" : "+"}
-                  </span>
+                  {!locked && (
+                    <span className={"text-sm mt-0.5 shrink-0 transition-opacity " + (open ? "text-taupe" : "text-taupe/30")} aria-hidden>
+                      {open ? "−" : "+"}
+                    </span>
+                  )}
+                  {locked && <Lock className="size-4 text-taupe/40 shrink-0 mt-0.5" aria-hidden />}
                 </button>
+
+                {locked && (
+                  <div className="border-t hairline px-5 sm:px-6 py-8 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                    <div className="size-10 rounded-xl bg-muted flex items-center justify-center shrink-0">
+                      <Lock className="size-4 text-taupe" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium mb-0.5">Upgrade to unlock this section</p>
+                      <p className="text-xs text-taupe leading-relaxed">
+                        This section is available on <span className="font-semibold text-foreground">{gate?.label}</span> and above.
+                      </p>
+                    </div>
+                    <Link
+                      to="/plans"
+                      className="shrink-0 bg-foreground text-offwhite px-5 py-2.5 text-[10px] uppercase tracking-[0.2em] hover:bg-taupe transition-colors inline-flex items-center gap-1.5"
+                    >
+                      View plans
+                    </Link>
+                  </div>
+                )}
 
                 {open && (
                   <div className="border-t hairline px-5 sm:px-6 py-6">
