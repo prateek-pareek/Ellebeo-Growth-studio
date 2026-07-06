@@ -9,12 +9,12 @@ export class GenerationService {
   constructor(
     private prisma: PrismaService,
     private generationGateway: GenerationGateway,
-  ) {}
+  ) { }
 
   async generate(tenantId: string, clientId: string, dto: GenerateContentDto) {
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     const tier = tenant?.subscriptionTier ?? 'free';
-    const trialBypassed = process.env.TRIAL_LIMIT_BYPASS === 'true';
+    const trialBypassed = process.env.TRIAL_LIMIT_BYPASS?.trim() === 'true';
 
     // ── Tier gate: booking-only for tier1/tier2 ──────────────────────────────
     const bookingOnlyTiers = ['free', 'standard', 'tier1', 'tier2'];
@@ -46,8 +46,8 @@ export class GenerationService {
       consentRecord = appointment.consentRecordId
         ? await this.prisma.consentRecord.findUnique({ where: { id: appointment.consentRecordId } })
         : await this.prisma.consentRecord.findFirst({
-            where: { clientId: appointment.clientId, tenantId, isCurrent: true },
-          });
+          where: { clientId: appointment.clientId, tenantId, isCurrent: true },
+        });
 
       if (!consentRecord || consentRecord.status !== 'granted') {
         throw new BadRequestException('Valid consent record is required for generation');
@@ -293,14 +293,14 @@ export class GenerationService {
 
   private getTierLimits(tier: string): { generations: number; reels: number } {
     const LIMITS: Record<string, { generations: number; reels: number }> = {
-      free:     { generations: 5,   reels: 2   },
-      standard: { generations: 50,  reels: 10  },
-      premium:  { generations: 999, reels: 999 },
-      tier1:    { generations: 2,   reels: 0   },
-      tier2:    { generations: 2,   reels: 2   },
-      tier3:    { generations: 999, reels: 20  },
-      tier4:    { generations: 999, reels: 20  },
-      tier5:    { generations: 999, reels: 999 },
+      free: { generations: 5, reels: 2 },
+      standard: { generations: 50, reels: 10 },
+      premium: { generations: 999, reels: 999 },
+      tier1: { generations: 2, reels: 0 },
+      tier2: { generations: 2, reels: 2 },
+      tier3: { generations: 999, reels: 20 },
+      tier4: { generations: 999, reels: 20 },
+      tier5: { generations: 999, reels: 999 },
     };
     return LIMITS[tier] ?? LIMITS['free'];
   }
@@ -348,8 +348,8 @@ export class GenerationService {
       });
     }
 
-    const isMedical = appointment?.serviceCategory === 'injectables_cosmetic' || 
-                      appointment?.serviceCategory === 'laser_treatments';
+    const isMedical = appointment?.serviceCategory === 'injectables_cosmetic' ||
+      appointment?.serviceCategory === 'laser_treatments';
     const category = isMedical ? 'medical_aesthetics' : 'general';
 
     const masterPrompt = await this.prisma.masterPrompt.findFirst({
@@ -360,9 +360,9 @@ export class GenerationService {
     const { PromptBuilder } = await import('../ai/orchestrator/prompt-builder');
     const mockCache = {
       getBrandDNAFragment: async () => null,
-      setBrandDNAFragment: async () => {},
+      setBrandDNAFragment: async () => { },
       getGoldenExamplesFragment: async () => null,
-      setGoldenExamplesFragment: async () => {},
+      setGoldenExamplesFragment: async () => { },
     } as any;
     const promptBuilder = new PromptBuilder(mockCache);
 

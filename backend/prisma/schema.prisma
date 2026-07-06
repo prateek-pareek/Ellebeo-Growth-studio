@@ -213,6 +213,8 @@ model Tenant {
   failedJobs             FailedJob[]
   crmIntegrationConfig   CrmIntegrationConfig?
   notifications          Notification[]
+  feedbacks              ContentFeedback[]
+  performances           PostPerformance[]
 
   @@index([userId])
   @@index([status])
@@ -624,6 +626,8 @@ model ContentItem {
   updatedAt             DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   completedAt           DateTime?     @map("completed_at") @db.Timestamptz
   deletedAt             DateTime?     @map("deleted_at") @db.Timestamptz
+  contentPillar         String?       @map("content_pillar") @db.VarChar(100)
+  layoutType            String?       @map("layout_type") @db.VarChar(100)
 
   tenant        Tenant         @relation(fields: [tenantId], references: [id])
   appointment   Appointment    @relation(fields: [appointmentId], references: [id])
@@ -633,6 +637,8 @@ model ContentItem {
   imageAssets            ImageAsset[]
   scheduledPosts         ScheduledPost[]
   generationFingerprints GenerationFingerprint[]
+  feedbacks              ContentFeedback[]
+  performances           PostPerformance[]
 
   @@index([tenantId, status])
   @@index([appointmentId])
@@ -868,5 +874,45 @@ model Notification {
   @@index([tenantId, readAt])
   @@index([tenantId, createdAt])
   @@map("notifications")
+  @@schema("platform")
+}
+
+model ContentFeedback {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String      @map("tenant_id") @db.Uuid
+  contentItemId String      @map("content_item_id") @db.Uuid
+  actionType    String      @map("action_type") @db.VarChar(50) // 'rejected', 'edited', 'accepted'
+  reasonTag     String?     @map("reason_tag") @db.VarChar(100)
+  customComment String?     @map("custom_comment") @db.Text
+  originalText  String?     @map("original_text") @db.Text
+  editedText    String?     @map("edited_text") @db.Text
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id])
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id])
+
+  @@index([tenantId])
+  @@map("content_feedbacks")
+  @@schema("platform")
+}
+
+model PostPerformance {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String      @map("tenant_id") @db.Uuid
+  contentItemId String      @map("content_item_id") @db.Uuid
+  saves         Int         @default(0)
+  shares        Int         @default(0)
+  comments      Int         @default(0)
+  bookingsCount Int         @default(0) @map("bookings_count")
+  profileClicks Int         @default(0) @map("profile_clicks")
+  layoutType    String      @map("layout_type") @db.VarChar(100)
+  contentPillar String      @map("content_pillar") @db.VarChar(100)
+  syncedAt      DateTime    @default(now()) @map("synced_at") @db.Timestamptz
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id])
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id])
+
+  @@index([tenantId])
+  @@map("post_performances")
   @@schema("platform")
 }

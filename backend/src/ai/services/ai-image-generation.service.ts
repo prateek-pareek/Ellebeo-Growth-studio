@@ -153,6 +153,7 @@ export class AiImageGenerationService {
 
   async generateSlide(params: {
     photoUrl: string;
+    beforePhotoUrl?: string;
     overlayText: string;
     title: string;
     index: number;
@@ -168,9 +169,10 @@ export class AiImageGenerationService {
     outputSize?: '1024x1024' | '1024x1536';
     customPrompt?: string;
     totalSlides?: number;
+    layoutType?: string;
   }): Promise<string> {
     const {
-      photoUrl, overlayText, index, isFirst, isLast, isBeforePhoto,
+      photoUrl, beforePhotoUrl, overlayText, index, isFirst, isLast, isBeforePhoto,
       tenantId, businessName, brandColor,
       secondaryColor = '#f5f0eb',
       aesthetic = 'minimal editorial premium beauty',
@@ -178,6 +180,7 @@ export class AiImageGenerationService {
       outputSize = '1024x1024' as '1024x1024' | '1024x1536',
       customPrompt,
       totalSlides = 4,
+      layoutType = 'passepartout_text',
     } = params;
 
     const prompt = customPrompt || (isBeforePhoto
@@ -331,8 +334,9 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
     aesthetic?: string;
     serviceType?: string;
     artDirectorBrief?: any[];
+    layoutType?: string;
   }): Promise<GeneratedSlide[]> {
-    const { afterPhotoUrl, beforePhotoUrl, concepts, artDirectorBrief, ...rest } = params;
+    const { afterPhotoUrl, beforePhotoUrl, concepts, artDirectorBrief, layoutType = 'passepartout_text', ...rest } = params;
     const total = concepts.length;
 
     const slides = await Promise.all(
@@ -345,9 +349,15 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
 
         const brief = artDirectorBrief?.find(b => b.index === concept.index);
 
+        // Only apply split_before_after on the first slide (cover) of a carousel
+        const currentSlideLayout = (isFirst && layoutType === 'split_before_after')
+          ? 'split_before_after'
+          : (layoutType === 'split_before_after' ? 'passepartout_text' : layoutType);
+
         try {
           const url = await this.generateSlide({
             photoUrl,
+            beforePhotoUrl,
             overlayText: concept.overlayText,
             title: concept.title,
             index: concept.index,
@@ -360,6 +370,7 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
             brandColor: brief?.panelHexColor || rest.brandColor,
             secondaryColor: brief?.textColorHex || rest.secondaryColor,
             totalSlides: total,
+            layoutType: currentSlideLayout,
           });
           return { url, title: concept.title, label: `SLIDE ${String(concept.index).padStart(2, '0')}` };
         } catch {
@@ -384,8 +395,9 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
     aesthetic?: string;
     serviceType?: string;
     artDirectorBrief?: any[];
+    layoutType?: string;
   }): Promise<GeneratedSlide[]> {
-    const { afterPhotoUrl, beforePhotoUrl, frames, artDirectorBrief, ...rest } = params;
+    const { afterPhotoUrl, beforePhotoUrl, frames, artDirectorBrief, layoutType = 'passepartout_text', ...rest } = params;
     const total = frames.length;
 
     const results = await Promise.all(
@@ -397,9 +409,15 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
 
         const brief = artDirectorBrief?.find(b => b.index === frame.index);
 
+        // Only apply split_before_after on the first frame (cover) of a story sequence
+        const currentSlideLayout = (isFirst && layoutType === 'split_before_after')
+          ? 'split_before_after'
+          : (layoutType === 'split_before_after' ? 'passepartout_text' : layoutType);
+
         try {
           const url = await this.generateSlide({
             photoUrl,
+            beforePhotoUrl,
             overlayText: frame.overlayText,
             title: frame.title,
             index: frame.index,
@@ -412,6 +430,7 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
             brandColor: brief?.panelHexColor || rest.brandColor,
             secondaryColor: brief?.textColorHex || rest.secondaryColor,
             totalSlides: total,
+            layoutType: currentSlideLayout,
           });
           return { url, title: frame.title, label: `FRAME ${String(frame.index).padStart(2, '0')}` };
         } catch {
@@ -435,8 +454,10 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
     businessName?: string;
     index?: number;
     totalSlides?: number;
+    layoutType?: string;
+    beforePhotoUrl?: string;
   }): Promise<string> {
-    const { base64Image, overlayText, isFirst, isLast, brandColor, secondaryColor, businessName, index, totalSlides } = params;
+    const { base64Image, overlayText, isFirst, isLast, brandColor, secondaryColor, businessName, index, totalSlides, layoutType = 'passepartout_text', beforePhotoUrl } = params;
 
     const hasText = overlayText && overlayText.trim().length > 0;
 
@@ -480,10 +501,9 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
         rectHeight = 165;
       }
 
-      const bgOpacity = 0.65;
-      const panelBg = '#161616';
-      const borderStroke = brandColor.startsWith('#') ? brandColor : '#1a1a1a';
-      const dividerStroke = secondaryColor.startsWith('#') ? secondaryColor : '#c28d75';
+      // Use dynamic brand colors
+      const validBrandColor = brandColor.startsWith('#') ? brandColor : '#161616';
+      const validSecondaryColor = secondaryColor.startsWith('#') ? secondaryColor : '#161616';
 
       const rawName = (businessName || 'RAW CANVAS').trim().toUpperCase();
       const spacedName = rawName.split('').join(' ');
@@ -494,10 +514,59 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
       const slideNumText = String(index || 1).padStart(2, '0');
       const totalSlidesText = String(totalSlides || 4).padStart(2, '0');
 
-      const textPanelSvg = hasText ? `
-          <!-- Text Panel above footer -->
-          <rect x="60" y="${rectY}" width="${w - 120}" height="${rectHeight}" rx="10" class="bg-rect" />
-          <text x="${w / 2}" y="${textY}" class="overlay-text">
+      // True Passepartout Layout Calculations
+      const paddingX = Math.floor(w * 0.05); // 5% side margin
+      const paddingTop = Math.floor(h * 0.05); // 5% top margin
+      const paddingBottom = 200; // Deep bottom margin for text & footer
+
+      const innerW = w - (paddingX * 2);
+      const innerH = h - (paddingTop + paddingBottom);
+
+      // ── Step 1: Process Base Image based on LayoutType ──
+      let baseImage: sharp.Sharp = sharp(imageBuffer);
+
+      if (layoutType === 'split_before_after' && beforePhotoUrl) {
+        try {
+          const beforeBuffer = await downloadImageAsBuffer(beforePhotoUrl);
+          
+          // Crop left half of Before image
+          const leftHalf = await sharp(beforeBuffer)
+            .resize(Math.round(innerW / 2), innerH, { fit: 'cover' })
+            .toBuffer();
+            
+          // Crop right half of After image
+          const rightHalf = await sharp(imageBuffer)
+            .resize(Math.round(innerW / 2), innerH, { fit: 'cover' })
+            .toBuffer();
+
+          // Create a new blank canvas of innerW x innerH to merge them side-by-side
+          baseImage = sharp({
+            create: {
+              width: innerW,
+              height: innerH,
+              channels: 3,
+              background: '#000000',
+            }
+          }).composite([
+            { input: leftHalf, top: 0, left: 0 },
+            { input: rightHalf, top: 0, left: Math.round(innerW / 2) }
+          ]);
+        } catch (splitErr) {
+          console.error('[Sharp Split Frame Error] Failed to stitch before/after images, falling back:', splitErr);
+          baseImage = sharp(imageBuffer).resize(innerW, innerH, { fit: 'cover' });
+        }
+      } else {
+        if (layoutType !== 'full_bleed_clean') {
+          baseImage = sharp(imageBuffer).resize(innerW, innerH, { fit: 'cover' });
+        }
+      }
+
+      // ── Step 2: Assemble SVG overlays (conditional text & watermarks) ──
+      const showText = hasText && (layoutType === 'passepartout_text' || layoutType === 'split_before_after');
+
+      const textPanelSvg = showText ? `
+          <!-- Hook Text directly in the Passepartout Negative Space -->
+          <text x="${w / 2}" y="${h - 130}" class="overlay-text">
             ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : 36}">${line}</tspan>`).join('')}
           </text>
       ` : '';
@@ -506,28 +575,49 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
         <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <style>
-              .bg-rect { fill: ${panelBg}; fill-opacity: ${bgOpacity}; stroke: ${borderStroke}; stroke-width: 2px; }
-              .overlay-text { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 28px; font-weight: bold; fill: #ffffff; text-anchor: middle; letter-spacing: 1.5px; }
-              .footer-bg { fill: #161616; }
-              .footer-line { stroke: ${dividerStroke}; stroke-width: 1.5px; }
-              .footer-brand { font-family: 'Georgia', Times, serif; font-size: 16px; font-weight: bold; fill: #ffffff; letter-spacing: 4px; text-anchor: start; }
+              .overlay-text { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 26px; font-weight: bold; fill: #ffffff; text-anchor: middle; letter-spacing: 2px; }
+              .footer-bg { fill: ${validSecondaryColor}; }
+              .footer-brand { font-family: 'Georgia', Times, serif; font-size: 14px; font-weight: bold; fill: #ffffff; letter-spacing: 5px; text-anchor: start; }
               .footer-tracker { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 14px; font-weight: normal; fill: #ffffff; letter-spacing: 1px; text-anchor: end; }
             </style>
           </defs>
+          
+          <!-- Anti-theft transparent brand watermark across the image area -->
+          <text x="${w / 2}" y="${h / 2.2}" fill="#ffffff" fill-opacity="0.10" font-family="'Georgia', Times, serif" font-size="28px" font-weight="bold" transform="rotate(-30 ${w / 2} ${h / 2.2})" text-anchor="middle" letter-spacing="8px">
+            AUTHENTIC WORK • ${escapedSpacedName}
+          </text>
+          
           ${textPanelSvg}
-          <!-- Editorial Footer -->
-          <rect x="0" y="${h - 80}" width="${w}" height="80" class="footer-bg" />
-          <line x1="0" y1="${h - 80}" x2="${w}" y2="${h - 80}" class="footer-line" />
-          <text x="60" y="${h - 35}" class="footer-brand">${escapedSpacedName}</text>
-          <text x="${w - 60}" y="${h - 35}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>
+          
+          <!-- Minimalist Editorial Footer -->
+          <rect x="0" y="${h - 60}" width="${w}" height="60" class="footer-bg" />
+          <text x="60" y="${h - 25}" class="footer-brand">${escapedSpacedName}</text>
+          <text x="${w - 60}" y="${h - 25}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>
         </svg>
       `;
 
       const svgBuffer = Buffer.from(svgString);
-      const compositeBuffer = await sharp(imageBuffer)
-        .composite([{ input: svgBuffer, blend: 'over' }])
-        .png()
-        .toBuffer();
+
+      // ── Step 3: Composite image scaling and margins based on layout ──
+      let compositeBuffer: Buffer;
+      if (layoutType === 'full_bleed_clean') {
+        compositeBuffer = await sharp(imageBuffer)
+          .composite([{ input: svgBuffer, blend: 'over' }])
+          .png()
+          .toBuffer();
+      } else {
+        compositeBuffer = await baseImage
+          .extend({
+            top: paddingTop,
+            bottom: paddingBottom,
+            left: paddingX,
+            right: paddingX,
+            background: validBrandColor
+          })
+          .composite([{ input: svgBuffer, blend: 'over' }])
+          .png()
+          .toBuffer();
+      }
 
       return compositeBuffer.toString('base64');
     } catch (err) {

@@ -30,8 +30,8 @@ export class ContentController {
   }
 
   @Patch(':id/reject')
-  rejectContent(@Req() req: any, @Param('id') id: string) {
-    return this.contentService.rejectContent(req.user.tenantId, id);
+  rejectContent(@Req() req: any, @Param('id') id: string, @Body() dto?: { reasonTag?: string; customComment?: string }) {
+    return this.contentService.rejectContent(req.user.tenantId, id, dto?.reasonTag, dto?.customComment);
   }
 
   @Post(':id/select-option')
