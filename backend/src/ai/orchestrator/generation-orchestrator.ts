@@ -8,6 +8,7 @@ import { ConsentGuard } from '../guards/consent.guard';
 import { ModelRouter } from './model-router';
 import { PromptBuilder } from './prompt-builder';
 import { filterDnaForTier, tierDnaLabel } from '../config/brand-dna-tier-filter';
+import { buildStyleDirectionBlock } from '../config/visual-style-library';
 import { VisionAnalysisChain } from '../chains/vision-analysis.chain';
 import { CaptionGenerationChain } from '../chains/caption-generation.chain';
 import { ReelScriptChain } from '../chains/reel-script.chain';
@@ -400,7 +401,7 @@ export class GenerationOrchestrator {
       try {
         const feedPrompt = `Transform this beauty photo into a professional Instagram feed post for "${brandDNA.businessName}".
 Brand colors: ${brandDNA.primaryBrandColor ?? '#1a1a1a'} and ${brandDNA.secondaryBrandColor ?? '#f5f0eb'}.
-Aesthetic: ${brandDNA.aestheticDirection ?? 'minimal editorial premium beauty'}.
+Aesthetic: ${(brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA.visualRanking) : null) ?? brandDNA.aestheticDirection ?? 'minimal editorial premium beauty'}.
 Caption hook: "${captionResult.hookSentence || captionResult.caption.slice(0, 80)}"
 Requirements:
 - Keep the real photo as the main visual â€” preserve the person/hair authentically
@@ -502,7 +503,7 @@ Requirements:
             businessName: brandDNA.businessName,
             brandColor: brandDNA.primaryBrandColor ?? '#1a1a1a',
             secondaryColor: brandDNA.secondaryBrandColor ?? '#f5f0eb',
-            aesthetic: brandDNA.aestheticDirection ?? 'minimal editorial',
+            aesthetic: (brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA.visualRanking) : null) ?? brandDNA.aestheticDirection ?? 'minimal editorial',
             serviceType: appointment?.serviceCategory ?? 'beauty treatment',
             artDirectorBrief: briefResult.slides,
           });
@@ -559,7 +560,7 @@ Requirements:
             businessName: brandDNA.businessName,
             brandColor: brandDNA.primaryBrandColor ?? '#1a1a1a',
             secondaryColor: brandDNA.secondaryBrandColor ?? '#f5f0eb',
-            aesthetic: brandDNA.aestheticDirection ?? 'minimal editorial',
+            aesthetic: (brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA.visualRanking) : null) ?? brandDNA.aestheticDirection ?? 'minimal editorial',
             serviceType: appointment?.serviceCategory ?? 'beauty treatment',
             artDirectorBrief: briefResult.slides,
           });
