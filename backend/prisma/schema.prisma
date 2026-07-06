@@ -412,6 +412,9 @@ model ConsentRecord {
   consentToken           String?       @unique @map("consent_token") @db.VarChar(255)
   consentTokenExpiresAt  DateTime?     @map("consent_token_expires_at") @db.Timestamptz
   consentTokenUsedAt     DateTime?     @map("consent_token_used_at") @db.Timestamptz
+  consentOtp             String?       @map("consent_otp") @db.VarChar(64)
+  consentOtpExpiresAt    DateTime?     @map("consent_otp_expires_at") @db.Timestamptz
+  consentOtpVerifiedAt   DateTime?     @map("consent_otp_verified_at") @db.Timestamptz
   consentGrantedIp       String?       @map("consent_granted_ip") @db.VarChar(100)
   consentGrantedDevice   String?       @map("consent_granted_device") @db.VarChar(500)
 

@@ -93,7 +93,11 @@ function LoginPage() {
       toast.success("Welcome back.");
       navigate({ to: "/" });
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Invalid credentials. Please try again.");
+      if (!error.response) {
+        toast.error("Cannot reach the server. Please check your connection.");
+      } else {
+        toast.error(error.response?.data?.message || "Invalid credentials. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
