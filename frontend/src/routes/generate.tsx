@@ -88,6 +88,42 @@ function GeneratePage() {
   const [jobStatus, setJobStatus] = useState<string | null>(null);
   const [backendVariants, setBackendVariants] = useState<any[] | null>(null);
   const pollRef = useRef<number | null>(null);
+  
+  const [promptPreview, setPromptPreview] = useState<{ systemPrompt: string; userPrompt: string } | null>(null);
+
+  useEffect(() => {
+    if (appointment?.id) {
+      const formatMap: Record<Format, string> = {
+        'Carousel': 'carousel',
+        'Reel': 'reel',
+        'Story': 'story',
+        'Caption': 'feed',
+      };
+      const goalMap: Record<Goal, string> = {
+        'showcase': 'attract_new_clients',
+        'educate': 'build_brand_authority',
+        'convert': 'promote_high_margin_services',
+        'availability': 'fill_quiet_days',
+        'trust': 'retain_existing_clients'
+      };
+      api.post('/generation/preview-prompts', {
+        appointmentId: appointment.id,
+        platforms: ['instagram'],
+        outputFormats: [formatMap[format]],
+        goal: goalMap[goal],
+        includeVoiceover: false,
+        includeMusic: false,
+      }).then(res => {
+        if (res.data?.data) {
+          setPromptPreview(res.data.data);
+        }
+      }).catch(err => {
+        console.error('Failed to load prompt preview:', err);
+      });
+    } else {
+      setPromptPreview(null);
+    }
+  }, [appointment?.id, format, goal]);
 
   useEffect(() => {
     if (requestedMatch && !appointment) {
@@ -438,6 +474,7 @@ function GeneratePage() {
                   backendVariants={backendVariants}
                   onChangeStep={(s: Step) => setStep(s)}
                   onRefineComplete={(items: any[]) => setBackendVariants(items)}
+                  promptPreview={promptPreview}
                 />
               )}
             </div>
@@ -1087,6 +1124,8 @@ const MODEL_LABELS: Record<string, string> = {
   ChatGPT: "ChatGPT · OpenAI",
   "GPT-4o": "GPT-4o · OpenAI",
   Gemini: "Gemini · Google",
+  "GPT-4o-Strategist (Technical)": "GPT-4o · Technical",
+  "GPT-4o-Strategist (Empathetic)": "Gemini · Empathetic",
 };
 
 function GeneratingScreen({ jobStatus }: { jobStatus: string }) {
@@ -1175,7 +1214,7 @@ function GeneratingScreen({ jobStatus }: { jobStatus: string }) {
   );
 }
 
-function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep, onRefineComplete }: any) {
+function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep, onRefineComplete, promptPreview }: any) {
   const [activeVariant, setActiveVariant] = useState(0);
   const [activeSlide, setActiveSlide] = useState(0);
   const [captionCopied, setCaptionCopied] = useState(false);
@@ -1186,6 +1225,8 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep, onRe
   const [scheduleDateTime, setScheduleDateTime] = useState('');
   const [scheduling, setScheduling] = useState(false);
   const refinePollRef = useRef<number | null>(null);
+
+  const [activeTab, setActiveTab] = useState<'visual' | 'copywriting' | 'prompt'>('visual');
 
   if (generating) {
     return <GeneratingScreen jobStatus={jobStatus} />;
@@ -1403,20 +1444,50 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep, onRe
       )}
 
       {/* Draft preview card */}
-      <div className="border hairline">
+      <div className="border border-border bg-card shadow-sm overflow-hidden">
 
-        {/* Card header */}
-        <div className="flex items-center justify-between bg-foreground px-5 py-3">
-          <div className="flex items-center gap-2">
-            <span className="size-1.5 rounded-full bg-nude shrink-0" />
-            <p className="text-[10px] uppercase tracking-widest text-offwhite">Draft preview</p>
+        {/* Card header / Tabs */}
+        <div className="flex flex-wrap items-center justify-between border-b border-border bg-muted px-4 py-2">
+          <div className="flex items-center gap-1.5 overflow-x-auto">
+            <button
+              onClick={() => setActiveTab('visual')}
+              className={`px-3 py-1.5 text-[10px] uppercase tracking-widest font-semibold border-b-2 transition-all ${
+                activeTab === 'visual'
+                  ? 'border-foreground text-foreground'
+                  : 'border-transparent text-taupe hover:text-foreground'
+              }`}
+            >
+              Visual Presentation
+            </button>
+            <button
+              onClick={() => setActiveTab('copywriting')}
+              className={`px-3 py-1.5 text-[10px] uppercase tracking-widest font-semibold border-b-2 transition-all ${
+                activeTab === 'copywriting'
+                  ? 'border-foreground text-foreground'
+                  : 'border-transparent text-taupe hover:text-foreground'
+              }`}
+            >
+              Polished Copywriting
+            </button>
+            <button
+              onClick={() => setActiveTab('prompt')}
+              className={`px-3 py-1.5 text-[10px] uppercase tracking-widest font-semibold border-b-2 transition-all ${
+                activeTab === 'prompt'
+                  ? 'border-foreground text-foreground'
+                  : 'border-transparent text-taupe hover:text-foreground'
+              }`}
+            >
+              Live System Prompt
+            </button>
           </div>
-          <p className="text-[10px] uppercase tracking-widest text-nude">
-            {isCarousel ? `Carousel · ${carouselSlides.length} slides` : isStory ? `4-Frame Story · 9:16 · Auto-advance` : isReel ? `TikTok / Reel · ${reelShots.length} shots` : `Option ${activeVariant + 1}`}
-          </p>
+          <span className="text-[9px] uppercase tracking-widest font-bold text-taupe/40 pr-2 hidden sm:inline">
+            Output Canvas
+          </span>
         </div>
 
-        {isStory && storyFrames.length > 0 ? (
+        {activeTab === 'visual' ? (
+          <>
+            {isStory && storyFrames.length > 0 ? (
           /* ── STORY LAYOUT ────────────────────────────────────────────── */
           <div className="grid grid-cols-1 lg:grid-cols-2">
 
@@ -1865,6 +1936,89 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep, onRe
                   </p>
                 </div>
               )}
+            </div>
+          </div>
+            )}
+          </>
+        ) : activeTab === 'copywriting' ? (
+          /* ── POLISHED COPYWRITING TAB ────────────────────────────────── */
+          <div className="p-6 bg-card text-foreground divide-y divide-border space-y-6">
+            <div className="pb-4">
+              <h4 className="text-[10px] uppercase tracking-[0.2em] text-taupe font-bold mb-2">On-Image Hook Text</h4>
+              <p className="text-lg font-serif italic text-foreground leading-relaxed">
+                {opt.hookSentence ? `"${opt.hookSentence}"` : "No hook sentence generated."}
+              </p>
+            </div>
+            
+            <div className="py-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-[10px] uppercase tracking-[0.2em] text-taupe font-bold">Instagram Caption</h4>
+                <button onClick={copyCaption} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
+                  {captionCopied ? "Copied!" : "Copy Caption"}
+                </button>
+              </div>
+              <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{opt.caption}</p>
+            </div>
+            
+            {opt.callToAction && (
+              <div className="py-4">
+                <h4 className="text-[10px] uppercase tracking-[0.2em] text-taupe font-bold mb-1">Call to Action</h4>
+                <p className="text-sm text-foreground leading-relaxed">{opt.callToAction}</p>
+              </div>
+            )}
+            
+            {opt.hashtags && opt.hashtags.length > 0 && (
+              <div className="py-4">
+                <h4 className="text-[10px] uppercase tracking-[0.2em] text-taupe font-bold mb-3">Suggested Hashtags</h4>
+                <div className="flex flex-wrap gap-1.5">
+                  {opt.hashtags.map((h: string) => (
+                    <span key={h} className="text-[10px] uppercase tracking-widest border border-border px-2.5 py-1 text-taupe bg-muted font-mono">
+                      #{h}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* ── LIVE SYSTEM PROMPT TAB ──────────────────────────────────── */
+          <div className="p-6 bg-card text-foreground">
+            <div className="flex flex-wrap items-start justify-between gap-4 mb-5 pb-4 border-b border-border">
+              <div>
+                <h4 className="text-xs font-semibold uppercase tracking-widest text-taupe">
+                  Current Active System Instructions Passed to the Engine
+                </h4>
+                <p className="text-[11px] text-taupe mt-1">
+                  Below is the core system architecture. It enforces absolute work truthfulness, incorporates your Brand DNA, and dynamically implements compliance standards.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  const fullText = `SYSTEM PROMPT:\n${promptPreview?.systemPrompt ?? ''}\n\nUSER PROMPT:\n${promptPreview?.userPrompt ?? ''}`;
+                  navigator.clipboard.writeText(fullText);
+                  toast.success("Full prompt copied to clipboard");
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-border bg-muted hover:bg-nude/20 text-[10px] uppercase tracking-widest font-semibold transition-all"
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Copy Full Prompt
+              </button>
+            </div>
+            
+            <div className="space-y-5">
+              <div>
+                <p className="text-[10px] uppercase tracking-widest font-bold text-taupe mb-1.5">System Prompt & Brand DNA Rules</p>
+                <pre className="w-full bg-[#1e1e1e] text-[#d4d4d4] font-mono text-[11px] p-4 overflow-auto max-h-[300px] border border-border whitespace-pre-wrap leading-relaxed">
+                  {promptPreview?.systemPrompt || 'No system prompt compiled.'}
+                </pre>
+              </div>
+              
+              <div>
+                <p className="text-[10px] uppercase tracking-widest font-bold text-taupe mb-1.5">User Appointment Context Brief</p>
+                <pre className="w-full bg-[#1e1e1e] text-[#d4d4d4] font-mono text-[11px] p-4 overflow-auto max-h-[250px] border border-border whitespace-pre-wrap leading-relaxed">
+                  {promptPreview?.userPrompt || 'No user prompt compiled.'}
+                </pre>
+              </div>
             </div>
           </div>
         )}

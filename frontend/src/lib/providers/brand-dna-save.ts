@@ -26,7 +26,7 @@ export async function saveBrandDnaRecord(
       // Mirror key scalar fields for backwards compat with AI prompt builder
       serviceCategories: record.foundations.categories,
       serviceArea: record.foundations.service_area || undefined,
-      locationCity: record.foundations.location || undefined,
+      personaLocation: record.foundations.location || undefined,
       oneLiner: record.foundations.known_for || undefined,
       brandEssenceSentence: record.essence.one_sentence || undefined,
       brandWorldAnchor: record.essence.world_anchor || undefined,
@@ -44,6 +44,8 @@ export async function saveBrandDnaRecord(
       moodboardLabels: record.moodboard.map((m) => m.usage).filter(Boolean),
       visualRanking: record.visual_identity.style_ranking,
       pillars: record.content_strategy.pillars_ranked,
+      logoUrl: record.logo_storage_path || undefined,
+      logoPosition: record.logo_position || 'bottom_right',
       goals: [
         record.content_strategy.targets.bookings_per_week
           ? { label: "bookings per week", target: record.content_strategy.targets.bookings_per_week }
@@ -66,9 +68,29 @@ export async function loadBrandDnaRecord(): Promise<LoadResult> {
     const dna = res.data?.data;
     if (!dna) return { kind: "empty" };
 
-    // New JSONB record takes priority over scalar columns
+    // New JSONB record takes priority over scalar columns.
+    // Deep-merge with EMPTY_BRAND_DNA so any section missing from older or
+    // seeded records gets a safe default instead of crashing on undefined.
     if (dna.brandDnaV2 && typeof dna.brandDnaV2 === "object") {
-      return { kind: "ok", record: dna.brandDnaV2 as BrandDnaRecord };
+      const v2 = dna.brandDnaV2 as Partial<BrandDnaRecord>;
+      const merged: BrandDnaRecord = {
+        ...EMPTY_BRAND_DNA,
+        ...v2,
+        foundations:          { ...EMPTY_BRAND_DNA.foundations,          ...(v2.foundations          ?? {}) },
+        essence:              { ...EMPTY_BRAND_DNA.essence,              ...(v2.essence              ?? {}) },
+        visual_identity:      { ...EMPTY_BRAND_DNA.visual_identity,      ...(v2.visual_identity      ?? {}), palette: { ...EMPTY_BRAND_DNA.visual_identity.palette, ...(v2.visual_identity?.palette ?? {}) } },
+        image_direction:      { ...EMPTY_BRAND_DNA.image_direction,      ...(v2.image_direction      ?? {}) },
+        output_formats:       { ...EMPTY_BRAND_DNA.output_formats,       ...(v2.output_formats       ?? {}) },
+        typography:           { ...EMPTY_BRAND_DNA.typography,           ...(v2.typography           ?? {}) },
+        voice_v2:             { ...EMPTY_BRAND_DNA.voice_v2,             ...(v2.voice_v2             ?? {}) },
+        written_conventions:  { ...EMPTY_BRAND_DNA.written_conventions,  ...(v2.written_conventions  ?? {}) },
+        commercial:           { ...EMPTY_BRAND_DNA.commercial,           ...(v2.commercial           ?? {}) },
+        ideal_client_v2:      { ...EMPTY_BRAND_DNA.ideal_client_v2,      ...(v2.ideal_client_v2      ?? {}) },
+        content_strategy:     { ...EMPTY_BRAND_DNA.content_strategy,     ...(v2.content_strategy     ?? {}), targets: { ...EMPTY_BRAND_DNA.content_strategy.targets, ...(v2.content_strategy?.targets ?? {}) } },
+        compliance:           { ...EMPTY_BRAND_DNA.compliance,           ...(v2.compliance           ?? {}) },
+        signature_system:     { ...EMPTY_BRAND_DNA.signature_system,     ...(v2.signature_system     ?? {}) },
+      };
+      return { kind: "ok", record: merged };
     }
 
     // Seed from legacy scalar columns so existing data is not lost

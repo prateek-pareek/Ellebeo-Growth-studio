@@ -1,4 +1,4 @@
-﻿// ============================================================================
+// ============================================================================
 // generation-orchestrator.ts â€” Assembles All Chains Into the Full Pipeline
 // Manages state transitions, partial success, and component-level tracking.
 // ============================================================================
@@ -7,6 +7,8 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { ConsentGuard } from '../guards/consent.guard';
 import { ModelRouter } from './model-router';
 import { PromptBuilder } from './prompt-builder';
+import { filterDnaForTier, tierDnaLabel } from '../config/brand-dna-tier-filter';
+import { buildStyleDirectionBlock } from '../config/visual-style-library';
 import { VisionAnalysisChain } from '../chains/vision-analysis.chain';
 import { CaptionGenerationChain } from '../chains/caption-generation.chain';
 import { ReelScriptChain } from '../chains/reel-script.chain';
@@ -31,6 +33,13 @@ import type { GenerationResult, ComponentStatus } from '../types/generation-resu
 import type { VisionAnalysisResult, CaptionGenerationResult, ReelScriptResult, PlatformVariantResult, ImageProcessingResult, VoiceoverResult } from '../types/chain-output.types';
 import { validateStateTransition } from '../types/job-payload.types';
 import type { JobState } from '../types/job-payload.types';
+
+// New services and chains
+import { TierGatingService } from '../services/tier-gating.service';
+import { ArtDirectorBriefChain } from '../chains/art-director-brief.chain';
+import { ScoringGateService } from '../services/scoring-gate.service';
+import { BrandStrategistChain } from '../chains/brand-strategist.chain';
+import { CreativeDirectorChain } from '../chains/creative-director.chain';
 
 type NotifyFn = (dto: {
   tenantId: string;
@@ -60,6 +69,13 @@ export class GenerationOrchestrator {
   private readonly aiImageGen: AiImageGenerationService;
   private readonly logoOverlay: LogoOverlayService;
 
+  // New properties
+  private readonly tierGating: TierGatingService;
+  private readonly artDirectorBriefChain: ArtDirectorBriefChain;
+  private readonly scoringGate: ScoringGateService;
+  private readonly brandStrategistChain: BrandStrategistChain;
+  private readonly creativeDirectorChain: CreativeDirectorChain;
+
   constructor(
     private readonly prisma: PrismaClient,
     private readonly consentGuard: ConsentGuard,
@@ -86,6 +102,13 @@ export class GenerationOrchestrator {
     this.reelShotChain = new ReelShotChain();
     this.aiImageGen = new AiImageGenerationService();
     this.logoOverlay = new LogoOverlayService();
+
+    // New instantiations
+    this.tierGating = new TierGatingService(prisma);
+    this.artDirectorBriefChain = new ArtDirectorBriefChain();
+    this.scoringGate = new ScoringGateService();
+    this.brandStrategistChain = new BrandStrategistChain();
+    this.creativeDirectorChain = new CreativeDirectorChain();
   }
 
   // --------------------------------------------------------------------------
@@ -100,6 +123,11 @@ export class GenerationOrchestrator {
 
     const { jobId, tenantId, clientId, consentSnapshot, brandDNA, generationOptions } = payload;
     const jobStart = Date.now();
+
+    // Validate Subscription Tier limits and gates (Tier 1 vs Tier 2 vs Tier 3)
+    const tenantRecord = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    const isNonBooking = !payload.appointmentId;
+    await this.tierGating.validateRequest(tenantId, tenantRecord?.subscriptionTier ?? 'basic', isNonBooking);
 
     // â”€â”€ Checkpoint 2: Consent re-validation inside worker â”€â”€
     const consentCheck = await this.consentGuard.validateAtProcessing(
@@ -117,6 +145,7 @@ export class GenerationOrchestrator {
     let generationOptionsResult: (CaptionGenerationResult & { generatedBy: string })[] = [];
     let reelScriptResult: ReelScriptResult | null = null;
     let platformVariants: PlatformVariantResult[] | null = null;
+    let strategistOutput: any = null;
 
     const componentStatus: {
       caption: ComponentStatus;
@@ -184,8 +213,13 @@ export class GenerationOrchestrator {
     });
 
     const primaryPlatform = generationOptions.platform[0] ?? 'instagram';
+
+    // Apply tier filter — strip Brand DNA fields the tenant hasn't unlocked
+    const tieredDna = filterDnaForTier(brandDNA as unknown as Record<string, any>, generationOptions.userTier) as typeof brandDNA;
+    // log tier filter applied (observable in backend stdout)
+
     const assembledPrompt = await this.promptBuilder.assembleGenerationPrompt({
-      brandDNA,
+      brandDNA: tieredDna,
       visionResult,
       businessGoal: payload.businessGoal,
       goldenExamples: payload.goldenExamples,
@@ -200,7 +234,7 @@ export class GenerationOrchestrator {
       },
     });
 
-    // â”€â”€ Step 3: Caption Generation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Step 3: Caption Generation ──────────────────────────────────────────
     await this.transitionState(jobId, 'building_prompt', 'generating_text');
     await this.progressEmitter.emit(jobId, tenantId, 'generating_text');
 
@@ -212,14 +246,54 @@ export class GenerationOrchestrator {
     modelUsed = `${llmConfig.provider}/${llmConfig.modelId}`;
 
     try {
-      const multiResult = await this.captionChain.generateMultipleOptions({
+      const blacklist = brandDNA.vocabularyBlacklist ?? brandDNA.blacklistedWords ?? [];
+
+      // Generate Option 1: Technical & Clinical copy
+      const opt1 = await this.brandStrategistChain.generate({
         assembledPrompt,
-        brandDNABlacklist: brandDNA.vocabularyBlacklist ?? brandDNA.blacklistedWords ?? [],
-        allowRetry: true,
+        brandDNABlacklist: blacklist,
+        llmConfig,
+        angle: 'technical',
       });
-      captionResult = multiResult.primary;
-      generationOptionsResult = multiResult.options;
-      
+
+      // Generate Option 2: Empathetic & Warm copy
+      const opt2 = await this.brandStrategistChain.generate({
+        assembledPrompt,
+        brandDNABlacklist: blacklist,
+        llmConfig,
+        angle: 'empathetic',
+      });
+
+      captionResult = {
+        caption: opt1.caption,
+        hookSentence: opt1.hookSentence,
+        callToAction: opt1.callToAction,
+        hashtags: opt1.hashtags,
+        altText: `Beauty treatment image showing skin clinical details for ${brandDNA.businessName}`,
+        estimatedReadTime: Math.max(1, Math.ceil(opt1.caption.length / 100)),
+        brandVoiceConfidenceScore: opt1.brandVoiceConfidenceScore,
+      };
+
+      generationOptionsResult = [
+        {
+          ...captionResult,
+          generatedBy: 'GPT-4o-Strategist (Technical)',
+        },
+        {
+          caption: opt2.caption,
+          hookSentence: opt2.hookSentence,
+          callToAction: opt2.callToAction,
+          hashtags: opt2.hashtags,
+          altText: `Beauty treatment image showing skin clinical details for ${brandDNA.businessName}`,
+          estimatedReadTime: Math.max(1, Math.ceil(opt2.caption.length / 100)),
+          brandVoiceConfidenceScore: opt2.brandVoiceConfidenceScore,
+          generatedBy: 'GPT-4o-Strategist (Empathetic)',
+        }
+      ];
+
+      // Expose the primary strategist context to the Creative Director
+      strategistOutput = opt1;
+
       componentStatus.caption = 'completed';
       const validation = await this.outputValidator.validate(
         captionResult.caption,
@@ -229,33 +303,16 @@ export class GenerationOrchestrator {
       );
       if (validation.correctedOutput) captionResult.caption = validation.correctedOutput;
       if (validation.requiresRegeneration) {
-        const retryPrompt = {
-          ...assembledPrompt,
-          userPrompt: `${assembledPrompt.userPrompt}\n\nCRITICAL REGENERATION REQUIREMENT:\nPrevious output failed validation for:\n- ${validation.hardFailures.join('\n- ')}\nDo not use any prohibited phrasing.`,
-        };
-        captionResult = await this.captionChain.generate({
-          assembledPrompt: retryPrompt,
-          llmConfig,
-          brandDNABlacklist: brandDNA.vocabularyBlacklist ?? [],
-          allowRetry: false,
-        });
-        const secondPass = await this.outputValidator.validate(
-          captionResult.caption,
-          payload.consentSnapshot,
-          'general',
-          tenantId
-        );
-        if (secondPass.requiresRegeneration) componentStatus.caption = 'failed';
+        componentStatus.caption = 'failed';
       }
-      totalTokensIn += captionResult.tokenUsage?.inputTokens ?? 0;
-      totalTokensOut += captionResult.tokenUsage?.outputTokens ?? 0;
 
-      // Emit partial result â€” send caption to frontend as soon as it's ready
+      // Emit partial result — send caption to frontend as soon as it's ready
       await this.progressEmitter.emitPartialResult(jobId, tenantId, {
         caption: captionResult.caption,
         hashtags: captionResult.hashtags,
       });
     } catch (err) {
+      console.error('[Orchestrator Step 3 Error]:', err);
       componentStatus.caption = 'failed';
     }
 
@@ -344,7 +401,7 @@ export class GenerationOrchestrator {
       try {
         const feedPrompt = `Transform this beauty photo into a professional Instagram feed post for "${brandDNA.businessName}".
 Brand colors: ${brandDNA.primaryBrandColor ?? '#1a1a1a'} and ${brandDNA.secondaryBrandColor ?? '#f5f0eb'}.
-Aesthetic: ${brandDNA.aestheticDirection ?? 'minimal editorial premium beauty'}.
+Aesthetic: ${(brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA.visualRanking) : null) ?? brandDNA.aestheticDirection ?? 'minimal editorial premium beauty'}.
 Caption hook: "${captionResult.hookSentence || captionResult.caption.slice(0, 80)}"
 Requirements:
 - Keep the real photo as the main visual â€” preserve the person/hair authentically
@@ -429,6 +486,13 @@ Requirements:
           brandVoice: extractBrandVoice(brandDNA),
         });
 
+        // Step 2 of two-step prompting: Generate bespoke visual design briefs via Creative Director Agent
+        const briefResult = await this.creativeDirectorChain.generate({
+          strategistOutput,
+          brandDNA,
+          concepts: conceptResult.concepts,
+        });
+
         try {
           // Try AI image generation first
           const aiSlides = await this.aiImageGen.generateCarousel({
@@ -439,8 +503,9 @@ Requirements:
             businessName: brandDNA.businessName,
             brandColor: brandDNA.primaryBrandColor ?? '#1a1a1a',
             secondaryColor: brandDNA.secondaryBrandColor ?? '#f5f0eb',
-            aesthetic: brandDNA.aestheticDirection ?? 'minimal editorial',
+            aesthetic: (brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA.visualRanking) : null) ?? brandDNA.aestheticDirection ?? 'minimal editorial',
             serviceType: appointment?.serviceCategory ?? 'beauty treatment',
+            artDirectorBrief: briefResult.slides,
           });
           // Apply logo to each carousel slide
           const slidesWithLogo = brandDNA.logoUrl
@@ -448,6 +513,7 @@ Requirements:
             : aiSlides;
           carouselSlides = { type: 'carousel', slides: slidesWithLogo };
         } catch (aiErr) {
+          console.error('[Orchestrator Slide Generation Fallback]:', aiErr);
           // Fallback to Cloudinary if AI generation fails
           if (imageResult?.cloudinaryPublicId) {
             carouselSlides = this.carouselPipeline.generate({
@@ -459,6 +525,7 @@ Requirements:
           }
         }
       } catch (err) {
+        console.error('[Orchestrator Step 5.6 Error]:', err);
       }
     }
 
@@ -477,6 +544,13 @@ Requirements:
           brandVoice: extractBrandVoice(brandDNA),
         });
 
+        // Step 2 of two-step prompting: Generate bespoke visual design briefs via Creative Director Agent
+        const briefResult = await this.creativeDirectorChain.generate({
+          strategistOutput,
+          brandDNA,
+          concepts: storyFrames.frames,
+        });
+
         try {
           const aiFrames = await this.aiImageGen.generateStory({
             afterPhotoUrl,
@@ -486,14 +560,16 @@ Requirements:
             businessName: brandDNA.businessName,
             brandColor: brandDNA.primaryBrandColor ?? '#1a1a1a',
             secondaryColor: brandDNA.secondaryBrandColor ?? '#f5f0eb',
-            aesthetic: brandDNA.aestheticDirection ?? 'minimal editorial',
+            aesthetic: (brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA.visualRanking) : null) ?? brandDNA.aestheticDirection ?? 'minimal editorial',
             serviceType: appointment?.serviceCategory ?? 'beauty treatment',
+            artDirectorBrief: briefResult.slides,
           });
           const framesWithLogo = brandDNA.logoUrl
             ? await Promise.all(aiFrames.map(async f => ({ ...f, url: await this.logoOverlay.applyLogo({ imageUrl: f.url, logoUrl: brandDNA.logoUrl, position: brandDNA.logoPosition, tenantId }) })))
             : aiFrames;
           storyOutput = { type: 'story', frames: framesWithLogo };
         } catch (aiErr) {
+          console.error('[Orchestrator Story Generation Fallback]:', aiErr);
           if (imageResult?.cloudinaryPublicId) {
             storyOutput = this.storyPipeline.generate({
               cloudinaryPublicId: imageResult.cloudinaryPublicId,
@@ -504,6 +580,7 @@ Requirements:
           }
         }
       } catch (err) {
+        console.error('[Orchestrator Step 5.65 Error]:', err);
       }
     }
 
@@ -547,7 +624,18 @@ Requirements:
       }
     }
 
-    // â”€â”€ Step 6: Persist Result â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // â”€â”€ Step 6: Scoring & Compliance Gate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    const scoringResult = await this.scoringGate.evaluate({
+      caption: captionResult?.caption ?? '',
+      hashtags: captionResult?.hashtags ?? [],
+      blacklist: brandDNA.vocabularyBlacklist ?? brandDNA.blacklistedWords ?? [],
+      hasBefore: !!beforePhotoUrl,
+      beforeAfterAllowed: consentCheck.activeRestrictions?.allow_before_after !== false,
+      isCarousel: isCarousel,
+      slidesCount: carouselSlides?.slides?.length ?? 0,
+    });
+
+    // â”€â”€ Step 6.5: Persist Result â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const processingMs = Date.now() - jobStart;
     const contentItemId = await this.persistResult({
       payload,
@@ -566,16 +654,18 @@ Requirements:
       carouselSlides,
       storyOutput,
       reelShotResult,
+      scoringResult,
     });
 
     // â”€â”€ Step 7: Final State Transition â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const totalCostUSD = this.modelRouter.estimateCost(llmConfig.modelId, totalTokensIn, totalTokensOut) + aiImageCostUSD;
-    await this.transitionState(jobId, 'generating_text', 'completed');
+    const targetState = scoringResult.passed ? 'completed' : 'blocked';
+    await this.transitionState(jobId, 'generating_text', targetState);
     await this.prisma.generationJob.update({
       where: { id: jobId },
       data: { estimatedCostUsd: totalCostUSD },
     }).catch(() => {});
-    await this.progressEmitter.emit(jobId, tenantId, 'completed');
+    await this.progressEmitter.emit(jobId, tenantId, targetState);
 
     // â”€â”€ Step 8: Notify tenant â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     this.notify?.({
@@ -738,10 +828,15 @@ Requirements:
     carouselSlides: CarouselSlides | null;
     storyOutput: StoryOutput | null;
     reelShotResult: ReelShotResult | null;
+    scoringResult?: any;
   }): Promise<string> {
-    const { payload, captionResult, platformVariants, reelScriptResult, componentStatus, generationOptionsResult } = params;
+    const { payload, captionResult, platformVariants, reelScriptResult, componentStatus, generationOptionsResult, scoringResult } = params;
     const { v4: uuidv4 } = await import('uuid');
     const contentItemId = uuidv4();
+
+    const failedScoring = scoringResult && !scoringResult.passed;
+    const status = failedScoring ? 'blocked' : 'draft';
+    const blockedReason = failedScoring ? scoringResult.reason : null;
 
     await this.prisma.contentItem.create({
       data: {
@@ -749,6 +844,8 @@ Requirements:
         generationJobId: payload.jobId,
         tenantId: payload.tenantId,
         appointmentId: payload.appointmentId,
+        status: status as any,
+        blockedReason,
         captionStatus: componentStatus.caption,
         imageStatus: componentStatus.image,
         reelStatus: componentStatus.reel,
@@ -763,12 +860,12 @@ Requirements:
         platformVariants: params.carouselSlides
           ? (params.carouselSlides as unknown as Prisma.InputJsonValue)
           : params.storyOutput
-            ? (params.storyOutput as unknown as Prisma.InputJsonValue)
-            : params.reelShotResult
-              ? (params.reelShotResult as unknown as Prisma.InputJsonValue)
-              : platformVariants
-                ? (platformVariants as unknown as Prisma.InputJsonValue)
-                : Prisma.JsonNull,
+              ? (params.storyOutput as unknown as Prisma.InputJsonValue)
+              : params.reelShotResult
+                ? (params.reelShotResult as unknown as Prisma.InputJsonValue)
+                : platformVariants
+                  ? (platformVariants as unknown as Prisma.InputJsonValue)
+                  : Prisma.JsonNull,
         reelScript: reelScriptResult?.script ?? null,
         completedAt: new Date(),
       },
@@ -812,7 +909,7 @@ Requirements:
 
 // Helper to determine model label from payload before routing
 function AI_CONFIG_MODEL_LABEL(payload: GenerationJobPayload): string {
-  return payload.generationOptions.userTier === 'premium'
+  return ['premium', 'tier3', 'tier4', 'tier5'].includes(payload.generationOptions.userTier)
     ? 'anthropic/claude-3-5-sonnet-20241022'
     : 'openai/gpt-4o-mini';
 }

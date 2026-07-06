@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Req, Res, Headers, UseGuards, HttpCode } from '@nestjs/common';
+import { Controller, Post, Body, Req, Res, Headers, UseGuards, HttpCode, BadRequestException } from '@nestjs/common';
 import { Response } from 'express';
 import { BillingService } from './billing.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -10,8 +10,12 @@ export class BillingController {
 
   @UseGuards(JwtAuthGuard, TenantStatusGuard)
   @Post('checkout-session')
-  createCheckoutSession(@Req() req: any) {
-    return this.billingService.createCheckoutSession(req.user.tenantId);
+  createCheckoutSession(@Req() req: any, @Body('plan') plan: string) {
+    const validPlans = ['tier1', 'tier2', 'tier3', 'tier4', 'tier5'];
+    if (!validPlans.includes(plan)) {
+      throw new BadRequestException(`plan must be one of: ${validPlans.join(', ')}`);
+    }
+    return this.billingService.createCheckoutSession(req.user.tenantId, plan as any);
   }
 
   @UseGuards(JwtAuthGuard, TenantStatusGuard)

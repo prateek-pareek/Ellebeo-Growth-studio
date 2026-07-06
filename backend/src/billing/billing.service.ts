@@ -2,13 +2,26 @@ import { Injectable, BadRequestException, InternalServerErrorException, Logger }
 import Stripe from 'stripe';
 import { PrismaService } from '../prisma/prisma.service';
 
-// stripe v22's CJS default-export type only re-exports `.Stripe` as a plain
-// type alias (not a dottable namespace), so `Stripe.Stripe.Event` etc. don't
-// resolve. Deriving structurally from the real method signatures sidesteps
-// the broken nested-namespace typing entirely.
 type StripeClient = InstanceType<typeof Stripe>;
 type StripeEvent = ReturnType<StripeClient['webhooks']['constructEvent']>;
 type StripeCheckoutSession = Awaited<ReturnType<StripeClient['checkout']['sessions']['create']>>;
+
+export type PlanTier = 'tier1' | 'tier2' | 'tier3' | 'tier4' | 'tier5';
+
+const PLAN_NAMES: Record<PlanTier, string> = {
+  tier1: 'Starter ($59/mo)',
+  tier2: 'Growth ($99/mo)',
+  tier3: 'Premium ($250/mo)',
+  tier4: 'Premium+ ($500/mo)',
+  tier5: 'Publicist ($2,000/mo)',
+};
+
+function getPriceId(plan: PlanTier): string {
+  const key = `STRIPE_PRICE_${plan.toUpperCase()}` as const;
+  const priceId = process.env[key];
+  if (!priceId) throw new InternalServerErrorException(`${key} is not configured`);
+  return priceId;
+}
 
 @Injectable()
 export class BillingService {
@@ -16,7 +29,6 @@ export class BillingService {
   private stripe: StripeClient | null = null;
 
   constructor(private prisma: PrismaService) {
-    // Same variable name convention as elleobe-backend's Stripe integration.
     const secretKey = process.env.STRIPE_API_KEY ?? process.env.STRIPE_SECRET_KEY;
     if (secretKey) {
       this.stripe = new Stripe(secretKey);
@@ -25,72 +37,57 @@ export class BillingService {
     }
   }
 
-  // Single one-time-purchase plan. Price is built inline via `price_data`
-  // (instead of a pre-created Stripe Price object) so it always matches
-  // whatever the admin currently has set in PlanSettings — no risk of the
-  // Stripe Dashboard and the admin panel drifting out of sync.
-  async createCheckoutSession(tenantId: string): Promise<{ url: string }> {
+  async createCheckoutSession(tenantId: string, plan: PlanTier): Promise<{ url: string }> {
     if (!this.stripe) throw new InternalServerErrorException('Payments are not configured');
 
-    const settings = await this.prisma.planSettings.upsert({
-      where: { id: 'default' },
-      update: {},
-      create: { id: 'default' },
-    });
-
+    const priceId = getPriceId(plan);
     const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
 
     const session = await this.stripe.checkout.sessions.create({
-      mode: 'payment',
-      line_items: [{
-        price_data: {
-          currency: 'usd',
-          product_data: { name: `Elle.Be.O Growth Studio — ${settings.generationsIncluded} generations` },
-          unit_amount: Math.round(settings.priceUsd * 100),
-        },
-        quantity: 1,
-      }],
+      mode: 'subscription',
+      line_items: [{ price: priceId, quantity: 1 }],
       client_reference_id: tenantId,
       success_url: `${frontendUrl}/plans?success=true&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${frontendUrl}/plans?canceled=true`,
-      metadata: { tenantId, generationsIncluded: String(settings.generationsIncluded) },
+      metadata: { tenantId, tier: plan },
     });
 
     if (!session.url) throw new InternalServerErrorException('Stripe did not return a checkout URL');
     return { url: session.url };
   }
 
-  async verifySession(tenantId: string, sessionId: string): Promise<{ applied: boolean; generationsAdded: number }> {
+  async verifySession(tenantId: string, sessionId: string): Promise<{ applied: boolean; tier: string | null }> {
     if (!this.stripe) throw new InternalServerErrorException('Payments are not configured');
 
     const session = await this.stripe.checkout.sessions.retrieve(sessionId);
 
-    // Must belong to this tenant and be paid
     if (session.client_reference_id !== tenantId) throw new BadRequestException('Session does not belong to this account');
-    if (session.payment_status !== 'paid') return { applied: false, generationsAdded: 0 };
+    if (session.payment_status !== 'paid' && session.status !== 'complete') return { applied: false, tier: null };
 
-    const generationsIncluded = Number(session.metadata?.generationsIncluded ?? 0);
-    if (generationsIncluded === 0) return { applied: false, generationsAdded: 0 };
+    const tier = session.metadata?.tier as PlanTier | undefined;
+    if (!tier) return { applied: false, tier: null };
 
-    // Idempotency: only apply if this session hasn't been applied yet
     const existing = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
       select: { appliedStripeSessionIds: true },
     });
-    const applied = existing?.appliedStripeSessionIds ?? [];
-    if (applied.includes(sessionId)) return { applied: true, generationsAdded: 0 };
+    if (existing?.appliedStripeSessionIds?.includes(sessionId)) {
+      return { applied: true, tier };
+    }
 
     await this.prisma.tenant.update({
       where: { id: tenantId },
       data: {
-        planGenerationsTotal: { increment: generationsIncluded },
+        subscriptionTier: tier as any,
+        subscriptionStartedAt: new Date(),
         stripeCustomerId: typeof session.customer === 'string' ? session.customer : (session.customer as any)?.id,
+        stripeSubscriptionId: typeof session.subscription === 'string' ? session.subscription : (session.subscription as any)?.id,
         appliedStripeSessionIds: { push: sessionId },
       },
     });
 
-    this.logger.log(`Tenant ${tenantId} session ${sessionId} verified — added ${generationsIncluded} generations`);
-    return { applied: true, generationsAdded: generationsIncluded };
+    this.logger.log(`Tenant ${tenantId} subscribed to ${PLAN_NAMES[tier]} via session ${sessionId}`);
+    return { applied: true, tier };
   }
 
   async handleWebhookEvent(rawBody: Buffer, signature: string): Promise<void> {
@@ -109,19 +106,36 @@ export class BillingService {
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as StripeCheckoutSession;
       const tenantId = session.client_reference_id;
-      const generationsIncluded = Number(session.metadata?.generationsIncluded ?? 0);
+      const tier = session.metadata?.tier as PlanTier | undefined;
 
-      if (tenantId && generationsIncluded > 0) {
+      if (tenantId && tier) {
         await this.prisma.tenant.update({
           where: { id: tenantId },
           data: {
-            // Additive — buying again tops up rather than resets, in case
-            // they purchase before fully using a previous batch.
-            planGenerationsTotal: { increment: generationsIncluded },
-            stripeCustomerId: typeof session.customer === 'string' ? session.customer : session.customer?.id,
+            subscriptionTier: tier as any,
+            subscriptionStartedAt: new Date(),
+            stripeCustomerId: typeof session.customer === 'string' ? session.customer : (session.customer as any)?.id,
+            stripeSubscriptionId: typeof session.subscription === 'string' ? session.subscription : (session.subscription as any)?.id,
           },
         });
-        this.logger.log(`Tenant ${tenantId} purchased ${generationsIncluded} generations for $${(session.amount_total ?? 0) / 100}`);
+        this.logger.log(`Webhook: tenant ${tenantId} activated ${PLAN_NAMES[tier]}`);
+      }
+    }
+
+    if (event.type === 'customer.subscription.deleted') {
+      const subscription = event.data.object as any;
+      const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id;
+
+      if (customerId) {
+        await this.prisma.tenant.updateMany({
+          where: { stripeCustomerId: customerId },
+          data: {
+            subscriptionTier: 'free' as any,
+            stripeSubscriptionId: null,
+            subscriptionExpiresAt: new Date(),
+          },
+        });
+        this.logger.log(`Webhook: subscription cancelled for Stripe customer ${customerId} — downgraded to free`);
       }
     }
   }
