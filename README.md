@@ -42,4 +42,4 @@ This repository contains the full source code for the Elle.Be.O Growth Studio pl
 
 ## License
 
-Copyright © 2026 Elle.Be.O. All rights reserved.
+Copyright © 2026 Elle.Be.O. All rights reserved

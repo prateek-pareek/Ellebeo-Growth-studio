@@ -61,18 +61,6 @@ export class ScheduleController {
     return { redirectUrl };
   }
 
-  // Called by the frontend after Meta redirects back with ?code=&state=
-  @Post('social-accounts/connect/instagram/exchange')
-  async exchangeInstagram(@Body('code') code: string, @Body('state') state: string) {
-    await this.scheduleService.handleInstagramCallback(code, state);
-    return { connected: true };
-  }
-
-  @Post('social-accounts/connect/facebook/exchange')
-  async exchangeFacebook(@Body('code') code: string, @Body('state') state: string) {
-    await this.scheduleService.handleFacebookCallback(code, state);
-    return { connected: true };
-  }
 
   @Delete('social-accounts/:id')
   disconnectSocialAccount(@Req() req: any, @Param('id') id: string) {

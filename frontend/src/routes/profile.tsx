@@ -409,23 +409,61 @@ function ConnectedAccounts() {
     const params = new URLSearchParams(window.location.search);
     const code  = params.get("code");
     const state = params.get("state");
-    if (!code || !state) return;
+    const error = params.get("error") || params.get("error_code");
+    if (!state) return;
 
     // Clean URL immediately so a refresh doesn't re-trigger
     window.history.replaceState({}, "", window.location.pathname);
 
     let platform = "instagram";
+    let mobileRedirectUri = "";
+    let isMobile = false;
+
     try {
-      const decoded = JSON.parse(Buffer.from(state, "base64url").toString());
-      if (decoded.platform === "facebook") platform = "facebook";
+      const decodeState = (str: string) => {
+        try {
+          if (typeof Buffer !== "undefined") {
+            return JSON.parse(Buffer.from(str, "base64url").toString());
+          }
+        } catch {}
+        try {
+          const base64 = str.replace(/-/g, "+").replace(/_/g, "/");
+          return JSON.parse(atob(base64));
+        } catch {}
+        return null;
+      };
+
+      const decoded = decodeState(state);
+      if (decoded) {
+        if (decoded.platform === "facebook") platform = "facebook";
+        if (decoded.mobileRedirectUri) {
+          mobileRedirectUri = decoded.mobileRedirectUri;
+          isMobile = true;
+        }
+      }
     } catch {}
+
+    if (error || !code) {
+      if (isMobile && mobileRedirectUri) {
+        window.location.href = `${mobileRedirectUri}?error=${platform}_denied`;
+      }
+      return;
+    }
 
     api.post(`/social-accounts/connect/${platform}/exchange`, { code, state })
       .then(() => {
         toast.success(`${platform.charAt(0).toUpperCase() + platform.slice(1)} connected!`);
         fetchAccounts();
+        if (isMobile && mobileRedirectUri) {
+          window.location.href = `${mobileRedirectUri}?connected=${platform}`;
+        }
       })
-      .catch(() => toast.error("Connection failed. Try again."));
+      .catch(() => {
+        toast.error("Connection failed. Try again.");
+        if (isMobile && mobileRedirectUri) {
+          window.location.href = `${mobileRedirectUri}?error=${platform}_connect_failed`;
+        }
+      });
   }, [fetchAccounts]);
 
   useEffect(() => { fetchAccounts(); }, [fetchAccounts]);
