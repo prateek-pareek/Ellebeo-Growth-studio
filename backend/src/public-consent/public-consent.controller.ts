@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Query, Body, Req, HttpCode, HttpStatus } from '@nestjs/common';
 import { Request } from 'express';
+import { IsBoolean, IsString, Length } from 'class-validator';
 import { PublicConsentService } from './public-consent.service';
-import { IsBoolean } from 'class-validator';
 
 class GrantConsentDto {
   @IsBoolean() allowShowFace: boolean;
@@ -12,6 +12,12 @@ class GrantConsentDto {
   @IsBoolean() allowMarketingContent: boolean;
 }
 
+class VerifyOtpDto {
+  @IsString()
+  @Length(6, 6)
+  otp: string;
+}
+
 @Controller('public/consent')
 export class PublicConsentController {
   constructor(private readonly service: PublicConsentService) {}
@@ -19,6 +25,15 @@ export class PublicConsentController {
   @Get()
   getConsent(@Query('token') token: string) {
     return this.service.getConsentByToken(token);
+  }
+
+  @Post('verify-otp')
+  @HttpCode(HttpStatus.OK)
+  verifyOtp(
+    @Query('token') token: string,
+    @Body() body: VerifyOtpDto,
+  ) {
+    return this.service.verifyOtp(token, body.otp);
   }
 
   @Post('decline')

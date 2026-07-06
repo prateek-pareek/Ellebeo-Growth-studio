@@ -3,6 +3,7 @@
 // Assembles the complete prompt from named, independently cacheable fragments.
 // ============================================================================
 
+import { buildStyleDirectionBlock } from '../config/visual-style-library';
 import type {
   BrandDNARecord,
   GoldenExample,
@@ -356,6 +357,9 @@ ${CRAFT_RULES}`;
           visual.palette ? `**Visual Palette:** Primary: ${str(visual.palette.primary)}, Secondary: ${str(visual.palette.secondary)}, Background: ${str(visual.palette.background)}, Accent: ${str(visual.palette.accent)}` : '',
           visual.colours_to_avoid ? `**Colours to avoid in visuals:** ${str(visual.colours_to_avoid)}` : '',
           visual.never_look_like ? `**Your brand visuals must NEVER look like:** ${str(visual.never_look_like)}` : '',
+          Array.isArray(visual.style_ranking) && visual.style_ranking.length > 0
+            ? buildStyleDirectionBlock(visual.style_ranking)
+            : '',
           signature.recurring_motif ? `**Signature Motif/Device:** ${str(signature.recurring_motif)}` : '',
           signature.colour_discipline ? `**Signature Colour Discipline:** ${str(signature.colour_discipline)}` : '',
           voice.three_words ? `**Voice Tone (3 words):** ${str(voice.three_words)}` : '',
@@ -395,7 +399,9 @@ ${CRAFT_RULES}`;
       dna.primaryTone ? `**Primary tone:** ${tone(dna.primaryTone)}` : '',
       dna.secondaryTone ? `**Secondary tone:** ${tone(dna.secondaryTone)}` : '',
       dna.moodTag ? `**Brand mood:** ${str(dna.moodTag)}` : '',
-      dna.aestheticDirection ? `**Aesthetic direction:** ${str(dna.aestheticDirection)}` : '',
+      Array.isArray(dna.visualRanking) && dna.visualRanking.length > 0
+        ? buildStyleDirectionBlock(dna.visualRanking)
+        : dna.aestheticDirection ? `**Aesthetic direction:** ${str(dna.aestheticDirection)}` : '',
       dna.formattingStyle ? `**Caption style notes:** ${str(dna.formattingStyle)}` : '',
       preferred.length ? `**Vocabulary you love (use these):** ${preferred.join(', ')}` : '',
       blacklist.length ? `**BLACKLISTED WORDS — NEVER USE IN ANY FORM:** ${blacklist.join(', ')}` : '',

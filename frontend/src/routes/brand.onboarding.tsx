@@ -1,5 +1,6 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { z } from "zod";
 import { Lock } from "lucide-react";
 import { loadBrandDnaRecord, saveBrandDnaRecord } from "@/lib/providers/brand-dna-save";
 import { EMPTY_BRAND_DNA, SECTIONS, type BrandDnaRecord, type SectionId, type SectionDef } from "@/lib/brand-dna/schema";
@@ -32,7 +33,12 @@ function tierRank(tier: string): number {
   return TIER_RANK[tier] ?? 0;
 }
 
+const searchSchema = z.object({
+  section: z.string().optional(),
+});
+
 export const Route = createFileRoute("/brand/onboarding")({
+  validateSearch: searchSchema,
   head: () => ({
     meta: [
       { title: "Brand DNA — Elle.Be.O Growth" },
@@ -73,6 +79,8 @@ function BrandDnaForm() {
     }, 60);
   }, []);
 
+  const { section: sectionParam } = useSearch({ from: "/brand/onboarding" });
+
   useEffect(() => {
     Promise.all([
       loadBrandDnaRecord(),
@@ -81,8 +89,11 @@ function BrandDnaForm() {
       if (dnaRes.kind === "ok") setRecord(dnaRes.record);
       const tier = meRes?.data?.data?.tenant?.subscriptionTier ?? "free";
       setCurrentTier(tier);
+      if (sectionParam) {
+        window.setTimeout(() => jumpToSection(sectionParam as SectionId), 300);
+      }
     }).finally(() => setLoading(false));
-  }, []);
+  }, [sectionParam]);
 
   const sectionsByGroup = useMemo(() => {
     const map: Record<GroupName, SectionDef[]> = {

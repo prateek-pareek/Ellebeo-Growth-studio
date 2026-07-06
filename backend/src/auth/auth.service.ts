@@ -282,10 +282,10 @@ export class AuthService {
     if (!brandDna) {
       suggestions.push({ label: 'Set up your Brand DNA to power AI-generated content', impact: 'High', link: '/brand/onboarding' });
     } else {
-      if (!brandDna.primaryBrandColor) suggestions.push({ label: 'Add brand colours to your Brand DNA', impact: 'High', link: '/brand/onboarding' });
-      if ((brandDna.pillars?.length ?? 0) < 3) suggestions.push({ label: 'Define at least 3 content pillars in Brand DNA', impact: 'High', link: '/brand/onboarding' });
-      if (!brandDna.uniqueSellingProposition) suggestions.push({ label: 'Describe your signature service in Brand DNA', impact: 'Medium', link: '/brand/onboarding' });
-      if (bioStrength !== 'Strong') suggestions.push({ label: "Complete your brand voice — add tone words and do/don't rules", impact: 'Medium', link: '/brand/onboarding' });
+      if (!brandDna.primaryBrandColor) suggestions.push({ label: 'Add brand colours to your Brand DNA', impact: 'High', link: '/brand/onboarding?section=visual_identity' });
+      if ((brandDna.pillars?.length ?? 0) < 3) suggestions.push({ label: 'Define at least 3 content pillars in Brand DNA', impact: 'High', link: '/brand/onboarding?section=content_strategy' });
+      if (!brandDna.uniqueSellingProposition) suggestions.push({ label: 'Describe your signature service in Brand DNA', impact: 'Medium', link: '/brand/onboarding?section=essence' });
+      if (bioStrength !== 'Strong') suggestions.push({ label: "Complete your brand voice — add tone words and do/don't rules", impact: 'Medium', link: '/brand/onboarding?section=voice' });
     }
 
     // Photo gaps
