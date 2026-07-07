@@ -241,16 +241,6 @@ export class AuthService {
       : [];
     const servicesListed = serviceRows.length;
 
-    // Profile completion (0–100)
-    let completion = 0;
-    if (brandDna) completion += 30;
-    if (brandDna?.primaryTone) completion += 10;
-    if (brandDna?.primaryBrandColor) completion += 10;
-    if ((brandDna?.pillars?.length ?? 0) > 0) completion += 10;
-    if (appointmentCount > 0) completion += 15;
-    if (photoCount > 0) completion += 15;
-    if (contentCount > 0) completion += 10;
-
     // Bio strength
     let bioStrength = 'Weak';
     if (brandDna) {
@@ -274,6 +264,20 @@ export class AuthService {
         ? this.prisma.contentItem.count({ where: { tenantId, deletedAt: null, status: 'scheduled' } })
         : 0,
     ]);
+
+    // Profile completion (0–100) — thresholds match suggestion conditions so
+    // 100% can only be reached when there are no remaining suggestions.
+    let completion = 0;
+    if (brandDna) completion += 20;
+    if (brandDna?.primaryTone) completion += 5;
+    if (brandDna?.primaryBrandColor) completion += 10;
+    if ((brandDna?.pillars?.length ?? 0) >= 3) completion += 15;
+    if (brandDna?.uniqueSellingProposition) completion += 5;
+    if (bioStrength === 'Strong') completion += 5;
+    if (appointmentCount > 0) completion += 10;
+    if (photoCount >= 5) completion += 15;
+    if (contentCount > 0) completion += 10;
+    if (scheduledContent > 0) completion += 5;
 
     // Dynamic suggestions — always show actionable items
     const suggestions: Array<{ label: string; impact: string; link: string }> = [];

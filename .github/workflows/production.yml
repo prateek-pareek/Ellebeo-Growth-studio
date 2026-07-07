@@ -192,6 +192,11 @@ jobs:
             DELAYED_PAYOUT_HOURS=${{ vars.DELAYED_PAYOUT_HOURS }}
             CONSENT_BASE_URL=${{ vars.CONSENT_BASE_URL }}
             NEXT_PUBLIC_GROWTH_STUDIO_API_URL=${{ vars.NEXT_PUBLIC_GROWTH_STUDIO_API_URL }}
+            STRIPE_PRICE_TIER1=${{ vars.STRIPE_PRICE_TIER1 }}
+            STRIPE_PRICE_TIER2=${{ vars.STRIPE_PRICE_TIER2 }}
+            STRIPE_PRICE_TIER3=${{ vars.STRIPE_PRICE_TIER3 }}
+            STRIPE_PRICE_TIER4=${{ vars.STRIPE_PRICE_TIER4 }}
+            STRIPE_PRICE_TIER5=${{ vars.STRIPE_PRICE_TIER5 }}
             EOF
  
             # Secure the environment file so only the owner can read it
