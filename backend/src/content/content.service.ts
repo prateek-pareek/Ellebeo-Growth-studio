@@ -86,7 +86,25 @@ export class ContentService {
   }
 
   async updateContent(tenantId: string, id: string, dto: { caption?: string; callToAction?: string; hashtags?: string[]; hookSentence?: string }) {
-    await this.getContentItem(tenantId, id);
+    const item = await this.getContentItem(tenantId, id);
+
+    // Log manual edits to feedback history
+    if (dto.caption !== undefined && dto.caption !== item.caption) {
+      try {
+        await this.prisma.contentFeedback.create({
+          data: {
+            tenantId,
+            contentItemId: id,
+            actionType: 'edited',
+            originalText: item.caption || '',
+            editedText: dto.caption,
+          }
+        });
+      } catch (feedbackErr: any) {
+        console.warn('[FEEDBACK LEARNER WARNING] Could not log edited feedback (table may not exist yet):', feedbackErr.message);
+      }
+    }
+
     return this.prisma.contentItem.update({
       where: { id },
       data: {
@@ -110,12 +128,27 @@ export class ContentService {
       }
     });
   }
-
-  async rejectContent(tenantId: string, id: string) {
+  async rejectContent(tenantId: string, id: string, reasonTag?: string, customComment?: string) {
     await this.getContentItem(tenantId, id);
+
+    // Log rejection parameters to feedback history safely
+    try {
+      await this.prisma.contentFeedback.create({
+        data: {
+          tenantId,
+          contentItemId: id,
+          actionType: 'rejected',
+          reasonTag: reasonTag || null,
+          customComment: customComment || null,
+        }
+      });
+    } catch (feedbackErr: any) {
+      console.warn('[FEEDBACK LEARNER WARNING] Could not save rejection log (table may not exist yet):', feedbackErr.message);
+    }
+
     return this.prisma.contentItem.update({
       where: { id },
-      data: { status: 'draft' } // Simplified rejection to draft
+      data: { status: 'draft' }
     });
   }
 

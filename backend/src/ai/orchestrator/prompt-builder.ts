@@ -90,9 +90,16 @@ NEVER USE (these are automatic AI tells — if any appear, score drops to 0.0):
 - "luxurious", "transformative experience", "indulge in", "elevate your look", "self-care journey"
 - "treat yourself", "glow up", "slay", "obsessed with this", "absolutely stunning", "game-changer"
 - "look no further", "step into", "unlock", "say goodbye to", "we've got you covered", "just dropped"
+- "delve", "journey", "oasis", "sanctuary", "meticulous", "nestled", "whimsical", "unveil"
 - Stacked empty adjectives: "stunning, gorgeous, flawless result"
 - Hashtags anywhere inside the caption body — they go ONLY in the hashtags array
 - Any word from the Blacklisted Words list, including plurals and conjugated forms
+
+THE "MESSY HUMAN" PACING DIRECTIVE (MANDATORY):
+- Do not write standard 3-paragraph AI essays. Real technicians write from their phones between clients.
+- Use conversational pacing. Break grammatical rules if it sounds more authentic.
+- Use sentence fragments for impact. 
+- Mimic the exact sentence length, rhythm, and colloquialisms found in the Golden Examples. If the Golden Examples are short and punchy, your output MUST be short and punchy.
 
 BRAND VOICE CONFIDENCE SCORE (honest self-assessment — a low honest score triggers a better rewrite):
 - 0.90–1.00: Used their vocabulary, matched their sentence rhythm, wrote a detail that could ONLY be from them
@@ -121,8 +128,16 @@ export class PromptBuilder {
       clientFirstName?: string;
       serviceCategory?: string;
     };
+    contentPillar?: string;
+    recentFeedback?: Array<{
+      actionType: string;
+      reasonTag?: string | null;
+      customComment?: string | null;
+      originalText?: string | null;
+      editedText?: string | null;
+    }>;
   }): Promise<AssembledPrompt> {
-    const { brandDNA, visionResult, businessGoal, goldenExamples, platform, serviceCategory = 'general', masterPromptText, consentRestrictions, appointmentContext } = params;
+    const { brandDNA, visionResult, businessGoal, goldenExamples, platform, serviceCategory = 'general', masterPromptText, consentRestrictions, appointmentContext, contentPillar, recentFeedback } = params;
 
     const { brandDNAFragment, brandDNACacheHit } = await this.getBrandDNAFragment(brandDNA);
     const { goldenExamplesFragment, goldenExamplesCacheHit } =
@@ -153,6 +168,51 @@ export class PromptBuilder {
 - Add this mandatory clinical disclaimer to the very end of the caption: "Individual results vary. Consultation is required before treatment. All medical procedures carry risks."`
       : '';
 
+    const pillarInstruction = contentPillar ? `## DYNAMIC GRID CONTENT PILLAR (MANDATORY DIRECTION):
+You MUST format/orient this post to align with the '${contentPillar.toUpperCase().replace(/_/g, ' ')}' pillar:
+- CLIENT RESULTS: Focus on clinical/technical work details, the physical results of this treatment, and micro-aesthetic details.
+- BEHIND THE SCENES: Focus on practitioner process, salon vibes, or personal micro-stories from the chair.
+- EDUCATION TIPS: Focus on post-care literacy, skincare ingredients, micro-tips, or treatment science.
+- PROMOTION: Focus on gentle slot urgencies, booking CTAs, or positioning high-margin treatments.` : '';
+
+    // Compile recent feedbacks into active prompting constraints
+    let feedbackInstruction = '';
+    if (recentFeedback && recentFeedback.length > 0) {
+      const rejections = recentFeedback.filter(f => f.actionType === 'rejected');
+      const edits = recentFeedback.filter(f => f.actionType === 'edited');
+      const parts: string[] = [];
+
+      if (rejections.length > 0) {
+        parts.push('## MANDATORY ADJUSTMENTS FROM PREVIOUS REJECTIONS:');
+        parts.push('The client recently rejected draft posts for the following reasons. You MUST strictly adjust your writing style to avoid these errors:');
+        rejections.forEach(r => {
+          if (r.reasonTag) {
+            const mapped = {
+              too_salesy: '- AVOID aggressive promotion, sales buzzwords, or pushy booking demands. Keep the tone soft and educational.',
+              too_generic: '- AVOID generic beauty copy. Use specific technical/treatment details rather than empty aesthetic fluff.',
+              off_brand: '- AVOID breaking brand character. Match their preferred tone, pace, and clinic profile exactly.',
+            }[r.reasonTag];
+            if (mapped) parts.push(mapped);
+          }
+          if (r.customComment) {
+            parts.push(`- USER DIRECTIVE: "${r.customComment}"`);
+          }
+        });
+      }
+
+      if (edits.length > 0) {
+        parts.push('\n## LEARNING EXAMPLES FROM MANUAL USER EDITS:');
+        parts.push('Study how the user edited your past drafts, and mimic their writing conventions, word choice, and structure:');
+        edits.slice(0, 3).forEach((e, idx) => {
+          parts.push(`Example ${idx + 1}:`);
+          parts.push(`- Draft provided: "${e.originalText}"`);
+          parts.push(`- How user corrected it: "${e.editedText}"`);
+        });
+      }
+
+      feedbackInstruction = parts.join('\n');
+    }
+
     const userPrompt = [
       '## BRAND STYLE & AESTHETIC GUIDELINES (How the content must feel)',
       brandDNAFragment,
@@ -166,6 +226,12 @@ export class PromptBuilder {
       '## IMAGE ANALYSIS',
       visionSection || '(No image provided — generate based on appointment context only)',
       '',
+      contentPillar ? '## DYNAMIC CONTENT PILLAR' : '',
+      pillarInstruction,
+      contentPillar ? '' : '',
+      feedbackInstruction ? '## CLIENT FEEDBACK LEARNING INPUTS' : '',
+      feedbackInstruction,
+      feedbackInstruction ? '' : '',
       '## YOUR BUSINESS GOAL THIS WEEK',
       goalSection,
       '',
