@@ -354,11 +354,14 @@ ${CRAFT_RULES}`;
           essence.one_sentence ? `**Brand Essence/One-Liner:** "${str(essence.one_sentence)}"` : '',
           essence.world_anchor ? `**Brand World Anchor:** ${str(essence.world_anchor)}` : '',
           essence.image_energy ? `**Image Energy Mood:** ${str(essence.image_energy)}` : '',
-          visual.palette ? `**Visual Palette:** Primary: ${str(visual.palette.primary)}, Secondary: ${str(visual.palette.secondary)}, Background: ${str(visual.palette.background)}, Accent: ${str(visual.palette.accent)}` : '',
+          visual.palette ? `**Visual Palette:** Primary: ${str(visual.palette.primary)}, Secondary: ${str(visual.palette.secondary)}, Background: ${str(visual.palette.background)}, Accent: ${str(visual.palette.accent)}${visual.palette.depth ? `, Depth (text/headings only): ${str(visual.palette.depth)}` : ''}` : '',
           visual.colours_to_avoid ? `**Colours to avoid in visuals:** ${str(visual.colours_to_avoid)}` : '',
           visual.never_look_like ? `**Your brand visuals must NEVER look like:** ${str(visual.never_look_like)}` : '',
           Array.isArray(visual.style_ranking) && visual.style_ranking.length > 0
             ? buildStyleDirectionBlock(visual.style_ranking)
+            : '',
+          arr(dna.moodboardLabels).length > 0
+            ? `**Visual references (moodboard — use for feel, not to copy):** ${arr(dna.moodboardLabels).map((label: string, i: number) => `Reference ${i + 1}: ${label}`).join('. ')}.`
             : '',
           signature.recurring_motif ? `**Signature Motif/Device:** ${str(signature.recurring_motif)}` : '',
           signature.colour_discipline ? `**Signature Colour Discipline:** ${str(signature.colour_discipline)}` : '',
@@ -372,6 +375,10 @@ ${CRAFT_RULES}`;
           commercial.desired_outcome ? `**Desired Client Outcome:** ${str(commercial.desired_outcome)}` : '',
           client.problem ? `**Target Client Pain Points:** ${str(client.problem)}` : '',
           client.fears_objections ? `**Objections/Fears to address:** ${str(client.fears_objections)}` : '',
+          client.trust_triggers ? `**What builds trust for this client:** ${str(client.trust_triggers)}` : '',
+          client.visual_taste ? `**Client visual taste:** ${str(client.visual_taste)}` : '',
+          client.buying_triggers ? `**What motivates this client to book:** ${str(client.buying_triggers)}` : '',
+          client.lifestyle ? `**Client lifestyle context:** ${str(client.lifestyle)}` : '',
           compliance.do_not_invent ? `**Strict Verification Rule:** ${str(compliance.do_not_invent)}` : '',
           compliance.before_after_rules ? `**Before/After Compliance Rules:** ${str(compliance.before_after_rules)}` : '',
         ].filter(Boolean).join('\n');
@@ -393,6 +400,11 @@ ${CRAFT_RULES}`;
       dna.primaryPersona ? `**Primary client:** ${str(dna.primaryPersona)}` : '',
       dna.secondaryPersona ? `**Secondary client:** ${str(dna.secondaryPersona)}` : '',
       painPoints.length ? `**Client pain points to speak to:** ${painPoints.join(', ')}` : '',
+      dna.clientFears ? `**Objections/Fears to address:** ${str(dna.clientFears)}` : '',
+      dna.clientTrustTriggers ? `**What builds trust for this client:** ${str(dna.clientTrustTriggers)}` : '',
+      dna.clientVisualTaste ? `**Client visual taste:** ${str(dna.clientVisualTaste)}` : '',
+      dna.clientBuyingTriggers ? `**What motivates this client to book:** ${str(dna.clientBuyingTriggers)}` : '',
+      dna.audienceLifestyle ? `**Client lifestyle context:** ${str(dna.audienceLifestyle)}` : '',
       dna.oneLiner ? `**Your one-liner (this is your voice):** "${str(dna.oneLiner)}"` : '',
       dna.uniqueSellingProposition ? `**What makes you different:** ${str(dna.uniqueSellingProposition)}` : '',
       dna.signatureOutcome ? `**Signature result you deliver:** ${str(dna.signatureOutcome)}` : '',
@@ -402,6 +414,10 @@ ${CRAFT_RULES}`;
       Array.isArray(dna.visualRanking) && dna.visualRanking.length > 0
         ? buildStyleDirectionBlock(dna.visualRanking)
         : dna.aestheticDirection ? `**Aesthetic direction:** ${str(dna.aestheticDirection)}` : '',
+      Array.isArray(dna.moodboardLabels) && dna.moodboardLabels.length > 0
+        ? `**Visual references (moodboard — use for feel, not to copy):** ${(dna.moodboardLabels as string[]).map((label, i) => `Reference ${i + 1}: ${label}`).join('. ')}.`
+        : '',
+      dna.depthBrandColor ? `**Depth brand colour (for text/headings only):** ${str(dna.depthBrandColor)}` : '',
       dna.formattingStyle ? `**Caption style notes:** ${str(dna.formattingStyle)}` : '',
       preferred.length ? `**Vocabulary you love (use these):** ${preferred.join(', ')}` : '',
       blacklist.length ? `**BLACKLISTED WORDS — NEVER USE IN ANY FORM:** ${blacklist.join(', ')}` : '',
