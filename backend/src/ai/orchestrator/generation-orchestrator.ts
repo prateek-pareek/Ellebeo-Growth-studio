@@ -683,6 +683,8 @@ Requirements:
       beforeAfterAllowed: consentCheck.activeRestrictions?.allow_before_after !== false,
       isCarousel: isCarousel,
       slidesCount: carouselSlides?.slides?.length ?? 0,
+      tenantId,
+      prisma: this.prisma,
     });
 
     // â”€â”€ Step 6.5: Persist Result â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
