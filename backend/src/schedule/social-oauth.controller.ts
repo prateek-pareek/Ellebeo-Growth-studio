@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Res } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Res } from '@nestjs/common';
 import { Response } from 'express';
 import { ScheduleService } from './schedule.service';
 
@@ -89,4 +89,18 @@ export class SocialOAuthController {
       return res.redirect(errorUri);
     }
   }
+
+  // Called by the frontend/app callback page after Meta redirects back with ?code=&state=
+  @Post('social-accounts/connect/instagram/exchange')
+  async exchangeInstagram(@Body('code') code: string, @Body('state') state: string) {
+    await this.scheduleService.handleInstagramCallback(code, state);
+    return { connected: true };
+  }
+
+  @Post('social-accounts/connect/facebook/exchange')
+  async exchangeFacebook(@Body('code') code: string, @Body('state') state: string) {
+    await this.scheduleService.handleFacebookCallback(code, state);
+    return { connected: true };
+  }
 }
+

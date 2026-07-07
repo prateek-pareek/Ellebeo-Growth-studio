@@ -96,7 +96,7 @@ export function startContentGenerationWorker(io: SocketServer, notifyFn?: Notify
         await progressEmitter.emitError(jobId, tenantId, error.name, userMessage);
 
         // Notify tenant of failure (fire-and-forget)
-        notify({ tenantId, type: 'content_generation_failed', title: 'Content generation failed', body: 'Something went wrong while generating your post. Please try again.', data: { jobId } }).catch(() => {});
+        notify({ tenantId, type: 'content_generation_failed', title: 'Content generation failed', body: 'Something went wrong while generating your post. Please try again.', data: { jobId } }).catch(() => { });
 
         // Rethrow so BullMQ handles retry logic
         throw err;

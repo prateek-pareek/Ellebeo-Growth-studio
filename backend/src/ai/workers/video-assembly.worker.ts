@@ -74,17 +74,17 @@ export function startVideoAssemblyWorker(): Worker<VideoAssemblyJobPayload> {
         },
         reelScript: voiceoverScript && voiceId
           ? {
-              script: voiceoverScript,
-              wordCount: voiceoverScript.split(/\s+/).length,
-              estimatedDurationSeconds: 15,
-              elevenLabsVoiceSettings: {
-                voiceId,
-                voiceName: '',
-                stability: AI_CONFIG.elevenLabs.defaultStability,
-                similarityBoost: AI_CONFIG.elevenLabs.defaultSimilarityBoost,
-                style: AI_CONFIG.elevenLabs.defaultStyle,
-              },
-            }
+            script: voiceoverScript,
+            wordCount: voiceoverScript.split(/\s+/).length,
+            estimatedDurationSeconds: 15,
+            elevenLabsVoiceSettings: {
+              voiceId,
+              voiceName: '',
+              stability: AI_CONFIG.elevenLabs.defaultStability,
+              similarityBoost: AI_CONFIG.elevenLabs.defaultSimilarityBoost,
+              style: AI_CONFIG.elevenLabs.defaultStyle,
+            },
+          }
           : null,
         includeVoiceover,
         includeMusic,
@@ -119,7 +119,7 @@ export function startVideoAssemblyWorker(): Worker<VideoAssemblyJobPayload> {
     }
   });
 
-  worker.on('error', () => {});
+  worker.on('error', () => { });
 
 
   return worker;

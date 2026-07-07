@@ -40,6 +40,7 @@ import { ArtDirectorBriefChain } from '../chains/art-director-brief.chain';
 import { ScoringGateService } from '../services/scoring-gate.service';
 import { BrandStrategistChain } from '../chains/brand-strategist.chain';
 import { CreativeDirectorChain } from '../chains/creative-director.chain';
+import { GridOrchestratorService } from '../services/grid-orchestrator.service';
 
 type NotifyFn = (dto: {
   tenantId: string;
@@ -75,6 +76,7 @@ export class GenerationOrchestrator {
   private readonly scoringGate: ScoringGateService;
   private readonly brandStrategistChain: BrandStrategistChain;
   private readonly creativeDirectorChain: CreativeDirectorChain;
+  private readonly gridOrchestrator: GridOrchestratorService;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -109,6 +111,8 @@ export class GenerationOrchestrator {
     this.scoringGate = new ScoringGateService();
     this.brandStrategistChain = new BrandStrategistChain();
     this.creativeDirectorChain = new CreativeDirectorChain();
+    // PrismaClient from NestJS main passes a PrismaService which is compatible
+    this.gridOrchestrator = new GridOrchestratorService(prisma as any);
   }
 
   // --------------------------------------------------------------------------
@@ -218,6 +222,25 @@ export class GenerationOrchestrator {
     const tieredDna = filterDnaForTier(brandDNA as unknown as Record<string, any>, generationOptions.userTier) as typeof brandDNA;
     // log tier filter applied (observable in backend stdout)
 
+    let determinedGrid = { pillar: 'client_results', layout: 'passepartout_text' };
+    try {
+      determinedGrid = await this.gridOrchestrator.determineNextLayoutAndPillar(tenantId);
+      console.log(`[GRID ROTATOR]: Selected Pillar="${determinedGrid.pillar}" Layout="${determinedGrid.layout}" for tenant ${tenantId}`);
+    } catch (gridErr) {
+      console.error('[GRID ROTATOR ERROR] Failed to compute grid, falling back to default:', gridErr);
+    }
+
+    let recentFeedback: any[] = [];
+    try {
+      recentFeedback = await this.prisma.contentFeedback.findMany({
+        where: { tenantId },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      });
+    } catch (feedbackErr: any) {
+      console.warn('[FEEDBACK LEARNER WARNING]: Could not query recent feedbacks (table may not exist yet):', feedbackErr.message);
+    }
+
     const assembledPrompt = await this.promptBuilder.assembleGenerationPrompt({
       brandDNA: tieredDna,
       visionResult,
@@ -232,6 +255,8 @@ export class GenerationOrchestrator {
         clientFirstName: appointment?.client?.firstName ?? undefined,
         serviceCategory: appointment?.serviceCategory ?? undefined,
       },
+      contentPillar: determinedGrid.pillar,
+      recentFeedback,
     });
 
     // ── Step 3: Caption Generation ──────────────────────────────────────────
@@ -247,22 +272,45 @@ export class GenerationOrchestrator {
 
     try {
       const blacklist = brandDNA.vocabularyBlacklist ?? brandDNA.blacklistedWords ?? [];
+      
+      const antiAIGlossary = ["transformation", "radiant", "rejuvenated", "delve", "journey", "oasis", "sanctuary", "meticulous", "nestled", "whimsical", "unveil", "elevate", "glow up", "game-changer", "luxurious", "indulge"];
+      
+      const generateWithEnforcement = async (angle: 'technical' | 'empathetic', promptContext: any) => {
+        let attempts = 0;
+        let lastResult: any;
+        // Deep copy prompt to allow appending penalty instructions without bleeding across options
+        let currentPrompt = { ...promptContext, userPrompt: promptContext.userPrompt };
+        
+        while (attempts < 2) {
+          lastResult = await this.brandStrategistChain.generate({
+            assembledPrompt: currentPrompt,
+            brandDNABlacklist: blacklist,
+            llmConfig,
+            angle,
+          });
+          
+          const textToCheck = `${lastResult.caption} ${lastResult.hookSentence}`.toLowerCase();
+          const foundBannedAI = antiAIGlossary.find(word => textToCheck.includes(word.toLowerCase()));
+          const foundBlacklisted = blacklist.find((word: string) => textToCheck.includes(word.toLowerCase()));
+          
+          const violatingWord = foundBannedAI || foundBlacklisted;
+          
+          if (!violatingWord) {
+            return lastResult; // Passed the enforcement gate
+          }
+          
+          // Failed gate -> Append strict penalty and retry
+          currentPrompt.userPrompt += `\n\nCRITICAL PENALTY: Your previous attempt was rejected because you used the banned word/phrase "${violatingWord}". You are acting like a generic AI. Rewrite this using conversational, authentic human vocabulary only.`;
+          attempts++;
+        }
+        return lastResult; // Fallback to last attempt if retry fails
+      };
 
-      // Generate Option 1: Technical & Clinical copy
-      const opt1 = await this.brandStrategistChain.generate({
-        assembledPrompt,
-        brandDNABlacklist: blacklist,
-        llmConfig,
-        angle: 'technical',
-      });
+      // Generate Option 1: Technical & Clinical copy (with enforcement)
+      const opt1 = await generateWithEnforcement('technical', assembledPrompt);
 
-      // Generate Option 2: Empathetic & Warm copy
-      const opt2 = await this.brandStrategistChain.generate({
-        assembledPrompt,
-        brandDNABlacklist: blacklist,
-        llmConfig,
-        angle: 'empathetic',
-      });
+      // Generate Option 2: Empathetic & Warm copy (with enforcement)
+      const opt2 = await generateWithEnforcement('empathetic', assembledPrompt);
 
       captionResult = {
         caption: opt1.caption,
@@ -506,6 +554,7 @@ Requirements:
             aesthetic: (brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA.visualRanking) : null) ?? brandDNA.aestheticDirection ?? 'minimal editorial',
             serviceType: appointment?.serviceCategory ?? 'beauty treatment',
             artDirectorBrief: briefResult.slides,
+            layoutType: determinedGrid.layout,
           });
           // Apply logo to each carousel slide
           const slidesWithLogo = brandDNA.logoUrl
@@ -563,6 +612,7 @@ Requirements:
             aesthetic: (brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA.visualRanking) : null) ?? brandDNA.aestheticDirection ?? 'minimal editorial',
             serviceType: appointment?.serviceCategory ?? 'beauty treatment',
             artDirectorBrief: briefResult.slides,
+            layoutType: determinedGrid.layout,
           });
           const framesWithLogo = brandDNA.logoUrl
             ? await Promise.all(aiFrames.map(async f => ({ ...f, url: await this.logoOverlay.applyLogo({ imageUrl: f.url, logoUrl: brandDNA.logoUrl, position: brandDNA.logoPosition, tenantId }) })))
@@ -655,6 +705,8 @@ Requirements:
       storyOutput,
       reelShotResult,
       scoringResult,
+      contentPillar: determinedGrid.pillar,
+      layoutType: determinedGrid.layout,
     });
 
     // â”€â”€ Step 7: Final State Transition â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -829,8 +881,10 @@ Requirements:
     storyOutput: StoryOutput | null;
     reelShotResult: ReelShotResult | null;
     scoringResult?: any;
+    contentPillar?: string | null;
+    layoutType?: string | null;
   }): Promise<string> {
-    const { payload, captionResult, platformVariants, reelScriptResult, componentStatus, generationOptionsResult, scoringResult } = params;
+    const { payload, captionResult, platformVariants, reelScriptResult, componentStatus, generationOptionsResult, scoringResult, contentPillar, layoutType } = params;
     const { v4: uuidv4 } = await import('uuid');
     const contentItemId = uuidv4();
 
@@ -868,6 +922,8 @@ Requirements:
                   : Prisma.JsonNull,
         reelScript: reelScriptResult?.script ?? null,
         completedAt: new Date(),
+        contentPillar: contentPillar ?? null,
+        layoutType: layoutType ?? null,
       },
     });
 

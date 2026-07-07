@@ -24,8 +24,8 @@ export function startImageProcessingWorker(): Worker<ImageProcessingJobPayload> 
     AI_CONFIG.queues.imageProcessing.name,
     async (job: Job<ImageProcessingJobPayload>) => {
       const { jobId, tenantId, contentItemId, rawStoragePath, consentShowFace,
-              brandPrimaryColour, brandSecondaryColour, outputFormats,
-              cloudinaryPublicId } = job.data;
+        brandPrimaryColour, brandSecondaryColour, outputFormats,
+        cloudinaryPublicId } = job.data;
 
       // Update image_status to processing
       await prisma.$executeRaw`
@@ -70,7 +70,7 @@ export function startImageProcessingWorker(): Worker<ImageProcessingJobPayload> 
     }
   });
 
-  worker.on('error', () => {});
+  worker.on('error', () => { });
 
 
   return worker;

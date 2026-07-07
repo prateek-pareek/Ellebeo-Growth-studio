@@ -129,4 +129,4 @@ services:
     image: ${BACKEND_IMAGE:-ghcr.io/prateek-pareek/ellebeo-growth-studio/backend:latest}
     container_name: growth-studio-migrate
     entrypoint: ["node", "node_modules/prisma/build/index.js"]
-    command: ["migrate", "deploy"]
+    command: ["db", "push", "--skip-generate"]
