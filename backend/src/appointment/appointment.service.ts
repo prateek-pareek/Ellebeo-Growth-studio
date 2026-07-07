@@ -383,6 +383,9 @@ export class AppointmentService {
           consentToken: token,
           consentTokenExpiresAt: expiresAt,
           consentTokenUsedAt: null,
+          consentOtp: null,
+          consentOtpExpiresAt: null,
+          consentOtpVerifiedAt: null,
           status: 'pending',
         },
       });
