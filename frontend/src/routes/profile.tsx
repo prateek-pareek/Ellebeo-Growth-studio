@@ -20,68 +20,6 @@ export const Route = createFileRoute("/profile")({
   component: ProfilePage,
 });
 
-const PLANS: Array<{
-  tier: string;
-  label: string;
-  name: string;
-  price: string;
-  dna: string;
-  bullets: string[];
-  limit: string;
-}> = [
-  {
-    tier: "tier1",
-    label: "Tier 1",
-    name: "Starter",
-    price: "$59 / mo",
-    dna: "Essential Brand DNA",
-    bullets: [
-      "Booking-only posts",
-      "Up to 2 generations per day",
-      "AHPRA compliance included",
-    ],
-    limit: "2 booking generations / day",
-  },
-  {
-    tier: "tier2",
-    label: "Tier 2",
-    name: "Growth",
-    price: "$99 / mo",
-    dna: "Enhanced Brand DNA",
-    bullets: [
-      "5-colour palette and moodboard",
-      "Better booking post personalisation",
-      "Typography and visual direction",
-    ],
-    limit: "Unlimited booking content",
-  },
-  {
-    tier: "tier3",
-    label: "Tier 3",
-    name: "Premium",
-    price: "$250 / mo",
-    dna: "Full Brand DNA",
-    bullets: [
-      "Full visual brand world and asset library",
-      "Always-on brand marketing content",
-      "Non-booking personal brand posts",
-    ],
-    limit: "Unlimited all content",
-  },
-  {
-    tier: "tier4",
-    label: "Tier 4",
-    name: "Premium+",
-    price: "$500 / mo",
-    dna: "Full Brand DNA + Support",
-    bullets: [
-      "Everything in Premium",
-      "Monthly brand audit by OMG Media",
-      "Human creative direction layer",
-    ],
-    limit: "Unlimited all content",
-  },
-];
 
 function ProfilePage() {
   const { profile, technician, loading } = useProfile();
@@ -286,28 +224,22 @@ function ProfilePage() {
           </div>
         </section>
 
-        {/* ── Plan grid ─────────────────────────────────────────────────── */}
+        {/* ── Plan ──────────────────────────────────────────────────────── */}
         <section className="col-span-12">
-          <h2 className="eyebrow mb-6">Plan</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-px bg-border border hairline">
-            {PLANS.map((p) => (
-              <div key={p.tier} className="bg-card p-5 flex flex-col">
-                <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">{p.label}</p>
-                <p className="font-serif text-xl leading-tight mb-0.5">{p.name}</p>
-                <p className="text-[11px] uppercase tracking-widest text-taupe mb-3">{p.price}</p>
-                <p className="text-[10px] uppercase tracking-widest text-taupe/70 mb-4">{p.dna}</p>
-                <ul className="text-xs leading-relaxed space-y-1.5 mb-5 flex-1">
-                  {p.bullets.map((b) => <li key={b}>· {b}</li>)}
-                </ul>
-                <p className="text-[10px] text-taupe/70 mb-4">{p.limit}</p>
-                <Link
-                  to="/plans"
-                  className="text-[10px] uppercase tracking-[0.2em] border hairline px-3 py-2 hover:bg-nude/30 transition-colors self-start"
-                >
-                  Select plan
-                </Link>
-              </div>
-            ))}
+          <h2 className="eyebrow mb-6">Plan &amp; billing</h2>
+          <div className="artifact p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+            <div>
+              <p className="font-serif text-xl mb-1">Unlock more with a Growth Studio plan.</p>
+              <p className="text-sm text-taupe leading-relaxed">
+                Compare Starter, Growth, Premium, Premium+ and Publicist tiers — each unlocks more Brand DNA, more content types, and more generations per day.
+              </p>
+            </div>
+            <Link
+              to="/plans"
+              className="shrink-0 text-[11px] uppercase tracking-[0.2em] bg-foreground text-offwhite px-6 py-3 hover:opacity-90 transition-opacity"
+            >
+              View plans →
+            </Link>
           </div>
         </section>
 
