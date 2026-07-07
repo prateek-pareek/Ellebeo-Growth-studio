@@ -157,7 +157,21 @@ export class PromptBuilder {
 
     const appointmentSection = this.buildAppointmentSection(appointmentContext, consentRestrictions);
 
-    const isMedical = serviceCategory === 'injectables_cosmetic' || serviceCategory === 'laser_treatments';
+    // Medical flag: fires from (1) this appointment's category, (2) brand DNA V2 practitioner flag, (3) brand DNA service categories
+    const isMedicalByCategory = serviceCategory === 'injectables_cosmetic' || serviceCategory === 'laser_treatments';
+    const isMedicalByDnaFlag = (() => {
+      try {
+        const v2 = brandDNA.brandDnaV2
+          ? (typeof brandDNA.brandDnaV2 === 'string' ? JSON.parse(brandDNA.brandDnaV2) : brandDNA.brandDnaV2)
+          : null;
+        return v2?.compliance?.medical_aesthetics_practitioner === true;
+      } catch { return false; }
+    })();
+    const isMedicalByServiceCategories = Array.isArray(brandDNA.serviceCategories) &&
+      (brandDNA.serviceCategories as string[]).some(
+        (c) => c === 'injectables_cosmetic' || c === 'laser_treatments' || c === 'medical_aesthetics',
+      );
+    const isMedical = isMedicalByCategory || isMedicalByDnaFlag || isMedicalByServiceCategories;
     const medicalComplianceSection = isMedical
       ? `## AHPRA MEDICAL COMPLIANCE RULES (MANDATORY):
 - This is a regulated medical aesthetics service. You MUST follow AHPRA guidelines.
