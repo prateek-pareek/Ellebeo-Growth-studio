@@ -524,22 +524,23 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
 
       // ── Step 1: Process Base Image based on LayoutType ──
       let baseImage: sharp.Sharp = sharp(imageBuffer);
+      let compositeTop = paddingTop;
+      let compositeBottom = paddingBottom;
+      let compositeLeft = paddingX;
+      let compositeRight = paddingX;
 
       if (layoutType === 'split_before_after' && beforePhotoUrl) {
         try {
           const beforeBuffer = await downloadImageAsBuffer(beforePhotoUrl);
           
-          // Crop left half of Before image
           const leftHalf = await sharp(beforeBuffer)
             .resize(Math.round(innerW / 2), innerH, { fit: 'cover' })
             .toBuffer();
             
-          // Crop right half of After image
           const rightHalf = await sharp(imageBuffer)
             .resize(Math.round(innerW / 2), innerH, { fit: 'cover' })
             .toBuffer();
 
-          // Create a new blank canvas of innerW x innerH to merge them side-by-side
           baseImage = sharp({
             create: {
               width: innerW,
@@ -555,52 +556,109 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
           console.error('[Sharp Split Frame Error] Failed to stitch before/after images, falling back:', splitErr);
           baseImage = sharp(imageBuffer).resize(innerW, innerH, { fit: 'cover' });
         }
+      } else if (layoutType === 'asymmetric_monogram') {
+        // Shrink photo to 70% of canvas, offset it to the top-left
+        const monoW = Math.floor(w * 0.70);
+        const monoH = Math.floor(h * 0.70);
+        baseImage = sharp(imageBuffer).resize(monoW, monoH, { fit: 'cover' });
+        
+        compositeTop = Math.floor(h * 0.05);
+        compositeLeft = Math.floor(w * 0.05);
+        compositeBottom = h - monoH - compositeTop;
+        compositeRight = w - monoW - compositeLeft;
       } else {
-        if (layoutType !== 'full_bleed_clean') {
+        if (layoutType !== 'full_bleed_clean' && layoutType !== 'translucent_split' && layoutType !== 'poster_cover') {
           baseImage = sharp(imageBuffer).resize(innerW, innerH, { fit: 'cover' });
         }
       }
 
-      // ── Step 2: Assemble SVG overlays (conditional text & watermarks) ──
-      const showText = hasText && (layoutType === 'passepartout_text' || layoutType === 'split_before_after');
+      // ── Step 2: Auto-detect Contrast for Borderless Poster Covers ──
+      let posterTextColor = '#FFFFFF';
+      if (layoutType === 'poster_cover') {
+        try {
+          const stats = await sharp(imageBuffer).stats();
+          const meanLuminance = (stats.channels[0].mean + stats.channels[1].mean + stats.channels[2].mean) / 3;
+          posterTextColor = meanLuminance > 127 ? '#161616' : '#FFFFFF';
+        } catch (contrastErr) {
+          console.error('[Sharp Contrast Detection Error]:', contrastErr);
+        }
+      }
 
-      const textPanelSvg = showText ? `
+      // ── Step 3: Assemble SVG overlays (typography & custom layouts) ──
+      const showPassepartoutText = hasText && (layoutType === 'passepartout_text' || layoutType === 'split_before_after');
+
+      const textPanelSvg = showPassepartoutText ? `
           <!-- Hook Text directly in the Passepartout Negative Space -->
-          <text x="${w / 2}" y="${h - 130}" class="overlay-text">
+          <text x="${w / 2}" y="${h - 130}" class="overlay-text text-centered">
             ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : 36}">${line}</tspan>`).join('')}
           </text>
-      ` : '';
+      ` : (layoutType === 'asymmetric_monogram' && hasText ? `
+          <!-- Left-aligned negative space text for Asymmetrical Layout -->
+          <text x="60" y="${h - 145}" class="overlay-text text-left">
+            ${escapedLines.map((line, idx) => `<tspan x="60" dy="${idx === 0 ? 0 : 36}">${line}</tspan>`).join('')}
+          </text>
+      ` : (layoutType === 'translucent_split' && hasText ? `
+          <!-- Text inside the blurred brand side-panel -->
+          <text x="${w * 0.25}" y="${h / 2 - 40}" class="overlay-text text-centered">
+            ${escapedLines.map((line, idx) => `<tspan x="${w * 0.25}" dy="${idx === 0 ? 0 : 36}">${line}</tspan>`).join('')}
+          </text>
+      ` : (layoutType === 'poster_cover' && hasText ? `
+          <!-- High contrast text placed directly on the borderless photo -->
+          <text x="${w / 2}" y="${h - 150}" class="overlay-text text-centered" style="fill: ${posterTextColor}; letter-spacing: 5px;">
+            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : 36}">${line}</tspan>`).join('')}
+          </text>
+      ` : '')));
+
+      // Draw structural overlays (split pane rectangles or monograms)
+      const visualAdditions = layoutType === 'asymmetric_monogram' ? `
+          <!-- Large single-character monogram watermark in negative space -->
+          <text x="${w * 0.82}" y="${h * 0.76}" fill="${validSecondaryColor}" fill-opacity="0.07" font-family="'Playfair Display', Georgia, serif" font-size="300px" font-weight="bold" text-anchor="middle">
+            ${rawName.charAt(0)}
+          </text>
+      ` : (layoutType === 'translucent_split' ? `
+          <!-- Semi-transparent solid brand pane overlay -->
+          <rect x="0" y="0" width="${w * 0.5}" height="${h}" fill="${validBrandColor}" fill-opacity="0.82" />
+      ` : '');
 
       const svgString = `
         <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <style>
-              .overlay-text { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 26px; font-weight: bold; fill: #ffffff; text-anchor: middle; letter-spacing: 2px; }
+              @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&amp;family=Inter:wght@300..700&amp;display=swap');
+              
+              .overlay-text { font-family: 'Playfair Display', Georgia, serif; font-size: 26px; font-weight: bold; fill: #ffffff; letter-spacing: 2px; }
+              .text-centered { text-anchor: middle; }
+              .text-left { text-anchor: start; }
               .footer-bg { fill: ${validSecondaryColor}; }
-              .footer-brand { font-family: 'Georgia', Times, serif; font-size: 14px; font-weight: bold; fill: #ffffff; letter-spacing: 5px; text-anchor: start; }
-              .footer-tracker { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 14px; font-weight: normal; fill: #ffffff; letter-spacing: 1px; text-anchor: end; }
+              .footer-brand { font-family: 'Playfair Display', Georgia, serif; font-size: 14px; font-weight: bold; fill: #ffffff; letter-spacing: 5px; text-anchor: start; }
+              .footer-tracker { font-family: 'Inter', Helvetica, sans-serif; font-size: 13px; font-weight: normal; fill: #ffffff; letter-spacing: 1px; text-anchor: end; }
             </style>
           </defs>
           
-          <!-- Anti-theft transparent brand watermark across the image area -->
-          <text x="${w / 2}" y="${h / 2.2}" fill="#ffffff" fill-opacity="0.10" font-family="'Georgia', Times, serif" font-size="28px" font-weight="bold" transform="rotate(-30 ${w / 2} ${h / 2.2})" text-anchor="middle" letter-spacing="8px">
+          <!-- Anti-theft transparent brand watermark across the image area (not shown on clean full bleed) -->
+          ${layoutType !== 'full_bleed_clean' && layoutType !== 'poster_cover' ? `
+          <text x="${w / 2}" y="${h / 2.2}" fill="#ffffff" fill-opacity="0.10" font-family="'Playfair Display', Georgia, serif" font-size="28px" font-weight="bold" transform="rotate(-30 ${w / 2} ${h / 2.2})" text-anchor="middle" letter-spacing="8px">
             AUTHENTIC WORK • ${escapedSpacedName}
           </text>
-          
+          ` : ''}
+
+          ${visualAdditions}
           ${textPanelSvg}
           
-          <!-- Minimalist Editorial Footer -->
+          <!-- Minimalist Editorial Footer (hidden only on poster covers) -->
+          ${layoutType !== 'poster_cover' ? `
           <rect x="0" y="${h - 60}" width="${w}" height="60" class="footer-bg" />
           <text x="60" y="${h - 25}" class="footer-brand">${escapedSpacedName}</text>
           <text x="${w - 60}" y="${h - 25}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>
+          ` : ''}
         </svg>
       `;
 
       const svgBuffer = Buffer.from(svgString);
 
-      // ── Step 3: Composite image scaling and margins based on layout ──
+      // ── Step 4: Composite image scaling and margins based on layout ──
       let compositeBuffer: Buffer;
-      if (layoutType === 'full_bleed_clean') {
+      if (layoutType === 'full_bleed_clean' || layoutType === 'translucent_split' || layoutType === 'poster_cover') {
         compositeBuffer = await sharp(imageBuffer)
           .composite([{ input: svgBuffer, blend: 'over' }])
           .png()
@@ -608,15 +666,36 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
       } else {
         compositeBuffer = await baseImage
           .extend({
-            top: paddingTop,
-            bottom: paddingBottom,
-            left: paddingX,
-            right: paddingX,
+            top: compositeTop,
+            bottom: compositeBottom,
+            left: compositeLeft,
+            right: compositeRight,
             background: validBrandColor
           })
           .composite([{ input: svgBuffer, blend: 'over' }])
           .png()
           .toBuffer();
+      }
+
+      // ── Step 5: Finish Control (Overlay microscopic gray noise overlay for matte texture) ──
+      try {
+        const noiseSize = 256;
+        const noisePixels = Buffer.alloc(noiseSize * noiseSize * 2); // 2 channels: Grayscale (Y) + Alpha (A)
+        for (let i = 0; i < noisePixels.length; i += 2) {
+          noisePixels[i] = Math.floor(Math.random() * 255); // Grayscale value
+          noisePixels[i + 1] = 5; // Alpha opacity (~2% opacity: 5/255)
+        }
+        const noiseBuffer = await sharp(noisePixels, { raw: { width: noiseSize, height: noiseSize, channels: 2 } })
+          .resize(w, h)
+          .png()
+          .toBuffer();
+
+        compositeBuffer = await sharp(compositeBuffer)
+          .composite([{ input: noiseBuffer, blend: 'overlay' }])
+          .png()
+          .toBuffer();
+      } catch (noiseErr) {
+        console.warn('[Sharp Finish Control Warning] Could not apply grain texture, falling back to clean image:', noiseErr);
       }
 
       return compositeBuffer.toString('base64');

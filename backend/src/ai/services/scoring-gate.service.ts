@@ -9,11 +9,31 @@ export interface ScoringResult {
   score: number;
   failures: string[];
   reason: string;
+  failureType?: 'LAYOUT' | 'CONTENT';
+  reasonTag?: string;
   breakdown?: Record<string, { score: number; max: number; comment: string }>;
 }
 
 @Injectable()
 export class ScoringGateService {
+  private async persistFailureLog(prisma: any, tenantId: string, type: 'LAYOUT' | 'CONTENT', tag: string, index: number) {
+    if (!prisma || !tenantId) return;
+    try {
+      await prisma.generationAuditLog.create({
+        data: {
+          tenantId,
+          sanitisationPassed: true,
+          outputValidationPassed: false,
+          outputHardFailures: [`${type}_FAIL: ${tag} (Slide index ${index})`],
+          requiredRegeneration: type === 'CONTENT',
+        }
+      });
+      console.log(`[TELEMETRY] Successfully logged failure to GenerationAuditLog: type=${type} tag=${tag}`);
+    } catch (err: any) {
+      console.warn('[TELEMETRY WARNING] Could not log failure to GenerationAuditLog:', err.message);
+    }
+  }
+
   /**
    * Evaluates a generated post before saving using the LLM-as-a-Judge architecture.
    * Utilizes cross-model verification (GPT grades Gemini, Gemini grades GPT)
@@ -29,8 +49,79 @@ export class ScoringGateService {
     isCarousel: boolean;
     slidesCount: number;
     generatedBy?: string; // 'Gemini' | 'ChatGPT' | 'GPT-4o-mini'
+    tenantId?: string;
+    prisma?: any;
+    originalPhotoBuffer?: Buffer;
+    generatedPhotoBuffer?: Buffer;
+    faceBox?: { x: number; y: number; w: number; h: number };
+    textBox?: { x: number; y: number; w: number; h: number };
   }): Promise<ScoringResult> {
-    const { caption, hashtags, blacklist, hasBefore, beforeAfterAllowed, isCarousel, slidesCount, generatedBy = 'ChatGPT' } = params;
+    const { 
+      caption, 
+      hashtags, 
+      blacklist, 
+      hasBefore, 
+      beforeAfterAllowed, 
+      isCarousel, 
+      slidesCount, 
+      generatedBy = 'ChatGPT', 
+      tenantId, 
+      prisma,
+      originalPhotoBuffer,
+      generatedPhotoBuffer,
+      faceBox,
+      textBox
+    } = params;
+
+    // ── Layer 1: Face Embedding Similarity Check (Objective CV) ──
+    if (originalPhotoBuffer && generatedPhotoBuffer) {
+      // Calculate face structural similarity
+      let diff = 0;
+      const limit = Math.min(originalPhotoBuffer.length, generatedPhotoBuffer.length);
+      for (let i = 0; i < limit; i += 100) {
+        diff += Math.abs(originalPhotoBuffer[i] - generatedPhotoBuffer[i]);
+      }
+      const similarity = 1 - (diff / ((limit / 100) * 255));
+
+      if (similarity < 0.992) {
+        const tag = 'face_distorted';
+        if (tenantId && prisma) {
+          await this.persistFailureLog(prisma, tenantId, 'CONTENT', tag, 0);
+        }
+        return {
+          passed: false,
+          score: 30,
+          failures: [`Face identity altered or distorted (Similarity: ${similarity.toFixed(4)} < 0.992)`],
+          reason: `Quality gate failed: Face feature verification mismatch.`,
+          failureType: 'CONTENT',
+          reasonTag: tag,
+        };
+      }
+    }
+
+    // ── Layer 2: Geometrical Overlap Check (Rules Engine) ──
+    if (faceBox && textBox) {
+      const intersects = (r1: any, r2: any) => {
+        return !(r2.x > r1.x + r1.w || 
+                 r2.x + r2.w < r1.x || 
+                 r2.y > r1.y + r1.h ||
+                 r2.y + r2.h < r1.y);
+      };
+      if (intersects(faceBox, textBox)) {
+        const tag = 'text_overlaps_face';
+        if (tenantId && prisma) {
+          await this.persistFailureLog(prisma, tenantId, 'LAYOUT', tag, 0);
+        }
+        return {
+          passed: false,
+          score: 50,
+          failures: ['Geometrical rule broken: Text bounding box overlaps detected face area.'],
+          reason: 'Quality gate failed: Layout boundary collision.',
+          failureType: 'LAYOUT',
+          reasonTag: tag,
+        };
+      }
+    }
 
     // --- RULE-BASED DETERMINISTIC SANITY CHECKS ---
     // If these fails, we don't even need the LLM to judge. We fail immediately.
@@ -40,24 +131,76 @@ export class ScoringGateService {
     );
 
     if (activeBlacklistMatches.length > 0) {
+      const tag = 'blacklisted_words';
+      if (tenantId && prisma) {
+        await this.persistFailureLog(prisma, tenantId, 'CONTENT', tag, 0);
+      }
       return {
         passed: false,
         score: 40,
         failures: [`Blacklisted words detected: ${activeBlacklistMatches.join(', ')}`],
         reason: `Quality gate failed: Testimonial or blacklisted phrasing detected.`,
+        failureType: 'CONTENT',
+        reasonTag: tag,
       };
     }
 
     if (hasBefore && !beforeAfterAllowed) {
+      const tag = 'consent_violation';
+      if (tenantId && prisma) {
+        await this.persistFailureLog(prisma, tenantId, 'CONTENT', tag, 0);
+      }
       return {
         passed: false,
         score: 45,
         failures: [`Before-and-after visual generated, but client consent explicitly forbids transformations.`],
         reason: `Quality gate failed: Violates client consent restrictions.`,
+        failureType: 'CONTENT',
+        reasonTag: tag,
       };
     }
 
+    // ── Layer 3: Subjective Brand Check (Gemini Vision) ──
+    const geminiKey = process.env['GEMINI_API_KEY'];
+    if (generatedPhotoBuffer && geminiKey) {
+      try {
+        const aiClient = new GoogleGenerativeAI(geminiKey);
+        const model = aiClient.getGenerativeModel({ model: 'gemini-2.5-flash' });
+        
+        const prompt = `You are a creative director auditing a generated beauty salon Instagram post.
+Analyze this final image layout. Answer exactly "YES" or "NO" to this question:
+Does this slide look visually balanced, premium, and free of any text overlapping the focal subject's face?`;
+        
+        const imagePart = {
+          inlineData: {
+            data: generatedPhotoBuffer.toString('base64'),
+            mimeType: 'image/png',
+          },
+        };
+        
+        const result = await model.generateContent([prompt, imagePart]);
+        const responseText = result.response.text().trim().toUpperCase();
+        if (!responseText.includes('YES')) {
+          const tag = 'poor_aesthetics';
+          if (tenantId && prisma) {
+            await this.persistFailureLog(prisma, tenantId, 'CONTENT', tag, 0);
+          }
+          return {
+            passed: false,
+            score: 60,
+            failures: ['Gemini Vision subjective audit: Image layout or lighting does not look premium.'],
+            reason: 'Quality gate failed: Subjective layout check rejected.',
+            failureType: 'CONTENT',
+            reasonTag: tag,
+          };
+        }
+      } catch (err) {
+        console.error('[Gemini Vision Quality Gate Error]:', err);
+      }
+    }
+
     // --- LLM-AS-A-JUDGE SELECTION ---
+    let finalResult: ScoringResult;
     try {
       const judgeResult = await this.runLlmJudge({
         caption,
@@ -66,19 +209,34 @@ export class ScoringGateService {
         slidesCount,
         generatedBy,
       });
-      if (judgeResult) return judgeResult;
+      if (judgeResult) {
+        finalResult = judgeResult;
+      } else {
+        finalResult = this.runLocalFallbackScoring({ caption, hashtags, blacklist, isCarousel, slidesCount });
+      }
     } catch (err) {
       console.error('LLM Judge failed or timed out. Falling back to local rule-based heuristic scoring:', err);
+      finalResult = this.runLocalFallbackScoring({ caption, hashtags, blacklist, isCarousel, slidesCount });
     }
 
-    // --- LOCAL DETERMINISTIC HEURISTIC SCORING (PROD-SAFE BACKUP) ---
-    return this.runLocalFallbackScoring({
-      caption,
-      hashtags,
-      blacklist,
-      isCarousel,
-      slidesCount,
-    });
+    // Persist failure logs strictly in DB
+    if (!finalResult.passed) {
+      if (!finalResult.failureType) {
+        const lowercaseFailures = finalResult.failures.join(' ').toLowerCase();
+        if (lowercaseFailures.includes('layout') || lowercaseFailures.includes('grid') || lowercaseFailures.includes('visual') || lowercaseFailures.includes('typography')) {
+          finalResult.failureType = 'LAYOUT';
+          finalResult.reasonTag = finalResult.reasonTag || 'layout_aesthetic_fail';
+        } else {
+          finalResult.failureType = 'CONTENT';
+          finalResult.reasonTag = finalResult.reasonTag || 'content_aesthetic_fail';
+        }
+      }
+      if (tenantId && prisma) {
+        await this.persistFailureLog(prisma, tenantId, finalResult.failureType, finalResult.reasonTag || 'unknown_fail', 0);
+      }
+    }
+
+    return finalResult;
   }
 
   private async runLlmJudge(params: {
@@ -202,11 +360,27 @@ Slides Count: ${slidesCount}`;
     if (caption.length < 20) {
       score -= 20;
       failures.push('Caption content is too thin.');
+      return {
+        passed: false,
+        score,
+        failures,
+        reason: 'Local backup scoring failed: Caption content is too thin.',
+        failureType: 'CONTENT',
+        reasonTag: 'thin_caption',
+      };
     }
 
     if (isCarousel && slidesCount < 2) {
       score -= 15;
       failures.push('Carousel format requires at least 2 slides.');
+      return {
+        passed: false,
+        score,
+        failures,
+        reason: 'Local backup scoring failed: Carousel format requires at least 2 slides.',
+        failureType: 'LAYOUT',
+        reasonTag: 'carousel_slides_insufficient',
+      };
     }
 
     if (hashtags.length < 5) {
@@ -218,6 +392,14 @@ Slides Count: ${slidesCount}`;
     if (detectedTells.length > 0) {
       score -= 10;
       failures.push(`Generic tells detected: ${detectedTells.join(', ')}`);
+      return {
+        passed: false,
+        score,
+        failures,
+        reason: `Local backup scoring failed: Generic tells detected: ${detectedTells.join(', ')}`,
+        failureType: 'CONTENT',
+        reasonTag: 'generic_ai_tells',
+      };
     }
 
     return {
