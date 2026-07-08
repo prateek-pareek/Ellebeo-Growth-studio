@@ -170,6 +170,9 @@ export class AiImageGenerationService {
     customPrompt?: string;
     totalSlides?: number;
     layoutType?: string;
+    brandFont?: string;
+    bodyFont?: string;
+    visualRanking?: string[];
   }): Promise<string> {
     const {
       photoUrl, beforePhotoUrl, overlayText, index, isFirst, isLast, isBeforePhoto,
@@ -181,6 +184,9 @@ export class AiImageGenerationService {
       customPrompt,
       totalSlides = 4,
       layoutType = 'passepartout_text',
+      brandFont,
+      bodyFont,
+      visualRanking = []
     } = params;
 
     const prompt = customPrompt || (isBeforePhoto
@@ -211,6 +217,32 @@ CRITICAL FACE & BODY PRESERVATION (for GPT model):
     const cleanPrompt = prompt + facePreservationClause + "\n\nCRITICAL: Do NOT write, draw, or render any text overlays, titles, or caption boxes directly onto the image. The image must contain only the raw photographic result.";
 
     const imageBuffer = await downloadImageAsBuffer(photoUrl);
+
+    // Senior AI Engineer decision: If we have a real client photo, bypass DALL-E / Gemini image edit
+    // to enforce 100% face/photo preservation and reduce API cost to $0.
+    const isRealClientPhoto = photoUrl && (photoUrl.startsWith('http') || photoUrl.includes('raw_assets') || photoUrl.includes('storage') || photoUrl.includes('temp'));
+    
+    if (isRealClientPhoto) {
+      console.log(`[PASS-THROUGH SHARP COMPOSITOR] Bypassing AI image editor for slide ${index} to guarantee 100% client face preservation.`);
+      const base64Image = imageBuffer.toString('base64');
+      const brandedBase64 = await this.overlayBrandingAndText({
+        base64Image,
+        overlayText,
+        isFirst,
+        isLast,
+        brandColor,
+        secondaryColor,
+        businessName,
+        index,
+        totalSlides,
+        brandFont,
+        bodyFont,
+        layoutType,
+        beforePhotoUrl,
+        visualRanking,
+      });
+      return uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
+    }
 
     console.log(`\n==================================================`);
     console.log(`[AI IMAGE PROMPT FOR SLIDE ${index}]:`);
@@ -319,6 +351,10 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
       businessName,
       index,
       totalSlides,
+      brandFont,
+      bodyFont,
+      layoutType,
+      visualRanking,
     });
     return uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
   }
@@ -335,8 +371,11 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
     serviceType?: string;
     artDirectorBrief?: any[];
     layoutType?: string;
+    brandFont?: string;
+    bodyFont?: string;
+    visualRanking?: string[];
   }): Promise<GeneratedSlide[]> {
-    const { afterPhotoUrl, beforePhotoUrl, concepts, artDirectorBrief, layoutType = 'passepartout_text', ...rest } = params;
+    const { afterPhotoUrl, beforePhotoUrl, concepts, artDirectorBrief, layoutType = 'passepartout_text', visualRanking = [], ...rest } = params;
     const total = concepts.length;
 
     const slides = await Promise.all(
@@ -371,6 +410,7 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
             secondaryColor: brief?.textColorHex || rest.secondaryColor,
             totalSlides: total,
             layoutType: currentSlideLayout,
+            visualRanking,
           });
           return { url, title: concept.title, label: `SLIDE ${String(concept.index).padStart(2, '0')}` };
         } catch {
@@ -396,8 +436,11 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
     serviceType?: string;
     artDirectorBrief?: any[];
     layoutType?: string;
+    brandFont?: string;
+    bodyFont?: string;
+    visualRanking?: string[];
   }): Promise<GeneratedSlide[]> {
-    const { afterPhotoUrl, beforePhotoUrl, frames, artDirectorBrief, layoutType = 'passepartout_text', ...rest } = params;
+    const { afterPhotoUrl, beforePhotoUrl, frames, artDirectorBrief, layoutType = 'passepartout_text', visualRanking = [], ...rest } = params;
     const total = frames.length;
 
     const results = await Promise.all(
@@ -431,6 +474,7 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
             secondaryColor: brief?.textColorHex || rest.secondaryColor,
             totalSlides: total,
             layoutType: currentSlideLayout,
+            visualRanking,
           });
           return { url, title: frame.title, label: `FRAME ${String(frame.index).padStart(2, '0')}` };
         } catch {
@@ -456,8 +500,26 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
     totalSlides?: number;
     layoutType?: string;
     beforePhotoUrl?: string;
+    brandFont?: string;
+    bodyFont?: string;
+    visualRanking?: string[];
   }): Promise<string> {
-    const { base64Image, overlayText, isFirst, isLast, brandColor, secondaryColor, businessName, index, totalSlides, layoutType = 'passepartout_text', beforePhotoUrl } = params;
+    const { 
+      base64Image, 
+      overlayText, 
+      isFirst, 
+      isLast, 
+      brandColor, 
+      secondaryColor, 
+      businessName, 
+      index, 
+      totalSlides, 
+      layoutType = 'passepartout_text', 
+      beforePhotoUrl,
+      brandFont = 'Playfair Display',
+      bodyFont = 'Inter',
+      visualRanking = []
+    } = params;
 
     const hasText = overlayText && overlayText.trim().length > 0;
 
@@ -514,9 +576,40 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
       const slideNumText = String(index || 1).padStart(2, '0');
       const totalSlidesText = String(totalSlides || 4).padStart(2, '0');
 
-      // True Passepartout Layout Calculations
-      const paddingX = Math.floor(w * 0.05); // 5% side margin
-      const paddingTop = Math.floor(h * 0.05); // 5% top margin
+      // ── MAPPING STYLE RANKINGS DYNAMICALLY (Production-Grade Lookup) ──
+      const STYLE_GEOMETRY: Record<string, { borderPercent: number; letterSpacing: string }> = {
+        quiet_luxury: { borderPercent: 0.03, letterSpacing: '5px' },
+        editorial_beauty: { borderPercent: 0.04, letterSpacing: '3px' },
+        clinical_minimalist: { borderPercent: 0.035, letterSpacing: '4px' },
+        warm_wellness: { borderPercent: 0.045, letterSpacing: '2px' },
+        high_fashion: { borderPercent: 0.035, letterSpacing: '5px' },
+        polished_commercial: { borderPercent: 0.05, letterSpacing: '2px' },
+        soft_feminine: { borderPercent: 0.045, letterSpacing: '3px' },
+        bold_campaign: { borderPercent: 0.05, letterSpacing: '1px' },
+        natural_organic: { borderPercent: 0.04, letterSpacing: '2px' },
+        contemporary_cool: { borderPercent: 0.05, letterSpacing: '1px' },
+      };
+
+      const primaryRanking = visualRanking[0] || 'quiet_luxury';
+      const geometry = STYLE_GEOMETRY[primaryRanking] || { borderPercent: 0.04, letterSpacing: '2px' };
+      
+      const borderPercent = geometry.borderPercent;
+      const headingLetterSpacing = geometry.letterSpacing;
+
+      // Dynamic brand footer spacing based on name length to prevent overlaps/clippings
+      let footerLetterSpacing = 5;
+      let footerFontSize = 13;
+      if (escapedSpacedName.length > 35) {
+        footerLetterSpacing = 1;
+        footerFontSize = 10;
+      } else if (escapedSpacedName.length > 25) {
+        footerLetterSpacing = 2;
+        footerFontSize = 11;
+      }
+
+      // True Passepartout Layout Calculations using dynamic borders
+      const paddingX = Math.floor(w * borderPercent); 
+      const paddingTop = Math.floor(h * borderPercent); 
       const paddingBottom = 200; // Deep bottom margin for text & footer
 
       const innerW = w - (paddingX * 2);
@@ -557,7 +650,7 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
           baseImage = sharp(imageBuffer).resize(innerW, innerH, { fit: 'cover' });
         }
       } else if (layoutType === 'asymmetric_monogram') {
-        // Shrink photo to 70% of canvas, offset it to the top-left
+        // Shift photo to 70% of canvas, offset it to the top-left
         const monoW = Math.floor(w * 0.70);
         const monoH = Math.floor(h * 0.70);
         baseImage = sharp(imageBuffer).resize(monoW, monoH, { fit: 'cover' });
@@ -572,47 +665,82 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
         }
       }
 
-      // ── Step 2: Auto-detect Contrast for Borderless Poster Covers ──
+      // ── Step 2: Auto-detect Contrast for Borderless Poster Covers & Slide Backgrounds ──
+      const getLuminance = (hex: string): number => {
+        try {
+          const cleaned = hex.replace('#', '');
+          const rgb = parseInt(cleaned, 16);
+          const r = (rgb >> 16) & 0xff;
+          const g = (rgb >> 8) & 0xff;
+          const b = (rgb >> 0) & 0xff;
+          return 0.299 * r + 0.587 * g + 0.114 * b;
+        } catch {
+          return 0; // Default to dark (white text)
+        }
+      };
+
+      // Determine text color based on background panel contrast
+      const panelLuminance = getLuminance(validBrandColor);
+      const isLightPanel = panelLuminance > 175; // Threshold for cream/off-white
+      const dynamicTextColor = isLightPanel ? '#1E1E1C' : '#FFFFFF';
+
+      const footerLuminance = getLuminance(validSecondaryColor);
+      const isLightFooter = footerLuminance > 175;
+      const dynamicFooterTextColor = isLightFooter ? '#1E1E1C' : '#FFFFFF';
+
       let posterTextColor = '#FFFFFF';
       if (layoutType === 'poster_cover') {
         try {
           const stats = await sharp(imageBuffer).stats();
           const meanLuminance = (stats.channels[0].mean + stats.channels[1].mean + stats.channels[2].mean) / 3;
-          posterTextColor = meanLuminance > 127 ? '#161616' : '#FFFFFF';
+          posterTextColor = meanLuminance > 127 ? '#1E1E1C' : '#FFFFFF';
         } catch (contrastErr) {
           console.error('[Sharp Contrast Detection Error]:', contrastErr);
         }
       }
+
+      // Calculate dynamic font size and letter spacing to prevent clipping
+      let dynamicFontSize = 26;
+      let maxLength = 0;
+      for (const line of lines) {
+        if (line.length > maxLength) maxLength = line.length;
+      }
+      if (maxLength > 32) {
+        dynamicFontSize = 18;
+      } else if (maxLength > 26) {
+        dynamicFontSize = 21;
+      }
+      const dyOffset = Math.round(dynamicFontSize * 1.35);
 
       // ── Step 3: Assemble SVG overlays (typography & custom layouts) ──
       const showPassepartoutText = hasText && (layoutType === 'passepartout_text' || layoutType === 'split_before_after');
 
       const textPanelSvg = showPassepartoutText ? `
           <!-- Hook Text directly in the Passepartout Negative Space -->
-          <text x="${w / 2}" y="${h - 130}" class="overlay-text text-centered">
-            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : 36}">${line}</tspan>`).join('')}
+          <text x="${w / 2}" y="${h - 135}" class="overlay-text text-centered" style="font-size: ${dynamicFontSize}px; fill: ${dynamicTextColor};">
+            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : dyOffset}">${line}</tspan>`).join('')}
           </text>
       ` : (layoutType === 'asymmetric_monogram' && hasText ? `
           <!-- Left-aligned negative space text for Asymmetrical Layout -->
-          <text x="60" y="${h - 145}" class="overlay-text text-left">
-            ${escapedLines.map((line, idx) => `<tspan x="60" dy="${idx === 0 ? 0 : 36}">${line}</tspan>`).join('')}
+          <text x="60" y="${h - 145}" class="overlay-text text-left" style="font-size: ${dynamicFontSize}px; fill: ${dynamicTextColor};">
+            ${escapedLines.map((line, idx) => `<tspan x="60" dy="${idx === 0 ? 0 : dyOffset}">${line}</tspan>`).join('')}
           </text>
       ` : (layoutType === 'translucent_split' && hasText ? `
           <!-- Text inside the blurred brand side-panel -->
-          <text x="${w * 0.25}" y="${h / 2 - 40}" class="overlay-text text-centered">
-            ${escapedLines.map((line, idx) => `<tspan x="${w * 0.25}" dy="${idx === 0 ? 0 : 36}">${line}</tspan>`).join('')}
+          <text x="${w * 0.25}" y="${h / 2 - 40}" class="overlay-text text-centered" style="font-size: ${dynamicFontSize}px; fill: #FFFFFF;">
+            ${escapedLines.map((line, idx) => `<tspan x="${w * 0.25}" dy="${idx === 0 ? 0 : dyOffset}">${line}</tspan>`).join('')}
           </text>
       ` : (layoutType === 'poster_cover' && hasText ? `
           <!-- High contrast text placed directly on the borderless photo -->
-          <text x="${w / 2}" y="${h - 150}" class="overlay-text text-centered" style="fill: ${posterTextColor}; letter-spacing: 5px;">
-            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : 36}">${line}</tspan>`).join('')}
+          <text x="${w / 2}" y="${h - 150}" class="overlay-text text-centered" style="fill: ${posterTextColor}; font-size: ${dynamicFontSize}px; letter-spacing: 5px;">
+            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : dyOffset}">${line}</tspan>`).join('')}
           </text>
       ` : '')));
 
       // Draw structural overlays (split pane rectangles or monograms)
       const visualAdditions = layoutType === 'asymmetric_monogram' ? `
           <!-- Large single-character monogram watermark in negative space -->
-          <text x="${w * 0.82}" y="${h * 0.76}" fill="${validSecondaryColor}" fill-opacity="0.07" font-family="'Playfair Display', Georgia, serif" font-size="300px" font-weight="bold" text-anchor="middle">
+          <text x="${w * 0.82}" y="${h * 0.76}" fill="${validSecondaryColor}" fill-opacity="0.07" font-family="'${brandFont}', Georgia, serif" font-size="300px" font-weight="bold" text-anchor="middle">
             ${rawName.charAt(0)}
           </text>
       ` : (layoutType === 'translucent_split' ? `
@@ -620,24 +748,29 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
           <rect x="0" y="0" width="${w * 0.5}" height="${h}" fill="${validBrandColor}" fill-opacity="0.82" />
       ` : '');
 
+      // Encode typography queries safely for Google API
+      const escapedHeadline = encodeURIComponent(brandFont);
+      const escapedBody = encodeURIComponent(bodyFont);
+      const importUrl = `https://fonts.googleapis.com/css2?family=${escapedHeadline}:wght@300..900&amp;family=${escapedBody}:wght@300..700&amp;display=swap`;
+
       const svgString = `
         <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <style>
-              @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&amp;family=Inter:wght@300..700&amp;display=swap');
+              @import url('${importUrl}');
               
-              .overlay-text { font-family: 'Playfair Display', Georgia, serif; font-size: 26px; font-weight: bold; fill: #ffffff; letter-spacing: 2px; }
+              .overlay-text { font-family: '${brandFont}', Georgia, serif; font-size: 26px; font-weight: bold; fill: ${dynamicTextColor}; letter-spacing: ${headingLetterSpacing}; }
               .text-centered { text-anchor: middle; }
               .text-left { text-anchor: start; }
               .footer-bg { fill: ${validSecondaryColor}; }
-              .footer-brand { font-family: 'Playfair Display', Georgia, serif; font-size: 14px; font-weight: bold; fill: #ffffff; letter-spacing: 5px; text-anchor: start; }
-              .footer-tracker { font-family: 'Inter', Helvetica, sans-serif; font-size: 13px; font-weight: normal; fill: #ffffff; letter-spacing: 1px; text-anchor: end; }
+              .footer-brand { font-family: '${brandFont}', Georgia, serif; font-size: ${footerFontSize}px; font-weight: bold; fill: ${dynamicFooterTextColor}; letter-spacing: ${footerLetterSpacing}px; text-anchor: start; }
+              .footer-tracker { font-family: '${bodyFont}', Helvetica, sans-serif; font-size: 13px; font-weight: normal; fill: ${dynamicFooterTextColor}; letter-spacing: 1px; text-anchor: end; }
             </style>
           </defs>
           
           <!-- Anti-theft transparent brand watermark across the image area (not shown on clean full bleed) -->
           ${layoutType !== 'full_bleed_clean' && layoutType !== 'poster_cover' ? `
-          <text x="${w / 2}" y="${h / 2.2}" fill="#ffffff" fill-opacity="0.10" font-family="'Playfair Display', Georgia, serif" font-size="28px" font-weight="bold" transform="rotate(-30 ${w / 2} ${h / 2.2})" text-anchor="middle" letter-spacing="8px">
+          <text x="${w / 2}" y="${h / 2.2}" fill="#ffffff" fill-opacity="0.10" font-family="'${brandFont}', Georgia, serif" font-size="28px" font-weight="bold" transform="rotate(-30 ${w / 2} ${h / 2.2})" text-anchor="middle" letter-spacing="8px">
             AUTHENTIC WORK • ${escapedSpacedName}
           </text>
           ` : ''}
