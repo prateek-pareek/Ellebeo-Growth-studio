@@ -42,6 +42,7 @@ import { BrandStrategistChain } from '../chains/brand-strategist.chain';
 import { CreativeDirectorChain } from '../chains/creative-director.chain';
 import { GridOrchestratorService } from '../services/grid-orchestrator.service';
 import { MoodboardVisionChain } from '../chains/moodboard-vision.chain';
+import { AssetLibraryVisionChain, type AssetLibraryItemInput } from '../chains/asset-library-vision.chain';
 
 type NotifyFn = (dto: {
   tenantId: string;
@@ -79,6 +80,7 @@ export class GenerationOrchestrator {
   private readonly creativeDirectorChain: CreativeDirectorChain;
   private readonly gridOrchestrator: GridOrchestratorService;
   private readonly moodboardVisionChain: MoodboardVisionChain;
+  private readonly assetLibraryVisionChain: AssetLibraryVisionChain;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -116,6 +118,7 @@ export class GenerationOrchestrator {
     // PrismaClient from NestJS main passes a PrismaService which is compatible
     this.gridOrchestrator = new GridOrchestratorService(prisma as any);
     this.moodboardVisionChain = new MoodboardVisionChain();
+    this.assetLibraryVisionChain = new AssetLibraryVisionChain();
   }
 
   // --------------------------------------------------------------------------
@@ -180,6 +183,17 @@ export class GenerationOrchestrator {
       : [];
 
     let moodboardVisionSummary: string | null = null;
+    let assetLibraryVisionSummary: string | null = null;
+
+    // Extract asset library items from brandDnaV2 JSON, respecting usage and consent rules
+    const rawAssetLibrary: AssetLibraryItemInput[] = (() => {
+      try {
+        const v2 = brandDNA.brandDnaV2
+          ? (typeof brandDNA.brandDnaV2 === 'string' ? JSON.parse(brandDNA.brandDnaV2) : brandDNA.brandDnaV2) as Record<string, any>
+          : null;
+        return Array.isArray(v2?.asset_library) ? v2.asset_library : [];
+      } catch { return []; }
+    })();
 
     const appointmentVisionTask = (async () => {
       if (payload.imageAssets.length === 0) return;
@@ -214,7 +228,17 @@ export class GenerationOrchestrator {
       }
     })();
 
-    await Promise.all([appointmentVisionTask, moodboardVisionTask]);
+    const assetLibraryVisionTask = (async () => {
+      if (rawAssetLibrary.length === 0) return;
+      try {
+        const summary = await this.assetLibraryVisionChain.analyse(rawAssetLibrary);
+        if (summary) assetLibraryVisionSummary = summary;
+      } catch {
+        // Non-fatal â€” generation continues without asset library vision if it fails
+      }
+    })();
+
+    await Promise.all([appointmentVisionTask, moodboardVisionTask, assetLibraryVisionTask]);
 
     // â”€â”€ Step 2: Prompt Building â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     await this.transitionState(jobId, 'processing_vision', 'building_prompt');
@@ -282,6 +306,7 @@ export class GenerationOrchestrator {
       contentPillar: determinedGrid.pillar,
       recentFeedback,
       moodboardVisionSummary: moodboardVisionSummary ?? undefined,
+      assetLibraryVisionSummary: assetLibraryVisionSummary ?? undefined,
     });
 
     // ── Step 3: Caption Generation ──────────────────────────────────────────
