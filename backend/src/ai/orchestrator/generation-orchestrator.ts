@@ -41,6 +41,8 @@ import { ScoringGateService } from '../services/scoring-gate.service';
 import { BrandStrategistChain } from '../chains/brand-strategist.chain';
 import { CreativeDirectorChain } from '../chains/creative-director.chain';
 import { GridOrchestratorService } from '../services/grid-orchestrator.service';
+import { MoodboardVisionChain } from '../chains/moodboard-vision.chain';
+import { AssetLibraryVisionChain, type AssetLibraryItemInput } from '../chains/asset-library-vision.chain';
 
 type NotifyFn = (dto: {
   tenantId: string;
@@ -77,6 +79,8 @@ export class GenerationOrchestrator {
   private readonly brandStrategistChain: BrandStrategistChain;
   private readonly creativeDirectorChain: CreativeDirectorChain;
   private readonly gridOrchestrator: GridOrchestratorService;
+  private readonly moodboardVisionChain: MoodboardVisionChain;
+  private readonly assetLibraryVisionChain: AssetLibraryVisionChain;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -113,6 +117,8 @@ export class GenerationOrchestrator {
     this.creativeDirectorChain = new CreativeDirectorChain();
     // PrismaClient from NestJS main passes a PrismaService which is compatible
     this.gridOrchestrator = new GridOrchestratorService(prisma as any);
+    this.moodboardVisionChain = new MoodboardVisionChain();
+    this.assetLibraryVisionChain = new AssetLibraryVisionChain();
   }
 
   // --------------------------------------------------------------------------
@@ -168,15 +174,35 @@ export class GenerationOrchestrator {
     // Always advance through processing_vision â€” required by state machine regardless of whether images exist
     await this.transitionState(jobId, 'processing_image', 'processing_vision');
 
-    if (payload.imageAssets.length > 0) {
-      await this.progressEmitter.emit(jobId, tenantId, 'processing_vision');
+    // Run appointment image vision + moodboard vision in parallel (both non-fatal)
+    const moodboardUrls: string[] = Array.isArray((brandDNA as any).moodboardUrls)
+      ? (brandDNA as any).moodboardUrls.filter(Boolean)
+      : [];
+    const moodboardLabels: string[] = Array.isArray((brandDNA as any).moodboardLabels)
+      ? (brandDNA as any).moodboardLabels
+      : [];
 
+    let moodboardVisionSummary: string | null = null;
+    let assetLibraryVisionSummary: string | null = null;
+
+    // Extract asset library items from brandDnaV2 JSON, respecting usage and consent rules
+    const rawAssetLibrary: AssetLibraryItemInput[] = (() => {
+      try {
+        const v2 = brandDNA.brandDnaV2
+          ? (typeof brandDNA.brandDnaV2 === 'string' ? JSON.parse(brandDNA.brandDnaV2) : brandDNA.brandDnaV2) as Record<string, any>
+          : null;
+        return Array.isArray(v2?.asset_library) ? v2.asset_library : [];
+      } catch { return []; }
+    })();
+
+    const appointmentVisionTask = (async () => {
+      if (payload.imageAssets.length === 0) return;
+      await this.progressEmitter.emit(jobId, tenantId, 'processing_vision');
       const primaryImage = payload.imageAssets[0]!;
       const isLocalVisionUrl = primaryImage.rawStoragePath.startsWith('http://localhost') ||
                                primaryImage.rawStoragePath.startsWith('http://127.');
-
-      if (!isLocalVisionUrl) try {
-        // Only use Cloudinary URL if we have an actual cloudinaryPublicId â€” otherwise fall back to rawStoragePath
+      if (isLocalVisionUrl) return;
+      try {
         const imageUrl = (process.env['CLOUDINARY_CLOUD_NAME'] && primaryImage.cloudinaryPublicId)
           ? `https://res.cloudinary.com/${process.env['CLOUDINARY_CLOUD_NAME']}/image/upload/${primaryImage.cloudinaryPublicId}`
           : primaryImage.rawStoragePath;
@@ -187,10 +213,32 @@ export class GenerationOrchestrator {
           cachedResult: primaryImage.visionAnalysisCache,
         });
         visionResult = visionAnalysis.result;
-      } catch (err) {
-        // Vision failure is non-fatal â€” caption still generated from appointment context
+      } catch {
+        // Non-fatal â€” caption still generated from appointment context
       }
-    }
+    })();
+
+    const moodboardVisionTask = (async () => {
+      if (moodboardUrls.length === 0) return;
+      try {
+        const summary = await this.moodboardVisionChain.analyse(moodboardUrls, moodboardLabels);
+        if (summary) moodboardVisionSummary = summary;
+      } catch {
+        // Non-fatal â€” generation continues without moodboard vision if it fails
+      }
+    })();
+
+    const assetLibraryVisionTask = (async () => {
+      if (rawAssetLibrary.length === 0) return;
+      try {
+        const summary = await this.assetLibraryVisionChain.analyse(rawAssetLibrary);
+        if (summary) assetLibraryVisionSummary = summary;
+      } catch {
+        // Non-fatal â€” generation continues without asset library vision if it fails
+      }
+    })();
+
+    await Promise.all([appointmentVisionTask, moodboardVisionTask, assetLibraryVisionTask]);
 
     // â”€â”€ Step 2: Prompt Building â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     await this.transitionState(jobId, 'processing_vision', 'building_prompt');
@@ -261,6 +309,8 @@ export class GenerationOrchestrator {
       },
       contentPillar: determinedGrid.pillar,
       recentFeedback,
+      moodboardVisionSummary: moodboardVisionSummary ?? undefined,
+      assetLibraryVisionSummary: assetLibraryVisionSummary ?? undefined,
     });
 
     // ── Step 3: Caption Generation ──────────────────────────────────────────

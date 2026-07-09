@@ -136,8 +136,10 @@ export class PromptBuilder {
       originalText?: string | null;
       editedText?: string | null;
     }>;
+    moodboardVisionSummary?: string;
+    assetLibraryVisionSummary?: string;
   }): Promise<AssembledPrompt> {
-    const { brandDNA, visionResult, businessGoal, goldenExamples, platform, serviceCategory = 'general', masterPromptText, consentRestrictions, appointmentContext, contentPillar, recentFeedback } = params;
+    const { brandDNA, visionResult, businessGoal, goldenExamples, platform, serviceCategory = 'general', masterPromptText, consentRestrictions, appointmentContext, contentPillar, recentFeedback, moodboardVisionSummary, assetLibraryVisionSummary } = params;
 
     const { brandDNAFragment, brandDNACacheHit } = await this.getBrandDNAFragment(brandDNA);
     const { goldenExamplesFragment, goldenExamplesCacheHit } =
@@ -240,6 +242,12 @@ You MUST format/orient this post to align with the '${contentPillar.toUpperCase(
       '## IMAGE ANALYSIS',
       visionSection || '(No image provided — generate based on appointment context only)',
       '',
+      moodboardVisionSummary ? '## MOODBOARD VISUAL DIRECTION (extracted from brand reference images)' : '',
+      moodboardVisionSummary ?? '',
+      moodboardVisionSummary ? '' : '',
+      assetLibraryVisionSummary ? '## BRAND ENVIRONMENT CONTEXT (extracted from asset library)' : '',
+      assetLibraryVisionSummary ?? '',
+      assetLibraryVisionSummary ? '' : '',
       contentPillar ? '## DYNAMIC CONTENT PILLAR' : '',
       pillarInstruction,
       contentPillar ? '' : '',

@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SchedulePostDto, UpdateScheduledPostDto } from './dto/schedule.dto';
+import { publishScheduledQueue, type PublishScheduledJobPayload } from '../ai/queues/queue.definitions';
+import { publishScheduledPost } from './publish-post.helper';
 
 @Injectable()
 export class ScheduleService {
@@ -16,7 +18,7 @@ export class ScheduleService {
         scheduledFor: {
           gte: from ? new Date(from) : undefined,
           lte: to ? new Date(to) : undefined,
-        }
+        },
       },
       include: {
         contentItem: {
@@ -26,14 +28,14 @@ export class ScheduleService {
             reelThumbnailUrl: true,
             processedImageUrlFeed: true,
             status: true,
-          }
-        }
+          },
+        },
       },
-      orderBy: { scheduledFor: 'asc' }
+      orderBy: { scheduledFor: 'asc' },
     });
 
     return {
-      posts: posts.map(p => ({
+      posts: posts.map((p) => ({
         id: p.id,
         scheduledFor: p.scheduledFor.toISOString(),
         platform: p.platform,
@@ -45,210 +47,110 @@ export class ScheduleService {
           status: p.contentItem.status,
         },
         publishStatus: p.publishStatus,
-      }))
+      })),
     };
   }
 
   async schedule(tenantId: string, dto: SchedulePostDto) {
-    return this.prisma.scheduledPost.create({
+    const scheduledFor = new Date(dto.scheduledFor);
+
+    const post = await this.prisma.scheduledPost.create({
       data: {
         ...dto,
         tenantId,
-        scheduledFor: new Date(dto.scheduledFor),
+        scheduledFor,
         hashtagsOverride: dto.hashtagsOverride ?? [],
-      }
+      },
     });
+
+    // Enqueue a delayed BullMQ job — fires exactly at scheduledFor.
+    // jobId = post.id so we can remove/replace it if the user reschedules.
+    const delay = Math.max(0, scheduledFor.getTime() - Date.now());
+    await publishScheduledQueue.add(
+      'publish',
+      { scheduledPostId: post.id, tenantId } satisfies PublishScheduledJobPayload,
+      { jobId: post.id, delay },
+    );
+
+    this.logger.log(`Scheduled post ${post.id} for ${scheduledFor.toISOString()} (delay ${Math.round(delay / 1000)}s)`);
+    return post;
   }
 
   async updateSchedule(tenantId: string, id: string, dto: UpdateScheduledPostDto) {
     const post = await this.prisma.scheduledPost.findUnique({ where: { id } });
     if (!post || post.tenantId !== tenantId) throw new NotFoundException('Post not found');
 
-    return this.prisma.scheduledPost.update({
+    const updated = await this.prisma.scheduledPost.update({
       where: { id },
       data: {
         ...dto,
         scheduledFor: dto.scheduledFor ? new Date(dto.scheduledFor) : undefined,
-      }
+      },
     });
+
+    // Replace the delayed job if the time changed.
+    if (dto.scheduledFor) {
+      const newTime = new Date(dto.scheduledFor);
+      await publishScheduledQueue.remove(id);
+      const delay = Math.max(0, newTime.getTime() - Date.now());
+      await publishScheduledQueue.add(
+        'publish',
+        { scheduledPostId: id, tenantId } satisfies PublishScheduledJobPayload,
+        { jobId: id, delay },
+      );
+      this.logger.log(`Rescheduled post ${id} to ${newTime.toISOString()} (delay ${Math.round(delay / 1000)}s)`);
+    }
+
+    return updated;
   }
 
   async deleteSchedule(tenantId: string, id: string) {
     const post = await this.prisma.scheduledPost.findUnique({ where: { id } });
     if (!post || post.tenantId !== tenantId) throw new NotFoundException('Post not found');
 
+    // Remove the delayed job so it doesn't fire after cancellation.
+    await publishScheduledQueue.remove(id);
+
     return this.prisma.scheduledPost.update({
       where: { id },
-      data: { deletedAt: new Date(), publishStatus: 'cancelled' }
+      data: { deletedAt: new Date(), publishStatus: 'cancelled' },
     });
   }
 
+  // Manual "Publish now" — bypasses the queue, fires immediately.
   async publishNow(tenantId: string, id: string) {
-    const post = await this.prisma.scheduledPost.findUnique({
-      where: { id },
-      include: {
-        contentItem: {
-          select: {
-            caption: true,
-            processedImageUrlFeed: true,
-            reelThumbnailUrl: true,
-            finalVideoUrl: true,
-            platformVariants: true,
-          },
-        },
-      },
-    });
+    const post = await this.prisma.scheduledPost.findUnique({ where: { id } });
     if (!post || post.tenantId !== tenantId) throw new NotFoundException('Post not found');
-    if (!['pending', 'failed'].includes(post.publishStatus)) throw new BadRequestException('Only pending posts can be published');
-
-    const account = await this.prisma.socialAccount.findUnique({ where: { id: post.socialAccountId } });
-    if (!account || account.status !== 'connected' || !account.accessToken) {
-      throw new BadRequestException('Social account not connected — reconnect and try again');
+    if (!['pending', 'failed'].includes(post.publishStatus)) {
+      throw new BadRequestException('Only pending or failed posts can be published');
     }
 
-    const caption        = post.contentItem?.caption ?? '';
-    const imageUrl       = post.contentItem?.processedImageUrlFeed ?? null;
-    const videoUrl       = post.contentItem?.finalVideoUrl ?? null;
-    const platformVariants = post.contentItem?.platformVariants as any;
-    const carouselUrls   = platformVariants?.type === 'carousel'
-      ? (platformVariants.slides as { url: string }[]).map(s => s.url)
-      : null;
+    // Remove any queued delayed job so it doesn't double-publish.
+    await publishScheduledQueue.remove(id);
 
     try {
-      if (account.platform === 'instagram') {
-        await this.publishToInstagram(account.platformAccountId!, account.accessToken, imageUrl, videoUrl, carouselUrls, caption, post.postFormat);
-      } else if (account.platform === 'facebook') {
-        await this.publishToFacebook(account.platformAccountId!, account.accessToken, imageUrl, caption);
-      } else {
-        throw new BadRequestException(`Publishing not supported for platform: ${account.platform}`);
-      }
-
-      await this.prisma.scheduledPost.update({
-        where: { id },
-        data: { publishStatus: 'published', publishedAt: new Date() },
-      });
-
-      this.logger.log(`Post ${id} published to ${account.platform}`);
+      await publishScheduledPost(this.prisma as any, id);
+      this.logger.log(`Post ${id} manually published (tenant: ${tenantId})`);
       return { message: 'Published successfully' };
     } catch (err: any) {
-      this.logger.error(`Failed to publish post ${id}: ${err.message}`);
+      this.logger.error(`Manual publish failed for post ${id}: ${err.message}`);
       await this.prisma.scheduledPost.update({
         where: { id },
         data: { publishStatus: 'failed' },
       });
-      throw err instanceof BadRequestException ? err : new BadRequestException(err.message ?? 'Publishing failed');
+      throw new BadRequestException(err.message ?? 'Publishing failed');
     }
-  }
-
-  private async publishToInstagram(igUserId: string, accessToken: string, imageUrl: string | null, videoUrl: string | null, carouselUrls: string[] | null, caption: string, format: string) {
-    const isReel     = format === 'reel';
-    const isStory    = format === 'story';
-    const isCarousel = format === 'carousel' && carouselUrls && carouselUrls.length > 1;
-
-    // ── Carousel ────────────────────────────────────────────────────────────
-    if (isCarousel) {
-      const childIds: string[] = [];
-      for (const url of carouselUrls!) {
-        const res  = await fetch(`https://graph.instagram.com/v21.0/${igUserId}/media`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image_url: url, is_carousel_item: true, access_token: accessToken }),
-        });
-        const data = await res.json() as any;
-        if (!data.id) throw new Error(data.error?.message ?? 'Failed to create carousel item');
-        childIds.push(data.id);
-      }
-
-      const parentRes  = await fetch(`https://graph.instagram.com/v21.0/${igUserId}/media`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ media_type: 'CAROUSEL', caption, children: childIds.join(','), access_token: accessToken }),
-      });
-      const parentData = await parentRes.json() as any;
-      if (!parentData.id) throw new Error(parentData.error?.message ?? 'Failed to create carousel container');
-
-      const publishRes  = await fetch(`https://graph.instagram.com/v21.0/${igUserId}/media_publish`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ creation_id: parentData.id, access_token: accessToken }),
-      });
-      const publishData = await publishRes.json() as any;
-      if (!publishData.id) throw new Error(publishData.error?.message ?? 'Failed to publish carousel');
-      return;
-    }
-
-    const mediaUrl = isReel ? videoUrl : imageUrl;
-    if (!mediaUrl) throw new Error('No media URL available for publishing');
-
-    // Step 1 — create media container
-    const containerParams: Record<string, string> = { access_token: accessToken };
-    if (!isStory) containerParams.caption = caption;
-
-    if (isReel) {
-      containerParams.media_type = 'REELS';
-      containerParams.video_url  = mediaUrl;
-    } else if (isStory) {
-      containerParams.media_type = 'STORIES';
-      containerParams.image_url  = mediaUrl;
-    } else {
-      containerParams.image_url  = mediaUrl;
-    }
-
-    const containerRes  = await fetch(`https://graph.instagram.com/v21.0/${igUserId}/media`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(containerParams),
-    });
-    const containerData = await containerRes.json() as any;
-    if (!containerData.id) throw new Error(containerData.error?.message ?? 'Failed to create media container');
-
-    // Step 2 — poll status for reels (video needs processing time)
-    if (isReel) {
-      for (let i = 0; i < 10; i++) {
-        await new Promise(r => setTimeout(r, 5000));
-        const statusRes  = await fetch(`https://graph.instagram.com/v21.0/${containerData.id}?fields=status_code&access_token=${accessToken}`);
-        const statusData = await statusRes.json() as any;
-        if (statusData.status_code === 'FINISHED') break;
-        if (statusData.status_code === 'ERROR') throw new Error('Reel processing failed on Instagram');
-      }
-    }
-
-    // Step 3 — publish container
-    const publishRes  = await fetch(`https://graph.instagram.com/v21.0/${igUserId}/media_publish`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ creation_id: containerData.id, access_token: accessToken }),
-    });
-    const publishData = await publishRes.json() as any;
-    if (!publishData.id) throw new Error(publishData.error?.message ?? 'Failed to publish to Instagram');
-  }
-
-  private async publishToFacebook(pageId: string, pageToken: string, imageUrl: string | null, caption: string) {
-    if (!imageUrl) throw new Error('No image URL available for publishing');
-
-    const res  = await fetch(`https://graph.facebook.com/v21.0/${pageId}/photos`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: imageUrl, caption, access_token: pageToken }),
-    });
-    const data = await res.json() as any;
-    if (!data.id) throw new Error(data.error?.message ?? 'Failed to publish to Facebook');
   }
 
   async getSocialAccounts(tenantId: string) {
-    return this.prisma.socialAccount.findMany({
-      where: { tenantId },
-    });
+    return this.prisma.socialAccount.findMany({ where: { tenantId } });
   }
 
   // ── Instagram OAuth ──────────────────────────────────────────────────────
 
   getInstagramOAuthUrl(tenantId: string, redirectUri: string, mobileRedirectUri?: string): string {
     const statePayload: Record<string, string> = { tenantId, redirectUri };
-    if (mobileRedirectUri) {
-      // Embedded so the OAuth callback controller can redirect back to the native app
-      statePayload.mobileRedirectUri = mobileRedirectUri;
-    }
+    if (mobileRedirectUri) statePayload.mobileRedirectUri = mobileRedirectUri;
     const state = Buffer.from(JSON.stringify(statePayload)).toString('base64url');
     const params = new URLSearchParams({
       client_id:     process.env.INSTAGRAM_CLIENT_ID!,
@@ -262,14 +164,15 @@ export class ScheduleService {
   }
 
   async handleInstagramCallback(code: string, stateRaw: string): Promise<void> {
-    const { tenantId, redirectUri: decodedRedirectUri } = JSON.parse(Buffer.from(stateRaw, 'base64url').toString()) as { tenantId: string; redirectUri?: string };
+    const { tenantId, redirectUri: decodedRedirectUri } = JSON.parse(
+      Buffer.from(stateRaw, 'base64url').toString(),
+    ) as { tenantId: string; redirectUri?: string };
 
     const clientId     = process.env.INSTAGRAM_CLIENT_ID;
     const clientSecret = process.env.INSTAGRAM_CLIENT_SECRET;
     const redirectUri  = decodedRedirectUri ?? process.env.INSTAGRAM_REDIRECT_URI ?? '';
-    if (!clientId || !clientSecret) throw new Error('INSTAGRAM_CLIENT_ID or INSTAGRAM_CLIENT_SECRET env var not set on server');
+    if (!clientId || !clientSecret) throw new Error('INSTAGRAM_CLIENT_ID or INSTAGRAM_CLIENT_SECRET not set');
 
-    // 1 — Exchange code for short-lived token
     const tokenForm = new URLSearchParams({
       client_id: clientId, client_secret: clientSecret,
       grant_type: 'authorization_code', redirect_uri: redirectUri, code,
@@ -283,7 +186,6 @@ export class ScheduleService {
     if (!tokenData.access_token) throw new Error(tokenData.error_message ?? tokenData.error?.message ?? 'Token exchange failed');
     const shortToken = tokenData.access_token;
 
-    // 2 — Exchange for long-lived token (~60 days)
     const longRes  = await fetch(`https://graph.instagram.com/access_token?${new URLSearchParams({
       grant_type: 'ig_exchange_token', client_secret: clientSecret, access_token: shortToken,
     })}`);
@@ -291,15 +193,12 @@ export class ScheduleService {
     const longToken = longData.access_token ?? shortToken;
     const expiresIn = longData.expires_in   ?? 5184000;
 
-    // 3 — Fetch Instagram profile
     const profileRes  = await fetch(`https://graph.instagram.com/me?${new URLSearchParams({
       fields: 'id,username', access_token: longToken,
     })}`);
     const profileData = await profileRes.json() as any;
+    const expiresAt   = new Date(Date.now() + expiresIn * 1000);
 
-    const expiresAt = new Date(Date.now() + expiresIn * 1000);
-
-    // 4 — Upsert into DB
     await this.prisma.socialAccount.upsert({
       where:  { unique_platform_per_tenant: { tenantId, platform: 'instagram' } },
       update: {
@@ -331,12 +230,10 @@ export class ScheduleService {
 
   getFacebookOAuthUrl(tenantId: string, redirectUri: string, mobileRedirectUri?: string): string {
     const statePayload: Record<string, string> = { tenantId, platform: 'facebook', redirectUri };
-    if (mobileRedirectUri) {
-      statePayload.mobileRedirectUri = mobileRedirectUri;
-    }
+    if (mobileRedirectUri) statePayload.mobileRedirectUri = mobileRedirectUri;
     const state = Buffer.from(JSON.stringify(statePayload)).toString('base64url');
     const params = new URLSearchParams({
-      client_id:     process.env.INSTAGRAM_CLIENT_ID!, // same Facebook App
+      client_id:     process.env.INSTAGRAM_CLIENT_ID!,
       redirect_uri:  redirectUri,
       scope:         'pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_metadata',
       response_type: 'code',
@@ -346,20 +243,20 @@ export class ScheduleService {
   }
 
   async handleFacebookCallback(code: string, stateRaw: string): Promise<void> {
-    const { tenantId, redirectUri: decodedRedirectUri } = JSON.parse(Buffer.from(stateRaw, 'base64url').toString()) as { tenantId: string; platform?: string; redirectUri?: string };
+    const { tenantId, redirectUri: decodedRedirectUri } = JSON.parse(
+      Buffer.from(stateRaw, 'base64url').toString(),
+    ) as { tenantId: string; platform?: string; redirectUri?: string };
 
     const clientId     = process.env.INSTAGRAM_CLIENT_ID!;
     const clientSecret = process.env.INSTAGRAM_CLIENT_SECRET!;
     const redirectUri  = decodedRedirectUri ?? process.env.FACEBOOK_REDIRECT_URI!;
 
-    // 1 — Exchange code for short-lived token
     const tokenUrl  = `https://graph.facebook.com/v21.0/oauth/access_token?${new URLSearchParams({
       client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri, code,
     })}`;
     const tokenData = await (await fetch(tokenUrl)).json() as any;
     if (!tokenData.access_token) throw new Error(tokenData.error?.message ?? 'Token exchange failed');
 
-    // 2 — Long-lived token
     const longUrl  = `https://graph.facebook.com/v21.0/oauth/access_token?${new URLSearchParams({
       grant_type: 'fb_exchange_token', client_id: clientId, client_secret: clientSecret,
       fb_exchange_token: tokenData.access_token,
@@ -368,20 +265,16 @@ export class ScheduleService {
     const longToken = longData.access_token ?? tokenData.access_token;
     const expiresIn = longData.expires_in ?? 5184000;
 
-    // 3 — Get Facebook Pages
     const pagesUrl  = `https://graph.facebook.com/v21.0/me/accounts?${new URLSearchParams({
-      access_token: longToken,
-      fields: 'id,name,access_token,picture,fan_count',
+      access_token: longToken, fields: 'id,name,access_token,picture,fan_count',
     })}`;
     const pagesData = await (await fetch(pagesUrl)).json() as any;
     const pages: any[] = pagesData.data ?? [];
-
     if (pages.length === 0) throw new Error('No Facebook Pages found on this account.');
 
-    // Use the first page (most common case for beauty businesses)
-    const page           = pages[0];
-    const pageToken      = page.access_token;
-    const expiresAt      = new Date(Date.now() + expiresIn * 1000);
+    const page      = pages[0];
+    const pageToken = page.access_token;
+    const expiresAt = new Date(Date.now() + expiresIn * 1000);
 
     await this.prisma.socialAccount.upsert({
       where:  { unique_platform_per_tenant: { tenantId, platform: 'facebook' } },
@@ -415,9 +308,9 @@ export class ScheduleService {
   async refreshInstagramToken(tenantId: string, id: string) {
     const account = await this.prisma.socialAccount.findUnique({ where: { id } });
     if (!account || account.tenantId !== tenantId) throw new NotFoundException('Account not found');
-    if (!account.accessToken) throw new BadRequestException('No access token stored — reconnect the account');
+    if (!account.accessToken) throw new BadRequestException('No access token — reconnect the account');
 
-    const url = `https://graph.facebook.com/v21.0/oauth/access_token?${new URLSearchParams({
+    const url  = `https://graph.facebook.com/v21.0/oauth/access_token?${new URLSearchParams({
       grant_type:        'fb_exchange_token',
       client_id:         process.env.INSTAGRAM_CLIENT_ID!,
       client_secret:     process.env.INSTAGRAM_CLIENT_SECRET!,
@@ -434,12 +327,9 @@ export class ScheduleService {
     return { success: true };
   }
 
-  // ── Disconnect ───────────────────────────────────────────────────────────
-
   async disconnectSocialAccount(tenantId: string, id: string) {
     const account = await this.prisma.socialAccount.findUnique({ where: { id } });
     if (!account || account.tenantId !== tenantId) throw new NotFoundException('Account not found');
-
     return this.prisma.socialAccount.update({
       where: { id },
       data:  { status: 'disconnected', accessToken: null, refreshToken: null },

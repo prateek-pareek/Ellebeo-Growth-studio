@@ -6,6 +6,7 @@ export type CalendarEntry = {
   title: string;
   type: string;
   status: "scheduled" | "draft" | "published" | "rest";
+  publishStatus?: string;
   scheduledFor?: string;
   platform?: string;
   contentItemId?: string;
@@ -42,6 +43,7 @@ function mapPost(post: any): CalendarEntry {
     title: post.contentItem?.caption?.split(".")[0] ?? "Scheduled post",
     type: post.format ?? post.platform ?? "Post",
     status: post.publishStatus === "published" ? "published" : "scheduled",
+    publishStatus: post.publishStatus,
     scheduledFor: post.scheduledFor,
     platform: post.platform,
     contentItemId: post.contentItem?.id,
@@ -119,6 +121,15 @@ export function useCalendar(): UseCalendarResult {
     const id = ++reqId.current;
     load(id, offset);
   }, [offset, load]);
+
+  // Poll every 30s so published status updates automatically
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const id = ++reqId.current;
+      load(id, offsetRef.current);
+    }, 30_000);
+    return () => clearInterval(timer);
+  }, [load]);
 
   const refresh = useCallback(() => {
     const id = ++reqId.current;
