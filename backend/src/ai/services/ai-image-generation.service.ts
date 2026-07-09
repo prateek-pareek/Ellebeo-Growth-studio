@@ -226,49 +226,44 @@ export class AiImageGenerationService {
       aesthetic = 'minimal editorial premium beauty',
       serviceType = 'beauty treatment',
       outputSize = '1024x1024' as '1024x1024' | '1024x1536',
+      layoutType = 'passepartout_text',
       customPrompt,
       totalSlides = 4,
-      layoutType = 'passepartout_text',
       brandFont,
       bodyFont,
       visualRanking = []
     } = params;
 
-    const prompt = customPrompt || (isBeforePhoto
-      ? buildBeforeSlidePrompt({ overlayText: '', businessName, brandColor })
-      : buildSlidePrompt({
-        overlayText: '',
-        businessName,
-        brandColor,
-        secondaryColor,
-        aesthetic,
-        serviceType,
+    // Fast-path: Skip AI image generation entirely for text-only editorial quote layouts
+    if (layoutType === 'text_only_editorial') {
+      console.log(`[TEXT ONLY EDITORIAL] Bypassing AI image generator for slide ${index} and creating solid brand colored tile.`);
+      const brandedBase64 = await this.overlayBrandingAndText({
+        base64Image: '',
+        overlayText,
         isFirst,
         isLast,
-      }));
+        brandColor,
+        secondaryColor,
+        businessName,
+        index,
+        totalSlides,
+        brandFont,
+        bodyFont,
+        layoutType,
+        beforePhotoUrl,
+        visualRanking,
+      });
+      return uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
+    }
 
-    const facePreservationClause = `
-
-CRITICAL FACE & BODY PRESERVATION (for GPT model):
-- DO NOT alter any facial features, expressions, or identity markers
-- DO NOT beautify, smooth, or enhance skin, face, or complexion
-- DO NOT change eye color, placement, or appearance
-- DO NOT modify nose, mouth, chin, or jaw shape
-- DO NOT adjust facial structure in any way
-- DO NOT change body shape, proportions, or posture
-- The person in the original photo must be completely recognizable and unchanged
-- Only add design elements (text boxes, overlays) — NO image editing or retouching of the person`;
-
-    const cleanPrompt = prompt + facePreservationClause + "\n\nCRITICAL: Do NOT write, draw, or render any text overlays, titles, or caption boxes directly onto the image. The image must contain only the raw photographic result.";
-
-    const imageBuffer = await downloadImageAsBuffer(photoUrl);
-
-    // Senior AI Engineer decision: If we have a real client photo, bypass DALL-E / Gemini image edit
-    // to enforce 100% face/photo preservation and reduce API cost to $0.
     const isRealClientPhoto = photoUrl && (photoUrl.startsWith('http') || photoUrl.includes('raw_assets') || photoUrl.includes('storage') || photoUrl.includes('temp'));
-    
+
+    let cleanPrompt = '';
+    let imageBuffer: Buffer | null = null;
+
     if (isRealClientPhoto) {
       console.log(`[PASS-THROUGH SHARP COMPOSITOR] Bypassing AI image editor for slide ${index} to guarantee 100% client face preservation.`);
+      imageBuffer = await downloadImageAsBuffer(photoUrl);
       const base64Image = imageBuffer.toString('base64');
       const brandedBase64 = await this.overlayBrandingAndText({
         base64Image,
@@ -289,8 +284,42 @@ CRITICAL FACE & BODY PRESERVATION (for GPT model):
       return uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
     }
 
+    // Compile dynamic lifestyle/studio assets for non-booking educational/moodboard posts
+    const lifestyleSubjects = [
+      `a luxury minimalist beauty clinic treatment room with warm soft lighting, beige tones, and clean design`,
+      `close-up of elegant serum bottles on a textured travertine stone plate, surrounded by delicate olive leaves, soft shadows`,
+      `a premium spa treatment leather chair in a high-end wellness interior, aesthetic clinical design`,
+      `clean aesthetic details of organic cosmetic packaging resting on a stone surface, delicate shadows`
+    ];
+    const chosenSubject = lifestyleSubjects[index % lifestyleSubjects.length];
+
+    const prompt = customPrompt || (isBeforePhoto
+      ? buildBeforeSlidePrompt({ overlayText: '', businessName, brandColor })
+      : buildSlidePrompt({
+        overlayText: '',
+        businessName,
+        brandColor,
+        secondaryColor,
+        aesthetic,
+        serviceType,
+        isFirst,
+        isLast,
+      }));
+
+    const facePreservationClause = `
+    
+CRITICAL IMAGE REQUIREMENTS:
+- Subject: ${chosenSubject}
+- Color scheme: brand palette primary ${brandColor}, secondary ${secondaryColor}
+- Aesthetic style: ${aesthetic || 'minimal, premium beauty editorial'}
+- Do NOT feature any people, faces, or bodies. Focus entirely on organic, luxury interiors and clinic product details.
+- The image must look like a professional, high-fashion campaign photography asset.
+- CRITICAL: Do NOT write, draw, or render any text overlays, titles, or logo elements directly onto the image. The image must contain only the raw photographic result.`;
+
+    cleanPrompt = prompt + facePreservationClause;
+
     console.log(`\n==================================================`);
-    console.log(`[AI IMAGE PROMPT FOR SLIDE ${index}]:`);
+    console.log(`[AI IMAGE PROMPT FOR LIFESTYLE SLIDE ${index}]:`);
     console.log(cleanPrompt);
     console.log(`==================================================\n`);
 
@@ -299,29 +328,14 @@ CRITICAL FACE & BODY PRESERVATION (for GPT model):
       try {
         console.log(`Attempting image generation with Gemini (Nano Banana) for slide ${index}...`);
         const aiClient = new GoogleGenAI({ apiKey: geminiKey });
+        // Generate lifestyle image from text prompt
         const response = await aiClient.models.generateContent({
           model: 'gemini-2.5-flash-image',
-          contents: [
-            {
-              inlineData: {
-                mimeType: 'image/jpeg',
-                data: imageBuffer.toString('base64'),
-              },
-            },
-            cleanPrompt,
-          ],
+          contents: cleanPrompt,
           config: {
             responseModalities: ['image'],
           } as any,
         });
-
-        // Debug logging block for Senior AI telemetry analysis
-        console.log(`[DEBUG Gemini API Response Metadata for Slide ${index}]:`, JSON.stringify(response, (key, value) => {
-          if (key === 'data' && typeof value === 'string' && value.length > 200) {
-            return `${value.slice(0, 50)}... [Base64 Truncated: ${value.length} chars]`;
-          }
-          return value;
-        }, 2));
 
         const outputPart = response.candidates?.[0]?.content?.parts?.find(
           (part: any) => part.inlineData
@@ -329,7 +343,7 @@ CRITICAL FACE & BODY PRESERVATION (for GPT model):
         const base64Data = outputPart?.inlineData?.data;
 
         if (base64Data) {
-          console.log(`Gemini image generation successful for slide ${index}!`);
+          console.log(`Gemini image generation successful for lifestyle slide ${index}!`);
           const brandedBase64 = await this.overlayBrandingAndText({
             base64Image: base64Data,
             overlayText,
@@ -340,23 +354,26 @@ CRITICAL FACE & BODY PRESERVATION (for GPT model):
             businessName,
             index,
             totalSlides,
+            brandFont,
+            bodyFont,
+            layoutType,
+            beforePhotoUrl,
+            visualRanking,
           });
           return uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
-        } else {
-          console.warn(`Gemini returned empty image data for slide ${index}. Falling back to OpenAI.`);
         }
       } catch (err) {
-        console.error(`Gemini image generation failed for slide ${index}:`, err);
-        console.log(`Falling back to OpenAI for slide ${index}...`);
+        console.error(`Gemini image generation failed for lifestyle slide ${index}:`, err);
       }
     }
 
-    console.log(`Using OpenAI to generate slide ${index}...`);
-    const imageFile = new File([imageBuffer], 'photo.jpg', { type: 'image/jpeg' });
-
-    // Senior engineer enhancement: For face preservation, add explicit constraints
-    // These instructions override default behavior and enforce photo authenticity
-    const facePreservationInstructions = `
+    console.log(`Using OpenAI to generate lifestyle slide ${index}...`);
+    let base64 = '';
+    
+    if (isRealClientPhoto && imageBuffer) {
+      try {
+        const imageFile = new File([imageBuffer], 'photo.jpg', { type: 'image/jpeg' });
+        const facePreservationInstructions = `
 You MUST follow these strict rules when processing this image:
 1. IDENTITY PRESERVATION: The person's face and body must remain EXACTLY as in the original photo
 2. NO BEAUTIFICATION: Do not smooth, enhance, or improve skin appearance in any way
@@ -364,27 +381,36 @@ You MUST follow these strict rules when processing this image:
 4. AUTHENTIC TEXTURE: Preserve all natural skin texture, lines, and marks from the original
 5. NO BODY MODIFICATIONS: Do not alter body shape, posture, or proportions
 6. BACKGROUND PRESERVATION: Keep all background elements exactly as they are
-7. ONLY TEXT OVERLAYS: The ONLY addition should be the text box and design elements — nothing else should be modified
+7. ONLY TEXT OVERLAYS: The ONLY addition should be the text box and design elements — nothing else should be modified`;
 
-This is a legal and compliance requirement. Failure to preserve the person's identity and appearance is unacceptable.`;
+        const strengthenedPrompt = cleanPrompt + "\n\n" + facePreservationInstructions;
 
-    // Append preservation instructions to prompt
-    const strengthenedPrompt = cleanPrompt + "\n\n" + facePreservationInstructions;
+        const response = await openai.images.edit({
+          model: 'gpt-image-1',
+          image: imageFile,
+          prompt: strengthenedPrompt,
+          size: outputSize === '1024x1536' ? '1024x1024' as any : outputSize,
+        });
+        base64 = response.data?.[0]?.b64_json || '';
+      } catch (gptErr) {
+        console.error(`OpenAI image edit failed for slide ${index}:`, gptErr);
+      }
+    } else {
+      try {
+        // DALL-E text-to-image generation for lifestyle/studio posts
+        const response = await openai.images.generate({
+          model: 'dall-e-3',
+          prompt: cleanPrompt,
+          size: outputSize === '1024x1536' ? '1024x1792' as any : '1024x1024',
+          response_format: 'b64_json',
+        });
+        base64 = response.data?.[0]?.b64_json || '';
+      } catch (dalleErr) {
+        console.error(`DALL-E image generation failed for slide ${index}:`, dalleErr);
+      }
+    }
 
-    const response = await openai.images.edit({
-      model: 'gpt-image-1',
-      image: imageFile,
-      prompt: strengthenedPrompt,
-      size: outputSize,
-    });
-
-    const base64 = response.data?.[0]?.b64_json;
-    if (!base64) throw new Error('gpt-image-1 returned no image data');
-
-    // Senior engineer logging: Track GPT image generation for compliance
-    console.log(`[GPT IMAGE ${index}] Generated with face-preservation constraints applied`);
-    console.log(`[GPT IMAGE ${index}] Original prompt length: ${cleanPrompt.length} chars`);
-    console.log(`[GPT IMAGE ${index}] Output: ${base64.substring(0, 50)}... (face preservation enforced)`);
+    if (!base64) throw new Error(`OpenAI image generation failed completely for slide ${index}`);
 
     const brandedBase64 = await this.overlayBrandingAndText({
       base64Image: base64,
@@ -399,6 +425,7 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
       brandFont,
       bodyFont,
       layoutType,
+      beforePhotoUrl,
       visualRanking,
     });
     return uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
@@ -420,8 +447,37 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
     bodyFont?: string;
     visualRanking?: string[];
   }): Promise<GeneratedSlide[]> {
-    const { afterPhotoUrl, beforePhotoUrl, concepts, artDirectorBrief, layoutType = 'passepartout_text', visualRanking = [], ...rest } = params;
+    const { afterPhotoUrl, beforePhotoUrl, concepts, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], ...rest } = params;
     const total = concepts.length;
+
+    // Define pool of premium layout templates
+    const layoutPool = [
+      'passepartout_text',
+      'asymmetric_monogram',
+      'translucent_split',
+      'poster_cover',
+      'postcard_ticket',
+      'editorial_arch',
+      'text_only_editorial'
+    ];
+
+    // Select unique layouts without repeats
+    const uniqueLayoutsForSlides: string[] = [];
+    let pool = [...layoutPool];
+    for (let i = 0; i < total; i++) {
+      let chosen = '';
+      if (i === 0) {
+        // Slide 1 (Cover) should prefer a striking template if available
+        const coverOptions = ['poster_cover', 'translucent_split', 'passepartout_text'];
+        chosen = coverOptions.find(o => pool.includes(o)) || pool[0];
+      } else {
+        const randomIndex = Math.floor(Math.random() * pool.length);
+        chosen = pool[randomIndex] || 'passepartout_text';
+      }
+      uniqueLayoutsForSlides.push(chosen);
+      pool = pool.filter(l => l !== chosen);
+      if (pool.length === 0) pool = [...layoutPool]; // Reset if total slides exceeds layout count
+    }
 
     const slides = await Promise.all(
       concepts.map(async (concept, i) => {
@@ -432,11 +488,7 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
         const photoUrl = usingBefore ? beforePhotoUrl! : afterPhotoUrl;
 
         const brief = artDirectorBrief?.find(b => b.index === concept.index);
-
-        // Only apply split_before_after on the first slide (cover) of a carousel
-        const currentSlideLayout = (isFirst && layoutType === 'split_before_after')
-          ? 'split_before_after'
-          : (layoutType === 'split_before_after' ? 'passepartout_text' : layoutType);
+        const currentSlideLayout = uniqueLayoutsForSlides[i];
 
         try {
           const url = await this.generateSlide({
@@ -485,8 +537,37 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
     bodyFont?: string;
     visualRanking?: string[];
   }): Promise<GeneratedSlide[]> {
-    const { afterPhotoUrl, beforePhotoUrl, frames, artDirectorBrief, layoutType = 'passepartout_text', visualRanking = [], ...rest } = params;
+    const { afterPhotoUrl, beforePhotoUrl, frames, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], ...rest } = params;
     const total = frames.length;
+
+    // Define pool of premium layout templates
+    const layoutPool = [
+      'passepartout_text',
+      'asymmetric_monogram',
+      'translucent_split',
+      'poster_cover',
+      'postcard_ticket',
+      'editorial_arch',
+      'text_only_editorial'
+    ];
+
+    // Select unique layouts without repeats
+    const uniqueLayoutsForFrames: string[] = [];
+    let pool = [...layoutPool];
+    for (let i = 0; i < total; i++) {
+      let chosen = '';
+      if (i === 0) {
+        // Frame 1 (Cover) should prefer a striking template if available
+        const coverOptions = ['poster_cover', 'translucent_split', 'passepartout_text'];
+        chosen = coverOptions.find(o => pool.includes(o)) || pool[0];
+      } else {
+        const randomIndex = Math.floor(Math.random() * pool.length);
+        chosen = pool[randomIndex] || 'passepartout_text';
+      }
+      uniqueLayoutsForFrames.push(chosen);
+      pool = pool.filter(l => l !== chosen);
+      if (pool.length === 0) pool = [...layoutPool]; // Reset if total frames exceeds layout count
+    }
 
     const results = await Promise.all(
       frames.map(async (frame, i) => {
@@ -496,11 +577,7 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
         const photoUrl = usingBefore ? beforePhotoUrl! : afterPhotoUrl;
 
         const brief = artDirectorBrief?.find(b => b.index === frame.index);
-
-        // Only apply split_before_after on the first frame (cover) of a story sequence
-        const currentSlideLayout = (isFirst && layoutType === 'split_before_after')
-          ? 'split_before_after'
-          : (layoutType === 'split_before_after' ? 'passepartout_text' : layoutType);
+        const currentSlideLayout = uniqueLayoutsForFrames[i];
 
         try {
           const url = await this.generateSlide({
@@ -578,10 +655,20 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
           .replace(/'/g, '&apos;');
       };
 
-      const imageBuffer = Buffer.from(base64Image, 'base64');
-      const metadata = await sharp(imageBuffer).metadata();
-      const originalW = metadata.width || 1024;
-      const originalH = metadata.height || 1024;
+      let originalW = 1024;
+      let originalH = 1024;
+      let imageBuffer: Buffer = Buffer.alloc(0);
+
+      if (base64Image && base64Image.trim().length > 0) {
+        imageBuffer = Buffer.from(base64Image, 'base64');
+        try {
+          const metadata = await sharp(imageBuffer).metadata();
+          originalW = metadata.width || 1024;
+          originalH = metadata.height || 1024;
+        } catch (metadataErr) {
+          console.warn('[Sharp Metadata Warning]: Could not parse image metadata, using defaults:', metadataErr);
+        }
+      }
 
       // Force high-definition target canvas dimensions (Instagram standards)
       const isStory = originalH > originalW;
@@ -666,13 +753,52 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
       const innerH = h - (paddingTop + paddingBottom);
 
       // ── Step 1: Process Base Image based on LayoutType ──
-      let baseImage: sharp.Sharp = sharp(imageBuffer);
+      let baseImage: sharp.Sharp;
+      if (imageBuffer && imageBuffer.length > 0) {
+        baseImage = sharp(imageBuffer);
+      } else {
+        baseImage = sharp({
+          create: {
+            width: w,
+            height: h,
+            channels: 3,
+            background: validBrandColor
+          }
+        });
+      }
       let compositeTop = paddingTop;
       let compositeBottom = paddingBottom;
       let compositeLeft = paddingX;
       let compositeRight = paddingX;
 
-      if (layoutType === 'split_before_after' && beforePhotoUrl) {
+      if (layoutType === 'text_only_editorial') {
+        baseImage = sharp({
+          create: {
+            width: w,
+            height: h,
+            channels: 3,
+            background: validBrandColor
+          }
+        });
+        compositeTop = 0;
+        compositeBottom = 0;
+        compositeLeft = 0;
+        compositeRight = 0;
+      } else if (layoutType === 'postcard_ticket') {
+        const cardW = w - 160;
+        const cardH = h - 300;
+        baseImage = sharp(imageBuffer).resize(cardW, cardH, { fit: 'cover' });
+        compositeTop = 80;
+        compositeLeft = 80;
+        compositeBottom = h - cardH - compositeTop;
+        compositeRight = w - cardW - compositeLeft;
+      } else if (layoutType === 'editorial_arch') {
+        baseImage = sharp(imageBuffer).resize(innerW, innerH, { fit: 'cover' });
+        compositeTop = paddingTop;
+        compositeLeft = paddingX;
+        compositeBottom = paddingBottom;
+        compositeRight = paddingX;
+      } else if (layoutType === 'split_before_after' && beforePhotoUrl) {
         try {
           const beforeBuffer = await downloadImageAsBuffer(beforePhotoUrl);
           
@@ -764,7 +890,6 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
 
       // ── Step 3: Assemble SVG overlays (typography & custom layouts) ──
       const showPassepartoutText = hasText && (layoutType === 'passepartout_text' || layoutType === 'split_before_after');
-
       const textPanelSvg = showPassepartoutText ? `
           <!-- Hook Text directly in the Passepartout Negative Space -->
           <text x="${w / 2}" y="${h - 135}" class="overlay-text text-centered" style="font-size: ${dynamicFontSize}px; fill: ${dynamicTextColor};">
@@ -785,8 +910,23 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
           <text x="${w / 2}" y="${h - 150}" class="overlay-text text-centered" style="fill: ${posterTextColor}; font-size: ${dynamicFontSize}px; letter-spacing: 5px;">
             ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : dyOffset}">${line}</tspan>`).join('')}
           </text>
-      ` : '')));
-
+      ` : (layoutType === 'text_only_editorial' && hasText ? `
+          <!-- Center-aligned premium quote card style text -->
+          <text x="${w / 2}" y="${h / 2 - (lines.length * (dyOffset + 8)) / 2 + 25}" class="overlay-text text-centered" style="fill: ${dynamicTextColor}; font-size: ${dynamicFontSize + 6}px; line-height: 1.45;">
+            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : dyOffset + 10}">${line}</tspan>`).join('')}
+          </text>
+      ` : (layoutType === 'postcard_ticket' && hasText ? `
+          <!-- Elegant clean caption centered under the postcard frame -->
+          <text x="${w / 2}" y="${h - 130}" class="overlay-text text-centered" style="fill: ${dynamicTextColor}; font-size: ${dynamicFontSize}px;">
+            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : dyOffset}">${line}</tspan>`).join('')}
+          </text>
+      ` : (layoutType === 'editorial_arch' && hasText ? `
+          <!-- Clean arch caption in bottom margin -->
+          <text x="${w / 2}" y="${h - 125}" class="overlay-text text-centered" style="fill: ${dynamicTextColor}; font-size: ${dynamicFontSize}px;">
+            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : dyOffset}">${line}</tspan>`).join('')}
+          </text>
+      ` : ''))))));
+ 
       // Draw structural overlays (split pane rectangles or monograms)
       const visualAdditions = layoutType === 'asymmetric_monogram' ? `
           <!-- Large single-character monogram watermark in negative space -->
@@ -796,33 +936,59 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
       ` : (layoutType === 'translucent_split' ? `
           <!-- Semi-transparent solid brand pane overlay -->
           <rect x="0" y="0" width="${w * 0.5}" height="${h}" fill="${validBrandColor}" fill-opacity="0.82" />
-      ` : '');
-
-      // Fetch the custom fonts from Brand DNA dynamically as Base64 to embed directly in the SVG
+      ` : (layoutType === 'postcard_ticket' ? `
+          <!-- Decorative dashed ticket/postcard vintage frame overlay -->
+          <rect x="40" y="40" width="${w - 80}" height="${h - 80}" fill="none" stroke="${validSecondaryColor}" stroke-width="1.5" stroke-dasharray="10,6" />
+          <rect x="50" y="50" width="${w - 100}" height="${h - 260}" fill="none" stroke="${validSecondaryColor}" stroke-width="1.2" />
+          <!-- Ticket notch circles -->
+          <circle cx="40" cy="${h - 210}" r="15" fill="${validBrandColor}" />
+          <circle cx="${w - 40}" cy="${h - 210}" r="15" fill="${validBrandColor}" />
+      ` : (layoutType === 'editorial_arch' ? `
+          <!-- The Arch cutout mask overlay using even-odd fill path subtraction -->
+          <path d="M -10,-10 H ${w+10} V ${h+10} H -10 Z M ${paddingX},${paddingTop + 140} A ${innerW / 2},${innerW / 2} 0 0,1 ${w - paddingX},${paddingTop + 140} V ${h - paddingBottom + 20} H ${paddingX} Z" fill="${validBrandColor}" fill-rule="evenodd" />
+          <path d="M ${paddingX},${paddingTop + 140} A ${innerW / 2},${innerW / 2} 0 0,1 ${w - paddingX},${paddingTop + 140} V ${h - paddingBottom + 20} H ${paddingX} Z" fill="none" stroke="${validSecondaryColor}" stroke-width="1.5" />
+      ` : '')));
       const brandFontBase64 = await fetchGoogleFontBase64(brandFont);
       const bodyFontBase64 = await fetchGoogleFontBase64(bodyFont);
+
+      // Pre-compile dynamic font faces to avoid nested template literal parsing issues
+      const brandFontFace = brandFontBase64
+        ? `@font-face {
+            font-family: '${brandFont}';
+            src: url('data:font/ttf;base64,${brandFontBase64}') format('truetype');
+            font-weight: bold;
+            font-style: normal;
+          }`
+        : `@import url('https://fonts.googleapis.com/css2?family=${encodeURIComponent(brandFont)}:wght@700&display=swap');`;
+
+      const bodyFontFace = bodyFontBase64
+        ? `@font-face {
+            font-family: '${bodyFont}';
+            src: url('data:font/ttf;base64,${bodyFontBase64}') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+          }`
+        : `@import url('https://fonts.googleapis.com/css2?family=${encodeURIComponent(bodyFont)}:wght@400&display=swap');`;
+
+      // Pre-compile conditional SVG components
+      const watermarkText = (layoutType !== 'full_bleed_clean' && layoutType !== 'poster_cover')
+        ? `<text x="${w / 2}" y="${h / 2.2}" fill="#ffffff" fill-opacity="0.10" font-family="'${brandFont}', system-ui, sans-serif" font-size="28px" font-weight="bold" transform="rotate(-30 ${w / 2} ${h / 2.2})" text-anchor="middle" letter-spacing="8px">
+            AUTHENTIC WORK • ${escapedSpacedName}
+          </text>`
+        : '';
+
+      const footerSection = (layoutType !== 'poster_cover')
+        ? `<rect x="0" y="${h - 60}" width="${w}" height="60" class="footer-bg" />
+          <text x="60" y="${h - 25}" class="footer-brand">${escapedSpacedName}</text>
+          <text x="${w - 60}" y="${h - 25}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`
+        : '';
 
       const svgString = `
         <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <style>
-              ${brandFontBase64 ? `
-              @font-face {
-                font-family: '${brandFont}';
-                src: url('data:font/ttf;base64,${brandFontBase64}') format('truetype');
-                font-weight: bold;
-                font-style: normal;
-              }
-              ` : `@import url('https://fonts.googleapis.com/css2?family=${encodeURIComponent(brandFont)}:wght@700&amp;display=swap');`}
-              
-              ${bodyFontBase64 ? `
-              @font-face {
-                font-family: '${bodyFont}';
-                src: url('data:font/ttf;base64,${bodyFontBase64}') format('truetype');
-                font-weight: normal;
-                font-style: normal;
-              }
-              ` : `@import url('https://fonts.googleapis.com/css2?family=${encodeURIComponent(bodyFont)}:wght@400&amp;display=swap');`}
+              ${brandFontFace}
+              ${bodyFontFace}
               
               .overlay-text { font-family: '${brandFont}', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 26px; font-weight: bold; fill: ${dynamicTextColor}; letter-spacing: ${headingLetterSpacing}; }
               .text-centered { text-anchor: middle; }
@@ -833,22 +999,10 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
             </style>
           </defs>
           
-          <!-- Anti-theft transparent brand watermark across the image area (not shown on clean full bleed) -->
-          ${layoutType !== 'full_bleed_clean' && layoutType !== 'poster_cover' ? `
-          <text x="${w / 2}" y="${h / 2.2}" fill="#ffffff" fill-opacity="0.10" font-family="'${brandFont}', system-ui, sans-serif" font-size="28px" font-weight="bold" transform="rotate(-30 ${w / 2} ${h / 2.2})" text-anchor="middle" letter-spacing="8px">
-            AUTHENTIC WORK • ${escapedSpacedName}
-          </text>
-          ` : ''}
-
+          ${watermarkText}
           ${visualAdditions}
           ${textPanelSvg}
-          
-          <!-- Minimalist Editorial Footer (hidden only on poster covers) -->
-          ${layoutType !== 'poster_cover' ? `
-          <rect x="0" y="${h - 60}" width="${w}" height="60" class="footer-bg" />
-          <text x="60" y="${h - 25}" class="footer-brand">${escapedSpacedName}</text>
-          <text x="${w - 60}" y="${h - 25}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>
-          ` : ''}
+          ${footerSection}
         </svg>
       `;
 
@@ -861,7 +1015,15 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
       // ── Step 4: Composite image scaling and margins based on layout ──
       let compositeBuffer: Buffer;
       if (layoutType === 'full_bleed_clean' || layoutType === 'translucent_split' || layoutType === 'poster_cover') {
-        compositeBuffer = await sharp(imageBuffer)
+        const sourceImage = (imageBuffer && imageBuffer.length > 0) ? sharp(imageBuffer) : sharp({
+          create: {
+            width: w,
+            height: h,
+            channels: 3,
+            background: validBrandColor
+          }
+        });
+        compositeBuffer = await sourceImage
           .resize(w, h, { fit: 'cover' })
           .composite([{ input: highResSvgBuffer, blend: 'over' }])
           .png()

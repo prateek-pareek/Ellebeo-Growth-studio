@@ -173,7 +173,7 @@ export class GenerationOrchestrator {
 
       const primaryImage = payload.imageAssets[0]!;
       const isLocalVisionUrl = primaryImage.rawStoragePath.startsWith('http://localhost') ||
-                               primaryImage.rawStoragePath.startsWith('http://127.');
+        primaryImage.rawStoragePath.startsWith('http://127.');
 
       if (!isLocalVisionUrl) try {
         // Only use Cloudinary URL if we have an actual cloudinaryPublicId â€” otherwise fall back to rawStoragePath
@@ -206,10 +206,10 @@ export class GenerationOrchestrator {
       },
     });
 
-    const isMedical = appointment?.serviceCategory === 'injectables_cosmetic' || 
-                      appointment?.serviceCategory === 'laser_treatments';
+    const isMedical = appointment?.serviceCategory === 'injectables_cosmetic' ||
+      appointment?.serviceCategory === 'laser_treatments';
     const category = isMedical ? 'medical_aesthetics' : 'general';
-    
+
     // Fetch active MasterPrompt based on mapped category
     const masterPrompt = await this.prisma.masterPrompt.findFirst({
       where: { category, isActive: true },
@@ -276,15 +276,15 @@ export class GenerationOrchestrator {
 
     try {
       const blacklist = brandDNA.vocabularyBlacklist ?? brandDNA.blacklistedWords ?? [];
-      
+
       const antiAIGlossary = ["transformation", "radiant", "rejuvenated", "delve", "journey", "oasis", "sanctuary", "meticulous", "nestled", "whimsical", "unveil", "elevate", "glow up", "game-changer", "luxurious", "indulge"];
-      
+
       const generateWithEnforcement = async (angle: 'technical' | 'empathetic', promptContext: any) => {
         let attempts = 0;
         let lastResult: any;
         // Deep copy prompt to allow appending penalty instructions without bleeding across options
         let currentPrompt = { ...promptContext, userPrompt: promptContext.userPrompt };
-        
+
         while (attempts < 2) {
           lastResult = await this.brandStrategistChain.generate({
             assembledPrompt: currentPrompt,
@@ -292,17 +292,17 @@ export class GenerationOrchestrator {
             llmConfig,
             angle,
           });
-          
+
           const textToCheck = `${lastResult.caption} ${lastResult.hookSentence}`.toLowerCase();
           const foundBannedAI = antiAIGlossary.find(word => textToCheck.includes(word.toLowerCase()));
           const foundBlacklisted = blacklist.find((word: string) => textToCheck.includes(word.toLowerCase()));
-          
+
           const violatingWord = foundBannedAI || foundBlacklisted;
-          
+
           if (!violatingWord) {
             return lastResult; // Passed the enforcement gate
           }
-          
+
           // Failed gate -> Append strict penalty and retry
           currentPrompt.userPrompt += `\n\nCRITICAL PENALTY: Your previous attempt was rejected because you used the banned word/phrase "${violatingWord}". You are acting like a generic AI. Rewrite this using conversational, authentic human vocabulary only.`;
           attempts++;
@@ -404,7 +404,7 @@ export class GenerationOrchestrator {
 
       // Localhost URLs can't be reached by Cloudinary/OpenAI â€” use Sharp instead
       const isLocalUrl = primaryAsset.rawStoragePath.startsWith('http://localhost') ||
-                         primaryAsset.rawStoragePath.startsWith('http://127.');
+        primaryAsset.rawStoragePath.startsWith('http://127.');
       const useCloudinary = !!process.env['CLOUDINARY_CLOUD_NAME'] && !isLocalUrl;
 
       try {
@@ -522,10 +522,11 @@ Requirements:
     let carouselSlides: CarouselSlides | null = null;
     const isCarousel = (generationOptions.outputFormats as string[]).includes('carousel');
     const afterPhotoUrl = payload.imageAssets.find(a => a.isAfterPhoto)?.rawStoragePath
-      ?? payload.imageAssets[0]?.rawStoragePath;
+      ?? payload.imageAssets[0]?.rawStoragePath
+      ?? '';
     const beforePhotoUrl = payload.imageAssets.find(a => a.isBeforePhoto)?.rawStoragePath;
 
-    if (isCarousel && afterPhotoUrl && captionResult) {
+    if (isCarousel && captionResult) {
       try {
         const conceptResult = await this.carouselConceptChain.generate({
           hookSentence: captionResult.hookSentence || captionResult.caption.slice(0, 80),
@@ -592,7 +593,7 @@ Requirements:
     // â”€â”€ Step 5.65: Story Frames (conditional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     let storyOutput: StoryOutput | null = null;
     const isStory = (generationOptions.outputFormats as string[]).includes('story');
-    if (isStory && afterPhotoUrl && captionResult) {
+    if (isStory && captionResult) {
       try {
         const storyFrames = await this.storyFrameChain.generate({
           hookSentence: captionResult.hookSentence || captionResult.caption.slice(0, 80),
@@ -735,7 +736,7 @@ Requirements:
     await this.prisma.generationJob.update({
       where: { id: jobId },
       data: { estimatedCostUsd: totalCostUSD },
-    }).catch(() => {});
+    }).catch(() => { });
     await this.progressEmitter.emit(jobId, tenantId, targetState);
 
     // â”€â”€ Step 8: Notify tenant â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -745,7 +746,7 @@ Requirements:
       title: 'Content ready to review',
       body: 'Your new post is ready. Tap to review and schedule.',
       data: { contentItemId, jobId },
-    }).catch(() => {});
+    }).catch(() => { });
 
     return {
       jobId,
@@ -863,7 +864,7 @@ Requirements:
         completedAt: new Date().toISOString(),
       };
     } catch (err) {
-      await this.prisma.generationJob.update({ where: { id: jobId }, data: { state: 'failed' } }).catch(() => {});
+      await this.prisma.generationJob.update({ where: { id: jobId }, data: { state: 'failed' } }).catch(() => { });
       await this.progressEmitter.emit(jobId, tenantId, 'failed');
       throw err;
     }
@@ -933,12 +934,12 @@ Requirements:
         platformVariants: params.carouselSlides
           ? (params.carouselSlides as unknown as Prisma.InputJsonValue)
           : params.storyOutput
-              ? (params.storyOutput as unknown as Prisma.InputJsonValue)
-              : params.reelShotResult
-                ? (params.reelShotResult as unknown as Prisma.InputJsonValue)
-                : platformVariants
-                  ? (platformVariants as unknown as Prisma.InputJsonValue)
-                  : Prisma.JsonNull,
+            ? (params.storyOutput as unknown as Prisma.InputJsonValue)
+            : params.reelShotResult
+              ? (params.reelShotResult as unknown as Prisma.InputJsonValue)
+              : platformVariants
+                ? (platformVariants as unknown as Prisma.InputJsonValue)
+                : Prisma.JsonNull,
         reelScript: reelScriptResult?.script ?? null,
         completedAt: new Date(),
         contentPillar: contentPillar ?? null,

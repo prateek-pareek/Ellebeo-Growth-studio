@@ -56,16 +56,16 @@ export class ScoringGateService {
     faceBox?: { x: number; y: number; w: number; h: number };
     textBox?: { x: number; y: number; w: number; h: number };
   }): Promise<ScoringResult> {
-    const { 
-      caption, 
-      hashtags, 
-      blacklist, 
-      hasBefore, 
-      beforeAfterAllowed, 
-      isCarousel, 
-      slidesCount, 
-      generatedBy = 'ChatGPT', 
-      tenantId, 
+    const {
+      caption,
+      hashtags,
+      blacklist,
+      hasBefore,
+      beforeAfterAllowed,
+      isCarousel,
+      slidesCount,
+      generatedBy = 'ChatGPT',
+      tenantId,
       prisma,
       originalPhotoBuffer,
       generatedPhotoBuffer,
@@ -102,10 +102,10 @@ export class ScoringGateService {
     // ── Layer 2: Geometrical Overlap Check (Rules Engine) ──
     if (faceBox && textBox) {
       const intersects = (r1: any, r2: any) => {
-        return !(r2.x > r1.x + r1.w || 
-                 r2.x + r2.w < r1.x || 
-                 r2.y > r1.y + r1.h ||
-                 r2.y + r2.h < r1.y);
+        return !(r2.x > r1.x + r1.w ||
+          r2.x + r2.w < r1.x ||
+          r2.y > r1.y + r1.h ||
+          r2.y + r2.h < r1.y);
       };
       if (intersects(faceBox, textBox)) {
         const tag = 'text_overlaps_face';
@@ -126,7 +126,7 @@ export class ScoringGateService {
     // --- RULE-BASED DETERMINISTIC SANITY CHECKS ---
     // If these fails, we don't even need the LLM to judge. We fail immediately.
     const normalizedCaption = caption.toLowerCase();
-    const activeBlacklistMatches = blacklist.filter(word => 
+    const activeBlacklistMatches = blacklist.filter(word =>
       normalizedCaption.includes(word.toLowerCase())
     );
 
@@ -166,18 +166,18 @@ export class ScoringGateService {
       try {
         const aiClient = new GoogleGenerativeAI(geminiKey);
         const model = aiClient.getGenerativeModel({ model: 'gemini-2.5-flash' });
-        
+
         const prompt = `You are a creative director auditing a generated beauty salon Instagram post.
 Analyze this final image layout. Answer exactly "YES" or "NO" to this question:
 Does this slide look visually balanced, premium, and free of any text overlapping the focal subject's face?`;
-        
+
         const imagePart = {
           inlineData: {
             data: generatedPhotoBuffer.toString('base64'),
             mimeType: 'image/png',
           },
         };
-        
+
         const result = await model.generateContent([prompt, imagePart]);
         const responseText = result.response.text().trim().toUpperCase();
         if (!responseText.includes('YES')) {
