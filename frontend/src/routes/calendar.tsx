@@ -358,6 +358,13 @@ function EntryDetailModal({ entry, dayEntries, contentItems, onClose, onMutated 
   // Sync active entry when the modal opens or the clicked entry changes
   useEffect(() => { setActive(entry); }, [entry]);
 
+  // Keep active in sync when polling refreshes the calendar (e.g. after auto-publish)
+  useEffect(() => {
+    if (!active?.scheduledPostId) return;
+    const updated = dayEntries.find(e => e.scheduledPostId === active.scheduledPostId);
+    if (updated) setActive(updated);
+  }, [dayEntries]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Reset reschedule time whenever the active entry changes
   useEffect(() => {
     if (!active?.scheduledFor) return;
