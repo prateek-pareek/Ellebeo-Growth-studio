@@ -36,7 +36,7 @@ export interface SlideInput {
   isLast: boolean;
 }
 
-async function downloadImageAsBuffer(url: string): Promise<Buffer> {
+export async function downloadImageAsBuffer(url: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const protocol = url.startsWith('https') ? https : http;
     protocol.get(url, (res) => {
@@ -46,6 +46,51 @@ async function downloadImageAsBuffer(url: string): Promise<Buffer> {
       res.on('error', reject);
     }).on('error', reject);
   });
+}
+
+// In-memory cache for fonts to prevent repeated network calls
+const fontCache: Record<string, string> = {};
+
+async function fetchGoogleFontBase64(fontFamily: string): Promise<string> {
+  if (fontCache[fontFamily]) {
+    return fontCache[fontFamily];
+  }
+
+  try {
+    const escapedFamily = encodeURIComponent(fontFamily);
+    const googleFontsCssUrl = `https://fonts.googleapis.com/css2?family=${escapedFamily}:wght@400;700&display=swap`;
+
+    const cssText = await new Promise<string>((resolve, reject) => {
+      // Send a modern User-Agent to force Google Fonts to return the raw TTF/WOFF2 links
+      const options = {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+      };
+      https.get(googleFontsCssUrl, options, (res) => {
+        let body = '';
+        res.on('data', (chunk) => { body += chunk; });
+        res.on('end', () => resolve(body));
+        res.on('error', reject);
+      }).on('error', reject);
+    });
+
+    // Extract the URL pointing to the font file (.ttf or .woff2)
+    const urlMatch = cssText.match(/url\((https:\/\/fonts\.gstatic\.com\/[^)]+)\)/);
+    if (!urlMatch || !urlMatch[1]) {
+      throw new Error(`Failed to extract font URL for: ${fontFamily}`);
+    }
+
+    const fontUrl = urlMatch[1];
+    const fontBuffer = await downloadImageAsBuffer(fontUrl);
+    const base64 = fontBuffer.toString('base64');
+    
+    fontCache[fontFamily] = base64;
+    return base64;
+  } catch (err: any) {
+    console.error(`[FONT DOWNLOADER ERROR] Failed to fetch font: ${fontFamily}. Fallback active.`, err.message);
+    return '';
+  }
 }
 
 async function uploadBase64ToFirebase(base64: string, tenantId: string, name: string): Promise<string> {
@@ -535,8 +580,13 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
 
       const imageBuffer = Buffer.from(base64Image, 'base64');
       const metadata = await sharp(imageBuffer).metadata();
-      const w = metadata.width || 1024;
-      const h = metadata.height || 1024;
+      const originalW = metadata.width || 1024;
+      const originalH = metadata.height || 1024;
+
+      // Force high-definition target canvas dimensions (Instagram standards)
+      const isStory = originalH > originalW;
+      const w = 1080;
+      const h = isStory ? 1620 : 1080;
 
       const lines: string[] = [];
       if (hasText) {
@@ -748,29 +798,44 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
           <rect x="0" y="0" width="${w * 0.5}" height="${h}" fill="${validBrandColor}" fill-opacity="0.82" />
       ` : '');
 
-      // Encode typography queries safely for Google API
-      const escapedHeadline = encodeURIComponent(brandFont);
-      const escapedBody = encodeURIComponent(bodyFont);
-      const importUrl = `https://fonts.googleapis.com/css2?family=${escapedHeadline}:wght@300..900&amp;family=${escapedBody}:wght@300..700&amp;display=swap`;
+      // Fetch the custom fonts from Brand DNA dynamically as Base64 to embed directly in the SVG
+      const brandFontBase64 = await fetchGoogleFontBase64(brandFont);
+      const bodyFontBase64 = await fetchGoogleFontBase64(bodyFont);
 
       const svgString = `
         <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <style>
-              @import url('${importUrl}');
+              ${brandFontBase64 ? `
+              @font-face {
+                font-family: '${brandFont}';
+                src: url('data:font/ttf;base64,${brandFontBase64}') format('truetype');
+                font-weight: bold;
+                font-style: normal;
+              }
+              ` : `@import url('https://fonts.googleapis.com/css2?family=${encodeURIComponent(brandFont)}:wght@700&amp;display=swap');`}
               
-              .overlay-text { font-family: '${brandFont}', Georgia, serif; font-size: 26px; font-weight: bold; fill: ${dynamicTextColor}; letter-spacing: ${headingLetterSpacing}; }
+              ${bodyFontBase64 ? `
+              @font-face {
+                font-family: '${bodyFont}';
+                src: url('data:font/ttf;base64,${bodyFontBase64}') format('truetype');
+                font-weight: normal;
+                font-style: normal;
+              }
+              ` : `@import url('https://fonts.googleapis.com/css2?family=${encodeURIComponent(bodyFont)}:wght@400&amp;display=swap');`}
+              
+              .overlay-text { font-family: '${brandFont}', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 26px; font-weight: bold; fill: ${dynamicTextColor}; letter-spacing: ${headingLetterSpacing}; }
               .text-centered { text-anchor: middle; }
               .text-left { text-anchor: start; }
               .footer-bg { fill: ${validSecondaryColor}; }
-              .footer-brand { font-family: '${brandFont}', Georgia, serif; font-size: ${footerFontSize}px; font-weight: bold; fill: ${dynamicFooterTextColor}; letter-spacing: ${footerLetterSpacing}px; text-anchor: start; }
-              .footer-tracker { font-family: '${bodyFont}', Helvetica, sans-serif; font-size: 13px; font-weight: normal; fill: ${dynamicFooterTextColor}; letter-spacing: 1px; text-anchor: end; }
+              .footer-brand { font-family: '${brandFont}', system-ui, sans-serif; font-size: ${footerFontSize}px; font-weight: bold; fill: ${dynamicFooterTextColor}; letter-spacing: ${footerLetterSpacing}px; text-anchor: start; }
+              .footer-tracker { font-family: '${bodyFont}', system-ui, sans-serif; font-size: 13px; font-weight: normal; fill: ${dynamicFooterTextColor}; letter-spacing: 1px; text-anchor: end; }
             </style>
           </defs>
           
           <!-- Anti-theft transparent brand watermark across the image area (not shown on clean full bleed) -->
           ${layoutType !== 'full_bleed_clean' && layoutType !== 'poster_cover' ? `
-          <text x="${w / 2}" y="${h / 2.2}" fill="#ffffff" fill-opacity="0.10" font-family="'${brandFont}', Georgia, serif" font-size="28px" font-weight="bold" transform="rotate(-30 ${w / 2} ${h / 2.2})" text-anchor="middle" letter-spacing="8px">
+          <text x="${w / 2}" y="${h / 2.2}" fill="#ffffff" fill-opacity="0.10" font-family="'${brandFont}', system-ui, sans-serif" font-size="28px" font-weight="bold" transform="rotate(-30 ${w / 2} ${h / 2.2})" text-anchor="middle" letter-spacing="8px">
             AUTHENTIC WORK • ${escapedSpacedName}
           </text>
           ` : ''}
@@ -787,13 +852,18 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
         </svg>
       `;
 
-      const svgBuffer = Buffer.from(svgString);
+      // Render the SVG at 300 DPI high density and resize it back to canvas bounds to get razor-sharp high-definition text
+      const highResSvgBuffer = await sharp(Buffer.from(svgString), { density: 300 })
+        .resize(w, h)
+        .png()
+        .toBuffer();
 
       // ── Step 4: Composite image scaling and margins based on layout ──
       let compositeBuffer: Buffer;
       if (layoutType === 'full_bleed_clean' || layoutType === 'translucent_split' || layoutType === 'poster_cover') {
         compositeBuffer = await sharp(imageBuffer)
-          .composite([{ input: svgBuffer, blend: 'over' }])
+          .resize(w, h, { fit: 'cover' })
+          .composite([{ input: highResSvgBuffer, blend: 'over' }])
           .png()
           .toBuffer();
       } else {
@@ -805,7 +875,7 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
             right: compositeRight,
             background: validBrandColor
           })
-          .composite([{ input: svgBuffer, blend: 'over' }])
+          .composite([{ input: highResSvgBuffer, blend: 'over' }])
           .png()
           .toBuffer();
       }
