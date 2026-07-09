@@ -14,6 +14,7 @@ import { NotificationsService } from './notifications/notifications.service';
 import { SmsService } from './notifications/sms.service';
 import { PrismaService } from './prisma/prisma.service';
 import { startNotificationsWorker } from './notifications/notifications.worker';
+import { startPublishWorker } from './schedule/publish.worker';
 
 async function bootstrap() {
   // Body parser disabled globally so the Stripe webhook route can access the
@@ -84,6 +85,7 @@ async function bootstrap() {
   const smsService = app.get(SmsService);
   const prismaService = app.get(PrismaService);
   startNotificationsWorker(prismaService as any, notificationsGateway, smsService);
+  startPublishWorker(prismaService as any);
   console.log("Server is running on port", port);
   console.log("Environment:", process.env.NODE_ENV);
   console.log("Front end url: ", process.env.FRONTEND_URL);
