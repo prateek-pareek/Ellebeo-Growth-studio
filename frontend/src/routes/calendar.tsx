@@ -5,8 +5,6 @@ import { useContentItems, type ContentItem } from "@/lib/providers/content-provi
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
-import { ChevronUp, ChevronDown } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/calendar")({
   head: () => ({
@@ -372,7 +370,7 @@ function EntryDetailModal({ entry, dayEntries, contentItems, onClose, onMutated 
 
   const handleReschedule = async () => {
     if (!active?.scheduledPostId || !rescheduleTime) return;
-    if (auLocalToUTC(rescheduleTime) <= new Date().toISOString()) {
+    if (rescheduleTime <= toDatetimeLocal(new Date().toISOString())) {
       toast.error("Please pick a future date and time.");
       return;
     }
@@ -518,10 +516,7 @@ function EntryDetailModal({ entry, dayEntries, contentItems, onClose, onMutated 
 
           {active?.status !== "published" && (
             <div className="space-y-3">
-              <label className="text-[10px] uppercase tracking-widest text-taupe block">
-                Reschedule
-                <span className="ml-1 normal-case tracking-normal font-normal text-taupe/50">(Australian Eastern Time)</span>
-              </label>
+              <label className="text-[10px] uppercase tracking-widest text-taupe block">Reschedule</label>
               <DateTimePicker value={rescheduleTime} onChange={setRescheduleTime} />
               <button
                 type="button"
@@ -578,131 +573,28 @@ const TODAY = new Date().toISOString().slice(0, 10);
 
 function DateTimePicker({ value, onChange }: DateTimePickerProps) {
   const [datePart, timePart] = value.split("T");
-  const [hStr, mStr] = (timePart ?? "09:00").split(":");
-  const h24    = Number(hStr) || 9;
-  const minute = Math.max(0, Math.min(59, Number(mStr) || 0));
-  const isPM   = h24 >= 12;
-  const hour12 = h24 % 12 || 12;
-
-  const selectedDate = datePart
-    ? (() => { const [y, m, d] = datePart.split("-").map(Number); return new Date(y, m - 1, d); })()
-    : undefined;
-
-  const dateInputRef = useRef<HTMLInputElement>(null);
-
-  const update = (dp: string, newH24: number, newM: number) =>
-    onChange(`${dp}T${String(newH24).padStart(2, "0")}:${String(newM).padStart(2, "0")}`);
-
-  const stepHour = (dir: 1 | -1) => {
-    const next = ((hour12 - 1 + dir + 12) % 12) + 1;
-    update(datePart, next % 12 + (isPM ? 12 : 0), minute);
-  };
-
-  const stepMinute = (dir: 1 | -1) => {
-    update(datePart, h24, (minute + dir + 60) % 60);
-  };
-
-  const toggleAmPm = () =>
-    update(datePart, isPM ? h24 - 12 : h24 + 12, minute);
-
-  const dateLabel = selectedDate
-    ? selectedDate.toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "long", year: "numeric" })
-    : "Tap to select a date";
 
   return (
-    <div className="relative overflow-hidden bg-card border hairline">
-
-      {/* ── Date card ── */}
-      <button
-        type="button"
-        onClick={() => { try { dateInputRef.current?.showPicker(); } catch { dateInputRef.current?.click(); } }}
-        className="w-full text-left flex items-center justify-between gap-4 bg-foreground text-offwhite border-b hairline px-4 py-3 hover:bg-foreground/90 transition-colors select-none"
-      >
-        <div className="flex items-center gap-3">
-          <span className="font-serif text-4xl tabular-nums leading-none">
-            {selectedDate ? String(selectedDate.getDate()).padStart(2, "0") : "—"}
-          </span>
-          <div>
-            <p className="text-sm font-medium leading-snug">
-              {selectedDate
-                ? selectedDate.toLocaleDateString("en-AU", { month: "long", year: "numeric" })
-                : <span className="text-offwhite/40">Select a date</span>}
-            </p>
-            <p className="text-[9px] uppercase tracking-widest text-offwhite/35 mt-0.5">
-              {selectedDate
-                ? selectedDate.toLocaleDateString("en-AU", { weekday: "long" }) + " · AEST"
-                : "Tap to pick"}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-1 shrink-0 border border-offwhite/20 px-2 py-1">
-          <svg className="size-3 text-offwhite/50" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
-            <path d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
-          </svg>
-          <span className="text-[9px] uppercase tracking-widest text-offwhite/50">Change</span>
-        </div>
-      </button>
-      {/* 1×1 visible pixel — required for showPicker() to work in all browsers */}
-      <input
-        ref={dateInputRef}
-        type="date"
-        value={datePart ?? ""}
-        min={TODAY}
-        onChange={(e) => update(e.target.value, h24, minute)}
-        tabIndex={-1}
-        className="absolute opacity-0 w-px h-px top-0 left-0 pointer-events-none"
-      />
-
-      {/* ── Time stepper ── */}
-      <div className="flex items-stretch divide-x divide-border">
-
-        {/* Hour */}
-        <div className="flex-1 flex flex-col items-center gap-0.5 py-2">
-          <button type="button" onClick={() => stepHour(1)}
-            className="p-1 text-taupe hover:text-foreground transition-colors">
-            <ChevronUp className="size-3" />
-          </button>
-          <span className="font-serif text-2xl tabular-nums leading-none">{String(hour12).padStart(2, "0")}</span>
-          <button type="button" onClick={() => stepHour(-1)}
-            className="p-1 text-taupe hover:text-foreground transition-colors">
-            <ChevronDown className="size-3" />
-          </button>
-          <span className="text-[7px] uppercase tracking-widest text-taupe/40">hr</span>
-        </div>
-
-        <div className="flex items-center px-1 self-center pb-4">
-          <span className="font-serif text-base text-taupe/20">:</span>
-        </div>
-
-        {/* Minute */}
-        <div className="flex-1 flex flex-col items-center gap-0.5 py-2">
-          <button type="button" onClick={() => stepMinute(1)}
-            className="p-1 text-taupe hover:text-foreground transition-colors">
-            <ChevronUp className="size-3" />
-          </button>
-          <span className="font-serif text-2xl tabular-nums leading-none">{String(minute).padStart(2, "0")}</span>
-          <button type="button" onClick={() => stepMinute(-1)}
-            className="p-1 text-taupe hover:text-foreground transition-colors">
-            <ChevronDown className="size-3" />
-          </button>
-          <span className="text-[7px] uppercase tracking-widest text-taupe/40">min</span>
-        </div>
-
-        {/* AM / PM */}
-        <div className="flex flex-col w-11 self-stretch">
-          <button type="button" onClick={() => isPM && toggleAmPm()}
-            className={cn(
-              "flex-1 text-[10px] font-semibold uppercase tracking-wider transition-colors border-b hairline",
-              !isPM ? "bg-foreground text-offwhite" : "text-taupe hover:bg-nude/20",
-            )}>AM</button>
-          <button type="button" onClick={() => !isPM && toggleAmPm()}
-            className={cn(
-              "flex-1 text-[10px] font-semibold uppercase tracking-wider transition-colors",
-              isPM ? "bg-foreground text-offwhite" : "text-taupe hover:bg-nude/20",
-            )}>PM</button>
-        </div>
+    <div className="grid grid-cols-2 gap-3">
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[10px] uppercase tracking-widest text-taupe">Date</span>
+        <input
+          type="date"
+          value={datePart ?? ""}
+          min={TODAY}
+          onChange={(e) => onChange(`${e.target.value}T${timePart ?? "09:00"}`)}
+          className="border hairline bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground w-full"
+        />
       </div>
-
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[10px] uppercase tracking-widest text-taupe">Time <span className="normal-case tracking-normal font-normal text-taupe/50">AEST</span></span>
+        <input
+          type="time"
+          value={timePart ?? "09:00"}
+          onChange={(e) => onChange(`${datePart ?? TODAY}T${e.target.value}`)}
+          className="border hairline bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground w-full"
+        />
+      </div>
     </div>
   );
 }
@@ -733,7 +625,12 @@ function ScheduleModal({ open, onClose, day, year, monthIndex, contentItems, onS
     if (!open) return;
     const mm = String(monthIndex + 1).padStart(2, "0");
     const dd = String(day).padStart(2, "0");
-    setScheduleTime(`${year}-${mm}-${dd}T09:00`);
+    const selectedDate = `${year}-${mm}-${dd}`;
+    // If scheduling for today in AEST, default to now+30min; otherwise 09:00
+    const nowPlusAU = toDatetimeLocal(new Date(Date.now() + 30 * 60 * 1000).toISOString());
+    const todayAU = nowPlusAU.split("T")[0];
+    const defaultTime = selectedDate === todayAU ? nowPlusAU.split("T")[1] : "09:00";
+    setScheduleTime(`${selectedDate}T${defaultTime}`);
     setSelectedItemId("");
     setSearch("");
   }, [open, day, year, monthIndex]);
@@ -772,7 +669,7 @@ function ScheduleModal({ open, onClose, day, year, monthIndex, contentItems, onS
 
   const handleSubmit = async () => {
     if (!selectedItem || !scheduleTime) return;
-    if (auLocalToUTC(scheduleTime) <= new Date().toISOString()) {
+    if (scheduleTime <= toDatetimeLocal(new Date().toISOString())) {
       toast.error("Please pick a future date and time.");
       return;
     }
@@ -819,12 +716,11 @@ function ScheduleModal({ open, onClose, day, year, monthIndex, contentItems, onS
 
         <div className="px-6 py-5 space-y-5 overflow-y-auto max-h-[60vh]">
           {/* Date & Time */}
-          <div>
-            <label className="text-[10px] uppercase tracking-widest text-taupe block mb-3">
-              Date & Time
-              <span className="ml-1 normal-case tracking-normal font-normal text-taupe/50">(Australian Eastern Time)</span>
-            </label>
+          <div className="space-y-1.5">
             <DateTimePicker value={scheduleTime} onChange={setScheduleTime} />
+            <p className="text-[10px] text-taupe/50">
+              Now in AEST: {new Date().toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit", timeZone: AU_TZ })}
+            </p>
           </div>
 
           {/* Content picker */}
