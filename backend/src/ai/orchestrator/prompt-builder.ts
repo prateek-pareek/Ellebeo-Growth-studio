@@ -188,7 +188,7 @@ export class PromptBuilder {
 You MUST format/orient this post to align with the '${contentPillar.toUpperCase().replace(/_/g, ' ')}' pillar:
 - CLIENT RESULTS: Focus on clinical/technical work details, the physical results of this treatment, and micro-aesthetic details.
 - BEHIND THE SCENES: Focus on practitioner process, salon vibes, or personal micro-stories from the chair.
-- EDUCATION TIPS: Focus on post-care literacy, skincare ingredients, micro-tips, or treatment science.
+- EDUCATION TIPS: Focus on post-care literacy, skincare ingredients, micro-tips, or treatment science. Strict compliance rule: Do NOT write a client case study or mention specific visit outcomes (e.g. do not say "Deg walked away with smoother skin"). Re-orient the copy to teach general skincare principles or ingredient benefits.
 - PROMOTION: Focus on gentle slot urgencies, booking CTAs, or positioning high-margin treatments.` : '';
 
     // Compile recent feedbacks into active prompting constraints

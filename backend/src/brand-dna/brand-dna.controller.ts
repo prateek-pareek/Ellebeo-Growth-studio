@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Req, UseGuards, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { BrandDnaService } from './brand-dna.service';
+import { MoodboardExtractorService } from '../ai/services/moodboard-extractor.service';
 import { CreateBrandDnaDto, ScanInstagramDto, ScanWebsiteDto } from './dto/brand-dna.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TenantStatusGuard } from '../common/guards/tenant-status.guard';
@@ -8,7 +9,15 @@ import { TenantStatusGuard } from '../common/guards/tenant-status.guard';
 @UseGuards(JwtAuthGuard, TenantStatusGuard)
 @Controller('brand-dna')
 export class BrandDnaController {
-  constructor(private readonly brandDnaService: BrandDnaService) {}
+  constructor(
+    private readonly brandDnaService: BrandDnaService,
+    private readonly moodboardExtractor: MoodboardExtractorService,
+  ) {}
+
+  @Post('moodboard/analyse')
+  analyseMoodboard(@Req() req: any, @Body('imageUrls') imageUrls: string[]) {
+    return this.moodboardExtractor.analyseMoodboards(req.user.tenantId, imageUrls);
+  }
 
   @Post('upload-logo')
   @UseInterceptors(FileInterceptor('file'))

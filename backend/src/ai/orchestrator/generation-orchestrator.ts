@@ -273,6 +273,10 @@ export class GenerationOrchestrator {
     let determinedGrid = { pillar: 'client_results', layout: 'passepartout_text' };
     try {
       determinedGrid = await this.gridOrchestrator.determineNextLayoutAndPillar(tenantId);
+      if (payload.businessGoal === 'build_brand_authority') {
+        determinedGrid.pillar = 'education_tips';
+        console.log(`[GRID ROTATOR OVERRIDE]: Forced Pillar="education_tips" because businessGoal is "build_brand_authority" (Educate).`);
+      }
       console.log(`[GRID ROTATOR]: Selected Pillar="${determinedGrid.pillar}" Layout="${determinedGrid.layout}" for tenant ${tenantId}`);
     } catch (gridErr) {
       console.error('[GRID ROTATOR ERROR] Failed to compute grid, falling back to default:', gridErr);
@@ -592,6 +596,10 @@ Requirements:
         });
 
         try {
+          // Extract dynamic fonts from BrandDNA structure
+          const headingFont = brandDNA.brandFont || (brandDNA.brandDnaV2 as any)?.typography?.heading_font || 'Playfair Display';
+          const bodyFont = (brandDNA.brandDnaV2 as any)?.typography?.body_font || 'Inter';
+
           // Try AI image generation first
           const aiSlides = await this.aiImageGen.generateCarousel({
             afterPhotoUrl,
@@ -605,6 +613,9 @@ Requirements:
             serviceType: appointment?.serviceCategory ?? 'beauty treatment',
             artDirectorBrief: briefResult.slides,
             layoutType: determinedGrid.layout,
+            brandFont: headingFont,
+            bodyFont: bodyFont,
+            visualRanking: brandDNA.visualRanking ?? [],
           });
           // Apply logo to each carousel slide
           const slidesWithLogo = brandDNA.logoUrl
@@ -651,6 +662,9 @@ Requirements:
         });
 
         try {
+          const headingFont = brandDNA.brandFont || (brandDNA.brandDnaV2 as any)?.typography?.heading_font || 'Playfair Display';
+          const bodyFont = (brandDNA.brandDnaV2 as any)?.typography?.body_font || 'Inter';
+
           const aiFrames = await this.aiImageGen.generateStory({
             afterPhotoUrl,
             beforePhotoUrl,
@@ -663,6 +677,9 @@ Requirements:
             serviceType: appointment?.serviceCategory ?? 'beauty treatment',
             artDirectorBrief: briefResult.slides,
             layoutType: determinedGrid.layout,
+            brandFont: headingFont,
+            bodyFont: bodyFont,
+            visualRanking: brandDNA.visualRanking ?? [],
           });
           const framesWithLogo = brandDNA.logoUrl
             ? await Promise.all(aiFrames.map(async f => ({ ...f, url: await this.logoOverlay.applyLogo({ imageUrl: f.url, logoUrl: brandDNA.logoUrl, position: brandDNA.logoPosition, tenantId }) })))
