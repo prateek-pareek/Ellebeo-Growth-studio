@@ -51,6 +51,120 @@ export const Route = createFileRoute("/brand/onboarding")({
 const GROUPS = ["Brand", "Visual", "Voice", "Commercial", "Compliance", "Output"] as const;
 type GroupName = (typeof GROUPS)[number];
 
+// ── Section fill count & status helpers ──────────────────────────────────────
+
+const T = (v: unknown): boolean =>
+  typeof v === "string" ? v.trim().length > 0 : Array.isArray(v) ? v.length > 0 : Boolean(v);
+
+function sectionFill(id: string, r: BrandDnaRecord): { filled: number; total: number } | null {
+  switch (id) {
+    case "foundations": {
+      const f = r.foundations;
+      const checks = [
+        T(f.professional_name),
+        T(f.category) || f.categories.length > 0,
+        T(f.location) || T(f.service_area),
+        T(f.niche),
+        T(f.known_for),
+        T(f.reputation_asset),
+      ];
+      return { filled: checks.filter(Boolean).length, total: 6 };
+    }
+    case "essence": {
+      const f = r.essence;
+      return { filled: [f.one_sentence, f.world_anchor, f.image_energy].filter(T).length, total: 3 };
+    }
+    case "visual_identity": {
+      const p = r.visual_identity.palette;
+      const checks = [T(p.primary), T(p.background), T(p.accent), r.visual_identity.style_ranking.length > 0, T(r.visual_identity.logo_usage_rules)];
+      return { filled: checks.filter(Boolean).length, total: 5 };
+    }
+    case "moodboard": {
+      const n = r.moodboard.filter((m) => m.usage !== "private").length;
+      return { filled: Math.min(n, 5), total: 5 };
+    }
+    case "image_direction": {
+      const d = r.image_direction;
+      const checks = [
+        d.lighting.length > 0,
+        d.composition.length > 0,
+        d.environments.length > 0 || T(d.environments_other),
+        d.textures.length > 0,
+        T(d.realism),
+        T(d.people),
+      ];
+      return { filled: checks.filter(Boolean).length, total: 6 };
+    }
+    case "typography": {
+      const ty = r.typography;
+      return { filled: [ty.personality, ty.heading_font, ty.body_font, ty.text_placement].filter(T).length, total: 4 };
+    }
+    case "asset_library": {
+      const n = r.asset_library.filter((a) => T(a.consent_status) && a.consent_status !== "no_consent").length;
+      return { filled: Math.min(n, 5), total: 5 };
+    }
+    case "signature_system": {
+      const s = r.signature_system;
+      return { filled: [s.recurring_motif, s.framing_habit, s.colour_discipline, s.type_rule, s.finish, s.light_signature, s.always_absent].filter(T).length, total: 7 };
+    }
+    case "voice": {
+      const v = r.voice_v2;
+      return { filled: [v.three_words, v.perception, v.proof, v.caption_length, v.emoji_usage, v.caption_style].filter(T).length, total: 6 };
+    }
+    case "written_conventions": {
+      const w = r.written_conventions;
+      return { filled: [w.always_write, w.avoid_phrases, w.punctuation_rules].filter(T).length, total: 3 };
+    }
+    case "commercial": {
+      const c = r.commercial;
+      const checks = [T(c.hero_service), T(c.desired_outcome), T(c.market_tier), c.content_objectives.length > 0, T(c.cta_style)];
+      return { filled: checks.filter(Boolean).length, total: 5 };
+    }
+    case "ideal_client": {
+      const ic = r.ideal_client_v2;
+      return { filled: [ic.summary, ic.problem, ic.feeling_after_booking, ic.fears_objections, ic.trust_signals, ic.age_range, ic.buying_motivation, ic.visual_taste].filter(T).length, total: 8 };
+    }
+    case "content_strategy": {
+      const cs = r.content_strategy;
+      const checks = [cs.pillars_ranked.length > 0, T(cs.targets.bookings_per_week), T(cs.targets.posts_per_week), cs.output_formats.length > 0];
+      return { filled: checks.filter(Boolean).length, total: 4 };
+    }
+    case "compliance": {
+      const c = r.compliance;
+      const checks = [T(c.before_after_rules), T(c.claims_to_avoid), c.regulated_ack || c.medical_aesthetics_practitioner];
+      return { filled: checks.filter(Boolean).length, total: 3 };
+    }
+    case "output_formats": {
+      const o = r.output_formats;
+      const checks = [o.platforms.length > 0, o.aspect_ratios.length > 0, o.finish.length > 0];
+      return { filled: checks.filter(Boolean).length, total: 3 };
+    }
+    default:
+      return null;
+  }
+}
+
+function sectionDotStatus(id: string, r: BrandDnaRecord, locked: boolean): "done" | "partial" | "empty" | "locked" {
+  if (locked) return "locked";
+  const fill = sectionFill(id, r);
+  if (!fill || fill.total === 0) return "empty";
+  const pct = fill.filled / fill.total;
+  if (pct >= 0.99) return "done";
+  if (pct >= 0.33) return "partial";
+  return "empty";
+}
+
+function StatusDot({ status, size = "sm" }: { status: "done" | "partial" | "empty" | "locked"; size?: "sm" | "md" }) {
+  const dim = size === "md" ? "w-2 h-2" : "w-[5px] h-[5px]";
+  const base = `${dim} rounded-full flex-shrink-0 transition-colors`;
+  if (status === "done")    return <div className={`${base} bg-sage`} />;
+  if (status === "partial") return <div className={`${base} border-2 border-taupe`} />;
+  if (status === "locked")  return <div className={`${base} border border-dashed border-taupe/40`} />;
+  return <div className={`${base} bg-border`} />;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 function BrandDnaForm() {
   const [record, setRecord] = useState<BrandDnaRecord>(EMPTY_BRAND_DNA);
   const [openSection, setOpenSection] = useState<string>(SECTIONS[0].id);
@@ -163,14 +277,29 @@ function BrandDnaForm() {
       <p className="text-sm text-taupe leading-relaxed max-w-[60ch] mb-2">
         Complete your Brand DNA so Elle.Be.O can create content that looks, sounds and feels like your brand. Save a draft any time — nothing is lost between sessions.
       </p>
-      <p className="text-xs text-taupe/60 mb-8">
+      <p className="text-xs text-taupe/60 mb-5">
         {loading ? "Loading your saved Brand DNA…" : "Live — changes save to your account."}
       </p>
 
-      {/* Group tabs */}
-      <div role="tablist" className="flex flex-wrap gap-px bg-border border hairline mb-8">
+      {/* Progress strip */}
+      <div className="flex items-center gap-4 sm:gap-5 py-3.5 mb-8 border-t border-b border-border/60">
+        <p className="text-[10px] uppercase tracking-[0.22em] text-taupe/70 whitespace-nowrap shrink-0">Brand DNA strength</p>
+        <div className="flex-1 h-px bg-border relative">
+          <div
+            className="absolute left-0 top-[-0.5px] h-[2px] bg-foreground transition-all duration-500"
+            style={{ width: `${Math.max(2, completion.percent)}%` }}
+          />
+        </div>
+        <p className="font-serif text-lg leading-none shrink-0 tabular-nums">
+          {completion.percent}<span className="text-sm text-taupe">%</span>
+        </p>
+        <p className="text-[11px] text-taupe hidden sm:block whitespace-nowrap shrink-0">{completion.tier.label}</p>
+      </div>
+
+      {/* Group tabs — underline style with per-section status dots */}
+      <div role="tablist" className="flex gap-0 border-b border-border mb-8 overflow-x-auto">
         {GROUPS.map((g) => {
-          const count = sectionsByGroup[g].length;
+          const tabSections = sectionsByGroup[g].filter((s) => s.id !== "completion");
           const active = g === activeGroup;
           return (
             <button
@@ -182,10 +311,25 @@ function BrandDnaForm() {
                 const first = sectionsByGroup[g][0];
                 if (first) setOpenSection(first.id);
               }}
-              className={"px-5 py-3 text-left transition-colors flex-1 min-w-[100px] " + (active ? "bg-foreground text-offwhite" : "bg-card hover:bg-nude/30")}
+              className={
+                "flex flex-col items-start gap-1 px-4 sm:px-5 py-3 pb-[11px] border-b-2 -mb-px transition-colors whitespace-nowrap " +
+                (active ? "border-foreground" : "border-transparent hover:border-border/60")
+              }
             >
-              <p className={"text-[10px] uppercase tracking-[0.15em] mb-1 " + (active ? "text-nude/70" : "text-taupe")}>{g}</p>
-              <p className={"text-xs font-medium " + (active ? "text-offwhite" : "text-foreground")}>{count} {count === 1 ? "area" : "areas"}</p>
+              <div className="flex items-center gap-2">
+                <span className={"text-[11px] uppercase tracking-[0.2em] transition-colors " + (active ? "text-foreground font-medium" : "text-taupe")}>
+                  {g}
+                </span>
+                <div className="flex gap-[3px] items-center">
+                  {tabSections.map((s) => {
+                    const lk = !!(SECTION_TIER_GATE[s.id] && tierRank(currentTier) < SECTION_TIER_GATE[s.id]!.minTier);
+                    return <StatusDot key={s.id} status={sectionDotStatus(s.id, record, lk)} size="sm" />;
+                  })}
+                </div>
+              </div>
+              <span className="text-[9px] text-taupe/50 tracking-[0.05em]">
+                {tabSections.length} {tabSections.length === 1 ? "section" : "sections"}
+              </span>
             </button>
           );
         })}
@@ -202,6 +346,8 @@ function BrandDnaForm() {
             const locked = gate ? tierRank(currentTier) < gate.minTier : false;
             const hasNote = !locked && softNote ? tierRank(currentTier) < softNote.minTier : false;
             const open = !locked && openSection === s.id;
+            const dotSt = sectionDotStatus(s.id, record, locked);
+            const fill = !locked && !open ? sectionFill(s.id, record) : null;
 
             return (
               <section key={s.id} id={`section-${s.id}`} className={"artifact scroll-mt-24 " + (locked ? "opacity-60" : "")}>
@@ -209,11 +355,15 @@ function BrandDnaForm() {
                   type="button"
                   aria-expanded={open}
                   onClick={() => !locked && setOpenSection(open ? "" : s.id)}
-                  className={"w-full text-left flex items-start justify-between gap-4 p-5 sm:p-6 transition-colors " + (locked ? "cursor-default" : "hover:bg-nude/20")}
+                  className={"w-full text-left flex items-center gap-3.5 px-5 sm:px-6 py-4 transition-colors " + (locked ? "cursor-default" : "hover:bg-nude/10")}
                 >
-                  <div className="flex-1">
+                  {/* Status dot */}
+                  <StatusDot status={dotSt} size="md" />
+
+                  {/* Title + badge + help */}
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h2 className="font-serif text-2xl leading-snug">{s.title}</h2>
+                      <h2 className="font-serif text-xl leading-snug">{s.title}</h2>
                       {locked && (
                         <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.15em] border border-border bg-muted text-taupe px-2 py-0.5 rounded-full">
                           <Lock className="size-2.5" /> {gate?.label}
@@ -225,17 +375,29 @@ function BrandDnaForm() {
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-taupe mt-1 leading-relaxed">{s.help}</p>
+                    <p className="text-xs text-taupe mt-0.5 leading-relaxed">{s.help}</p>
                     {hasNote && (
-                      <p className="text-[10px] text-amber-600/80 mt-1.5 leading-relaxed">{softNote?.note}</p>
+                      <p className="text-[10px] text-amber-600/80 mt-1 leading-relaxed">{softNote?.note}</p>
                     )}
                   </div>
-                  {!locked && (
-                    <span className={"text-sm mt-0.5 shrink-0 transition-opacity " + (open ? "text-taupe" : "text-taupe/30")} aria-hidden>
-                      {open ? "−" : "+"}
+
+                  {/* Fill chip — collapsed unlocked only */}
+                  {fill && (
+                    <span className={"text-[11px] whitespace-nowrap flex-shrink-0 tabular-nums " + (fill.filled > 0 ? "text-sage" : "text-taupe/40")}>
+                      {fill.filled} / {fill.total}
                     </span>
                   )}
-                  {locked && <Lock className="size-4 text-taupe/40 shrink-0 mt-0.5" aria-hidden />}
+
+                  {/* Chevron or lock */}
+                  {!locked && (
+                    <span
+                      className={"text-base flex-shrink-0 leading-none transition-transform duration-200 " + (open ? "rotate-180 text-taupe" : "text-taupe/30")}
+                      aria-hidden
+                    >
+                      ▾
+                    </span>
+                  )}
+                  {locked && <Lock className="size-4 text-taupe/40 flex-shrink-0" aria-hidden />}
                 </button>
 
                 {locked && (
