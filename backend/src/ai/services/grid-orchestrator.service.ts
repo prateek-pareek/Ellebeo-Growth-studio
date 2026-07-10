@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export type ContentPillar = 'client_results' | 'behind_the_scenes' | 'education_tips' | 'promotion';
-export type LayoutType = 'passepartout_text' | 'passepartout_clean' | 'full_bleed_clean' | 'split_before_after' | 'asymmetric_monogram' | 'translucent_split' | 'poster_cover' | 'postcard_ticket' | 'editorial_arch' | 'text_only_editorial' | 'filmstrip_grid' | 'handwritten_note' | 'gallery_frame' | 'duotone_editorial';
+export type LayoutType = 'passepartout_text' | 'passepartout_clean' | 'full_bleed_clean' | 'split_before_after' | 'asymmetric_monogram' | 'translucent_split' | 'poster_cover' | 'postcard_ticket' | 'editorial_arch' | 'text_only_editorial' | 'filmstrip_grid' | 'handwritten_note' | 'gallery_frame' | 'duotone_editorial' | 'side_panel_split' | 'bold_editorial_poster' | 'giant_type_overlay' | 'chat_bubble_quote' | 'testimonial_card';
 
 @Injectable()
 export class GridOrchestratorService {
@@ -28,7 +28,7 @@ export class GridOrchestratorService {
     });
 
     const pillars: ContentPillar[] = ['client_results', 'behind_the_scenes', 'education_tips', 'promotion'];
-    const layouts: LayoutType[] = ['passepartout_text', 'passepartout_clean', 'full_bleed_clean', 'split_before_after', 'asymmetric_monogram', 'translucent_split', 'poster_cover', 'postcard_ticket', 'editorial_arch', 'text_only_editorial', 'filmstrip_grid', 'handwritten_note', 'gallery_frame', 'duotone_editorial'];
+    const layouts: LayoutType[] = ['passepartout_text', 'passepartout_clean', 'full_bleed_clean', 'split_before_after', 'asymmetric_monogram', 'translucent_split', 'poster_cover', 'postcard_ticket', 'editorial_arch', 'text_only_editorial', 'filmstrip_grid', 'handwritten_note', 'gallery_frame', 'duotone_editorial', 'side_panel_split', 'bold_editorial_poster', 'giant_type_overlay', 'chat_bubble_quote', 'testimonial_card'];
 
     // Scoring system: penalize recent items to force rotation
     const pillarScores = { client_results: 0, behind_the_scenes: 0, education_tips: 0, promotion: 0 };
@@ -46,7 +46,12 @@ export class GridOrchestratorService {
       filmstrip_grid: 0,
       handwritten_note: 0,
       gallery_frame: 0,
-      duotone_editorial: 0
+      duotone_editorial: 0,
+      side_panel_split: 0,
+      bold_editorial_poster: 0,
+      giant_type_overlay: 0,
+      chat_bubble_quote: 0,
+      testimonial_card: 0
     };
 
     lastPosts.forEach((post, index) => {

@@ -582,6 +582,8 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
       const metadata = await sharp(imageBuffer).metadata();
       const originalW = metadata.width || 1024;
       const originalH = metadata.height || 1024;
+      const photoMimeType = metadata.format === 'jpeg' ? 'image/jpeg' : metadata.format === 'webp' ? 'image/webp' : 'image/png';
+      const photoDataUri = `data:${photoMimeType};base64,${base64Image}`;
 
       // Force high-definition target canvas dimensions (Instagram standards)
       const isStory = originalH > originalW;
@@ -733,8 +735,18 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
         baseImage = sharp({
           create: { width: innerW, height: innerH, channels: 3, background: validSecondaryColor }
         });
+      } else if (layoutType === 'side_panel_split') {
+        // Full solid-colour canvas — the photo is embedded into its own panel via SVG in Step 3
+        baseImage = sharp({
+          create: { width: w, height: h, channels: 3, background: validSecondaryColor }
+        });
       } else {
-        if (layoutType !== 'full_bleed_clean' && layoutType !== 'translucent_split' && layoutType !== 'poster_cover' && layoutType !== 'handwritten_note' && layoutType !== 'duotone_editorial') {
+        if (
+          layoutType !== 'full_bleed_clean' && layoutType !== 'translucent_split' && layoutType !== 'poster_cover' &&
+          layoutType !== 'handwritten_note' && layoutType !== 'duotone_editorial' &&
+          layoutType !== 'giant_type_overlay' && layoutType !== 'bold_editorial_poster' &&
+          layoutType !== 'chat_bubble_quote' && layoutType !== 'testimonial_card'
+        ) {
           baseImage = sharp(imageBuffer).resize(innerW, innerH, { fit: 'cover' });
         }
       }
@@ -842,6 +854,58 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
               ${escapedLines.map((line, idx) => `<tspan x="${w - 260}" dy="${idx === 0 ? 0 : dyOffset}">${line}</tspan>`).join('')}
             </text>
           </g>`;
+      } else if (layoutType === 'giant_type_overlay' && hasText) {
+        const giantWord = escapeXml((lines[0] || overlayText).split(/\s+/)[0].toUpperCase().slice(0, 12));
+        const giantFontSize = giantWord.length > 8 ? 90 : giantWord.length > 5 ? 130 : 180;
+        textPanelSvg = `
+          <!-- Oversized single-word graphic type statement behind the caption -->
+          <text x="${w / 2}" y="${Math.round(h * 0.42)}" text-anchor="middle" font-family="'${brandFont}', Georgia, serif" font-weight="bold" font-size="${giantFontSize}px" fill="${validBrandColor}" fill-opacity="0.92">${giantWord}</text>
+          <text x="${w / 2}" y="${h - 150}" class="overlay-text text-centered" style="font-size: ${dynamicFontSize}px; fill: #FFFFFF;">
+            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : dyOffset}">${line}</tspan>`).join('')}
+          </text>`;
+      } else if (layoutType === 'bold_editorial_poster' && hasText) {
+        const posterFontSize = dynamicFontSize + 34;
+        textPanelSvg = `
+          <!-- Bold stacked headline top-aligned, vertical brand tag along the right edge -->
+          <text x="${w / 2}" y="${Math.round(h * 0.16)}" text-anchor="middle" font-family="'${brandFont}', system-ui, sans-serif" font-weight="bold" font-size="${posterFontSize}px" fill="#FFFFFF" letter-spacing="1px">
+            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : posterFontSize * 1.05}">${line}</tspan>`).join('')}
+          </text>
+          <text x="${w - 30}" y="${h / 2}" text-anchor="middle" font-family="'${brandFont}', system-ui, sans-serif" font-weight="bold" font-size="22px" fill="#FFFFFF" fill-opacity="0.75" letter-spacing="6px" transform="rotate(90 ${w - 30} ${h / 2})">${escapedSpacedName}</text>`;
+      } else if (layoutType === 'chat_bubble_quote' && hasText) {
+        const bubbleW = Math.min(w - 120, 100 + maxLength * (dynamicFontSize * 0.6));
+        const bubbleX = (w - bubbleW) / 2;
+        const bubbleH = 70 + lines.length * dyOffset;
+        const bubbleY = h - 260 - bubbleH;
+        textPanelSvg = `
+          <!-- Rounded speech-bubble caption card -->
+          <rect x="${bubbleX}" y="${bubbleY}" width="${bubbleW}" height="${bubbleH}" rx="26" fill="${validSecondaryColor}" fill-opacity="0.96" />
+          <path d="M ${w / 2 - 16} ${bubbleY + bubbleH} L ${w / 2} ${bubbleY + bubbleH + 22} L ${w / 2 + 16} ${bubbleY + bubbleH} Z" fill="${validSecondaryColor}" fill-opacity="0.96" />
+          <text x="${w / 2}" y="${bubbleY + 45}" class="overlay-text text-centered" style="font-size: ${dynamicFontSize}px; fill: ${validBrandColor};">
+            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : dyOffset}">${line}</tspan>`).join('')}
+          </text>`;
+      } else if (layoutType === 'testimonial_card' && hasText) {
+        const avatarR = 70;
+        const avatarCx = 140;
+        const avatarCy = 170;
+        const cardY = avatarCy + avatarR + 40;
+        textPanelSvg = `
+          <!-- Circular avatar crop of the same photo + name + quote card -->
+          <defs><clipPath id="avatarClip"><circle cx="${avatarCx}" cy="${avatarCy}" r="${avatarR}" /></clipPath></defs>
+          <image href="${photoDataUri}" x="${avatarCx - avatarR}" y="${avatarCy - avatarR}" width="${avatarR * 2}" height="${avatarR * 2}" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatarClip)" />
+          <circle cx="${avatarCx}" cy="${avatarCy}" r="${avatarR}" fill="none" stroke="#FFFFFF" stroke-width="4" />
+          <text x="${avatarCx + avatarR + 20}" y="${avatarCy - 5}" font-family="'${brandFont}', system-ui, sans-serif" font-weight="bold" font-size="24px" fill="#FFFFFF">${escapedSpacedName}</text>
+          <text x="${avatarCx + avatarR + 20}" y="${avatarCy + 26}" font-family="'${bodyFont}', system-ui, sans-serif" font-size="15px" fill="#FFFFFF" fill-opacity="0.85" letter-spacing="2px">VERIFIED CLIENT</text>
+          <rect x="60" y="${cardY}" width="${w - 120}" height="${70 + lines.length * dyOffset}" rx="18" fill="#000000" fill-opacity="0.45" />
+          <text x="90" y="${cardY + 42}" class="overlay-text text-left" style="font-size: ${dynamicFontSize}px; fill: #FFFFFF;">
+            ${escapedLines.map((line, idx) => `<tspan x="90" dy="${idx === 0 ? 0 : dyOffset}">${line}</tspan>`).join('')}
+          </text>`;
+      } else if (layoutType === 'side_panel_split' && hasText) {
+        textPanelSvg = `
+          <!-- Label + headline block sitting in the solid side panel -->
+          <text x="50" y="${Math.round(h * 0.42)}" font-family="'${bodyFont}', system-ui, sans-serif" font-size="13px" letter-spacing="3px" fill="${validBrandColor}" fill-opacity="0.8">${escapedSpacedName}</text>
+          <text x="50" y="${Math.round(h * 0.42) + 40}" class="overlay-text text-left" style="font-size: ${dynamicFontSize + 4}px; fill: ${dynamicTextColor};">
+            ${escapedLines.map((line, idx) => `<tspan x="50" dy="${idx === 0 ? 0 : dyOffset}">${line}</tspan>`).join('')}
+          </text>`;
       }
 
       // Draw structural overlays (split pane rectangles, monograms, notches, sprockets, arch outline)
@@ -887,6 +951,13 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
         visualAdditions = `
           <!-- Fine vector outline retracing the dome mask edge -->
           <path d="M ${paddingX} ${h - paddingBottom} L ${paddingX} ${Math.round(paddingTop + innerH * 0.42)} A ${Math.round(innerW / 2)} ${Math.round(innerH * 0.42)} 0 0 1 ${w - paddingX} ${Math.round(paddingTop + innerH * 0.42)} L ${w - paddingX} ${h - paddingBottom} Z" fill="none" stroke="${validBrandColor}" stroke-width="2" />`;
+      } else if (layoutType === 'side_panel_split') {
+        const sidePanelW = Math.round(w * 0.38);
+        visualAdditions = `
+          <!-- Photo embedded into its own panel, clean vertical divider against the solid side panel -->
+          <defs><clipPath id="sidePhotoClip"><rect x="${sidePanelW}" y="0" width="${w - sidePanelW}" height="${h}" /></clipPath></defs>
+          <image href="${photoDataUri}" x="${sidePanelW}" y="0" width="${w - sidePanelW}" height="${h}" preserveAspectRatio="xMidYMid slice" clip-path="url(#sidePhotoClip)" />
+          <rect x="${sidePanelW - 2}" y="0" width="4" height="${h}" fill="${validBrandColor}" fill-opacity="0.5" />`;
       }
 
       // Fetch the custom fonts from Brand DNA dynamically as Base64 to embed directly in the SVG
@@ -951,7 +1022,18 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
 
       // ── Step 4: Composite image scaling and margins based on layout ──
       let compositeBuffer: Buffer;
-      if (layoutType === 'full_bleed_clean' || layoutType === 'translucent_split' || layoutType === 'poster_cover' || layoutType === 'handwritten_note' || layoutType === 'duotone_editorial') {
+      if (layoutType === 'side_panel_split') {
+        // baseImage is already a fully-built w x h canvas (solid panel + photo embedded via SVG)
+        compositeBuffer = await baseImage
+          .composite([{ input: highResSvgBuffer, blend: 'over' }])
+          .png()
+          .toBuffer();
+      } else if (
+        layoutType === 'full_bleed_clean' || layoutType === 'translucent_split' || layoutType === 'poster_cover' ||
+        layoutType === 'handwritten_note' || layoutType === 'duotone_editorial' ||
+        layoutType === 'giant_type_overlay' || layoutType === 'bold_editorial_poster' ||
+        layoutType === 'chat_bubble_quote' || layoutType === 'testimonial_card'
+      ) {
         let fullBleedImage = sharp(imageBuffer).resize(w, h, { fit: 'cover' });
         if (layoutType === 'duotone_editorial') {
           fullBleedImage = fullBleedImage.greyscale().tint(validBrandColor as any);
