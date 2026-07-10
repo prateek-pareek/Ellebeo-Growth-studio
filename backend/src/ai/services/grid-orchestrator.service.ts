@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export type ContentPillar = 'client_results' | 'behind_the_scenes' | 'education_tips' | 'promotion';
-export type LayoutType = 'passepartout_text' | 'passepartout_clean' | 'full_bleed_clean' | 'split_before_after' | 'asymmetric_monogram' | 'translucent_split' | 'poster_cover';
+export type LayoutType = 'passepartout_text' | 'passepartout_clean' | 'full_bleed_clean' | 'split_before_after' | 'asymmetric_monogram' | 'translucent_split' | 'poster_cover' | 'postcard_ticket' | 'editorial_arch' | 'text_only_editorial' | 'filmstrip_grid' | 'handwritten_note' | 'gallery_frame' | 'duotone_editorial';
 
 @Injectable()
 export class GridOrchestratorService {
@@ -28,18 +28,25 @@ export class GridOrchestratorService {
     });
 
     const pillars: ContentPillar[] = ['client_results', 'behind_the_scenes', 'education_tips', 'promotion'];
-    const layouts: LayoutType[] = ['passepartout_text', 'passepartout_clean', 'full_bleed_clean', 'split_before_after', 'asymmetric_monogram', 'translucent_split', 'poster_cover'];
+    const layouts: LayoutType[] = ['passepartout_text', 'passepartout_clean', 'full_bleed_clean', 'split_before_after', 'asymmetric_monogram', 'translucent_split', 'poster_cover', 'postcard_ticket', 'editorial_arch', 'text_only_editorial', 'filmstrip_grid', 'handwritten_note', 'gallery_frame', 'duotone_editorial'];
 
     // Scoring system: penalize recent items to force rotation
     const pillarScores = { client_results: 0, behind_the_scenes: 0, education_tips: 0, promotion: 0 };
-    const layoutScores = { 
-      passepartout_text: 0, 
-      passepartout_clean: 0, 
-      full_bleed_clean: 0, 
+    const layoutScores = {
+      passepartout_text: 0,
+      passepartout_clean: 0,
+      full_bleed_clean: 0,
       split_before_after: 0,
       asymmetric_monogram: 0,
       translucent_split: 0,
-      poster_cover: 0
+      poster_cover: 0,
+      postcard_ticket: 0,
+      editorial_arch: 0,
+      text_only_editorial: 0,
+      filmstrip_grid: 0,
+      handwritten_note: 0,
+      gallery_frame: 0,
+      duotone_editorial: 0
     };
 
     lastPosts.forEach((post, index) => {
