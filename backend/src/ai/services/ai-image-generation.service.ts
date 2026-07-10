@@ -18,6 +18,7 @@ import * as https from 'https';
 import * as http from 'http';
 import { GoogleGenAI } from '@google/genai';
 import sharp from 'sharp';
+import { resolveLayoutTemplate, BASE_TREATMENTS, TEXT_TEMPLATES, DECORATIONS } from '../config/layout-renderers';
 
 const openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
 
@@ -667,89 +668,23 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
       const innerW = w - (paddingX * 2);
       const innerH = h - (paddingTop + paddingBottom);
 
-      // ── Step 1: Process Base Image based on LayoutType ──
-      let baseImage: sharp.Sharp = sharp(imageBuffer);
-      let compositeTop = paddingTop;
-      let compositeBottom = paddingBottom;
-      let compositeLeft = paddingX;
-      let compositeRight = paddingX;
+      // ── Step 1: Process Base Image — dispatched from layout-templates.config.json ──
+      const template = resolveLayoutTemplate(layoutType);
 
-      if (layoutType === 'split_before_after' && beforePhotoUrl) {
-        try {
-          const beforeBuffer = await downloadImageAsBuffer(beforePhotoUrl);
-          
-          const leftHalf = await sharp(beforeBuffer)
-            .resize(Math.round(innerW / 2), innerH, { fit: 'cover' })
-            .toBuffer();
-            
-          const rightHalf = await sharp(imageBuffer)
-            .resize(Math.round(innerW / 2), innerH, { fit: 'cover' })
-            .toBuffer();
-
-          baseImage = sharp({
-            create: {
-              width: innerW,
-              height: innerH,
-              channels: 3,
-              background: '#000000',
-            }
-          }).composite([
-            { input: leftHalf, top: 0, left: 0 },
-            { input: rightHalf, top: 0, left: Math.round(innerW / 2) }
-          ]);
-        } catch (splitErr) {
-          console.error('[Sharp Split Frame Error] Failed to stitch before/after images, falling back:', splitErr);
-          baseImage = sharp(imageBuffer).resize(innerW, innerH, { fit: 'cover' });
-        }
-      } else if (layoutType === 'asymmetric_monogram') {
-        // Shift photo to 70% of canvas, offset it to the top-left
-        const monoW = Math.floor(w * 0.70);
-        const monoH = Math.floor(h * 0.70);
-        baseImage = sharp(imageBuffer).resize(monoW, monoH, { fit: 'cover' });
-
-        compositeTop = Math.floor(h * 0.05);
-        compositeLeft = Math.floor(w * 0.05);
-        compositeBottom = h - monoH - compositeTop;
-        compositeRight = w - monoW - compositeLeft;
-      } else if (layoutType === 'editorial_arch') {
-        // Mask the photo through a dome/arch shape, then seat it on a brand-secondary backdrop
-        try {
-          const archMaskSvg = `
-            <svg width="${innerW}" height="${innerH}" xmlns="http://www.w3.org/2000/svg">
-              <path d="M 0 ${innerH} L 0 ${Math.round(innerH * 0.42)} A ${Math.round(innerW / 2)} ${Math.round(innerH * 0.42)} 0 0 1 ${innerW} ${Math.round(innerH * 0.42)} L ${innerW} ${innerH} Z" fill="#fff"/>
-            </svg>`;
-          const archPhoto = await sharp(imageBuffer)
-            .resize(innerW, innerH, { fit: 'cover' })
-            .composite([{ input: Buffer.from(archMaskSvg), blend: 'dest-in' }])
-            .png()
-            .toBuffer();
-          baseImage = sharp({
-            create: { width: innerW, height: innerH, channels: 3, background: validSecondaryColor }
-          }).composite([{ input: archPhoto, top: 0, left: 0 }]);
-        } catch (archErr) {
-          console.error('[Sharp Editorial Arch Error] Falling back to standard inset:', archErr);
-          baseImage = sharp(imageBuffer).resize(innerW, innerH, { fit: 'cover' });
-        }
-      } else if (layoutType === 'text_only_editorial') {
-        // No photo — an elegant solid quote card using the brand secondary colour as the inner panel
-        baseImage = sharp({
-          create: { width: innerW, height: innerH, channels: 3, background: validSecondaryColor }
-        });
-      } else if (layoutType === 'side_panel_split') {
-        // Full solid-colour canvas — the photo is embedded into its own panel via SVG in Step 3
-        baseImage = sharp({
-          create: { width: w, height: h, channels: 3, background: validSecondaryColor }
-        });
-      } else {
-        if (
-          layoutType !== 'full_bleed_clean' && layoutType !== 'translucent_split' && layoutType !== 'poster_cover' &&
-          layoutType !== 'handwritten_note' && layoutType !== 'duotone_editorial' &&
-          layoutType !== 'giant_type_overlay' && layoutType !== 'bold_editorial_poster' &&
-          layoutType !== 'chat_bubble_quote' && layoutType !== 'testimonial_card'
-        ) {
-          baseImage = sharp(imageBuffer).resize(innerW, innerH, { fit: 'cover' });
-        }
-      }
+      const baseResult = await BASE_TREATMENTS[template.base]!({
+        imageBuffer,
+        beforePhotoUrl,
+        w, h,
+        paddingX, paddingTop, paddingBottom,
+        innerW, innerH,
+        validSecondaryColor,
+        downloadImageAsBuffer,
+      });
+      let baseImage = baseResult.baseImage;
+      let compositeTop = baseResult.compositeTop;
+      let compositeBottom = baseResult.compositeBottom;
+      let compositeLeft = baseResult.compositeLeft;
+      let compositeRight = baseResult.compositeRight;
 
       // ── Step 2: Auto-detect Contrast for Borderless Poster Covers & Slide Backgrounds ──
       const getLuminance = (hex: string): number => {
@@ -775,7 +710,7 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
       const dynamicFooterTextColor = isLightFooter ? '#1E1E1C' : '#FFFFFF';
 
       let posterTextColor = '#FFFFFF';
-      if (layoutType === 'poster_cover') {
+      if (template.textTemplate === 'poster_high_contrast') {
         try {
           const stats = await sharp(imageBuffer).stats();
           const meanLuminance = (stats.channels[0].mean + stats.channels[1].mean + stats.channels[2].mean) / 3;
@@ -798,167 +733,23 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
       }
       const dyOffset = Math.round(dynamicFontSize * 1.35);
 
-      // ── Step 3: Assemble SVG overlays (typography & custom layouts) ──
-      const showPassepartoutText = hasText && (
-        layoutType === 'passepartout_text' ||
-        layoutType === 'split_before_after' ||
-        layoutType === 'postcard_ticket' ||
-        layoutType === 'gallery_frame' ||
-        layoutType === 'filmstrip_grid' ||
-        layoutType === 'editorial_arch'
-      );
+      // ── Step 3: Assemble SVG overlays — dispatched from layout-templates.config.json ──
+      const textCtx = {
+        w, h, dynamicFontSize, dyOffset, escapedLines, lines, overlayText, maxLength,
+        dynamicTextColor, posterTextColor, validBrandColor, validSecondaryColor,
+        brandFont, bodyFont, escapedSpacedName, photoDataUri, escapeXml,
+      };
+      const textPanelSvg = hasText && template.textTemplate
+        ? (TEXT_TEMPLATES[template.textTemplate]?.(textCtx) ?? '')
+        : '';
 
-      let textPanelSvg = '';
-      if (showPassepartoutText) {
-        textPanelSvg = `
-          <!-- Hook Text directly in the Passepartout Negative Space -->
-          <text x="${w / 2}" y="${h - 135}" class="overlay-text text-centered" style="font-size: ${dynamicFontSize}px; fill: ${dynamicTextColor};">
-            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : dyOffset}">${line}</tspan>`).join('')}
-          </text>`;
-      } else if (layoutType === 'asymmetric_monogram' && hasText) {
-        textPanelSvg = `
-          <!-- Left-aligned negative space text for Asymmetrical Layout -->
-          <text x="60" y="${h - 145}" class="overlay-text text-left" style="font-size: ${dynamicFontSize}px; fill: ${dynamicTextColor};">
-            ${escapedLines.map((line, idx) => `<tspan x="60" dy="${idx === 0 ? 0 : dyOffset}">${line}</tspan>`).join('')}
-          </text>`;
-      } else if (layoutType === 'translucent_split' && hasText) {
-        textPanelSvg = `
-          <!-- Text inside the blurred brand side-panel -->
-          <text x="${w * 0.25}" y="${h / 2 - 40}" class="overlay-text text-centered" style="font-size: ${dynamicFontSize}px; fill: #FFFFFF;">
-            ${escapedLines.map((line, idx) => `<tspan x="${w * 0.25}" dy="${idx === 0 ? 0 : dyOffset}">${line}</tspan>`).join('')}
-          </text>`;
-      } else if (layoutType === 'poster_cover' && hasText) {
-        textPanelSvg = `
-          <!-- High contrast text placed directly on the borderless photo -->
-          <text x="${w / 2}" y="${h - 150}" class="overlay-text text-centered" style="fill: ${posterTextColor}; font-size: ${dynamicFontSize}px; letter-spacing: 5px;">
-            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : dyOffset}">${line}</tspan>`).join('')}
-          </text>`;
-      } else if (layoutType === 'duotone_editorial' && hasText) {
-        textPanelSvg = `
-          <!-- High contrast centred text over the duotone-treated photo -->
-          <text x="${w / 2}" y="${h - 150}" class="overlay-text text-centered" style="fill: #FFFFFF; font-size: ${dynamicFontSize}px; letter-spacing: 4px;">
-            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : dyOffset}">${line}</tspan>`).join('')}
-          </text>`;
-      } else if (layoutType === 'text_only_editorial' && hasText) {
-        textPanelSvg = `
-          <!-- Large centred quote-style text, no photo underneath -->
-          <text x="${w / 2}" y="${h / 2}" class="overlay-text text-centered" style="font-size: ${dynamicFontSize + 10}px; fill: ${dynamicTextColor};">
-            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : dyOffset + 14}">${line}</tspan>`).join('')}
-          </text>`;
-      } else if (layoutType === 'handwritten_note' && hasText) {
-        textPanelSvg = `
-          <!-- Rotated paper note card sitting over the full-bleed photo -->
-          <g transform="rotate(-4 ${w - 260} ${h - 210})">
-            <rect x="${w - 460}" y="${h - 300}" width="400" height="180" rx="6" fill="${validSecondaryColor}" fill-opacity="0.97" stroke="${validBrandColor}" stroke-width="2" />
-            <text x="${w - 260}" y="${h - 210}" class="overlay-text text-centered" style="font-style: italic; font-size: ${dynamicFontSize}px; fill: ${validBrandColor};">
-              ${escapedLines.map((line, idx) => `<tspan x="${w - 260}" dy="${idx === 0 ? 0 : dyOffset}">${line}</tspan>`).join('')}
-            </text>
-          </g>`;
-      } else if (layoutType === 'giant_type_overlay' && hasText) {
-        const giantWord = escapeXml((lines[0] || overlayText).split(/\s+/)[0].toUpperCase().slice(0, 12));
-        const giantFontSize = giantWord.length > 8 ? 90 : giantWord.length > 5 ? 130 : 180;
-        textPanelSvg = `
-          <!-- Oversized single-word graphic type statement behind the caption -->
-          <text x="${w / 2}" y="${Math.round(h * 0.42)}" text-anchor="middle" font-family="'${brandFont}', Georgia, serif" font-weight="bold" font-size="${giantFontSize}px" fill="${validBrandColor}" fill-opacity="0.92">${giantWord}</text>
-          <text x="${w / 2}" y="${h - 150}" class="overlay-text text-centered" style="font-size: ${dynamicFontSize}px; fill: #FFFFFF;">
-            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : dyOffset}">${line}</tspan>`).join('')}
-          </text>`;
-      } else if (layoutType === 'bold_editorial_poster' && hasText) {
-        const posterFontSize = dynamicFontSize + 34;
-        textPanelSvg = `
-          <!-- Bold stacked headline top-aligned, vertical brand tag along the right edge -->
-          <text x="${w / 2}" y="${Math.round(h * 0.16)}" text-anchor="middle" font-family="'${brandFont}', system-ui, sans-serif" font-weight="bold" font-size="${posterFontSize}px" fill="#FFFFFF" letter-spacing="1px">
-            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : posterFontSize * 1.05}">${line}</tspan>`).join('')}
-          </text>
-          <text x="${w - 30}" y="${h / 2}" text-anchor="middle" font-family="'${brandFont}', system-ui, sans-serif" font-weight="bold" font-size="22px" fill="#FFFFFF" fill-opacity="0.75" letter-spacing="6px" transform="rotate(90 ${w - 30} ${h / 2})">${escapedSpacedName}</text>`;
-      } else if (layoutType === 'chat_bubble_quote' && hasText) {
-        const bubbleW = Math.min(w - 120, 100 + maxLength * (dynamicFontSize * 0.6));
-        const bubbleX = (w - bubbleW) / 2;
-        const bubbleH = 70 + lines.length * dyOffset;
-        const bubbleY = h - 260 - bubbleH;
-        textPanelSvg = `
-          <!-- Rounded speech-bubble caption card -->
-          <rect x="${bubbleX}" y="${bubbleY}" width="${bubbleW}" height="${bubbleH}" rx="26" fill="${validSecondaryColor}" fill-opacity="0.96" />
-          <path d="M ${w / 2 - 16} ${bubbleY + bubbleH} L ${w / 2} ${bubbleY + bubbleH + 22} L ${w / 2 + 16} ${bubbleY + bubbleH} Z" fill="${validSecondaryColor}" fill-opacity="0.96" />
-          <text x="${w / 2}" y="${bubbleY + 45}" class="overlay-text text-centered" style="font-size: ${dynamicFontSize}px; fill: ${validBrandColor};">
-            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : dyOffset}">${line}</tspan>`).join('')}
-          </text>`;
-      } else if (layoutType === 'testimonial_card' && hasText) {
-        const avatarR = 70;
-        const avatarCx = 140;
-        const avatarCy = 170;
-        const cardY = avatarCy + avatarR + 40;
-        textPanelSvg = `
-          <!-- Circular avatar crop of the same photo + name + quote card -->
-          <defs><clipPath id="avatarClip"><circle cx="${avatarCx}" cy="${avatarCy}" r="${avatarR}" /></clipPath></defs>
-          <image href="${photoDataUri}" x="${avatarCx - avatarR}" y="${avatarCy - avatarR}" width="${avatarR * 2}" height="${avatarR * 2}" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatarClip)" />
-          <circle cx="${avatarCx}" cy="${avatarCy}" r="${avatarR}" fill="none" stroke="#FFFFFF" stroke-width="4" />
-          <text x="${avatarCx + avatarR + 20}" y="${avatarCy - 5}" font-family="'${brandFont}', system-ui, sans-serif" font-weight="bold" font-size="24px" fill="#FFFFFF">${escapedSpacedName}</text>
-          <text x="${avatarCx + avatarR + 20}" y="${avatarCy + 26}" font-family="'${bodyFont}', system-ui, sans-serif" font-size="15px" fill="#FFFFFF" fill-opacity="0.85" letter-spacing="2px">VERIFIED CLIENT</text>
-          <rect x="60" y="${cardY}" width="${w - 120}" height="${70 + lines.length * dyOffset}" rx="18" fill="#000000" fill-opacity="0.45" />
-          <text x="90" y="${cardY + 42}" class="overlay-text text-left" style="font-size: ${dynamicFontSize}px; fill: #FFFFFF;">
-            ${escapedLines.map((line, idx) => `<tspan x="90" dy="${idx === 0 ? 0 : dyOffset}">${line}</tspan>`).join('')}
-          </text>`;
-      } else if (layoutType === 'side_panel_split' && hasText) {
-        textPanelSvg = `
-          <!-- Label + headline block sitting in the solid side panel -->
-          <text x="50" y="${Math.round(h * 0.42)}" font-family="'${bodyFont}', system-ui, sans-serif" font-size="13px" letter-spacing="3px" fill="${validBrandColor}" fill-opacity="0.8">${escapedSpacedName}</text>
-          <text x="50" y="${Math.round(h * 0.42) + 40}" class="overlay-text text-left" style="font-size: ${dynamicFontSize + 4}px; fill: ${dynamicTextColor};">
-            ${escapedLines.map((line, idx) => `<tspan x="50" dy="${idx === 0 ? 0 : dyOffset}">${line}</tspan>`).join('')}
-          </text>`;
-      }
-
-      // Draw structural overlays (split pane rectangles, monograms, notches, sprockets, arch outline)
-      let visualAdditions = '';
-      if (layoutType === 'asymmetric_monogram') {
-        visualAdditions = `
-          <!-- Large single-character monogram watermark in negative space -->
-          <text x="${w * 0.82}" y="${h * 0.76}" fill="${validSecondaryColor}" fill-opacity="0.07" font-family="'${brandFont}', Georgia, serif" font-size="300px" font-weight="bold" text-anchor="middle">
-            ${rawName.charAt(0)}
-          </text>`;
-      } else if (layoutType === 'translucent_split') {
-        visualAdditions = `
-          <!-- Semi-transparent solid brand pane overlay -->
-          <rect x="0" y="0" width="${w * 0.5}" height="${h}" fill="${validBrandColor}" fill-opacity="0.82" />`;
-      } else if (layoutType === 'postcard_ticket') {
-        const notchY1 = paddingTop;
-        const notchY2 = h - paddingBottom;
-        const notchCount = 10;
-        const notchSpacing = innerW / notchCount;
-        let notches = '';
-        for (let i = 0; i <= notchCount; i++) {
-          const cx = paddingX + i * notchSpacing;
-          notches += `<circle cx="${cx}" cy="${notchY1}" r="9" fill="${validBrandColor}" /><circle cx="${cx}" cy="${notchY2}" r="9" fill="${validBrandColor}" />`;
-        }
-        visualAdditions = `
-          <!-- Vintage ticket-stub notches + dashed border around the photo inset -->
-          <rect x="${paddingX}" y="${paddingTop}" width="${innerW}" height="${innerH}" fill="none" stroke="${validBrandColor}" stroke-width="3" stroke-dasharray="14 10" />
-          ${notches}`;
-      } else if (layoutType === 'gallery_frame') {
-        visualAdditions = `
-          <!-- Museum mat: thin inner hairline rule around the photo -->
-          <rect x="${paddingX + 14}" y="${paddingTop + 14}" width="${innerW - 28}" height="${innerH - 28}" fill="none" stroke="${validBrandColor}" stroke-width="1.5" />`;
-      } else if (layoutType === 'filmstrip_grid') {
-        const holeCount = 8;
-        const holeSpacing = innerH / holeCount;
-        let holes = '';
-        for (let i = 0; i <= holeCount; i++) {
-          const cy = paddingTop + i * holeSpacing;
-          holes += `<rect x="${Math.round(paddingX * 0.3)}" y="${cy - 10}" width="16" height="20" rx="3" fill="${validBrandColor}" /><rect x="${w - Math.round(paddingX * 0.3) - 16}" y="${cy - 10}" width="16" height="20" rx="3" fill="${validBrandColor}" />`;
-        }
-        visualAdditions = `<!-- Film sprocket perforations along both edges -->${holes}`;
-      } else if (layoutType === 'editorial_arch') {
-        visualAdditions = `
-          <!-- Fine vector outline retracing the dome mask edge -->
-          <path d="M ${paddingX} ${h - paddingBottom} L ${paddingX} ${Math.round(paddingTop + innerH * 0.42)} A ${Math.round(innerW / 2)} ${Math.round(innerH * 0.42)} 0 0 1 ${w - paddingX} ${Math.round(paddingTop + innerH * 0.42)} L ${w - paddingX} ${h - paddingBottom} Z" fill="none" stroke="${validBrandColor}" stroke-width="2" />`;
-      } else if (layoutType === 'side_panel_split') {
-        const sidePanelW = Math.round(w * 0.38);
-        visualAdditions = `
-          <!-- Photo embedded into its own panel, clean vertical divider against the solid side panel -->
-          <defs><clipPath id="sidePhotoClip"><rect x="${sidePanelW}" y="0" width="${w - sidePanelW}" height="${h}" /></clipPath></defs>
-          <image href="${photoDataUri}" x="${sidePanelW}" y="0" width="${w - sidePanelW}" height="${h}" preserveAspectRatio="xMidYMid slice" clip-path="url(#sidePhotoClip)" />
-          <rect x="${sidePanelW - 2}" y="0" width="4" height="${h}" fill="${validBrandColor}" fill-opacity="0.5" />`;
-      }
+      const decoCtx = {
+        w, h, paddingX, paddingTop, paddingBottom, innerW, innerH,
+        validBrandColor, validSecondaryColor, brandFont, rawName, photoDataUri,
+      };
+      const visualAdditions = template.decoration
+        ? (DECORATIONS[template.decoration]?.(decoCtx) ?? '')
+        : '';
 
       // Fetch the custom fonts from Brand DNA dynamically as Base64 to embed directly in the SVG
       const brandFontBase64 = await fetchGoogleFontBase64(brandFont);
@@ -996,7 +787,7 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
           </defs>
           
           <!-- Anti-theft transparent brand watermark across the image area (not shown on clean full bleed) -->
-          ${layoutType !== 'full_bleed_clean' && layoutType !== 'poster_cover' && layoutType !== 'text_only_editorial' ? `
+          ${template.showWatermark ? `
           <text x="${w / 2}" y="${h / 2.2}" fill="#ffffff" fill-opacity="0.10" font-family="'${brandFont}', system-ui, sans-serif" font-size="28px" font-weight="bold" transform="rotate(-30 ${w / 2} ${h / 2.2})" text-anchor="middle" letter-spacing="8px">
             AUTHENTIC WORK • ${escapedSpacedName}
           </text>
@@ -1006,7 +797,7 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
           ${textPanelSvg}
           
           <!-- Minimalist Editorial Footer (hidden only on poster covers) -->
-          ${layoutType !== 'poster_cover' ? `
+          ${template.showFooter ? `
           <rect x="0" y="${h - 60}" width="${w}" height="60" class="footer-bg" />
           <text x="60" y="${h - 25}" class="footer-brand">${escapedSpacedName}</text>
           <text x="${w - 60}" y="${h - 25}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>
@@ -1020,22 +811,17 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
         .png()
         .toBuffer();
 
-      // ── Step 4: Composite image scaling and margins based on layout ──
+      // ── Step 4: Composite image scaling and margins — grouped by the base treatment ──
       let compositeBuffer: Buffer;
-      if (layoutType === 'side_panel_split') {
+      if (template.base === 'solid_canvas_full') {
         // baseImage is already a fully-built w x h canvas (solid panel + photo embedded via SVG)
         compositeBuffer = await baseImage
           .composite([{ input: highResSvgBuffer, blend: 'over' }])
           .png()
           .toBuffer();
-      } else if (
-        layoutType === 'full_bleed_clean' || layoutType === 'translucent_split' || layoutType === 'poster_cover' ||
-        layoutType === 'handwritten_note' || layoutType === 'duotone_editorial' ||
-        layoutType === 'giant_type_overlay' || layoutType === 'bold_editorial_poster' ||
-        layoutType === 'chat_bubble_quote' || layoutType === 'testimonial_card'
-      ) {
+      } else if (template.base === 'full_bleed' || template.base === 'full_bleed_duotone') {
         let fullBleedImage = sharp(imageBuffer).resize(w, h, { fit: 'cover' });
-        if (layoutType === 'duotone_editorial') {
+        if (template.base === 'full_bleed_duotone') {
           fullBleedImage = fullBleedImage.greyscale().tint(validBrandColor as any);
         }
         compositeBuffer = await fullBleedImage

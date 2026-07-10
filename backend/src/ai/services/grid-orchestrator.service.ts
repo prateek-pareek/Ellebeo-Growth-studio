@@ -12,10 +12,13 @@ export class GridOrchestratorService {
    * Evaluates the tenant's last 6 posts to select the next balanced pillar and layout.
    */
   async determineNextLayoutAndPillar(tenantId: string): Promise<{ pillar: ContentPillar; layout: LayoutType }> {
+    // Look at all recent generations (not just published posts) — most content sits in
+    // `draft` until manually approved, so restricting to `published` left this with no
+    // history to react to and it always fell back to the first layout/pillar in the list.
     const lastPosts = await this.prisma.contentItem.findMany({
       where: {
         tenantId,
-        status: 'published',
+        deletedAt: null,
       },
       orderBy: {
         createdAt: 'desc',
@@ -66,24 +69,17 @@ export class GridOrchestratorService {
       }
     });
 
-    // Pick the one with the lowest score
-    let selectedPillar = pillars[0];
-    let minPillarScore = Infinity;
-    for (const p of pillars) {
-      if (pillarScores[p] < minPillarScore) {
-        minPillarScore = pillarScores[p];
-        selectedPillar = p;
-      }
-    }
+    // Pick randomly among whichever pillars/layouts are tied for the lowest (least-recently-used)
+    // score — a strict "first tie wins" pick would always resolve to the same array entry
+    // whenever there's no history yet (all scores 0), which is what caused it to always
+    // return the same layout instead of exploring the full set.
+    const minPillarScore = Math.min(...pillars.map((p) => pillarScores[p]));
+    const tiedPillars = pillars.filter((p) => pillarScores[p] === minPillarScore);
+    const selectedPillar = tiedPillars[Math.floor(Math.random() * tiedPillars.length)]!;
 
-    let selectedLayout = layouts[0];
-    let minLayoutScore = Infinity;
-    for (const l of layouts) {
-      if (layoutScores[l] < minLayoutScore) {
-        minLayoutScore = layoutScores[l];
-        selectedLayout = l;
-      }
-    }
+    const minLayoutScore = Math.min(...layouts.map((l) => layoutScores[l]));
+    const tiedLayouts = layouts.filter((l) => layoutScores[l] === minLayoutScore);
+    const selectedLayout = tiedLayouts[Math.floor(Math.random() * tiedLayouts.length)]!;
 
     return {
       pillar: selectedPillar,
