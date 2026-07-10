@@ -1,10 +1,10 @@
-// ============================================================================
-// ai-image-generation.service.ts — Multi-model Image Generation (Gemini > GPT-Image-1)
-// Takes real before/after photo + brand context → beautiful designed image
+﻿// ============================================================================
+// ai-image-generation.service.ts â€” Multi-model Image Generation (Gemini > GPT-Image-1)
+// Takes real before/after photo + brand context â†’ beautiful designed image
 //
 // CRITICAL ARCHITECTURE NOTE:
 // - Gemini (gemini-2.5-flash-image): Uses vision+generation. Treats input photo as
-//   reference context to preserve. SAFE for face/identity — will NOT beautify or alter faces.
+//   reference context to preserve. SAFE for face/identity â€” will NOT beautify or alter faces.
 // - GPT (gpt-image-1): Uses images.edit() which implies "enhance/edit" semantics.
 //   REQUIRES explicit face-preservation instructions in prompts to prevent facial alterations.
 //
@@ -18,6 +18,7 @@ import * as https from 'https';
 import * as http from 'http';
 import { GoogleGenAI } from '@google/genai';
 import sharp from 'sharp';
+import { resolveLayoutTemplate, BASE_TREATMENTS, TEXT_TEMPLATES, DECORATIONS } from '../config/layout-renderers';
 
 const openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
 
@@ -62,17 +63,17 @@ export async function processPortraitFit(imageBuffer: Buffer, targetW: number, t
     const originalH = metadata.height || 1024;
     const targetAspect = targetW / targetH;
     const sourceAspect = originalW / originalH;
-    
+
     // Always contain the original photo fully and layer it on a blurred version to prevent awkward zooming or cropping of faces
     const blurredBg = await sharp(enhancedBuffer)
       .resize(targetW, targetH, { fit: 'cover' })
       .blur(50)
       .toBuffer();
-      
+
     const containedImg = await sharp(enhancedBuffer)
       .resize(targetW, targetH, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .toBuffer();
-      
+
     return await sharp(blurredBg)
       .composite([{ input: containedImg }])
       .png()
@@ -127,7 +128,7 @@ async function fetchGoogleFontBase64(fontFamily: string): Promise<string> {
     const fontUrl = urlMatch[1];
     const fontBuffer = await downloadImageAsBuffer(fontUrl);
     const base64 = fontBuffer.toString('base64');
-    
+
     fontCache[fontFamily] = base64;
     return base64;
   } catch (err: any) {
@@ -154,16 +155,16 @@ function buildBeforeSlidePrompt(params: {
   const { overlayText, businessName, brandColor } = params;
   return `You are a social media designer adding a minimal text overlay to a BEFORE photo for "${businessName}".
 
-CRITICAL — this is the BEFORE image in a before/after transformation post:
-- Preserve the photo EXACTLY as it is — no color grading, no filters, no enhancements, no cinematic treatment
+CRITICAL â€” this is the BEFORE image in a before/after transformation post:
+- Preserve the photo EXACTLY as it is â€” no color grading, no filters, no enhancements, no cinematic treatment
 - The photo must look raw and natural so the contrast with the AFTER photo is powerful and believable
 - Do NOT add bokeh, light leaks, glamour lighting, or any beautification effect
 - Do NOT make the skin/hair/nails look better than reality
 
 ONLY ADD:
-- A small, clean text label "${overlayText}" — place it in the bottom-left corner
+- A small, clean text label "${overlayText}" â€” place it in the bottom-left corner
 - Use a thin semi-transparent dark pill or rectangle behind the text (rgb 0,0,0 at 55% opacity)
-- Text in clean white, small size, all-caps tracking — minimal, unobtrusive
+- Text in clean white, small size, all-caps tracking â€” minimal, unobtrusive
 - A tiny "BEFORE" badge in brand color ${brandColor} in the top-left corner
 
 CONTENT SAFETY: family-friendly, professional, no nudity or intimate areas.`;
@@ -187,18 +188,18 @@ This is a real photo of a ${serviceType}. Your task: overlay a clean, elegant te
 Brand palette: primary ${brandColor}, secondary ${secondaryColor}.
 Aesthetic direction: ${aesthetic || 'minimal, premium beauty editorial, high-fashion editorial'}.
 
-PHOTO PRESERVATION (ABSOLUTE — non-negotiable):
-- Preserve the original photo exactly as it is — this is the HERO of the image.
+PHOTO PRESERVATION (ABSOLUTE â€” non-negotiable):
+- Preserve the original photo exactly as it is â€” this is the HERO of the image.
 - The person in the photo must remain COMPLETELY UNCHANGED in every detail.
 - Do NOT modify ANY facial features, facial structure, skin tone, eye placement, nose shape, mouth, chin, or jawline.
 - Do NOT alter facial expressions or head position.
-- Do NOT retouch, airbrush, smooth, or beautify skin or faces — keep raw, real, and textured.
+- Do NOT retouch, airbrush, smooth, or beautify skin or faces â€” keep raw, real, and textured.
 - Do NOT apply any filters, color grading, or tone adjustments to the face or skin.
 - Do NOT change hair color, hair texture, or hair styling.
 - Do NOT modify body shape, proportion, or posture.
 - Do NOT crop, remove, or replace the background. Keep the natural environment, background wood, towels, and salon context fully intact.
 - Do NOT add bokeh, light leaks, glamour lighting, or any beautification effects.
-- No AI-generated faces, bodies, or features — only add design overlays to EXISTING elements.
+- No AI-generated faces, bodies, or features â€” only add design overlays to EXISTING elements.
 
 VISUAL DESIGN DIRECTION:
 - The text overlay must look premium, minimalist, and editorial.
@@ -390,103 +391,103 @@ CRITICAL IMAGE REQUIREMENTS:
 
     // Real client photos are already handled and returned early in the pass-through compositor block.
     // Standard text-to-image asset generation happens below for lifestyle/concept slides.
-      console.log(`Generating lifestyle base images using generatorModel: ${generatorModel} for slide ${index}...`);
-      
-      const geminiTask = (async () => {
-        if (generatorModel === 'dalle') return null;
-        const geminiKey = process.env['GEMINI_API_KEY'];
-        if (!geminiKey) return null;
-        try {
-          const aiClient = new GoogleGenAI({ apiKey: geminiKey });
-          const response = await aiClient.models.generateContent({
-            model: 'gemini-2.5-flash-image',
-            contents: cleanPrompt,
-            config: { responseModalities: ['image'] } as any,
-          });
-          const outputPart = response.candidates?.[0]?.content?.parts?.find((part: any) => part.inlineData);
-          return outputPart?.inlineData?.data || null;
-        } catch (err) {
-          console.error(`Gemini generation failed for slide ${index}:`, err);
-          return null;
-        }
-      })();
+    console.log(`Generating lifestyle base images using generatorModel: ${generatorModel} for slide ${index}...`);
 
-      const dalleTask = (async () => {
-        if (generatorModel === 'gemini') return null;
+    const geminiTask = (async () => {
+      if (generatorModel === 'dalle') return null;
+      const geminiKey = process.env['GEMINI_API_KEY'];
+      if (!geminiKey) return null;
+      try {
+        const aiClient = new GoogleGenAI({ apiKey: geminiKey });
+        const response = await aiClient.models.generateContent({
+          model: 'gemini-2.5-flash-image',
+          contents: cleanPrompt,
+          config: { responseModalities: ['image'] } as any,
+        });
+        const outputPart = response.candidates?.[0]?.content?.parts?.find((part: any) => part.inlineData);
+        return outputPart?.inlineData?.data || null;
+      } catch (err) {
+        console.error(`Gemini generation failed for slide ${index}:`, err);
+        return null;
+      }
+    })();
+
+    const dalleTask = (async () => {
+      if (generatorModel === 'gemini') return null;
+      try {
+        console.log(`Generating DALL-E 3 image for slide ${index}...`);
+        const response = await openai.images.generate({
+          model: 'dall-e-3',
+          prompt: cleanPrompt,
+          size: outputSize === '1024x1536' ? '1024x1792' as any : '1024x1024',
+        });
+        const url = response.data?.[0]?.url;
+        if (url) {
+          const buf = await downloadImageAsBuffer(url);
+          return buf.toString('base64');
+        }
+        return null;
+      } catch (err) {
+        console.warn(`DALL-E 3 generation failed for slide ${index}, trying DALL-E 2 fallback:`, err);
         try {
-          console.log(`Generating DALL-E 3 image for slide ${index}...`);
           const response = await openai.images.generate({
-            model: 'dall-e-3',
+            model: 'dall-e-2',
             prompt: cleanPrompt,
-            size: outputSize === '1024x1536' ? '1024x1792' as any : '1024x1024',
+            size: '1024x1024',
           });
           const url = response.data?.[0]?.url;
           if (url) {
             const buf = await downloadImageAsBuffer(url);
             return buf.toString('base64');
           }
-          return null;
-        } catch (err) {
-          console.warn(`DALL-E 3 generation failed for slide ${index}, trying DALL-E 2 fallback:`, err);
-          try {
-            const response = await openai.images.generate({
-              model: 'dall-e-2',
-              prompt: cleanPrompt,
-              size: '1024x1024',
-            });
-            const url = response.data?.[0]?.url;
-            if (url) {
-              const buf = await downloadImageAsBuffer(url);
-              return buf.toString('base64');
-            }
-          } catch (err2) {
-            console.error(`DALL-E 2 fallback generation failed for slide ${index}:`, err2);
-          }
-          return null;
+        } catch (err2) {
+          console.error(`DALL-E 2 fallback generation failed for slide ${index}:`, err2);
         }
-      })();
+        return null;
+      }
+    })();
 
-      const [geminiResult, dalleResult] = await Promise.all([geminiTask, dalleTask]);
+    const [geminiResult, dalleResult] = await Promise.all([geminiTask, dalleTask]);
 
-      if (generatorModel === 'both' && geminiResult && dalleResult) {
-        console.log(`Both base images generated! Evaluating aesthetic winner using GPT-4o-mini judge...`);
-        try {
-          const evalResponse = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            messages: [
-              {
-                role: 'system',
-                content: 'You are a senior art director. Evaluate the two aesthetic beauty clinic background images and choose the one that looks more premium, professional, and fits a high-fashion beauty clinic brand (e.g. clean travertine, minimal spa interiors, elegant cosmetic products). Respond ONLY with valid JSON: {"winner": "A" | "B"}.'
-              },
-              {
-                role: 'user',
-                content: [
-                  { type: 'text', text: 'Image A is the first image, Image B is the second image. Which one looks more premium?' },
-                  { type: 'image_url', image_url: { url: `data:image/png;base64,${geminiResult}` } },
-                  { type: 'image_url', image_url: { url: `data:image/png;base64,${dalleResult}` } }
-                ]
-              }
-            ],
-            response_format: { type: 'json_object' }
-          });
-          const evalText = evalResponse.choices[0]?.message?.content || '';
-          const evalParsed = JSON.parse(evalText) as { winner: 'A' | 'B' };
-          if (evalParsed.winner === 'A') {
-            console.log(`--> Winner is Image A (Gemini)`);
-            base64 = geminiResult;
-          } else {
-            console.log(`--> Winner is Image B (DALL-E 3)`);
-            base64 = dalleResult;
-          }
-        } catch (evalErr) {
-          console.error('[Vision Judge Error] Selection query failed, falling back to DALL-E:', evalErr);
+    if (generatorModel === 'both' && geminiResult && dalleResult) {
+      console.log(`Both base images generated! Evaluating aesthetic winner using GPT-4o-mini judge...`);
+      try {
+        const evalResponse = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are a senior art director. Evaluate the two aesthetic beauty clinic background images and choose the one that looks more premium, professional, and fits a high-fashion beauty clinic brand (e.g. clean travertine, minimal spa interiors, elegant cosmetic products). Respond ONLY with valid JSON: {"winner": "A" | "B"}.'
+            },
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'Image A is the first image, Image B is the second image. Which one looks more premium?' },
+                { type: 'image_url', image_url: { url: `data:image/png;base64,${geminiResult}` } },
+                { type: 'image_url', image_url: { url: `data:image/png;base64,${dalleResult}` } }
+              ]
+            }
+          ],
+          response_format: { type: 'json_object' }
+        });
+        const evalText = evalResponse.choices[0]?.message?.content || '';
+        const evalParsed = JSON.parse(evalText) as { winner: 'A' | 'B' };
+        if (evalParsed.winner === 'A') {
+          console.log(`--> Winner is Image A (Gemini)`);
+          base64 = geminiResult;
+        } else {
+          console.log(`--> Winner is Image B (DALL-E 3)`);
           base64 = dalleResult;
         }
-      } else {
-        base64 = geminiResult || dalleResult || '';
+      } catch (evalErr) {
+        console.error('[Vision Judge Error] Selection query failed, falling back to DALL-E:', evalErr);
+        base64 = dalleResult;
       }
+    } else {
+      base64 = geminiResult || dalleResult || '';
+    }
 
-      if (!base64) throw new Error(`OpenAI image generation failed completely for slide ${index}`);
+    if (!base64) throw new Error(`OpenAI image generation failed completely for slide ${index}`);
 
     const brandedBase64 = await this.overlayBrandingAndText({
       base64Image: base64,
@@ -765,17 +766,17 @@ CRITICAL IMAGE REQUIREMENTS:
     backgroundBrandColor?: string;
     accentBrandColor?: string;
   }): Promise<string> {
-    const { 
-      base64Image, 
-      overlayText, 
-      isFirst, 
-      isLast, 
-      brandColor, 
-      secondaryColor, 
-      businessName, 
-      index, 
-      totalSlides, 
-      layoutType = 'passepartout_text', 
+    const {
+      base64Image,
+      overlayText,
+      isFirst,
+      isLast,
+      brandColor,
+      secondaryColor,
+      businessName,
+      index,
+      totalSlides,
+      layoutType = 'passepartout_text',
       beforePhotoUrl,
       brandFont = 'Playfair Display',
       bodyFont = 'Inter',
@@ -798,20 +799,12 @@ CRITICAL IMAGE REQUIREMENTS:
           .replace(/'/g, '&apos;');
       };
 
-      let originalW = 1024;
-      let originalH = 1024;
-      let imageBuffer: Buffer = Buffer.alloc(0);
-
-      if (base64Image && base64Image.trim().length > 0) {
-        imageBuffer = Buffer.from(base64Image, 'base64');
-        try {
-          const metadata = await sharp(imageBuffer).metadata();
-          originalW = metadata.width || 1024;
-          originalH = metadata.height || 1024;
-        } catch (metadataErr) {
-          console.warn('[Sharp Metadata Warning]: Could not parse image metadata, using defaults:', metadataErr);
-        }
-      }
+      const imageBuffer = Buffer.from(base64Image, 'base64');
+      const metadata = await sharp(imageBuffer).metadata();
+      const originalW = metadata.width || 1024;
+      const originalH = metadata.height || 1024;
+      const photoMimeType = metadata.format === 'jpeg' ? 'image/jpeg' : metadata.format === 'webp' ? 'image/webp' : 'image/png';
+      const photoDataUri = `data:${photoMimeType};base64,${base64Image}`;
 
       // Force high-definition target canvas dimensions (Instagram standards)
       const isStory = originalH > originalW;
@@ -853,7 +846,7 @@ CRITICAL IMAGE REQUIREMENTS:
       const spacedName = rawName.split('').join(' ');
 
       const escapedSpacedName = escapeXml(spacedName);
-      
+
       // Formatting helper mapped to Brand DNA capitalization rules
       const formatTextByRule = (text: string, rule: string): string => {
         const clean = text.trim();
@@ -872,7 +865,7 @@ CRITICAL IMAGE REQUIREMENTS:
       const slideNumText = String(index || 1).padStart(2, '0');
       const totalSlidesText = String(totalSlides || 4).padStart(2, '0');
 
-      // ── MAPPING STYLE RANKINGS DYNAMICALLY (Production-Grade Lookup) ──
+      // â”€â”€ MAPPING STYLE RANKINGS DYNAMICALLY (Production-Grade Lookup) â”€â”€
       const STYLE_GEOMETRY: Record<string, { borderPercent: number; letterSpacing: string }> = {
         quiet_luxury: { borderPercent: 0.03, letterSpacing: '5px' },
         editorial_beauty: { borderPercent: 0.04, letterSpacing: '3px' },
@@ -888,7 +881,7 @@ CRITICAL IMAGE REQUIREMENTS:
 
       const primaryRanking = visualRanking[0] || 'quiet_luxury';
       const geometry = STYLE_GEOMETRY[primaryRanking] || { borderPercent: 0.04, letterSpacing: '2px' };
-      
+
       const borderPercent = geometry.borderPercent;
       const headingLetterSpacing = geometry.letterSpacing;
 
@@ -904,147 +897,35 @@ CRITICAL IMAGE REQUIREMENTS:
       }
 
       // True Passepartout Layout Calculations using dynamic borders
-      const paddingX = Math.floor(w * borderPercent); 
-      const paddingTop = Math.floor(h * borderPercent); 
+      const paddingX = Math.floor(w * borderPercent);
+      const paddingTop = Math.floor(h * borderPercent);
       const paddingBottom = 200; // Deep bottom margin for text & footer
 
       const innerW = w - (paddingX * 2);
       const innerH = h - (paddingTop + paddingBottom);
 
-      // ── Step 1: Process Base Image based on LayoutType ──
-      let baseImage: sharp.Sharp;
-      if (imageBuffer && imageBuffer.length > 0) {
-        baseImage = sharp(imageBuffer);
-      } else {
-        baseImage = sharp({
-          create: {
-            width: w,
-            height: h,
-            channels: 3,
-            background: validBackgroundColor
-          }
-        });
-      }
-      let compositeTop = paddingTop;
-      let compositeBottom = paddingBottom;
-      let compositeLeft = paddingX;
-      let compositeRight = paddingX;
+      // â”€â”€ Step 1: Process Base Image â€” dispatched from layout-templates.config.json â”€â”€
+      const template = resolveLayoutTemplate(layoutType);
 
-      if (layoutType === 'text_only_editorial') {
-        baseImage = sharp({
-          create: {
-            width: w,
-            height: h,
-            channels: 3,
-            background: validBackgroundColor
-          }
-        });
-        compositeTop = 0;
-        compositeBottom = 0;
-        compositeLeft = 0;
-        compositeRight = 0;
-      } else if (layoutType === 'postcard_ticket') {
-        const cardW = w - 160;
-        const cardH = h - 300;
-        baseImage = sharp(await processPortraitFit(imageBuffer, cardW, cardH));
-        compositeTop = 80;
-        compositeLeft = 80;
-        compositeBottom = h - cardH - compositeTop;
-        compositeRight = w - cardW - compositeLeft;
-      } else if (layoutType === 'editorial_arch') {
-        baseImage = sharp(await processPortraitFit(imageBuffer, innerW, innerH));
-        compositeTop = paddingTop;
-        compositeLeft = paddingX;
-        compositeBottom = paddingBottom;
-        compositeRight = paddingX;
-      } else if (layoutType === 'split_before_after' && beforePhotoUrl) {
-        try {
-          const beforeBuffer = await downloadImageAsBuffer(beforePhotoUrl);
-          
-          const leftHalf = await processPortraitFit(beforeBuffer, Math.round(innerW / 2), innerH);
-          const rightHalf = await processPortraitFit(imageBuffer, Math.round(innerW / 2), innerH);
+      const baseResult = await BASE_TREATMENTS[template.base]!({
+        imageBuffer,
+        beforePhotoUrl,
+        w, h,
+        paddingX, paddingTop, paddingBottom,
+        innerW, innerH,
+        validSecondaryColor,
+        downloadImageAsBuffer,
+      });
+      let baseImage = baseResult.baseImage;
+      let compositeTop = baseResult.compositeTop;
+      let compositeBottom = baseResult.compositeBottom;
+      let compositeLeft = baseResult.compositeLeft;
+      let compositeRight = baseResult.compositeRight;
 
-          baseImage = sharp({
-            create: {
-              width: innerW,
-              height: innerH,
-              channels: 3,
-              background: '#000000',
-            }
-          }).composite([
-            { input: leftHalf, top: 0, left: 0 },
-            { input: rightHalf, top: 0, left: Math.round(innerW / 2) }
-          ]);
-        } catch (splitErr) {
-          console.error('[Sharp Split Frame Error] Failed to stitch before/after images, falling back:', splitErr);
-          baseImage = sharp(await processPortraitFit(imageBuffer, innerW, innerH));
-        }
-      } else if (layoutType === 'premium_diptyque') {
-        baseImage = sharp(await processPortraitFit(imageBuffer, w, h));
-        compositeTop = 0;
-        compositeLeft = 0;
-        compositeBottom = 0;
-        compositeRight = 0;
 
-        if (beforePhotoUrl) {
-          try {
-            const beforeBuffer = await downloadImageAsBuffer(beforePhotoUrl);
-            const maskW = 320;
-            const maskH = 440;
-            const archMaskSvg = `<svg width="${maskW}" height="${maskH}">
-              <path d="M 0,160 A 160,160 0 0,1 320,160 V 440 H 0 Z" fill="#ffffff" />
-            </svg>`;
-            
-            // Fit the before image into the mask dimensions elegantly
-            const fittedBeforeBuffer = await processPortraitFit(beforeBuffer, maskW, maskH);
-            const croppedBefore = await sharp(fittedBeforeBuffer)
-              .composite([{ input: Buffer.from(archMaskSvg), blend: 'dest-in' }])
-              .png()
-              .toBuffer();
 
-            baseImage = sharp(await baseImage.toBuffer()).composite([
-              { input: croppedBefore, left: 60, top: h - 520 }
-            ]);
-          } catch (diptyqueErr) {
-            console.error('[Sharp Diptyque Frame Error] Failed to overlay before photo:', diptyqueErr);
-          }
-        }
-      } else if (layoutType === 'art_director_split') {
-        const photoW = Math.floor(w * 0.6);
-        const photoBuffer = (imageBuffer && imageBuffer.length > 0)
-          ? await processPortraitFit(imageBuffer, photoW, h)
-          : null;
 
-        baseImage = sharp({
-          create: {
-            width: w,
-            height: h,
-            channels: 3,
-            background: validBackgroundColor
-          }
-        });
-
-        if (photoBuffer) {
-          baseImage = baseImage.composite([{ input: photoBuffer, left: 0, top: 0 }]);
-        }
-        compositeTop = 0;
-        compositeLeft = 0;
-        compositeBottom = 0;
-        compositeRight = 0;
-      } else if (layoutType === 'asymmetric_monogram' || layoutType === 'transparent_scrim') {
-        // Full bleed layouts
-        baseImage = sharp(await processPortraitFit(imageBuffer, w, h));
-        compositeTop = 0;
-        compositeLeft = 0;
-        compositeBottom = 0;
-        compositeRight = 0;
-      } else {
-        if (layoutType !== 'full_bleed_clean' && layoutType !== 'translucent_split' && layoutType !== 'poster_cover') {
-          baseImage = sharp(await processPortraitFit(imageBuffer, innerW, innerH));
-        }
-      }
-
-      // ── Step 2: Auto-detect Contrast for Borderless Poster Covers & Slide Backgrounds ──
+      // â”€â”€ Step 2: Auto-detect Contrast for Borderless Poster Covers & Slide Backgrounds â”€â”€
       const getLuminance = (hex: string): number => {
         try {
           const cleaned = hex.replace('#', '');
@@ -1068,7 +949,7 @@ CRITICAL IMAGE REQUIREMENTS:
       const dynamicFooterTextColor = isLightFooter ? validBrandColor : validBackgroundColor;
 
       let posterTextColor = '#FFFFFF';
-      if (layoutType === 'poster_cover') {
+      if (template.textTemplate === 'poster_high_contrast') {
         try {
           const stats = await sharp(imageBuffer).stats();
           const meanLuminance = (stats.channels[0].mean + stats.channels[1].mean + stats.channels[2].mean) / 3;
@@ -1091,157 +972,25 @@ CRITICAL IMAGE REQUIREMENTS:
       }
       const dyOffset = Math.round(dynamicFontSize * 1.35);
 
-      // ── Step 3: Assemble SVG Overlays
-      const showPassepartoutText = hasText && (layoutType === 'passepartout_text' || layoutType === 'split_before_after');
-      let textPanelSvg = '';
-      if (showPassepartoutText) {
-        textPanelSvg = `
-          <!-- Hook Text directly in the Passepartout Negative Space -->
-          <text x="${w / 2}" y="${h - 135}" text-anchor="middle" class="overlay-text text-centered" style="font-size: ${dynamicFontSize}px; fill: ${dynamicTextColor};">
-            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : dyOffset}" text-anchor="middle">${line}</tspan>`).join('')}
-          </text>`;
-      } else if (layoutType === 'asymmetric_monogram' && hasText) {
-        textPanelSvg = `
-          <!-- Left-aligned negative space text for Asymmetrical Layout -->
-          <text x="60" y="${h - 145}" text-anchor="start" class="overlay-text text-left" style="font-size: ${dynamicFontSize}px; fill: ${dynamicTextColor};">
-            ${escapedLines.map((line, idx) => `<tspan x="60" dy="${idx === 0 ? 0 : dyOffset}" text-anchor="start">${line}</tspan>`).join('')}
-          </text>`;
-      } else if (layoutType === 'translucent_split' && hasText) {
-        textPanelSvg = `
-          <!-- Text inside the blurred brand side-panel -->
-          <text x="${w * 0.25}" y="${h / 2 - 40}" text-anchor="middle" class="overlay-text text-centered" style="font-size: ${dynamicFontSize}px; fill: ${validBackgroundColor};">
-            ${escapedLines.map((line, idx) => `<tspan x="${w * 0.25}" dy="${idx === 0 ? 0 : dyOffset}" text-anchor="middle">${line}</tspan>`).join('')}
-          </text>`;
-      } else if (layoutType === 'poster_cover' && hasText) {
-        textPanelSvg = `
-          <!-- High contrast text placed directly on the borderless photo -->
-          <text x="${w / 2}" y="${h - 150}" text-anchor="middle" class="overlay-text text-centered" style="fill: ${posterTextColor}; font-size: ${dynamicFontSize}px; letter-spacing: 5px;">
-            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : dyOffset}" text-anchor="middle">${line}</tspan>`).join('')}
-          </text>`;
-      } else if (layoutType === 'text_only_editorial' && hasText) {
-        textPanelSvg = `
-          <!-- Center-aligned premium quote card style text -->
-          <text x="${w / 2}" y="${h / 2 - (lines.length * (dyOffset + 8)) / 2 + 25}" text-anchor="middle" class="overlay-text text-centered" style="fill: ${dynamicTextColor}; font-size: ${dynamicFontSize + 6}px; line-height: 1.45;">
-            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : dyOffset + 10}" text-anchor="middle">${line}</tspan>`).join('')}
-          </text>`;
-      } else if (layoutType === 'postcard_ticket' && hasText) {
-        textPanelSvg = `
-          <!-- Elegant clean caption centered under the postcard frame -->
-          <text x="${w / 2}" y="${h - 130}" text-anchor="middle" class="overlay-text text-centered" style="fill: ${dynamicTextColor}; font-size: ${dynamicFontSize}px;">
-            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : dyOffset}" text-anchor="middle">${line}</tspan>`).join('')}
-          </text>`;
-      } else if (layoutType === 'editorial_arch' && hasText) {
-        textPanelSvg = `
-          <!-- Clean arch caption in bottom margin -->
-          <text x="${w / 2}" y="${h - 125}" text-anchor="middle" class="overlay-text text-centered" style="fill: ${dynamicTextColor}; font-size: ${dynamicFontSize}px;">
-            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : dyOffset}" text-anchor="middle">${line}</tspan>`).join('')}
-          </text>`;
-      } else if (layoutType === 'transparent_scrim' && hasText) {
-        textPanelSvg = `
-          <!-- Premium overlay text centered on darkened scrim background -->
-          <text x="${w / 2}" y="${h / 2 - (lines.length * (dyOffset + 8)) / 2 + 25}" text-anchor="middle" class="overlay-text text-centered" style="fill: ${validBackgroundColor}; font-size: ${dynamicFontSize + 4}px; line-height: 1.45;">
-            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : dyOffset + 10}" text-anchor="middle">${line}</tspan>`).join('')}
-          </text>`;
-      } else if (layoutType === 'premium_diptyque' && hasText) {
-        textPanelSvg = `
-          <!-- Center-aligned caption positioned in top half for Diptyque -->
-          <text x="${w / 2}" y="180" text-anchor="middle" class="overlay-text text-centered" style="fill: ${dynamicTextColor}; font-size: ${dynamicFontSize}px;">
-            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : dyOffset}" text-anchor="middle">${line}</tspan>`).join('')}
-          </text>`;
-      } else if (layoutType === 'art_director_split' && hasText) {
-        textPanelSvg = `
-          <!-- Centered caption in the right side brand panel -->
-          <text x="864" y="${h / 2 - (lines.length * (dyOffset + 8)) / 2 + 25}" text-anchor="middle" class="overlay-text text-centered" style="fill: ${validBackgroundColor}; font-size: ${dynamicFontSize}px; line-height: 1.45;">
-            ${escapedLines.map((line, idx) => `<tspan x="864" dy="${idx === 0 ? 0 : dyOffset}" text-anchor="middle">${line}</tspan>`).join('')}
-          </text>`;
-      } else if (layoutType === 'gold_ticket' && hasText) {
-        textPanelSvg = `
-          <!-- Gold/Brass ticket text layout -->
-          <text x="${w / 2}" y="${h / 2 - (lines.length * (dyOffset + 8)) / 2 + 25}" text-anchor="middle" class="overlay-text text-centered" style="fill: ${validAccentColor}; font-size: ${dynamicFontSize + 2}px; letter-spacing: 4px; font-weight: 300;">
-            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : dyOffset + 8}" text-anchor="middle">${line}</tspan>`).join('')}
-          </text>`;
-      } else if (layoutType === 'newspaper_editorial' && hasText) {
-        textPanelSvg = `
-          <!-- Newspaper style double column vertical text layout -->
-          <text x="80" y="${h / 2 - (lines.length * dyOffset) / 2}" text-anchor="start" class="overlay-text text-left" style="fill: ${dynamicTextColor}; font-size: ${dynamicFontSize - 2}px; font-family: Georgia, serif; font-weight: normal; line-height: 1.6;">
-            ${escapedLines.map((line, idx) => `<tspan x="80" dy="${idx === 0 ? 0 : dyOffset + 6}">${line}</tspan>`).join('')}
-          </text>`;
-      } else if (layoutType === 'book_magazine_cover' && hasText) {
-        textPanelSvg = `
-          <!-- Editorial book / magazine title layout -->
-          <text x="${w / 2}" y="240" text-anchor="middle" class="overlay-text text-centered" style="fill: ${dynamicTextColor}; font-size: ${dynamicFontSize + 8}px; font-family: '${brandFont}', Georgia, serif; font-weight: 900; letter-spacing: 2px;">
-            ${escapedLines.map((line, idx) => `<tspan x="${w / 2}" dy="${idx === 0 ? 0 : dyOffset + 12}">${line}</tspan>`).join('')}
-          </text>`;
-      } else if (layoutType === 'letter_envelope' && hasText) {
-        textPanelSvg = `
-          <!-- Classic elegant stationary letter letter layout -->
-          <text x="120" y="240" text-anchor="start" class="overlay-text text-left" style="fill: ${dynamicTextColor}; font-size: ${dynamicFontSize}px; font-family: '${brandFont}', Georgia, serif; font-weight: 200; font-style: italic;">
-            ${escapedLines.map((line, idx) => `<tspan x="120" dy="${idx === 0 ? 0 : dyOffset + 6}">${line}</tspan>`).join('')}
-          </text>`;
-      }
+      // â”€â”€ Step 3: Assemble SVG overlays â€” dispatched from layout-templates.config.json â”€â”€
+      const textCtx = {
+        w, h, dynamicFontSize, dyOffset, escapedLines, lines, overlayText, maxLength,
+        dynamicTextColor, posterTextColor, validBrandColor, validSecondaryColor,
+        brandFont, bodyFont, escapedSpacedName, photoDataUri, escapeXml,
+      };
+      const textPanelSvg = hasText && template.textTemplate
+        ? (TEXT_TEMPLATES[template.textTemplate]?.(textCtx) ?? '')
+        : '';
 
-      // Draw structural overlays (split pane rectangles or monograms)
-      let visualAdditions = '';
-      if (layoutType === 'asymmetric_monogram') {
-        visualAdditions = `
-          <!-- Large single-character monogram watermark in negative space -->
-          <text x="${w * 0.82}" y="${h * 0.76}" fill="${validSecondaryColor}" fill-opacity="0.07" font-family="'${brandFont}', Georgia, serif" font-size="300px" font-weight="bold" text-anchor="middle">
-            ${rawName.charAt(0)}
-          </text>`;
-      } else if (layoutType === 'translucent_split') {
-        visualAdditions = `
-          <!-- Semi-transparent solid brand pane overlay -->
-          <rect x="0" y="0" width="${w * 0.5}" height="${h}" fill="${validBrandColor}" fill-opacity="0.38" />`;
-      } else if (layoutType === 'postcard_ticket') {
-        visualAdditions = `
-          <!-- Decorative dashed ticket/postcard vintage frame overlay -->
-          <rect x="40" y="40" width="${w - 80}" height="${h - 80}" fill="none" stroke="${validSecondaryColor}" stroke-width="1.5" stroke-dasharray="10,6" />
-          <rect x="50" y="50" width="${w - 100}" height="${h - 260}" fill="none" stroke="${validSecondaryColor}" stroke-width="1.2" />
-          <!-- Ticket notch circles -->
-          <circle cx="40" cy="${h - 210}" r="15" fill="${validBrandColor}" />
-          <circle cx="${w - 40}" cy="${h - 210}" r="15" fill="${validBrandColor}" />`;
-      } else if (layoutType === 'editorial_arch') {
-        visualAdditions = `
-          <!-- The Arch cutout mask overlay using even-odd fill path subtraction -->
-          <path d="M -10,-10 H ${w+10} V ${h+10} H -10 Z M ${paddingX},${paddingTop + 140} A ${innerW / 2},${innerW / 2} 0 0,1 ${w - paddingX},${paddingTop + 140} V ${h - paddingBottom + 20} H ${paddingX} Z" fill="${validBrandColor}" fill-rule="evenodd" />
-          <path d="M ${paddingX},${paddingTop + 140} A ${innerW / 2},${innerW / 2} 0 0,1 ${w - paddingX},${paddingTop + 140} V ${h - paddingBottom + 20} H ${paddingX} Z" fill="none" stroke="${validSecondaryColor}" stroke-width="1.5" />`;
-      } else if (layoutType === 'transparent_scrim') {
-        visualAdditions = `
-          <!-- Dark brand-colored transparent overlay scrim across entire screen -->
-          <rect x="0" y="0" width="${w}" height="${h}" fill="${validBrandColor}" fill-opacity="0.28" />`;
-      } else if (layoutType === 'premium_diptyque') {
-        visualAdditions = `
-          <!-- Matching elegant arch outline border for the inset before card -->
-          <path d="M 58,${h - 362} A 162,162 0 0,1 382,${h - 362} V ${h - 78} H 58 Z" fill="none" stroke="${validSecondaryColor}" stroke-width="2.5" />
-          <text x="220" y="${h - 45}" font-family="'${bodyFont}', sans-serif" font-size="12px" fill="#FFFFFF" font-weight="bold" text-anchor="middle" letter-spacing="2">BEFORE</text>`;
-      } else if (layoutType === 'gold_ticket') {
-        visualAdditions = `
-          <!-- Elegant gold/brass ticket border overlay -->
-          <rect x="50" y="50" width="${w - 100}" height="${h - 100}" fill="none" stroke="${validAccentColor}" stroke-width="2" />
-          <rect x="62" y="62" width="${w - 124}" height="${h - 124}" fill="none" stroke="${validAccentColor}" stroke-width="0.8" stroke-dasharray="8,4" />
-          <circle cx="50" cy="${h / 2}" r="25" fill="${validBrandColor}" stroke="${validAccentColor}" stroke-width="1.5" />
-          <circle cx="${w - 50}" cy="${h / 2}" r="25" fill="${validBrandColor}" stroke="${validAccentColor}" stroke-width="1.5" />`;
-      } else if (layoutType === 'newspaper_editorial') {
-        visualAdditions = `
-          <!-- Newspaper column dividers and header rule -->
-          <line x1="60" y1="80" x2="${w - 60}" y2="80" stroke="${validSecondaryColor}" stroke-width="2" />
-          <line x1="60" y1="90" x2="${w - 60}" y2="90" stroke="${validSecondaryColor}" stroke-width="0.5" />
-          <line x1="480" y1="120" x2="480" y2="${h - 140}" stroke="${validSecondaryColor}" stroke-width="0.5" stroke-dasharray="5,5" />
-          <text x="60" y="70" font-family="Georgia, serif" font-size="11px" fill="${validSecondaryColor}" letter-spacing="2">THE DAILY EDITORIAL</text>`;
-      } else if (layoutType === 'book_magazine_cover') {
-        visualAdditions = `
-          <!-- Magazine header structure -->
-          <rect x="40" y="40" width="${w - 80}" height="${h - 80}" fill="none" stroke="${validSecondaryColor}" stroke-width="1.2" />
-          <line x1="40" y1="120" x2="${w - 40}" y2="120" stroke="${validSecondaryColor}" stroke-width="1" />
-          <text x="${w / 2}" y="95" font-family="'${bodyFont}', sans-serif" font-size="12px" fill="${validSecondaryColor}" font-weight="bold" text-anchor="middle" letter-spacing="8">GROWTH STUDIO / ISSUE 04</text>`;
-      } else if (layoutType === 'letter_envelope') {
-        visualAdditions = `
-          <!-- Premium stationary letter borders and monogram wax seal simulation -->
-          <rect x="80" y="80" width="${w - 160}" height="${h - 160}" fill="none" stroke="${validSecondaryColor}" stroke-width="0.8" />
-          <circle cx="${w - 140}" cy="140" r="18" fill="${validAccentColor}" fill-opacity="0.15" />
-          <circle cx="${w - 140}" cy="140" r="14" fill="none" stroke="${validAccentColor}" stroke-width="0.8" />
-          <text x="${w - 140}" y="144" font-family="'${brandFont}', Georgia, serif" font-size="12px" fill="${validAccentColor}" text-anchor="middle">L</text>`;
-      }
+      const decoCtx = {
+        w, h, paddingX, paddingTop, paddingBottom, innerW, innerH,
+        validBrandColor, validSecondaryColor, brandFont, rawName, photoDataUri,
+      };
+      const visualAdditions = template.decoration
+        ? (DECORATIONS[template.decoration]?.(decoCtx) ?? '')
+        : '';
+
+      // Fetch the custom fonts from Brand DNA dynamically as Base64 to embed directly in the SVG
       const brandFontBase64 = await fetchGoogleFontBase64(brandFont);
       const bodyFontBase64 = await fetchGoogleFontBase64(bodyFont);
 
@@ -1267,7 +1016,7 @@ CRITICAL IMAGE REQUIREMENTS:
       // Pre-compile conditional SVG components
       const watermarkText = (layoutType !== 'full_bleed_clean' && layoutType !== 'poster_cover')
         ? `<text x="${w / 2}" y="${h / 2.2}" fill="#ffffff" fill-opacity="0.10" font-family="'${brandFont}', system-ui, sans-serif" font-size="28px" font-weight="bold" transform="rotate(-30 ${w / 2} ${h / 2.2})" text-anchor="middle" letter-spacing="8px">
-            AUTHENTIC WORK • ${escapedSpacedName}
+            AUTHENTIC WORK â€¢ ${escapedSpacedName}
           </text>`
         : '';
 
@@ -1293,10 +1042,22 @@ CRITICAL IMAGE REQUIREMENTS:
             </style>
           </defs>
           
-          ${watermarkText}
+          <!-- Anti-theft transparent brand watermark across the image area (not shown on clean full bleed) -->
+          ${template.showWatermark ? `
+          <text x="${w / 2}" y="${h / 2.2}" fill="#ffffff" fill-opacity="0.10" font-family="'${brandFont}', system-ui, sans-serif" font-size="28px" font-weight="bold" transform="rotate(-30 ${w / 2} ${h / 2.2})" text-anchor="middle" letter-spacing="8px">
+            AUTHENTIC WORK â€¢ ${escapedSpacedName}
+          </text>
+          ` : ''}
+
           ${visualAdditions}
           ${textPanelSvg}
-          ${footerSection}
+          
+          <!-- Minimalist Editorial Footer (hidden only on poster covers) -->
+          ${template.showFooter ? `
+          <rect x="0" y="${h - 60}" width="${w}" height="60" class="footer-bg" />
+          <text x="60" y="${h - 25}" class="footer-brand">${escapedSpacedName}</text>
+          <text x="${w - 60}" y="${h - 25}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>
+          ` : ''}
         </svg>
       `;
 
@@ -1306,19 +1067,20 @@ CRITICAL IMAGE REQUIREMENTS:
         .png()
         .toBuffer();
 
-      // ── Step 4: Composite image scaling and margins based on layout ──
+      // â”€â”€ Step 4: Composite image scaling and margins â€” grouped by the base treatment â”€â”€
       let compositeBuffer: Buffer;
-      if (layoutType === 'full_bleed_clean' || layoutType === 'translucent_split' || layoutType === 'poster_cover' || layoutType === 'asymmetric_monogram' || layoutType === 'transparent_scrim' || layoutType === 'gold_ticket' || layoutType === 'newspaper_editorial' || layoutType === 'book_magazine_cover' || layoutType === 'letter_envelope') {
-        const sourceImage = (imageBuffer && imageBuffer.length > 0) ? sharp(imageBuffer) : sharp({
-          create: {
-            width: w,
-            height: h,
-            channels: 3,
-            background: validBackgroundColor
-          }
-        });
-        compositeBuffer = await sourceImage
-          .resize(w, h, { fit: 'cover' })
+      if (template.base === 'solid_canvas_full') {
+        // baseImage is already a fully-built w x h canvas (solid panel + photo embedded via SVG)
+        compositeBuffer = await baseImage
+          .composite([{ input: highResSvgBuffer, blend: 'over' }])
+          .png()
+          .toBuffer();
+      } else if (template.base === 'full_bleed' || template.base === 'full_bleed_duotone') {
+        let fullBleedImage = sharp(imageBuffer).resize(w, h, { fit: 'cover' });
+        if (template.base === 'full_bleed_duotone') {
+          fullBleedImage = fullBleedImage.greyscale().tint(validBrandColor as any);
+        }
+        compositeBuffer = await fullBleedImage
           .composite([{ input: highResSvgBuffer, blend: 'over' }])
           .png()
           .toBuffer();
@@ -1336,7 +1098,7 @@ CRITICAL IMAGE REQUIREMENTS:
           .toBuffer();
       }
 
-      // ── Step 5: Finish Control (Overlay microscopic gray noise overlay for matte texture) ──
+      // â”€â”€ Step 5: Finish Control (Overlay microscopic gray noise overlay for matte texture) â”€â”€
       try {
         const noiseSize = 256;
         const noisePixels = Buffer.alloc(noiseSize * noiseSize * 2); // 2 channels: Grayscale (Y) + Alpha (A)

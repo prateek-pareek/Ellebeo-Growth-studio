@@ -310,6 +310,47 @@ export class AppointmentService {
     return { imageId: asset.id, rawUrl };
   }
 
+  async attachAssetLibraryImage(tenantId: string, appointmentId: string, storagePath: string, isBeforePhoto: boolean) {
+    await this.getAppointment(tenantId, appointmentId);
+
+    const brandDna = await this.prisma.brandDNA.findUnique({
+      where: { unique_current_brand_dna: { tenantId, isCurrent: true } },
+    });
+    if (!brandDna) throw new BadRequestException('Brand DNA must be configured before using asset library images');
+
+    const v2 = brandDna.brandDnaV2
+      ? (typeof brandDna.brandDnaV2 === 'string' ? JSON.parse(brandDna.brandDnaV2 as any) : brandDna.brandDnaV2) as Record<string, any>
+      : null;
+    const items: Array<{ storage_path: string; usage_rule?: string; consent_status?: string }> =
+      Array.isArray(v2?.['asset_library']) ? v2!['asset_library'] : [];
+
+    const item = items.find((i) => i.storage_path === storagePath);
+    if (!item) throw new BadRequestException('Asset not found in brand asset library');
+
+    const excludedUsage = new Set(['do_not_generate', 'do_not_use_publicly', 'private_ref']);
+    const excludedConsent = new Set(['no_consent', 'pending']);
+    if (excludedUsage.has(item.usage_rule || '') || excludedConsent.has(item.consent_status || '')) {
+      throw new BadRequestException('This asset is not permitted for content generation');
+    }
+
+    const asset = await this.prisma.imageAsset.create({
+      data: {
+        tenantId,
+        appointmentId,
+        rawUrl: storagePath,
+        s3Key: storagePath,
+        s3Bucket: this.configService.get<string>('FIREBASE_STORAGE_BUCKET') || '',
+        s3ObjectHash: `asset-library-${Date.now()}`,
+        fileSizeBytes: 0,
+        isBeforePhoto,
+        isAfterPhoto: !isBeforePhoto,
+        uploadValidated: true,
+      },
+    });
+
+    return { imageId: asset.id, rawUrl: storagePath };
+  }
+
   async deleteImage(tenantId: string, appointmentId: string, imageId: string) {
     const image = await this.prisma.imageAsset.findUnique({ where: { id: imageId } });
     if (!image || image.tenantId !== tenantId || image.appointmentId !== appointmentId) {

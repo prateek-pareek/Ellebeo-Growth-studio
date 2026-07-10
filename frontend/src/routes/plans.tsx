@@ -122,6 +122,10 @@ function PlansPage() {
   const [purchaseCanceled, setPurchaseCanceled] = useState(false);
 
   useEffect(() => {
+    if (!localStorage.getItem("accessToken")) {
+      setLoadingTier(false);
+      return;
+    }
     api.get("/auth/me")
       .then((res) => {
         const tier = res.data?.data?.tenant?.subscriptionTier ?? "free";
@@ -136,6 +140,7 @@ function PlansPage() {
       setPurchaseSuccess(true);
       const sessionId = search.session_id;
       if (sessionId) {
+        // Verify public session to activate in DB first, then redirect
         api.post("/billing/verify-session", { sessionId })
           .then((res) => {
             const tier = res.data?.data?.tier ?? res.data?.tier;
@@ -143,11 +148,18 @@ function PlansPage() {
               setCurrentTier(tier);
               setActivatedTier(tier);
             }
+            window.location.href = `elleobe://growth-studio/plans?success=true`;
           })
-          .catch(() => {});
+          .catch(() => {
+            // Redirect on failure too as a fallback
+            window.location.href = `elleobe://growth-studio/plans?success=true`;
+          });
       }
     }
-    if (search.canceled) setPurchaseCanceled(true);
+    if (search.canceled) {
+      setPurchaseCanceled(true);
+      window.location.href = "elleobe://growth-studio/plans?canceled=true";
+    }
   }, [search.success, search.canceled, search.session_id]);
 
   const handleSubscribe = async (plan: PlanTier) => {
