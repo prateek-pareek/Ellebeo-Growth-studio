@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export type ContentPillar = 'client_results' | 'behind_the_scenes' | 'education_tips' | 'promotion';
-export type LayoutType = 'passepartout_text' | 'passepartout_clean' | 'full_bleed_clean' | 'split_before_after' | 'asymmetric_monogram' | 'translucent_split' | 'poster_cover';
+export type LayoutType = 'passepartout_text' | 'passepartout_clean' | 'full_bleed_clean' | 'split_before_after' | 'asymmetric_monogram' | 'translucent_split' | 'poster_cover' | 'postcard_ticket' | 'editorial_arch' | 'text_only_editorial' | 'transparent_scrim' | 'premium_diptyque' | 'art_director_split';
 
 @Injectable()
 export class GridOrchestratorService {
@@ -28,7 +28,7 @@ export class GridOrchestratorService {
     });
 
     const pillars: ContentPillar[] = ['client_results', 'behind_the_scenes', 'education_tips', 'promotion'];
-    const layouts: LayoutType[] = ['passepartout_text', 'passepartout_clean', 'full_bleed_clean', 'split_before_after', 'asymmetric_monogram', 'translucent_split', 'poster_cover'];
+    const layouts: LayoutType[] = ['passepartout_text', 'passepartout_clean', 'full_bleed_clean', 'split_before_after', 'asymmetric_monogram', 'translucent_split', 'poster_cover', 'postcard_ticket', 'editorial_arch', 'text_only_editorial', 'transparent_scrim', 'premium_diptyque', 'art_director_split'];
 
     // Scoring system: penalize recent items to force rotation
     const pillarScores = { client_results: 0, behind_the_scenes: 0, education_tips: 0, promotion: 0 };
@@ -39,7 +39,13 @@ export class GridOrchestratorService {
       split_before_after: 0,
       asymmetric_monogram: 0,
       translucent_split: 0,
-      poster_cover: 0
+      poster_cover: 0,
+      postcard_ticket: 0,
+      editorial_arch: 0,
+      text_only_editorial: 0,
+      transparent_scrim: 0,
+      premium_diptyque: 0,
+      art_director_split: 0
     };
 
     lastPosts.forEach((post, index) => {

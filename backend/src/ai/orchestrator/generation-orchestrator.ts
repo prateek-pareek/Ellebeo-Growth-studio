@@ -617,6 +617,10 @@ Requirements:
             brandFont: headingFont,
             bodyFont: bodyFont,
             visualRanking: brandDNA.visualRanking ?? [],
+            capitalizationRule: (brandDNA.brandDnaV2 as any)?.typography?.capitalization_rule || (brandDNA.brandDnaV2 as any)?.typography?.capitalizationRule || 'uppercase',
+            footerBrandToggle: (brandDNA.brandDnaV2 as any)?.typography?.footer_brand_toggle !== false && (brandDNA.brandDnaV2 as any)?.typography?.footerBrandToggle !== false,
+            backgroundBrandColor: brandDNA.backgroundBrandColor ?? '#F7F4EF',
+            accentBrandColor: brandDNA.accentBrandColor ?? '#D4A373',
           });
           // Apply logo to each carousel slide
           const slidesWithLogo = brandDNA.logoUrl
@@ -681,6 +685,10 @@ Requirements:
             brandFont: headingFont,
             bodyFont: bodyFont,
             visualRanking: brandDNA.visualRanking ?? [],
+            capitalizationRule: (brandDNA.brandDnaV2 as any)?.typography?.capitalization_rule || (brandDNA.brandDnaV2 as any)?.typography?.capitalizationRule || 'uppercase',
+            footerBrandToggle: (brandDNA.brandDnaV2 as any)?.typography?.footer_brand_toggle !== false && (brandDNA.brandDnaV2 as any)?.typography?.footerBrandToggle !== false,
+            backgroundBrandColor: brandDNA.backgroundBrandColor ?? '#F7F4EF',
+            accentBrandColor: brandDNA.accentBrandColor ?? '#D4A373',
           });
           const framesWithLogo = brandDNA.logoUrl
             ? await Promise.all(aiFrames.map(async f => ({ ...f, url: await this.logoOverlay.applyLogo({ imageUrl: f.url, logoUrl: brandDNA.logoUrl, position: brandDNA.logoPosition, tenantId }) })))
