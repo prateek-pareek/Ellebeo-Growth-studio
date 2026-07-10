@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAppointments, type Appointment } from "@/lib/providers/appointments-provider";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -15,6 +15,16 @@ export const Route = createFileRoute("/appointments")({
   }),
   component: AppointmentsPage,
 });
+
+type AssetLibraryItem = {
+  storage_path: string;
+  asset_type: string;
+  usage_rule?: string;
+  consent_status?: string;
+};
+
+const EXCLUDED_USAGE = new Set(["do_not_generate", "do_not_use_publicly", "private_ref"]);
+const EXCLUDED_CONSENT = new Set(["no_consent", "pending"]);
 
 const CATEGORIES = [
   { value: "hair_colour",            label: "Colour" },
@@ -42,6 +52,24 @@ function AppointmentsPage() {
   const [isAdding, setIsAdding]       = useState(false);
   const [beforeFile, setBeforeFile]   = useState<File | null>(null);
   const [afterFile, setAfterFile]     = useState<File | null>(null);
+  const [beforeAssetPath, setBeforeAssetPath] = useState<string | null>(null);
+  const [afterAssetPath, setAfterAssetPath]   = useState<string | null>(null);
+  const [assetLibrary, setAssetLibrary]       = useState<AssetLibraryItem[]>([]);
+
+  useEffect(() => {
+    api.get("/brand-dna")
+      .then((res) => {
+        const dna = res.data?.data;
+        const v2 = typeof dna?.brandDnaV2 === "string" ? JSON.parse(dna.brandDnaV2) : dna?.brandDnaV2;
+        const items: AssetLibraryItem[] = Array.isArray(v2?.asset_library) ? v2.asset_library : [];
+        setAssetLibrary(
+          items.filter(
+            (i) => i.storage_path && !EXCLUDED_USAGE.has(i.usage_rule || "") && !EXCLUDED_CONSENT.has(i.consent_status || "")
+          )
+        );
+      })
+      .catch(() => setAssetLibrary([]));
+  }, []);
 
   const uploadFile = async (appointmentId: string, file: File, isBefore: boolean) => {
     const form = new FormData();
@@ -49,6 +77,13 @@ function AppointmentsPage() {
     form.append("isBeforePhoto", String(isBefore));
     await api.post(`/appointments/${appointmentId}/images/upload`, form, {
       headers: { "Content-Type": "multipart/form-data" },
+    });
+  };
+
+  const attachAssetLibraryImage = async (appointmentId: string, storagePath: string, isBefore: boolean) => {
+    await api.post(`/appointments/${appointmentId}/images/from-asset-library`, {
+      storagePath,
+      isBeforePhoto: isBefore,
     });
   };
 
@@ -108,12 +143,26 @@ function AppointmentsPage() {
           toast.error(uploadErr.response?.data?.error?.message || uploadErr.response?.data?.message || "Before photo upload failed");
           return;
         }
+      } else if (beforeAssetPath) {
+        try {
+          await attachAssetLibraryImage(appt.id, beforeAssetPath, true);
+        } catch (uploadErr: any) {
+          toast.error(uploadErr.response?.data?.error?.message || uploadErr.response?.data?.message || "Before photo (asset library) attach failed");
+          return;
+        }
       }
       if (afterFile) {
         try {
           await uploadFile(appt.id, afterFile, false);
         } catch (uploadErr: any) {
           toast.error(uploadErr.response?.data?.error?.message || uploadErr.response?.data?.message || "After photo upload failed");
+          return;
+        }
+      } else if (afterAssetPath) {
+        try {
+          await attachAssetLibraryImage(appt.id, afterAssetPath, false);
+        } catch (uploadErr: any) {
+          toast.error(uploadErr.response?.data?.error?.message || uploadErr.response?.data?.message || "After photo (asset library) attach failed");
           return;
         }
       }
@@ -124,6 +173,8 @@ function AppointmentsPage() {
       setServiceName("");
       setBeforeFile(null);
       setAfterFile(null);
+      setBeforeAssetPath(null);
+      setAfterAssetPath(null);
       if (refresh) refresh();
     } catch (e: any) {
       toast.error(e.response?.data?.message || "Failed to create appointment");
@@ -246,12 +297,18 @@ function AppointmentsPage() {
               <PhotoUpload
                 label="Before photo"
                 file={beforeFile}
-                onChange={setBeforeFile}
+                onChange={(f) => { setBeforeFile(f); if (f) setBeforeAssetPath(null); }}
+                assetLibrary={assetLibrary}
+                selectedAssetPath={beforeAssetPath}
+                onSelectAsset={(path) => { setBeforeAssetPath(path); setBeforeFile(null); }}
               />
               <PhotoUpload
                 label="After photo"
                 file={afterFile}
-                onChange={setAfterFile}
+                onChange={(f) => { setAfterFile(f); if (f) setAfterAssetPath(null); }}
+                assetLibrary={assetLibrary}
+                selectedAssetPath={afterAssetPath}
+                onSelectAsset={(path) => { setAfterAssetPath(path); setAfterFile(null); }}
               />
             </div>
 
@@ -349,11 +406,19 @@ function PhotoUpload({
   label,
   file,
   onChange,
+  assetLibrary = [],
+  selectedAssetPath = null,
+  onSelectAsset,
 }: {
   label: string;
   file: File | null;
   onChange: (f: File | null) => void;
+  assetLibrary?: AssetLibraryItem[];
+  selectedAssetPath?: string | null;
+  onSelectAsset?: (path: string) => void;
 }) {
+  const [showLibrary, setShowLibrary] = useState(false);
+
   return (
     <div className="space-y-1.5">
       <label className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
@@ -362,6 +427,8 @@ function PhotoUpload({
       <div className="border border-border bg-muted/30 flex items-center justify-center relative overflow-hidden group hover:border-taupe transition-colors min-h-32">
         {file ? (
           <img src={URL.createObjectURL(file)} className="w-full h-auto block" alt={label} />
+        ) : selectedAssetPath ? (
+          <img src={selectedAssetPath} className="w-full h-auto block" alt={label} />
         ) : (
           <div className="flex flex-col items-center gap-2 text-taupe group-hover:text-foreground transition-colors py-8">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -379,6 +446,36 @@ function PhotoUpload({
           className="absolute inset-0 opacity-0 cursor-pointer"
         />
       </div>
+
+      {assetLibrary.length > 0 && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowLibrary((v) => !v)}
+            className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors"
+          >
+            {selectedAssetPath ? "Change library photo" : "Or pick from asset library"}
+          </button>
+          {showLibrary && (
+            <div className="mt-1.5 grid grid-cols-4 gap-1.5 border border-border bg-card p-1.5">
+              {assetLibrary.map((item) => (
+                <button
+                  key={item.storage_path}
+                  type="button"
+                  onClick={() => { onSelectAsset?.(item.storage_path); setShowLibrary(false); }}
+                  className={
+                    "size-12 overflow-hidden border transition-colors " +
+                    (selectedAssetPath === item.storage_path ? "border-foreground" : "border-border hover:border-taupe")
+                  }
+                  title={item.asset_type}
+                >
+                  <img src={item.storage_path} className="w-full h-full object-cover" alt={item.asset_type} />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

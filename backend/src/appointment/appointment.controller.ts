@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Req, UseGuards, Query, UploadedFile, UseInterceptors, ParseFilePipe, MaxFileSizeValidator } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AppointmentService } from './appointment.service';
-import { CreateAppointmentDto, UpdateAppointmentDto, CancelAppointmentDto, UploadUrlRequestDto, ConfirmUploadDto, PaginationQueryDto } from './dto/appointment.dto';
+import { CreateAppointmentDto, UpdateAppointmentDto, CancelAppointmentDto, UploadUrlRequestDto, ConfirmUploadDto, PaginationQueryDto, AttachAssetLibraryImageDto } from './dto/appointment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TenantStatusGuard } from '../common/guards/tenant-status.guard';
 import { ContentModerationService } from '../ai/guards/content-moderation.service';
@@ -80,6 +80,11 @@ export class AppointmentController {
     @Body('isBeforePhoto') isBeforePhoto: string,
   ) {
     return this.appointmentService.uploadImageDirect(req.user.tenantId, id, file, isBeforePhoto === 'true');
+  }
+
+  @Post(':id/images/from-asset-library')
+  attachAssetLibraryImage(@Req() req: any, @Param('id') id: string, @Body() dto: AttachAssetLibraryImageDto) {
+    return this.appointmentService.attachAssetLibraryImage(req.user.tenantId, id, dto.storagePath, dto.isBeforePhoto ?? false);
   }
 
   @Delete(':id/images/:imageId')
