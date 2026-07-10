@@ -136,6 +136,9 @@ function PlansPage() {
       setPurchaseSuccess(true);
       const sessionId = search.session_id;
       if (sessionId) {
+        // Attempt deep link redirect back to mobile app
+        window.location.href = `elleobe://growth-studio/plans?success=true&session_id=${sessionId}`;
+
         api.post("/billing/verify-session", { sessionId })
           .then((res) => {
             const tier = res.data?.data?.tier ?? res.data?.tier;
@@ -147,7 +150,10 @@ function PlansPage() {
           .catch(() => {});
       }
     }
-    if (search.canceled) setPurchaseCanceled(true);
+    if (search.canceled) {
+      setPurchaseCanceled(true);
+      window.location.href = "elleobe://growth-studio/plans?canceled=true";
+    }
   }, [search.success, search.canceled, search.session_id]);
 
   const handleSubscribe = async (plan: PlanTier) => {
