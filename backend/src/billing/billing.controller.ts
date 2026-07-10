@@ -17,11 +17,10 @@ export class BillingController {
     }
     return this.billingService.createCheckoutSession(req.user.tenantId, plan as any);
   }
-
-  @UseGuards(JwtAuthGuard, TenantStatusGuard)
+  
   @Post('verify-session')
-  verifySession(@Req() req: any, @Body('sessionId') sessionId: string) {
-    return this.billingService.verifySession(req.user.tenantId, sessionId);
+  verifySession(@Body('sessionId') sessionId: string) {
+    return this.billingService.verifySessionPublic(sessionId);
   }
 
   // Stripe calls this directly — no JWT available. Signature verification

@@ -90,6 +90,42 @@ export class BillingService {
     return { applied: true, tier };
   }
 
+  async verifySessionPublic(sessionId: string): Promise<{ applied: boolean; tier: string | null }> {
+    if (!this.stripe) throw new InternalServerErrorException('Payments are not configured');
+
+    const session = await this.stripe.checkout.sessions.retrieve(sessionId);
+
+    if (session.payment_status !== 'paid' && session.status !== 'complete') return { applied: false, tier: null };
+
+    const tenantId = session.client_reference_id || session.metadata?.tenantId;
+    if (!tenantId) throw new BadRequestException('Session has no tenant reference');
+
+    const tier = session.metadata?.tier as PlanTier | undefined;
+    if (!tier) return { applied: false, tier: null };
+
+    const existing = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { appliedStripeSessionIds: true },
+    });
+    if (existing?.appliedStripeSessionIds?.includes(sessionId)) {
+      return { applied: true, tier };
+    }
+
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        subscriptionTier: tier as any,
+        subscriptionStartedAt: new Date(),
+        stripeCustomerId: typeof session.customer === 'string' ? session.customer : (session.customer as any)?.id,
+        stripeSubscriptionId: typeof session.subscription === 'string' ? session.subscription : (session.subscription as any)?.id,
+        appliedStripeSessionIds: { push: sessionId },
+      },
+    });
+
+    this.logger.log(`Tenant ${tenantId} subscribed to ${PLAN_NAMES[tier]} via session ${sessionId}`);
+    return { applied: true, tier };
+  }
+
   async handleWebhookEvent(rawBody: Buffer, signature: string): Promise<void> {
     if (!this.stripe) throw new InternalServerErrorException('Payments are not configured');
 
