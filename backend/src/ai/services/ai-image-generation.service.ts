@@ -1,4 +1,4 @@
-﻿// ============================================================================
+// ============================================================================
 // ai-image-generation.service.ts â€” Multi-model Image Generation (Gemini > GPT-Image-1)
 // Takes real before/after photo + brand context â†’ beautiful designed image
 //
@@ -18,7 +18,7 @@ import * as https from 'https';
 import * as http from 'http';
 import { GoogleGenAI } from '@google/genai';
 import sharp from 'sharp';
-import { resolveLayoutTemplate, BASE_TREATMENTS, TEXT_TEMPLATES, DECORATIONS } from '../config/layout-renderers';
+import { resolveLayoutTemplate, BASE_TREATMENTS, TEXT_TEMPLATES, DECORATIONS, LAYOUT_TEMPLATES } from '../config/layout-renderers';
 
 const openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
 
@@ -26,6 +26,10 @@ export interface GeneratedSlide {
   url: string;
   label: string;
   title: string;
+  variants?: {
+    gemini?: string;
+    dalle?: string;
+  };
 }
 
 export interface SlideInput {
@@ -49,32 +53,51 @@ export async function downloadImageAsBuffer(url: string): Promise<Buffer> {
   });
 }
 
-export async function processPortraitFit(imageBuffer: Buffer, targetW: number, targetH: number): Promise<Buffer> {
+export async function processPortraitFit(imageBuffer: Buffer, targetW: number, targetH: number, backgroundColor: string = '#F7F4EF'): Promise<Buffer> {
   try {
-    // Apply aggressive HD sharpening, light color modulation, and gamma correction for premium output
-    const enhancedBuffer = await sharp(imageBuffer)
-      .sharpen({ sigma: 1.8, m1: 0.6, m2: 3.5 })
+    const metadata = await sharp(imageBuffer).metadata();
+    const inputW = metadata.width || targetW;
+    const inputH = metadata.height || targetH;
+
+    let baseSharp = sharp(imageBuffer);
+
+    // Upscale if smaller than 80% of target canvas to prevent pixelation
+    if (inputW < targetW * 0.8 || inputH < targetH * 0.8) {
+      baseSharp = baseSharp.resize({
+        width: Math.max(inputW * 2, targetW),
+        height: Math.max(inputH * 2, targetH),
+        fit: 'inside',
+        kernel: 'lanczos3'
+      });
+      // Skip aggressive sharpening for very small images as it creates artifacts
+    } else {
+      // Apply aggressive HD sharpening, light color modulation, and gamma correction for premium output
+      baseSharp = baseSharp.sharpen({ sigma: 2.2, m1: 0.6, m2: 3.5 });
+    }
+
+    const enhancedBuffer = await baseSharp
       .modulate({ saturation: 1.06, brightness: 1.02 })
       .gamma(1.1)
       .toBuffer();
 
-    const metadata = await sharp(enhancedBuffer).metadata();
-    const originalW = metadata.width || 1024;
-    const originalH = metadata.height || 1024;
-    const targetAspect = targetW / targetH;
-    const sourceAspect = originalW / originalH;
-
     // Always contain the original photo fully and layer it on a blurred version to prevent awkward zooming or cropping of faces
-    const blurredBg = await sharp(enhancedBuffer)
+    const blurBase = await sharp(enhancedBuffer)
       .resize(targetW, targetH, { fit: 'cover' })
       .blur(50)
+      .toBuffer();
+
+    // Tint the blur with the brand's background color to create a unified premium look
+    const colorOverlaySvg = `<svg width="${targetW}" height="${targetH}"><rect x="0" y="0" width="${targetW}" height="${targetH}" fill="${backgroundColor}" fill-opacity="0.45" /></svg>`;
+    const tintedBg = await sharp(blurBase)
+      .composite([{ input: Buffer.from(colorOverlaySvg), blend: 'over' }])
+      .png()
       .toBuffer();
 
     const containedImg = await sharp(enhancedBuffer)
       .resize(targetW, targetH, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .toBuffer();
 
-    return await sharp(blurredBg)
+    return await sharp(tintedBg)
       .composite([{ input: containedImg }])
       .png()
       .toBuffer();
@@ -267,7 +290,8 @@ export class AiImageGenerationService {
     generatorModel?: 'gemini' | 'dalle' | 'both';
     backgroundBrandColor?: string;
     accentBrandColor?: string;
-  }): Promise<string> {
+    moodboardVisionSummary?: string;
+  }): Promise<{ url: string; variants?: { gemini?: string; dalle?: string } }> {
     const {
       photoUrl, beforePhotoUrl, overlayText, index, isFirst, isLast, isBeforePhoto,
       tenantId, businessName, brandColor,
@@ -285,10 +309,11 @@ export class AiImageGenerationService {
       footerBrandToggle = true,
       generatorModel = 'both',
       backgroundBrandColor = '#F7F4EF',
-      accentBrandColor = '#D4A373'
+      accentBrandColor = '#D4A373',
+      moodboardVisionSummary,
     } = params;
 
-    // Fast-path: Skip AI image generation entirely for text-only editorial quote layouts
+    // Fast-path: Skip AI image generation entirely for text-only editorial layouts
     if (layoutType === 'text_only_editorial') {
       console.log(`[TEXT ONLY EDITORIAL] Bypassing AI image generator for slide ${index} and creating solid brand colored tile.`);
       const brandedBase64 = await this.overlayBrandingAndText({
@@ -309,9 +334,11 @@ export class AiImageGenerationService {
         capitalizationRule,
         footerBrandToggle,
         backgroundBrandColor,
-        accentBrandColor
+        accentBrandColor,
+        outputSize
       });
-      return uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
+      const url = await uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
+      return { url };
     }
 
     let cleanPrompt = '';
@@ -343,15 +370,19 @@ export class AiImageGenerationService {
         backgroundBrandColor,
         accentBrandColor
       });
-      return uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
+      const url = await uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
+      return { url };
     }
 
     // Compile dynamic lifestyle/studio assets for non-booking educational/moodboard posts
+    // Subjects use Brand DNA aesthetic direction instead of hardcoded beige/travertine
+    const brandAestheticHint = aesthetic || 'minimal, premium beauty editorial';
     const lifestyleSubjects = [
-      `a luxury minimalist beauty clinic treatment room with warm soft lighting, beige tones, and clean design`,
-      `close-up of elegant serum bottles on a textured travertine stone plate, surrounded by delicate olive leaves, soft shadows`,
-      `a premium spa treatment leather chair in a high-end wellness interior, aesthetic clinical design`,
-      `clean aesthetic details of organic cosmetic packaging resting on a stone surface, delicate shadows`
+      `a luxury minimalist ${serviceType} treatment room in ${brandAestheticHint} style, using brand color palette: primary ${brandColor}, secondary ${secondaryColor}, background ${backgroundBrandColor}, accent ${accentBrandColor}`,
+      `close-up macro shot of elegant, organic botanical ingredients and natural elements used in ${serviceType}, styled in ${brandAestheticHint} aesthetic, color-matched to palette: ${brandColor}, ${secondaryColor}, ${accentBrandColor}`,
+      `clean architectural details of a premium ${serviceType} space with beautiful natural lighting and shadows, color palette matching: primary ${brandColor}, secondary ${secondaryColor}, background ${backgroundBrandColor}`,
+      `macro photography of smooth textures, glass serum bottles, or high-end products related to ${serviceType}, styled in ${brandAestheticHint} aesthetic, brand colors: ${brandColor}, ${secondaryColor}, ${accentBrandColor}`,
+      `an abstract, flowing composition of soft silk, water ripples, or natural textures evoking the feeling of a premium ${serviceType}, in exact brand colors: ${brandColor}, ${secondaryColor}, ${accentBrandColor}`,
     ];
     const chosenSubject = lifestyleSubjects[index % lifestyleSubjects.length];
 
@@ -372,12 +403,22 @@ export class AiImageGenerationService {
       ? `Visual style priorities: ${visualRanking.join(', ')}`
       : 'minimal, premium beauty editorial';
 
+    // Build moodboard context block for the image generation AI
+    const moodboardBlock = moodboardVisionSummary
+      ? `\n- MOODBOARD DIRECTION (from brand reference images — match this feel): ${moodboardVisionSummary}`
+      : '';
+
     const facePreservationClause = `
     
 CRITICAL IMAGE REQUIREMENTS:
 - Subject: ${chosenSubject}
-- Color scheme: brand palette primary ${brandColor}, secondary ${secondaryColor}
-- Aesthetic style: ${aesthetic || 'minimal, premium beauty editorial'}. ${rankingStyleText}
+- BRAND COLOR PALETTE (MANDATORY — the generated image MUST use these exact colors as the dominant palette):
+  * Primary brand color: ${brandColor}
+  * Secondary brand color: ${secondaryColor}
+  * Background color: ${backgroundBrandColor}
+  * Accent color: ${accentBrandColor}
+  * The image's dominant tones, surfaces, backgrounds, and accents MUST visually match these hex colors. Do NOT invent your own color scheme.
+- Aesthetic style: ${brandAestheticHint}. ${rankingStyleText}${moodboardBlock}
 - Photographic quality: Captured on a medium-format 80MP camera, ultra-detailed textures, razor-sharp focus on details, Hasselblad/Leica photography style, 8k resolution, cinematic natural lighting.
 - Do NOT feature any people, faces, or bodies. Focus entirely on organic, luxury interiors and clinic product details.
 - The image must look like a professional, high-fashion campaign photography asset.
@@ -415,9 +456,9 @@ CRITICAL IMAGE REQUIREMENTS:
     const dalleTask = (async () => {
       if (generatorModel === 'gemini') return null;
       try {
-        console.log(`Generating DALL-E 3 image for slide ${index}...`);
+        console.log(`Generating GPT Image 2 image for slide ${index}...`);
         const response = await openai.images.generate({
-          model: 'dall-e-3',
+          model: 'gpt-image-2',
           prompt: cleanPrompt,
           size: outputSize === '1024x1536' ? '1024x1792' as any : '1024x1024',
         });
@@ -428,67 +469,30 @@ CRITICAL IMAGE REQUIREMENTS:
         }
         return null;
       } catch (err) {
-        console.warn(`DALL-E 3 generation failed for slide ${index}, trying DALL-E 2 fallback:`, err);
-        try {
-          const response = await openai.images.generate({
-            model: 'dall-e-2',
-            prompt: cleanPrompt,
-            size: '1024x1024',
-          });
-          const url = response.data?.[0]?.url;
-          if (url) {
-            const buf = await downloadImageAsBuffer(url);
-            return buf.toString('base64');
-          }
-        } catch (err2) {
-          console.error(`DALL-E 2 fallback generation failed for slide ${index}:`, err2);
-        }
+        console.warn(`GPT Image 2 generation failed for slide ${index}:`, err);
         return null;
       }
     })();
 
     const [geminiResult, dalleResult] = await Promise.all([geminiTask, dalleTask]);
 
-    if (generatorModel === 'both' && geminiResult && dalleResult) {
-      console.log(`Both base images generated! Evaluating aesthetic winner using GPT-4o-mini judge...`);
-      try {
-        const evalResponse = await openai.chat.completions.create({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are a senior art director. Evaluate the two aesthetic beauty clinic background images and choose the one that looks more premium, professional, and fits a high-fashion beauty clinic brand (e.g. clean travertine, minimal spa interiors, elegant cosmetic products). Respond ONLY with valid JSON: {"winner": "A" | "B"}.'
-            },
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: 'Image A is the first image, Image B is the second image. Which one looks more premium?' },
-                { type: 'image_url', image_url: { url: `data:image/png;base64,${geminiResult}` } },
-                { type: 'image_url', image_url: { url: `data:image/png;base64,${dalleResult}` } }
-              ]
-            }
-          ],
-          response_format: { type: 'json_object' }
-        });
-        const evalText = evalResponse.choices[0]?.message?.content || '';
-        const evalParsed = JSON.parse(evalText) as { winner: 'A' | 'B' };
-        if (evalParsed.winner === 'A') {
-          console.log(`--> Winner is Image A (Gemini)`);
-          base64 = geminiResult;
-        } else {
-          console.log(`--> Winner is Image B (DALL-E 3)`);
-          base64 = dalleResult;
-        }
-      } catch (evalErr) {
-        console.error('[Vision Judge Error] Selection query failed, falling back to DALL-E:', evalErr);
-        base64 = dalleResult;
-      }
-    } else {
+    // Both models should generate - return both for technician to choose
+    if (geminiResult || dalleResult) {
+      console.log(`✅ Image generation complete for slide ${index}:`);
+      if (geminiResult) console.log(`   • Gemini: Generated ✅`);
+      if (dalleResult) console.log(`   • DALL-E: Generated ✅`);
+      if (!geminiResult) console.log(`   • Gemini: Failed ❌`);
+      if (!dalleResult) console.log(`   • DALL-E: Failed ❌`);
+
+      // Use primary result for main display, store both for technician choice
       base64 = geminiResult || dalleResult || '';
+    } else {
+      throw new Error(`No image generated from any model for slide ${index}`);
     }
 
     if (!base64) throw new Error(`OpenAI image generation failed completely for slide ${index}`);
 
+    // Apply branding/text overlay to both models' images
     const brandedBase64 = await this.overlayBrandingAndText({
       base64Image: base64,
       overlayText,
@@ -507,9 +511,50 @@ CRITICAL IMAGE REQUIREMENTS:
       capitalizationRule,
       footerBrandToggle,
       backgroundBrandColor,
-      accentBrandColor
+      accentBrandColor,
+      outputSize
     });
-    return uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
+
+    // Upload primary image
+    const primaryUrl = await uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}_primary`);
+
+    // If both models generated images, also upload the alternative
+    let variants: { gemini?: string; dalle?: string } | undefined;
+    if (geminiResult && dalleResult && generatorModel === 'both') {
+      // Apply overlay to alternative image for comparison
+      const altBase64 = geminiResult === base64 ? dalleResult : geminiResult;
+      const brandedAltBase64 = await this.overlayBrandingAndText({
+        base64Image: altBase64,
+        overlayText,
+        isFirst,
+        isLast,
+        brandColor,
+        secondaryColor,
+        businessName,
+        index,
+        totalSlides,
+        brandFont,
+        bodyFont,
+        layoutType,
+        beforePhotoUrl,
+        visualRanking,
+        capitalizationRule,
+        footerBrandToggle,
+        backgroundBrandColor,
+        accentBrandColor,
+        outputSize
+      });
+
+      const altUrl = await uploadBase64ToFirebase(brandedAltBase64, tenantId, `slide_${index}_alt`);
+
+      // Return both variants for technician choice
+      variants = {
+        gemini: geminiResult === base64 ? primaryUrl : altUrl,
+        dalle: dalleResult === base64 ? primaryUrl : altUrl,
+      };
+    }
+
+    return { url: primaryUrl, variants };
   }
 
   async generateCarousel(params: {
@@ -532,27 +577,13 @@ CRITICAL IMAGE REQUIREMENTS:
     generatorModel?: 'gemini' | 'dalle' | 'both';
     backgroundBrandColor?: string;
     accentBrandColor?: string;
+    moodboardVisionSummary?: string;
   }): Promise<GeneratedSlide[]> {
-    const { afterPhotoUrl, beforePhotoUrl, concepts, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', ...rest } = params;
+    const { afterPhotoUrl, beforePhotoUrl, concepts, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', moodboardVisionSummary, ...rest } = params;
     const total = concepts.length;
 
-    // Define pool of premium layout templates
-    const layoutPool = [
-      'passepartout_text',
-      'asymmetric_monogram',
-      'translucent_split',
-      'poster_cover',
-      'postcard_ticket',
-      'editorial_arch',
-      'text_only_editorial',
-      'transparent_scrim',
-      'premium_diptyque',
-      'art_director_split',
-      'gold_ticket',
-      'newspaper_editorial',
-      'book_magazine_cover',
-      'letter_envelope'
-    ];
+    // Derive pool dynamically from JSON config — never goes stale when new layouts are added
+    const layoutPool = Object.keys(LAYOUT_TEMPLATES);
 
     // Select unique layouts without repeats
     const uniqueLayoutsForSlides: string[] = [];
@@ -595,7 +626,7 @@ CRITICAL IMAGE REQUIREMENTS:
         }
 
         try {
-          const url = await this.generateSlide({
+          const result = await this.generateSlide({
             photoUrl: photoUrl || '',
             beforePhotoUrl,
             overlayText: concept.overlayText,
@@ -607,8 +638,8 @@ CRITICAL IMAGE REQUIREMENTS:
             outputSize: '1024x1024',
             customPrompt: brief?.artDirectorPrompt,
             ...rest,
-            brandColor: brief?.panelHexColor || rest.brandColor,
-            secondaryColor: brief?.textColorHex || rest.secondaryColor,
+            brandColor: rest.brandColor,
+            secondaryColor: rest.secondaryColor,
             totalSlides: total,
             layoutType: currentSlideLayout,
             visualRanking,
@@ -616,10 +647,17 @@ CRITICAL IMAGE REQUIREMENTS:
             footerBrandToggle,
             generatorModel,
             backgroundBrandColor,
-            accentBrandColor
+            accentBrandColor,
+            moodboardVisionSummary
           });
-          return { url, title: concept.title, label: `SLIDE ${String(concept.index).padStart(2, '0')}` };
-        } catch {
+          return {
+            url: result.url,
+            title: concept.title,
+            label: `SLIDE ${String(concept.index).padStart(2, '0')}`,
+            variants: result.variants
+          };
+        } catch (err) {
+          console.error(`Failed to generate slide ${concept.index}:`, err);
           return null;
         }
       })
@@ -650,27 +688,13 @@ CRITICAL IMAGE REQUIREMENTS:
     generatorModel?: 'gemini' | 'dalle' | 'both';
     backgroundBrandColor?: string;
     accentBrandColor?: string;
+    moodboardVisionSummary?: string;
   }): Promise<GeneratedSlide[]> {
-    const { afterPhotoUrl, beforePhotoUrl, frames, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', ...rest } = params;
+    const { afterPhotoUrl, beforePhotoUrl, frames, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', moodboardVisionSummary, ...rest } = params;
     const total = frames.length;
 
-    // Define pool of premium layout templates
-    const layoutPool = [
-      'passepartout_text',
-      'asymmetric_monogram',
-      'translucent_split',
-      'poster_cover',
-      'postcard_ticket',
-      'editorial_arch',
-      'text_only_editorial',
-      'transparent_scrim',
-      'premium_diptyque',
-      'art_director_split',
-      'gold_ticket',
-      'newspaper_editorial',
-      'book_magazine_cover',
-      'letter_envelope'
-    ];
+    // Derive pool dynamically from JSON config — never goes stale when new layouts are added
+    const layoutPool = Object.keys(LAYOUT_TEMPLATES);
 
     // Select unique layouts without repeats
     const uniqueLayoutsForFrames: string[] = [];
@@ -711,7 +735,7 @@ CRITICAL IMAGE REQUIREMENTS:
         }
 
         try {
-          const url = await this.generateSlide({
+          const result = await this.generateSlide({
             photoUrl: photoUrl || '',
             beforePhotoUrl,
             overlayText: frame.overlayText,
@@ -723,8 +747,8 @@ CRITICAL IMAGE REQUIREMENTS:
             outputSize: '1024x1536',
             customPrompt: brief?.artDirectorPrompt,
             ...rest,
-            brandColor: brief?.panelHexColor || rest.brandColor,
-            secondaryColor: brief?.textColorHex || rest.secondaryColor,
+            brandColor: rest.brandColor,
+            secondaryColor: rest.secondaryColor,
             totalSlides: total,
             layoutType: currentSlideLayout,
             visualRanking,
@@ -732,10 +756,17 @@ CRITICAL IMAGE REQUIREMENTS:
             footerBrandToggle,
             generatorModel,
             backgroundBrandColor,
-            accentBrandColor
+            accentBrandColor,
+            moodboardVisionSummary
           });
-          return { url, title: frame.title, label: `FRAME ${String(frame.index).padStart(2, '0')}` };
-        } catch {
+          return {
+            url: result.url,
+            title: frame.title,
+            label: `FRAME ${String(frame.index).padStart(2, '0')}`,
+            variants: result.variants
+          };
+        } catch (err) {
+          console.error(`Failed to generate frame ${frame.index}:`, err);
           return null;
         }
       })
@@ -765,6 +796,7 @@ CRITICAL IMAGE REQUIREMENTS:
     footerBrandToggle?: boolean;
     backgroundBrandColor?: string;
     accentBrandColor?: string;
+    outputSize?: string;
   }): Promise<string> {
     const {
       base64Image,
@@ -784,7 +816,8 @@ CRITICAL IMAGE REQUIREMENTS:
       capitalizationRule = 'uppercase',
       footerBrandToggle = true,
       backgroundBrandColor = '#F7F4EF',
-      accentBrandColor = '#D4A373'
+      accentBrandColor = '#D4A373',
+      outputSize
     } = params;
 
     const hasText = overlayText && overlayText.trim().length > 0;
@@ -799,21 +832,51 @@ CRITICAL IMAGE REQUIREMENTS:
           .replace(/'/g, '&apos;');
       };
 
-      const imageBuffer = Buffer.from(base64Image, 'base64');
-      const metadata = await sharp(imageBuffer).metadata();
-      const originalW = metadata.width || 1024;
-      const originalH = metadata.height || 1024;
-      const photoMimeType = metadata.format === 'jpeg' ? 'image/jpeg' : metadata.format === 'webp' ? 'image/webp' : 'image/png';
-      const photoDataUri = `data:${photoMimeType};base64,${base64Image}`;
+      let imageBuffer: Buffer;
+      let isStory = false;
+      let originalW = 1080;
+      let originalH = 1080;
+      let photoDataUri = '';
+
+      if (base64Image) {
+        imageBuffer = Buffer.from(base64Image, 'base64');
+        const metadata = await sharp(imageBuffer).metadata();
+        originalW = metadata.width || 1024;
+        originalH = metadata.height || 1024;
+        const photoMimeType = metadata.format === 'jpeg' ? 'image/jpeg' : metadata.format === 'webp' ? 'image/webp' : 'image/png';
+        photoDataUri = `data:${photoMimeType};base64,${base64Image}`;
+        isStory = originalH > originalW;
+      } else {
+        isStory = outputSize === '1024x1536';
+        originalW = 1080;
+        originalH = isStory ? 1620 : 1080;
+        imageBuffer = await sharp({
+          create: {
+            width: originalW,
+            height: originalH,
+            channels: 4,
+            background: { r: 0, g: 0, b: 0, alpha: 0 }
+          }
+        }).png().toBuffer();
+        photoDataUri = `data:image/png;base64,${imageBuffer.toString('base64')}`;
+      }
 
       // Force high-definition target canvas dimensions (Instagram standards)
-      const isStory = originalH > originalW;
       const w = 1080;
       const h = isStory ? 1620 : 1080;
 
+      // Ensure every slide has text for layouts that use randomized_overlay
+      let finalOverlayText = overlayText;
+      if (!overlayText || overlayText.trim().length === 0) {
+        if (layoutType === 'passepartout_clean' || layoutType === 'full_bleed_clean') {
+          finalOverlayText = businessName || 'AUTHENTIC WORK';
+        }
+      }
+      const hasText = finalOverlayText && finalOverlayText.trim().length > 0;
+
       const lines: string[] = [];
       if (hasText) {
-        const words = overlayText.split(/\s+/);
+        const words = finalOverlayText.split(/\s+/);
         let currentLine = '';
         for (const word of words) {
           if ((currentLine + word).length > 28) {
@@ -885,15 +948,22 @@ CRITICAL IMAGE REQUIREMENTS:
       const borderPercent = geometry.borderPercent;
       const headingLetterSpacing = geometry.letterSpacing;
 
-      // Dynamic brand footer spacing based on name length to prevent overlaps/clippings
-      let footerLetterSpacing = 5;
-      let footerFontSize = 13;
-      if (escapedSpacedName.length > 35) {
-        footerLetterSpacing = 1;
-        footerFontSize = 10;
-      } else if (escapedSpacedName.length > 25) {
+      // Dynamic brand footer spacing based on name length to prevent overlaps/clippings but keep it readable (not micro)
+      let footerLetterSpacing = 6;
+      let footerFontSize = 18; // Base increased from 13 to 18
+      
+      if (escapedSpacedName.length < 15) {
+        // Short names can be larger and more spaced out
+        footerFontSize = 24;
+        footerLetterSpacing = 8;
+      } else if (escapedSpacedName.length > 35) {
+        // Very long names
         footerLetterSpacing = 2;
-        footerFontSize = 11;
+        footerFontSize = 14; // Minimum readability increased from 10 to 14
+      } else if (escapedSpacedName.length > 25) {
+        // Medium-long names
+        footerLetterSpacing = 3;
+        footerFontSize = 16;
       }
 
       // True Passepartout Layout Calculations using dynamic borders
@@ -913,7 +983,9 @@ CRITICAL IMAGE REQUIREMENTS:
         w, h,
         paddingX, paddingTop, paddingBottom,
         innerW, innerH,
+        validBrandColor,
         validSecondaryColor,
+        validBackgroundColor,
         downloadImageAsBuffer,
       });
       let baseImage = baseResult.baseImage;
@@ -972,9 +1044,9 @@ CRITICAL IMAGE REQUIREMENTS:
       }
       const dyOffset = Math.round(dynamicFontSize * 1.35);
 
-      // â”€â”€ Step 3: Assemble SVG overlays â€” dispatched from layout-templates.config.json â”€â”€
+      // ── Step 3: Assemble SVG overlays — dispatched from layout-templates.config.json ──
       const textCtx = {
-        w, h, dynamicFontSize, dyOffset, escapedLines, lines, overlayText, maxLength,
+        w, h, dynamicFontSize, dyOffset, escapedLines, lines, overlayText: finalOverlayText, maxLength,
         dynamicTextColor, posterTextColor, validBrandColor, validSecondaryColor,
         brandFont, bodyFont, escapedSpacedName, photoDataUri, escapeXml,
       };
@@ -1052,12 +1124,29 @@ CRITICAL IMAGE REQUIREMENTS:
           ${visualAdditions}
           ${textPanelSvg}
           
-          <!-- Minimalist Editorial Footer (hidden only on poster covers) -->
-          ${template.showFooter ? `
-          <rect x="0" y="${h - 60}" width="${w}" height="60" class="footer-bg" />
-          <text x="60" y="${h - 25}" class="footer-brand">${escapedSpacedName}</text>
-          <text x="${w - 60}" y="${h - 25}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>
-          ` : ''}
+          <!-- Brand identity mark: randomly placed so the grid stays diverse -->
+          ${template.showFooter ? (() => {
+            const footerStyle = ((index ?? 0) + (totalSlides ?? 4)) % 5;
+            if (footerStyle === 0) {
+              // Classic footer bar
+              return `<rect x="0" y="${h - 60}" width="${w}" height="60" class="footer-bg" />
+              <text x="60" y="${h - 25}" class="footer-brand">${escapedSpacedName}</text>
+              <text x="${w - 60}" y="${h - 25}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`;
+            } else if (footerStyle === 1) {
+              // Top-left corner floating wordmark
+              return `<text x="50" y="52" font-family="'${bodyFont}', system-ui, sans-serif" font-size="13px" font-weight="600" letter-spacing="4px" fill="${validSecondaryColor}" fill-opacity="0.85" text-transform="uppercase">${escapedSpacedName}</text>
+              <line x1="50" y1="62" x2="${Math.min(50 + escapedSpacedName.length * 8, 300)}" y2="62" stroke="${validSecondaryColor}" stroke-width="1" stroke-opacity="0.5" />`;
+            } else if (footerStyle === 2) {
+              // Bottom-right corner slide counter only — super minimal
+              return `<text x="${w - 60}" y="${h - 25}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`;
+            } else if (footerStyle === 3) {
+              // Vertical side tag — editorial magazine style
+              return `<text x="${w - 24}" y="${Math.round(h * 0.62)}" font-family="'${bodyFont}', system-ui, sans-serif" font-size="11px" font-weight="600" letter-spacing="5px" fill="${validBrandColor}" fill-opacity="0.7" transform="rotate(90 ${w - 24} ${Math.round(h * 0.62)})">${escapedSpacedName}</text>`;
+            } else {
+              // Pure transparent — no footer at all for this slide
+              return '';
+            }
+          })() : ''}
         </svg>
       `;
 
@@ -1072,15 +1161,6 @@ CRITICAL IMAGE REQUIREMENTS:
       if (template.base === 'solid_canvas_full') {
         // baseImage is already a fully-built w x h canvas (solid panel + photo embedded via SVG)
         compositeBuffer = await baseImage
-          .composite([{ input: highResSvgBuffer, blend: 'over' }])
-          .png()
-          .toBuffer();
-      } else if (template.base === 'full_bleed' || template.base === 'full_bleed_duotone') {
-        let fullBleedImage = sharp(imageBuffer).resize(w, h, { fit: 'cover' });
-        if (template.base === 'full_bleed_duotone') {
-          fullBleedImage = fullBleedImage.greyscale().tint(validBrandColor as any);
-        }
-        compositeBuffer = await fullBleedImage
           .composite([{ input: highResSvgBuffer, blend: 'over' }])
           .png()
           .toBuffer();

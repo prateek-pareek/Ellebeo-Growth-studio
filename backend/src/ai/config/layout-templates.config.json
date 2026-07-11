@@ -8,14 +8,14 @@
   },
   "passepartout_clean": {
     "base": "bordered_default",
-    "textTemplate": null,
+    "textTemplate": "randomized_overlay",
     "decoration": null,
     "showWatermark": true,
     "showFooter": true
   },
   "full_bleed_clean": {
     "base": "full_bleed",
-    "textTemplate": null,
+    "textTemplate": "randomized_overlay",
     "decoration": null,
     "showWatermark": false,
     "showFooter": true
@@ -130,6 +130,41 @@
     "textTemplate": "testimonial_avatar_card",
     "decoration": null,
     "showWatermark": true,
+    "showFooter": true
+  },
+  "transparent_scrim": {
+    "base": "full_bleed",
+    "textTemplate": "poster_high_contrast",
+    "decoration": "dark_scrim_overlay",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "premium_diptyque": {
+    "base": "split_before_after",
+    "textTemplate": "passepartout_bottom",
+    "decoration": "gallery_hairline",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "art_director_split": {
+    "base": "solid_canvas_full",
+    "textTemplate": "side_panel_label",
+    "decoration": "side_photo_embed",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "date_highlight": {
+    "base": "full_bleed",
+    "textTemplate": "editorial_date_stamp",
+    "decoration": "brand_scrim_heavy",
+    "showWatermark": false,
+    "showFooter": true
+  },
+  "signature_feature": {
+    "base": "full_bleed",
+    "textTemplate": "technician_signature_card",
+    "decoration": "brand_scrim_heavy",
+    "showWatermark": false,
     "showFooter": true
   }
 }
