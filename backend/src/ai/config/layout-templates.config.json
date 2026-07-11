@@ -131,5 +131,312 @@
     "decoration": null,
     "showWatermark": true,
     "showFooter": true
+  },
+
+  "_proposed_template_agent_library": {
+    "_meta": {
+      "purpose": "Design catalog for the upcoming Template Agent (separate process — see 5-layer architecture in CLAUDE.md). These are creative specs only, not renderer configs — none of them have base/textTemplate/decoration keys, so resolveLayoutTemplate() in layout-renderers.ts never matches or uses this nested object.",
+      "note": "Not wired into AI generation. Do not reference from ai-image-generation.service.ts, layout-renderers.ts, or grid-orchestrator.service.ts."
+    },
+    "die_cut_reveal": {
+      "concept": "A solid brand-colour card with a die-cut window shape cut through it, revealing only a fragment of the photo underneath — treating the image like a product peeking through packaging rather than a photo filling a frame.",
+      "visual_structure": "Full canvas is a flat brand-colour card. A single die-cut window (30-45% of canvas area) is positioned off-centre, showing the photo beneath. Caption sits in the untouched card area opposite the window. Fine registration crosses sit at two corners.",
+      "image_mask": "Custom SVG die-cut shape — organic blob or angular packaging cutout, not a rectangle or circle",
+      "typography": "Minimal Sans, small tracked caps",
+      "decorative_elements": ["registration marks", "spot-gloss highlight band", "fold guide dotted line"],
+      "suitable_posts": ["Product launch", "Offer", "Announcement"],
+      "implementation_difficulty": "Hard",
+      "why_unique": "Treats the photo as something packaging reveals rather than displays — inverts the usual figure/ground relationship of a template."
+    },
+    "elevation_diagram": {
+      "concept": "The photo is annotated like an architectural elevation drawing — thin dimension lines measure the frame, a scale indicator sits in the margin, and a technical title block anchors the bottom corner like a blueprint sheet.",
+      "visual_structure": "Photo full-bleed or lightly inset. Dimension lines with arrow endpoints run along top and left edges. Small scale ratio text (e.g. '1:20'). Title block bottom-right with 3-4 rows of tiny technical metadata.",
+      "image_mask": "Rectangle, full-bleed",
+      "typography": "Swiss / technical monospace for callouts, thin sans for title block",
+      "decorative_elements": ["dimension lines with arrowheads", "scale indicator", "technical title block", "faint blueprint grid overlay"],
+      "suitable_posts": ["Before after", "Tips", "Product launch"],
+      "implementation_difficulty": "Medium",
+      "why_unique": "Borrows the visual grammar of architectural/patent drawings rather than any social template convention — turns the work into a 'specification' rather than a photo."
+    },
+    "unboxing_manifest": {
+      "concept": "Composition styled like a packing slip taped onto the image — a kraft-paper manifest card with a barcode, a typewriter-style contents list, and a torn perforated edge, as if the photo arrived boxed.",
+      "visual_structure": "Photo full-bleed. A kraft-coloured manifest card (25% width) is anchored to one edge with a visible perforated tear line where it 'attaches'. Card contains a barcode block and a short itemised list.",
+      "image_mask": "Rectangle, full-bleed with an overlaid card element",
+      "typography": "Typewriter/mono for manifest text, small sans label",
+      "decorative_elements": ["barcode", "perforation line", "kraft paper texture", "rubber-stamp style date mark"],
+      "suitable_posts": ["Product launch", "Announcement", "Offer"],
+      "implementation_difficulty": "Medium",
+      "why_unique": "Frames the content as a shipped/received object (logistics aesthetic) rather than a styled photo — a packaging-world visual language absent from social templates."
+    },
+    "typographic_module_system": {
+      "concept": "A strict Swiss/International Typographic Style module system — thin rule lines divide the canvas into a mathematically proportioned set of zones, with the photo occupying exactly one module and a flush-left headline in another, tied together with coordinate-style labels.",
+      "visual_structure": "Canvas divided by thin rule lines into an asymmetric module system (not a repeating grid of photos — only one photo module exists). Headline flush-left in its own module. Small coordinate labels (e.g. 'A2') mark module corners. One red or brand-colour accent rule.",
+      "image_mask": "Rectangle, confined to one module",
+      "typography": "Swiss — Helvetica-style flush-left, tight leading",
+      "decorative_elements": ["thin rule lines", "coordinate corner labels", "single accent rule"],
+      "suitable_posts": ["Tips", "Carousel", "Announcement"],
+      "implementation_difficulty": "Medium",
+      "why_unique": "Only one photo module exists — this is a typographic proportion system (Müller-Brockmann poster logic), not a repeating image grid, and is driven by mathematical rule-line placement rather than a border or split."
+    },
+    "look_number_plate": {
+      "concept": "A runway-lookbook numbering system — a small 'LOOK 01' plate anchored in a corner, full-bleed photo, and a slim sidebar carrying season/collection metadata in tiny tracked caps.",
+      "visual_structure": "Photo full-bleed. Small numbered plate (e.g. 'LOOK 01') in one corner. A very thin vertical rule near one edge separates the photo from a slim metadata sidebar (season, collection name) running the full height.",
+      "image_mask": "Rectangle, full-bleed",
+      "typography": "Fashion — condensed tracked caps",
+      "decorative_elements": ["numbered plate", "thin vertical rule", "season/collection tag"],
+      "suitable_posts": ["Reels cover", "Story", "Carousel"],
+      "implementation_difficulty": "Easy",
+      "why_unique": "Borrows runway show numbering conventions rather than any caption-card pattern — the metadata sidebar is bibliographic, not promotional."
+    },
+    "catalog_plate_entry": {
+      "concept": "An auction-catalog or museum-catalog plate page — photo inset with generous cream margin, a 'PLATE No.' numeral, and a provenance-style caption block set in small italic serif with a hanging indent.",
+      "visual_structure": "Photo inset within a generous flat-colour margin (not a border — a page). 'PLATE No.' numeral top-left of the margin. Below the photo, a hanging-indent caption block in the manner of an auction house catalog entry, thin rule above it.",
+      "image_mask": "Rectangle, generously inset",
+      "typography": "Luxury Serif — small italic for the caption block, upright serif for the plate numeral",
+      "decorative_elements": ["plate numeral", "hanging-indent caption rule", "cream page-margin field"],
+      "suitable_posts": ["Product launch", "Before after", "Announcement"],
+      "implementation_difficulty": "Medium",
+      "why_unique": "The layout mechanic is a bibliographic catalog entry (numbered plate + provenance caption), not a border treatment — distinct from any frame/mat template already built."
+    },
+    "wax_seal_emblem": {
+      "concept": "A circular embossed emblem badge, like a wax seal or foil stamp, sits at a corner intersection of a full-bleed photo, carrying a monogram or icon with a soft emboss shadow, and a minimal small-caps tagline beneath it.",
+      "visual_structure": "Photo full-bleed. Circular emblem badge (8-12% of canvas width) positioned at a corner or edge intersection, with visible emboss/drop-shadow depth. Small-caps tagline sits directly beneath the badge.",
+      "image_mask": "Rectangle, full-bleed",
+      "typography": "Luxury Serif for the badge monogram, minimal sans for the tagline",
+      "decorative_elements": ["embossed seal badge", "soft directional shadow", "fine ring border on badge"],
+      "suitable_posts": ["Announcement", "Product launch", "Testimonial"],
+      "implementation_difficulty": "Medium",
+      "why_unique": "The badge behaves as a certification/heritage mark (wax seal, foil stamp) rather than a logo watermark — a distinct decorative language from the existing monogram treatment."
+    },
+    "folio_spread": {
+      "concept": "Simulates an open coffee-table book spread — a thin centre-gutter shadow splits the canvas into two 'pages', one carrying the photo and the other a large drop-cap opening paragraph in editorial serif.",
+      "visual_structure": "Canvas split by a subtle centre gutter shadow line (not a hard divider) into two halves. One half is the photo; the other is a cream page carrying a large decorative drop-cap first letter followed by body serif text.",
+      "image_mask": "Rectangle, confined to one 'page'",
+      "typography": "Luxury Serif with a large decorative drop-cap",
+      "decorative_elements": ["centre gutter shadow", "drop-cap initial", "page-edge vignette"],
+      "suitable_posts": ["Tips", "Announcement", "Carousel"],
+      "implementation_difficulty": "Hard",
+      "why_unique": "Simulates the physical illusion of an open book (gutter shadow + page curvature vignette) rather than a flat panel split — a print-object illusion, not a layout division."
+    },
+    "specimen_label": {
+      "concept": "An apothecary specimen-jar label aesthetic — a centred rectangular label plate with a double-rule border, botanical-style small-caps text stack (Name / Origin / Batch), and tiny corner ornaments.",
+      "visual_structure": "Photo full-bleed, dimmed slightly behind the label. Centred label plate (rectangle, double-rule border) carries 3 stacked short text rows. Tiny plus-sign or dot ornaments mark the plate's four corners.",
+      "image_mask": "Rectangle, full-bleed behind label",
+      "typography": "Luxury Serif small caps, generous letter-spacing",
+      "decorative_elements": ["double-rule label border", "corner ornaments", "botanical-style text stack"],
+      "suitable_posts": ["Product launch", "Offer", "Tips"],
+      "implementation_difficulty": "Easy",
+      "why_unique": "Borrows apothecary/specimen labelling conventions (Aesop/Buly aesthetic) — a label plate system, not a caption card or quote card."
+    },
+    "signal_flag_marker": {
+      "concept": "A bold geometric colour-block pennant/flag shape anchored to one edge carries the headline, in the manner of museum wayfinding or exhibition signage, with a hard graphic drop shadow.",
+      "visual_structure": "Photo full-bleed. A triangular or angled-tab flag shape anchored to one edge (top or side), carrying the headline in reversed colour. Flag has a hard offset shadow (no blur) for a physical signage feel.",
+      "image_mask": "Rectangle, full-bleed",
+      "typography": "Museum / bold sans, high contrast",
+      "decorative_elements": ["angled flag/pennant shape", "hard offset drop shadow", "reversed colour headline"],
+      "suitable_posts": ["Announcement", "Offer", "Reels cover"],
+      "implementation_difficulty": "Medium",
+      "why_unique": "The headline lives on a physical signage shape (wayfinding pennant) with a hard shadow, not a soft card or bubble — a distinct exhibition-graphics language."
+    },
+    "measure_line_annotation": {
+      "concept": "Thin ruler-style tick marks with numeric labels run along one edge of the frame, and a single leader line points from a measurement to a small callout describing the result — patent-drawing precision aesthetic.",
+      "visual_structure": "Photo full-bleed or lightly inset. Tick-mark ruler runs along one edge with small numeric labels at intervals. One leader line breaks from the ruler to a small text callout box near the relevant part of the image.",
+      "image_mask": "Rectangle",
+      "typography": "Swiss technical, small monospace numerals",
+      "decorative_elements": ["ruler tick marks", "leader line with node", "small technical callout box"],
+      "suitable_posts": ["Before after", "Tips", "Product launch"],
+      "implementation_difficulty": "Medium",
+      "why_unique": "Uses patent/technical-drawing annotation logic (measurement + leader line callout) rather than any caption box or bubble convention."
+    },
+    "spec_sheet_minimal": {
+      "concept": "Apple-style product-page minimalism — a tiny centred name in thin tracked caps at the very top, vast negative space, a small centred photo (not full-bleed), and a single thin rule at the bottom carrying 2-3 spec words.",
+      "visual_structure": "Enormous negative space. Small centred photo occupying well under half the canvas. Tiny tracked-caps name centred at the top. One thin horizontal rule near the bottom with short spec words separated by dots.",
+      "image_mask": "Rectangle, deliberately small and centred",
+      "typography": "Minimal Sans, ultra-thin weight, wide tracking",
+      "decorative_elements": ["single bottom rule", "dot separators between spec words"],
+      "suitable_posts": ["Product launch", "Announcement"],
+      "implementation_difficulty": "Easy",
+      "why_unique": "Deliberately shrinks the photo and maximises negative space — the opposite move of every existing bold/giant-type layout, which is what makes it read as premium restraint."
+    },
+    "magazine_masthead_cover": {
+      "concept": "A magazine-cover treatment — a masthead wordmark bleeds off the very top edge (only the lower half of the letters visible), the photo dims behind it, and small cover-line text plus an issue number sit along one side like a real magazine cover.",
+      "visual_structure": "Photo full-bleed, dimmed. Masthead wordmark spans the full width at the very top, cropped by the canvas edge. 2-3 small 'cover line' text fragments run down one side. Small issue/date tag in a corner.",
+      "image_mask": "Rectangle, full-bleed",
+      "typography": "Fashion display serif or condensed sans for the masthead, small sans for cover lines",
+      "decorative_elements": ["cropped bleeding masthead", "cover-line text stack", "issue/date corner tag"],
+      "suitable_posts": ["Announcement", "Reels cover", "Product launch"],
+      "implementation_difficulty": "Medium",
+      "why_unique": "Specifically simulates a print magazine cover (masthead cropped by the trim edge + cover lines), distinct from any single-word graphic-type treatment already built."
+    },
+    "letterpress_deboss_card": {
+      "concept": "Simulates a letterpress-printed card — the headline carries a subtle deboss/inline shadow effect, the photo sits within a deckle (rough torn-paper) edge, on an ivory stationery background.",
+      "visual_structure": "Ivory/cream background field. Photo inset with a rough deckle-edge boundary (not a clean rectangle). Headline text carries a layered debossed-look shadow, positioned in the surrounding cream field.",
+      "image_mask": "Organic — deckle/torn-paper edge, not a clean rectangle",
+      "typography": "Luxury Serif with a debossed/engraved shadow treatment",
+      "decorative_elements": ["deckle-edge paper boundary", "debossed text shadow", "fine cotton-paper texture"],
+      "suitable_posts": ["Announcement", "Testimonial", "Offer"],
+      "implementation_difficulty": "Hard",
+      "why_unique": "Combines a torn-paper photo edge with an engraved/debossed type treatment — a stationery/print-production illusion with no border, frame, or card-shadow precedent in the existing set."
+    },
+    "print_proof_markup": {
+      "concept": "The photo is treated like a pre-press colour proof sheet — thin crop marks sit at all four corners, a small CMYK-style colour bar runs along one edge, and a rotated 'PROOF 01' stamp sits in a corner.",
+      "visual_structure": "Photo full-bleed or lightly inset. Fine crop marks (L-shaped ticks) at all four corners. A slim colour-bar swatch strip along the bottom edge. Small rotated stamp-style proof label in one corner.",
+      "image_mask": "Rectangle",
+      "typography": "Mono/technical for the stamp and colour-bar labels",
+      "decorative_elements": ["corner crop marks", "colour-bar swatch strip", "rotated proof stamp"],
+      "suitable_posts": ["Behind the scenes", "Announcement", "Tips"],
+      "implementation_difficulty": "Medium",
+      "why_unique": "Uses pre-press production marks (crop marks, colour bars, proof stamps) as the entire decorative language — a print-production aesthetic with no equivalent in the existing library."
+    },
+    "shadow_box_display": {
+      "concept": "The photo appears to sit inside a recessed shadow-box vitrine — an inner drop shadow simulates depth/recess around the image, a thin inner bevel line traces the recess edge, and a small museum-vitrine label plate sits below.",
+      "visual_structure": "Photo inset with a strong inner shadow simulating a recessed niche (not an outer border). Thin bevel line traces the inner recess edge. Small label plate directly below the recess, museum-vitrine style.",
+      "image_mask": "Rectangle, with simulated depth via inner shadow",
+      "typography": "Museum small caps for the label plate",
+      "decorative_elements": ["inner recess shadow", "bevel line", "vitrine label plate"],
+      "suitable_posts": ["Product launch", "Before after", "Testimonial"],
+      "implementation_difficulty": "Hard",
+      "why_unique": "Simulates physical recessed depth (a display niche) via inner shadow rather than an outer mat/border — a fundamentally different illusion from any frame template already built."
+    },
+    "barcode_provenance_tag": {
+      "concept": "A small vertical tag — like a retail garment or provenance tag — hangs from one edge of a full-bleed photo, carrying a barcode and serial number, attached via a thin perforated tear line.",
+      "visual_structure": "Photo full-bleed. A slim vertical tag (10-15% width) hangs from one edge, connected by a thin perforated tear line. Tag carries a barcode graphic and a small serial/batch number.",
+      "image_mask": "Rectangle, full-bleed with an attached tag element",
+      "typography": "Mono/technical for the serial number, small sans for any tag label",
+      "decorative_elements": ["barcode", "serial number", "perforated tear line", "tag hole/eyelet"],
+      "suitable_posts": ["Product launch", "Offer", "Announcement"],
+      "implementation_difficulty": "Easy",
+      "why_unique": "References retail garment-tag provenance systems rather than a ticket-stub aesthetic — the tag hangs off the edge as an attached object, not a bordered card."
+    },
+    "precision_reticle_mark": {
+      "concept": "A thin crosshair/reticle mark sits centred on the focal point of the photo, like a precision-targeting mark used in skincare/serum packaging shots, with tiny measurement annotations near it on an ultra-clean field.",
+      "visual_structure": "Photo full-bleed or clinically cropped. A fine crosshair reticle centred on the focal detail, with 1-2 tiny percentage or measurement labels near the reticle arms. Generous clean negative space elsewhere.",
+      "image_mask": "Rectangle, clinical crop",
+      "typography": "Minimal Sans, tiny precise labels",
+      "decorative_elements": ["crosshair reticle", "micro measurement labels", "clinical negative space"],
+      "suitable_posts": ["Before after", "Product launch", "Tips"],
+      "implementation_difficulty": "Medium",
+      "why_unique": "A single precision reticle mark (not a grid, not a border) reframes the photo as a clinical/scientific specimen shot — a skincare-campaign visual language, not a caption treatment."
+    },
+    "floor_plan_overlay": {
+      "concept": "A faint architectural floor-plan line drawing is overlaid semi-transparently across the photo, with a small compass/north-arrow icon in a corner and a caption set like a floor-plan room label.",
+      "visual_structure": "Photo full-bleed. Faint blueprint-style floor-plan linework overlaid at low opacity across the whole frame. Small compass/north-arrow icon in one corner. Caption styled as a room-label tag (small boxed text with a leader line).",
+      "image_mask": "Rectangle, full-bleed",
+      "typography": "Swiss technical for the room-label caption",
+      "decorative_elements": ["translucent floor-plan linework", "compass/north-arrow icon", "room-label leader tag"],
+      "suitable_posts": ["Behind the scenes", "Announcement", "Tips"],
+      "implementation_difficulty": "Hard",
+      "why_unique": "Overlays architectural plan-drawing linework directly across the photo as a texture/context layer — an entirely different decorative mechanic from any border, split, or card."
+    },
+    "sunlit_negative_field": {
+      "concept": "An extreme asymmetric composition in the Jacquemus/campaign tradition — the photo occupies a very small corner of the canvas within a vast solid or gradient colour field, with a tiny discreet caption in the far opposite corner.",
+      "visual_structure": "Photo occupies roughly 10-15% of the canvas, pushed into one corner. The remaining 85-90% is a flat or soft gradient brand-colour field. A tiny caption sits in the diagonally opposite corner, dwarfed by the space.",
+      "image_mask": "Rectangle, deliberately tiny",
+      "typography": "Fashion, extremely small and discreet",
+      "decorative_elements": ["vast negative colour field", "soft gradient wash", "diagonally opposed micro-caption"],
+      "suitable_posts": ["Announcement", "Reels cover", "Story"],
+      "implementation_difficulty": "Easy",
+      "why_unique": "Uses scale and emptiness as the entire statement (campaign-poster restraint) — the most extreme negative-space composition in the library, with no border, card, or graphic device at all."
+    },
+    "thread_stitch_seam": {
+      "concept": "A visible couture stitch-seam runs across the composition, like a tailoring construction line.",
+      "layout_description": "A single stitched seam line (dash-dot thread texture) crosses the frame at an angle, with a small fabric-swatch colour chip resting beside it.",
+      "why_unique": "Borrows tailoring/couture construction lines rather than any card, frame, or split — the seam is structural, not decorative."
+    },
+    "pressed_botanical": {
+      "concept": "Image preserved like a pressed flower between vellum sheets.",
+      "layout_description": "Photo sits under a faint glassine/vellum overlay texture with soft pressed-fibre texture at the edges and a tiny archival date stamp in a corner.",
+      "why_unique": "Simulates a specimen preservation object, not a photo in a container — the vellum layer is translucent texture, not a border."
+    },
+    "light_table_slide": {
+      "concept": "Photo displayed like a backlit transparency on a photographer's light table.",
+      "layout_description": "Image has a soft glow bleed at its edges and a small slide-mount corner clip (only at two corners, not a full frame), suggesting it's resting on backlit glass.",
+      "why_unique": "The 'mount' is partial and physical (a slide holder), and the glow is a lighting effect, not a border treatment."
+    },
+    "monograph_index": {
+      "concept": "A book-chapter tab index runs down one edge.",
+      "layout_description": "Slim colour-coded tabs stack down one side like a monograph's chapter dividers, current tab extended slightly with the caption text.",
+      "why_unique": "Uses bookbinding tab-index logic — navigation-as-decoration — absent from any card or split concept."
+    },
+    "apothecary_pour": {
+      "concept": "A serum-drop pour graphic flows from a corner.",
+      "layout_description": "A thin liquid drip/pour line graphic flows diagonally from one corner into the frame, with a minimal ingredient-style caption beneath it.",
+      "why_unique": "The pour line is a liquid-motion accent, not a static shape or border — reads as skincare campaign motion, not layout structure."
+    },
+    "runway_step_sequence": {
+      "concept": "A dotted footstep path suggests a runway walk direction.",
+      "layout_description": "Faint dotted path/footstep graphic crosses the lower third of the frame with a small step-counter numeral.",
+      "why_unique": "Implies movement and direction rather than static composition — a choreography cue, not a grid or split."
+    },
+    "cartography_route": {
+      "concept": "A thin travel-route line with a single pin crosses the image.",
+      "layout_description": "Dotted map-route line with one location-pin marker and small coordinate text, map-legend styling.",
+      "why_unique": "Borrows cartographic wayfinding — a route, not a border or frame — and implies a journey/origin story."
+    },
+    "linen_press_fold": {
+      "concept": "A single fabric fold crease shadow sits across a linen-textured field.",
+      "layout_description": "Linen-texture background with one soft fold-crease shadow running across it; photo inset within a single fold panel.",
+      "why_unique": "The 'fold' is a fabric crease illusion (soft shadow gradient), distinct from paper-fold or card mechanics."
+    },
+    "studio_backdrop_seam": {
+      "concept": "A faint photography-studio infinity-curve seam is visible behind the subject.",
+      "layout_description": "Subtle horizontal seam line (studio backdrop curve) faintly visible in the background field, small light-meter reading graphic in a corner.",
+      "why_unique": "Reproduces a photo-studio production detail as the decorative element — a behind-the-scenes authenticity cue."
+    },
+    "perfume_diffusion": {
+      "concept": "Soft concentric rings radiate from a focal point like scent diffusing.",
+      "layout_description": "Faint radiating rings emanate outward from one focal point on the photo, with minimal text floating inside the outer ring.",
+      "why_unique": "Uses radiating diffusion rings (scent/sound wave logic) as the sole structural device — no rectilinear element at all."
+    },
+    "loupe_inspection": {
+      "concept": "A jeweler's loupe zooms into one detail of the main image.",
+      "layout_description": "Small circular magnified inset shows a zoomed detail of part of the photo, connected to its source point by a fine leader line.",
+      "why_unique": "The circular inset is a magnification device (optical), not a decorative circle or spotlight — it references a specific detail."
+    },
+    "atelier_sketch_overlay": {
+      "concept": "A designer's croquis sketch line overlays the photo like an atelier reference sheet.",
+      "layout_description": "Faint fashion-illustration sketch linework (croquis proportions) overlaid semi-transparently across the photo.",
+      "why_unique": "Treats the photo as a fashion illustration reference sheet — sketch-over-photo is a design-process aesthetic, not a filter."
+    },
+    "marble_vein_inlay": {
+      "concept": "A marble-veining line motif inlays one edge like a spa countertop.",
+      "layout_description": "Thin marble-vein graphic pattern traces along one edge of the canvas; caption rests on the 'stone' edge.",
+      "why_unique": "Material-inlay aesthetic (stone veining) rather than a border stroke — evokes spa/interior material, not paper or frame."
+    },
+    "gilded_edge_page": {
+      "concept": "A gold-foil line traces one edge like a gilded book page.",
+      "layout_description": "Fine gold line runs along one canvas edge with a small embossed page-corner fold detail.",
+      "why_unique": "References gilded book-edge finishing (a print-production/bookbinding detail), distinct from any border or frame treatment."
+    },
+    "weather_index_report": {
+      "concept": "Presented like a minimalist forecast index card with one big stat.",
+      "layout_description": "A single large stat number/percentage dominates one zone with a small icon, rest of canvas is the photo — clinical data-vis styling.",
+      "why_unique": "Borrows weather-report/data-index visual logic to foreground one number — a stat-card, not a quote or testimonial card."
+    },
+    "still_life_pedestal": {
+      "concept": "The subject rests on an illustrated museum pedestal line drawing.",
+      "layout_description": "A thin illustrated plinth/pedestal line sits beneath the subject, suggesting museum object display without a full vitrine box.",
+      "why_unique": "Implies display via a single drawn pedestal line, not a boxed frame or shadow recess — a much lighter device."
+    },
+    "ateliers_swatch_strip": {
+      "concept": "A paint-fan-deck style swatch strip runs along one edge.",
+      "layout_description": "Slim strip of small colour/material swatch chips along one edge, one chip highlighted as the 'selected' brand colour.",
+      "why_unique": "Uses a material-swatch-deck convention (interior design/fashion ateliers) rather than a palette bar or label."
+    },
+    "postage_frank_mark": {
+      "concept": "A postal franking/cancellation mark sits in a corner.",
+      "layout_description": "Small circular postmark graphic with faint parallel cancellation lines in one corner, editorial correspondence aesthetic.",
+      "why_unique": "A postal/philatelic mark (specific cancellation-line texture) — distinct from a wax seal or emboss badge."
+    },
+    "cinema_slate_marker": {
+      "concept": "A small film-slate corner tag shows scene/take numbers.",
+      "layout_description": "Miniature clapperboard-style tag in one corner with scene/take numerals, rest of canvas full-bleed photo.",
+      "why_unique": "Borrows behind-the-scenes film-production signage as a tiny corner device, not a strip or sequential frame system."
+    },
+    "thermal_gradient_map": {
+      "concept": "A soft heat-map gradient wash suggests thermal/skincare imaging.",
+      "layout_description": "Subtle gradient colour wash (warm-to-cool) overlaid across part of the photo with a minimal temperature-scale legend at the edge.",
+      "why_unique": "Uses a scientific thermal-imaging visual convention — a diagnostic aesthetic unlike any campaign or editorial device already built."
+    }
   }
 }
