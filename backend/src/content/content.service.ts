@@ -195,7 +195,8 @@ export class ContentService {
     else if (dto.rating === 'doesnt_sound_like_me') scoreAdjustment = -0.2;
 
     const brandDna = await this.prisma.brandDNA.findUnique({
-      where: { unique_current_brand_dna: { tenantId, isCurrent: true } }
+      where: { unique_current_brand_dna: { tenantId, isCurrent: true } },
+      select: { id: true, averageConfidenceScore: true, preferredModelOverride: true },
     });
 
     if (brandDna) {
