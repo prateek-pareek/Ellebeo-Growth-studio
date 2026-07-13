@@ -43,6 +43,7 @@ import { CreativeDirectorChain } from '../chains/creative-director.chain';
 import { GridOrchestratorService } from '../services/grid-orchestrator.service';
 import { MoodboardVisionChain } from '../chains/moodboard-vision.chain';
 import { AssetLibraryVisionChain, type AssetLibraryItemInput } from '../chains/asset-library-vision.chain';
+import { TemplateAgentService } from '../services/template-agent.service';
 
 type NotifyFn = (dto: {
   tenantId: string;
@@ -81,6 +82,7 @@ export class GenerationOrchestrator {
   private readonly gridOrchestrator: GridOrchestratorService;
   private readonly moodboardVisionChain: MoodboardVisionChain;
   private readonly assetLibraryVisionChain: AssetLibraryVisionChain;
+  private readonly templateAgent: TemplateAgentService;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -119,6 +121,7 @@ export class GenerationOrchestrator {
     this.gridOrchestrator = new GridOrchestratorService(prisma as any);
     this.moodboardVisionChain = new MoodboardVisionChain();
     this.assetLibraryVisionChain = new AssetLibraryVisionChain();
+    this.templateAgent = new TemplateAgentService();
   }
 
   // --------------------------------------------------------------------------
@@ -270,14 +273,14 @@ export class GenerationOrchestrator {
     const tieredDna = filterDnaForTier(brandDNA as unknown as Record<string, any>, generationOptions.userTier) as typeof brandDNA;
     // log tier filter applied (observable in backend stdout)
 
-    let determinedGrid = { pillar: 'client_results', layout: 'passepartout_text' };
+    let determinedGrid: any = { pillar: 'client_results', layout: 'passepartout_text', gridConstraints: '' };
     try {
       determinedGrid = await this.gridOrchestrator.determineNextLayoutAndPillar(tenantId);
       if (payload.businessGoal === 'build_brand_authority') {
         determinedGrid.pillar = 'education_tips';
         console.log(`[GRID ROTATOR OVERRIDE]: Forced Pillar="education_tips" because businessGoal is "build_brand_authority" (Educate).`);
       }
-      console.log(`[GRID ROTATOR]: Selected Pillar="${determinedGrid.pillar}" Layout="${determinedGrid.layout}" for tenant ${tenantId}`);
+      console.log(`[GRID ROTATOR]: Selected Pillar="${determinedGrid.pillar}" with Constraints: "${determinedGrid.gridConstraints}" for tenant ${tenantId}`);
     } catch (gridErr) {
       console.error('[GRID ROTATOR ERROR] Failed to compute grid, falling back to default:', gridErr);
     }
@@ -325,7 +328,7 @@ export class GenerationOrchestrator {
     modelUsed = `${llmConfig.provider}/${llmConfig.modelId}`;
 
     try {
-      const blacklist = brandDNA.vocabularyBlacklist ?? brandDNA.blacklistedWords ?? [];
+      const blacklist = brandDNA.vocabularyBlacklist;
 
       const antiAIGlossary = ["transformation", "radiant", "rejuvenated", "delve", "journey", "oasis", "sanctuary", "meticulous", "nestled", "whimsical", "unveil", "elevate", "glow up", "game-changer", "luxurious", "indulge"];
 
@@ -418,7 +421,30 @@ export class GenerationOrchestrator {
       componentStatus.caption = 'failed';
     }
 
-    // â”€â”€ Step 4: Platform Variants (conditional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Step 3.5: Template Agent Layout Selection ─────────────────────────────
+    if (captionResult) {
+      try {
+        const isCarouselOpt = (generationOptions.outputFormats as string[]).includes('carousel');
+        const agentDecision = await this.templateAgent.selectTemplate({
+          brief: captionResult.caption,
+          brandName: brandDNA.businessName || 'Brand',
+          aesthetic: (brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA.visualRanking) : null) ?? brandDNA.aestheticDirection ?? 'minimal editorial',
+          textLength: captionResult.caption.length,
+          slideIndex: 0,
+          totalSlides: isCarouselOpt ? 4 : 1,
+          gridConstraints: determinedGrid.gridConstraints,
+          visionResult: visionResult,
+        });
+
+        // Assign directly to allow Universal Dynamic Renderer to handle new templates
+        determinedGrid.layout = agentDecision.selected_layout_id;
+        console.log(`[TEMPLATE AGENT] Intelligent selection passed to rendering engine: ${determinedGrid.layout}`);
+      } catch (err) {
+        console.error('[Orchestrator Step 3.5 Template Agent Error]:', err);
+      }
+    }
+
+    // ── Step 4: Platform Variants (conditional) ───────────────────────────────
     if (captionResult && generationOptions.platform.length > 1) {
       try {
         platformVariants = await this.platformVariantChain.generateVariants({
@@ -548,7 +574,7 @@ Requirements:
             let aiFeedUrl = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
             // Apply logo overlay if set in Brand DNA
             if (brandDNA.logoUrl) {
-              aiFeedUrl = await this.logoOverlay.applyLogo({ imageUrl: aiFeedUrl, logoUrl: brandDNA.logoUrl, position: brandDNA.logoPosition, tenantId });
+              aiFeedUrl = await this.logoOverlay.applyLogo({ imageUrl: aiFeedUrl, logoUrl: brandDNA.logoUrl as string, position: brandDNA.logoPosition as any, tenantId });
             }
             imageResult = { ...imageResult, variants: { ...imageResult.variants, feedUrl: aiFeedUrl } };
             aiImageCostUSD = AI_CONFIG.imageCosts['gpt-image-1-1024'];
@@ -621,11 +647,12 @@ Requirements:
             footerBrandToggle: (brandDNA.brandDnaV2 as any)?.typography?.footer_brand_toggle !== false && (brandDNA.brandDnaV2 as any)?.typography?.footerBrandToggle !== false,
             backgroundBrandColor: brandDNA.backgroundBrandColor ?? '#F7F4EF',
             accentBrandColor: brandDNA.accentBrandColor ?? '#D4A373',
+            depthBrandColor: brandDNA.depthBrandColor ?? '#1E1E1C',
             moodboardVisionSummary: moodboardVisionSummary ?? undefined,
           });
           // Apply logo to each carousel slide
           const slidesWithLogo = brandDNA.logoUrl
-            ? await Promise.all(aiSlides.map(async s => ({ ...s, url: await this.logoOverlay.applyLogo({ imageUrl: s.url, logoUrl: brandDNA.logoUrl, position: brandDNA.logoPosition, tenantId }) })))
+            ? await Promise.all(aiSlides.map(async s => ({ ...s, url: await this.logoOverlay.applyLogo({ imageUrl: s.url, logoUrl: brandDNA.logoUrl as string, position: brandDNA.logoPosition as any, tenantId }) })))
             : aiSlides;
           carouselSlides = { type: 'carousel', slides: slidesWithLogo };
         } catch (aiErr) {
@@ -693,7 +720,7 @@ Requirements:
             moodboardVisionSummary: moodboardVisionSummary ?? undefined,
           });
           const framesWithLogo = brandDNA.logoUrl
-            ? await Promise.all(aiFrames.map(async f => ({ ...f, url: await this.logoOverlay.applyLogo({ imageUrl: f.url, logoUrl: brandDNA.logoUrl, position: brandDNA.logoPosition, tenantId }) })))
+            ? await Promise.all(aiFrames.map(async f => ({ ...f, url: await this.logoOverlay.applyLogo({ imageUrl: f.url, logoUrl: brandDNA.logoUrl as string, position: brandDNA.logoPosition as any, tenantId }) })))
             : aiFrames;
           storyOutput = { type: 'story', frames: framesWithLogo };
         } catch (aiErr) {
@@ -712,7 +739,7 @@ Requirements:
       }
     }
 
-    // â”€â”€ Step 5.66: Reel Shot Storyboard (conditional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Step 5.66: Reel Shot Storyboard (conditional) ──────────────────────────────────────────
     let reelShotResult: ReelShotResult | null = null;
     const isReel = (generationOptions.outputFormats as string[]).includes('reel');
     if (isReel && captionResult) {
@@ -752,17 +779,40 @@ Requirements:
       }
     }
 
-    // â”€â”€ Step 6: Scoring & Compliance Gate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Step 6: Scoring & Compliance Gate ─────────────────────────
+    let originalPhotoBuffer: Buffer | undefined;
+    let generatedPhotoBuffer: Buffer | undefined;
+
+    try {
+      const origUrl = payload.imageAssets[0]?.rawStoragePath;
+      const genUrl = imageResult?.variants?.feedUrl;
+      
+      if (origUrl && genUrl) {
+        const [origRes, genRes] = await Promise.all([
+          fetch(origUrl),
+          fetch(genUrl)
+        ]);
+        if (origRes.ok && genRes.ok) {
+          originalPhotoBuffer = Buffer.from(await origRes.arrayBuffer());
+          generatedPhotoBuffer = Buffer.from(await genRes.arrayBuffer());
+        }
+      }
+    } catch (e) {
+      console.warn('[Validation Engine] Failed to fetch image buffers for Face Protection analysis.', e);
+    }
+
     const scoringResult = await this.scoringGate.evaluate({
       caption: captionResult?.caption ?? '',
       hashtags: captionResult?.hashtags ?? [],
-      blacklist: brandDNA.vocabularyBlacklist ?? brandDNA.blacklistedWords ?? [],
+      blacklist: brandDNA.vocabularyBlacklist,
       hasBefore: !!beforePhotoUrl,
       beforeAfterAllowed: consentCheck.activeRestrictions?.allow_before_after !== false,
       isCarousel: isCarousel,
       slidesCount: carouselSlides?.slides?.length ?? 0,
       tenantId,
       prisma: this.prisma,
+      originalPhotoBuffer,
+      generatedPhotoBuffer,
     });
 
     // â”€â”€ Step 6.5: Persist Result â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

@@ -10,6 +10,7 @@
 
 import sharp from 'sharp';
 import layoutTemplatesConfig from './layout-templates.config.json';
+import templateLibraryData from './template-library.json';
 import { processPortraitFit } from '../services/ai-image-generation.service';
 
 export type LayoutTemplate = {
@@ -28,12 +29,25 @@ const { _proposed_template_agent_library, ...activeLayoutTemplates } = layoutTem
 export const LAYOUT_TEMPLATES: Record<string, LayoutTemplate> = activeLayoutTemplates as Record<string, LayoutTemplate>;
 
 export function resolveLayoutTemplate(layoutType: string): LayoutTemplate {
-  return LAYOUT_TEMPLATES[layoutType] ?? LAYOUT_TEMPLATES['passepartout_text']!;
+  // If it's a hardcoded legacy layout, use it natively
+  if (LAYOUT_TEMPLATES[layoutType]) {
+    return LAYOUT_TEMPLATES[layoutType]!;
+  }
+  
+  // Otherwise, route to the Universal Dynamic Renderer engines
+  return {
+    base: 'universal_dynamic_base',
+    textTemplate: 'universal_dynamic_text',
+    decoration: 'universal_dynamic_deco',
+    showWatermark: true,
+    showFooter: true
+  };
 }
 
 // ── Base image treatments (Step 1) ──────────────────────────────────────────
 
 export type BaseCtx = {
+  layoutType: string;
   imageBuffer: Buffer;
   beforePhotoUrl?: string;
   w: number;
@@ -155,11 +169,86 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
       return borderedDefault(ctx);
     }
   },
+
+  universal_dynamic_base: async (ctx) => {
+    // Read the semantic metadata of the AI-selected template
+    const metadata = (templateLibraryData as any)[ctx.layoutType] || {};
+    const category = metadata.category || '';
+    const concept = (metadata.concept || '').toLowerCase();
+    const isSplit = concept.includes('split') || category.includes('Split');
+    const isCircle = concept.includes('circle') || concept.includes('round');
+    const isComposition = category.includes('Composition') || concept.includes('mask') || concept.includes('arch') || concept.includes('shape');
+
+    if (isSplit) {
+      // Dynamic Split Screen MVP
+      const halfW = Math.floor(ctx.w / 2);
+      const splitPhoto = await processPortraitFit(ctx.imageBuffer, halfW, ctx.h, ctx.validBackgroundColor);
+      const baseImage = sharp({
+        create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor },
+      }).composite([
+        { input: splitPhoto, top: 0, left: 0 }
+      ]);
+      return { baseImage, compositeTop: ctx.paddingTop, compositeBottom: ctx.paddingBottom, compositeLeft: halfW + ctx.paddingX, compositeRight: ctx.paddingX };
+    } else if (isCircle) {
+      // Dynamic Circle Mask MVP
+      try {
+        const minDim = Math.min(ctx.innerW, ctx.innerH);
+        const r = minDim / 2;
+        const cx = ctx.innerW / 2;
+        const cy = ctx.innerH / 2;
+        const circlePhoto = await processPortraitFit(ctx.imageBuffer, ctx.innerW, ctx.innerH, ctx.validBackgroundColor);
+        const circleMask = Buffer.from(
+          `<svg width="${ctx.innerW}" height="${ctx.innerH}">
+             <circle cx="${cx}" cy="${cy}" r="${r}" fill="white" />
+           </svg>`
+        );
+        const maskedImage = await sharp(circlePhoto)
+          .composite([{ input: circleMask, blend: 'dest-in' }])
+          .png()
+          .toBuffer();
+
+        const baseImage = sharp({
+          create: { width: ctx.innerW, height: ctx.innerH, channels: 3, background: ctx.validSecondaryColor },
+        }).composite([{ input: maskedImage, top: 0, left: 0 }]);
+        return { baseImage, compositeTop: ctx.paddingTop, compositeBottom: ctx.paddingBottom, compositeLeft: ctx.paddingX, compositeRight: ctx.paddingX };
+      } catch (err) {
+        return fullBleedBase(ctx);
+      }
+    } else if (isComposition) {
+      // Dynamic Masking Logic MVP (Arch)
+      try {
+        const archPhoto = await processPortraitFit(ctx.imageBuffer, ctx.innerW, ctx.innerH, ctx.validBackgroundColor);
+        const archMask = Buffer.from(
+          `<svg width="${ctx.innerW}" height="${ctx.innerH}">
+             <path d="M0 ${ctx.innerW / 2} A ${ctx.innerW / 2} ${ctx.innerW / 2} 0 0 1 ${ctx.innerW} ${ctx.innerW / 2} V ${ctx.innerH} H 0 Z" fill="white" />
+           </svg>`
+        );
+        const maskedImage = await sharp(archPhoto)
+          .composite([{ input: archMask, blend: 'dest-in' }])
+          .png()
+          .toBuffer();
+
+        const baseImage = sharp({
+          create: { width: ctx.innerW, height: ctx.innerH, channels: 3, background: ctx.validSecondaryColor },
+        }).composite([{ input: maskedImage, top: 0, left: 0 }]);
+        return { baseImage, compositeTop: ctx.paddingTop, compositeBottom: ctx.paddingBottom, compositeLeft: ctx.paddingX, compositeRight: ctx.paddingX };
+      } catch (err) {
+        return fullBleedBase(ctx);
+      }
+    } else {
+      // Full Bleed Tint Logic MVP
+      const base = await fullBleedBase(ctx);
+      // Give it a subtle, elegant tint based on the brand color to distinguish it from basic full bleed
+      base.baseImage = base.baseImage.tint(ctx.validBrandColor as any).modulate({ brightness: 0.8 });
+      return base;
+    }
+  },
 };
 
 // ── Text templates (Step 3) ─────────────────────────────────────────────────
 
 export type TextCtx = {
+  layoutType: string;
   w: number;
   h: number;
   dynamicFontSize: number;
@@ -413,11 +502,61 @@ export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
       }
     }
   },
+
+  universal_dynamic_text: (ctx) => {
+    const metadata = (templateLibraryData as any)[ctx.layoutType] || {};
+    const textRegions = (metadata.visual_structure?.text_regions || '').toLowerCase();
+    const concept = (metadata.concept || '').toLowerCase();
+    const isScattered = textRegions.includes('scattered') || concept.includes('cloud') || concept.includes('floating');
+
+    const isSide = textRegions.includes('side') || textRegions.includes('vertical');
+    const isBottomLeft = textRegions.includes('bottom') || textRegions.includes('corner');
+
+    if (isScattered) {
+      // Dynamic Scattered Word Cloud MVP
+      let svg = '';
+      const words = ctx.overlayText.split(/\s+/);
+      let currentY = 150;
+      words.forEach((word, index) => {
+        // Scatter x between 20% and 80% of width
+        const x = (ctx.w * 0.2) + (Math.random() * (ctx.w * 0.6));
+        svg += `
+          <text x="${x}" y="${currentY}" text-anchor="middle" class="overlay-text" style="font-size: ${ctx.dynamicFontSize + (Math.random() * 20)}px; fill: ${ctx.dynamicTextColor}; font-weight: ${index % 2 === 0 ? 'bold' : 'normal'};">
+            ${ctx.escapeXml(word)}
+          </text>`;
+        currentY += ctx.dyOffset + 20;
+      });
+      return svg;
+    } else if (isSide) {
+      // Dynamic Side Rotated MVP
+      return `
+        <!-- Dynamic Side Rotated Text Block -->
+        <text x="${ctx.w - 40}" y="${ctx.h / 2}" text-anchor="middle" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-weight="bold" font-size="18px" fill="${ctx.dynamicTextColor}" fill-opacity="0.8" letter-spacing="4px" transform="rotate(90 ${ctx.w - 40} ${ctx.h / 2})">${ctx.escapedSpacedName}</text>
+        <text x="60" y="120" class="overlay-text text-left" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.dynamicTextColor};">
+          ${tspans(ctx, '60')}
+        </text>`;
+    } else if (isBottomLeft) {
+      // Dynamic Bottom Left Poster MVP
+      return `
+        <!-- Dynamic Bottom Left Poster Block -->
+        <text x="40" y="${ctx.h - (ctx.lines.length * ctx.dyOffset) - 60}" class="overlay-text text-left" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.dynamicTextColor}; font-weight: bold;">
+          ${tspans(ctx, '40')}
+        </text>`;
+    } else {
+      // Sleek Centered Editorial MVP
+      return `
+        <!-- Dynamic Centered Editorial Block -->
+        <text x="${ctx.w / 2}" y="${ctx.h / 2 - (ctx.lines.length * ctx.dyOffset) / 2}" class="overlay-text text-centered" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.dynamicTextColor}; letter-spacing: 2px;">
+          ${tspans(ctx, `${ctx.w / 2}`)}
+        </text>`;
+    }
+  },
 };
 
 // ── Decorations (Step 3 structural overlays) ────────────────────────────────
 
 export type DecoCtx = {
+  layoutType: string;
   w: number;
   h: number;
   paddingX: number;
@@ -427,6 +566,7 @@ export type DecoCtx = {
   innerH: number;
   validBrandColor: string;
   validSecondaryColor: string;
+  validBackgroundColor: string;
   brandFont: string;
   rawName: string;
   photoDataUri: string;
@@ -493,5 +633,58 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       <defs><clipPath id="sidePhotoClip"><rect x="${sidePanelW}" y="0" width="${ctx.w - sidePanelW}" height="${ctx.h}" /></clipPath></defs>
       <image href="${ctx.photoDataUri}" x="${sidePanelW}" y="0" width="${ctx.w - sidePanelW}" height="${ctx.h}" preserveAspectRatio="xMidYMid slice" clip-path="url(#sidePhotoClip)" />
       <rect x="${sidePanelW - 2}" y="0" width="4" height="${ctx.h}" fill="${ctx.validBrandColor}" fill-opacity="0.5" />`;
+  },
+
+  universal_dynamic_deco: (ctx) => {
+    const metadata = (templateLibraryData as any)[ctx.layoutType] || {};
+    const deco = (metadata.visual_structure?.decorative_elements || '').toLowerCase();
+    const isFrame = deco.includes('frame') || deco.includes('border') || deco.includes('mat');
+
+    const isFilm = deco.includes('film') || deco.includes('sprocket');
+    const isTicket = deco.includes('ticket') || deco.includes('notch');
+
+    if (isFilm) {
+      // Dynamic Film Sprockets MVP
+      const holeCount = 8;
+      const holeSpacing = ctx.innerH / holeCount;
+      let holes = '';
+      for (let i = 0; i <= holeCount; i++) {
+        const cy = ctx.paddingTop + i * holeSpacing;
+        holes += `<rect x="${Math.round(ctx.paddingX * 0.3)}" y="${cy - 10}" width="16" height="20" rx="3" fill="${ctx.validBrandColor}" /><rect x="${ctx.w - Math.round(ctx.paddingX * 0.3) - 16}" y="${cy - 10}" width="16" height="20" rx="3" fill="${ctx.validBrandColor}" />`;
+      }
+      return `<!-- Dynamic Film Sprocket Perforations -->${holes}`;
+    } else if (isTicket) {
+      // Dynamic Ticket Notches MVP
+      const notchY1 = ctx.paddingTop;
+      const notchY2 = ctx.h - ctx.paddingBottom;
+      const notchCount = 10;
+      const notchSpacing = ctx.innerW / notchCount;
+      let notches = '';
+      for (let i = 0; i <= notchCount; i++) {
+        const cx = ctx.paddingX + i * notchSpacing;
+        notches += `<circle cx="${cx}" cy="${notchY1}" r="9" fill="${ctx.validBrandColor}" /><circle cx="${cx}" cy="${notchY2}" r="9" fill="${ctx.validBrandColor}" />`;
+      }
+      return `
+        <!-- Dynamic Ticket Notches -->
+        <rect x="${ctx.paddingX}" y="${ctx.paddingTop}" width="${ctx.innerW}" height="${ctx.innerH}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="3" stroke-dasharray="14 10" />
+        ${notches}`;
+    } else if (isFrame) {
+      // Minimal Gallery Frame MVP
+      return `
+        <!-- Dynamic Minimal Gallery Frame -->
+        <rect x="20" y="20" width="${ctx.w - 40}" height="${ctx.h - 40}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="2" stroke-opacity="0.8" />
+        <rect x="35" y="35" width="${ctx.w - 70}" height="${ctx.h - 70}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="0.5" stroke-opacity="0.5" />`;
+    } else {
+      // Heavy Gradient Scrim MVP
+      return `
+        <!-- Dynamic Contrast Gradient Scrim -->
+        <defs>
+          <linearGradient id="dynamicScrim" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="${ctx.validBackgroundColor}" stop-opacity="0.1" />
+            <stop offset="100%" stop-color="${ctx.validBackgroundColor}" stop-opacity="0.85" />
+          </linearGradient>
+        </defs>
+        <rect x="0" y="${ctx.h * 0.4}" width="${ctx.w}" height="${ctx.h * 0.6}" fill="url(#dynamicScrim)" />`;
+    }
   },
 };

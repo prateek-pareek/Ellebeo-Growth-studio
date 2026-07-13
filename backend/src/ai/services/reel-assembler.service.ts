@@ -58,7 +58,7 @@ export class ReelAssemblerService {
     if (includeMusic) {
       const track = await this.pixabayMusicService.selectTrack(
         tenantId,
-        brandDNA.moodTag
+        brandDNA.moodTag as any
       );
       if (track) {
         musicTrackUrl = track.cdnUrl;
@@ -90,8 +90,8 @@ export class ReelAssemblerService {
       beforeImageUrl,
       afterImageUrl,
       hookSentence,
-      brandPrimaryColour: brandDNA.primaryBrandColour,
-      brandSecondaryColour: brandDNA.secondaryBrandColour,
+      brandPrimaryColour: brandDNA.primaryBrandColor as any,
+      brandSecondaryColour: brandDNA.secondaryBrandColor as any,
       musicTrackUrl,
       musicVolume: shotStackCfg.musicVolume,
       voiceoverUrl,

@@ -107,8 +107,8 @@ export class PlatformVariantChain {
     const systemPrompt = `You are adapting a social media caption for a different platform.
 The brand voice must remain IDENTICAL — only the format and style changes.
 Business: ${brandDNA.businessName}
-Tone: ${brandDNA.primaryTone.replace(/_/g, ' ')}
-NEVER use these words: ${brandDNA.blacklistedWords.join(', ')}`;
+Tone: ${(brandDNA.primaryTone ?? '').replace(/_/g, ' ')}
+NEVER use these words: ${brandDNA.vocabularyBlacklist.join(', ')}`;
 
     const userPrompt = `PRIMARY INSTAGRAM CAPTION:
 "${primaryCaption.caption}"

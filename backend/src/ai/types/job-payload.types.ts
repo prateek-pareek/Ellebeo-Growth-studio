@@ -45,10 +45,69 @@ export type BrandMoodTag =
   | 'luxury' | 'upbeat' | 'chill' | 'elegant'
   | 'bold' | 'clinical' | 'warm' | 'playful';
 
-export interface BrandDNARecord extends Record<string, any> {
+export interface BrandDNARecord {
   id: string;
   tenantId: string;
   businessName: string;
+  version: number;
+  isCurrent: boolean;
+  brandDnaV2: any;
+  serviceCategories: string[];
+  serviceArea: string | null;
+  reputationAsset: string | null;
+  workDifferentiation: string | null;
+  brandEssenceSentence: string | null;
+  brandWorldAnchor: string | null;
+  imageEnergy: string | null;
+  oneLiner: string | null;
+  uniqueSellingProposition: string | null;
+  signatureOutcome: string | null;
+  primaryPersona: string | null;
+  secondaryPersona: string | null;
+  clientPainPoints: string[];
+  primaryTone: string | null;
+  secondaryTone: string | null;
+  emojiPolicy: string;
+  vocabularyBlacklist: string[];
+  vocabularyPreferred: string[];
+  doNotSay: string[];
+  formattingStyle: string | null;
+  aestheticDirection: string | null;
+  moodTag: string | null;
+  primaryBrandColor: string | null;
+  secondaryBrandColor: string | null;
+  backgroundBrandColor: string | null;
+  accentBrandColor: string | null;
+  depthBrandColor: string | null;
+  brandFont: string | null;
+  locationCity: string | null;
+  brandTier: string;
+  captionLengthPreference: string;
+  emojiStyle: string;
+  averageConfidenceScore: number;
+  preferredModelOverride: string | null;
+  logoUrl: string | null;
+  logoPosition: string;
+  moodboardUrls: string[];
+  moodboardLabels: string[];
+  lightingPreference: string | null;
+  texturePreference: string | null;
+  compositionStyle: string | null;
+  environmentPreference: string | null;
+  finishPreference: string | null;
+  audienceLifestyle: string | null;
+  commercialObjective: string | null;
+  visualRanking: string[];
+  clientFears: string | null;
+  clientTrustTriggers: string | null;
+  clientVisualTaste: string | null;
+  clientBuyingTriggers: string | null;
+  clientEmotionalOutcome: string | null;
+  brandPerceptionGoal: string | null;
+  brandProofStatement: string | null;
+  brandNeverLooksLike: string | null;
+  lastUpdatedAt: Date;
+  autoPopulated: boolean;
 }
 
 // ---------------------------------------------------------------------------
