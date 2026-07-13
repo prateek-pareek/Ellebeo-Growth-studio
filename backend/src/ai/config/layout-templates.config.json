@@ -166,5 +166,3144 @@
     "decoration": "brand_scrim_heavy",
     "showWatermark": false,
     "showFooter": true
+  },
+  "_proposed_template_agent_library": {
+    "_meta": {
+      "purpose": "Design catalog for the upcoming Template Agent (separate process — see 5-layer architecture in CLAUDE.md). These are creative specs only, not renderer configs — none of them have base/textTemplate/decoration keys, so resolveLayoutTemplate() in layout-renderers.ts never matches or uses this nested object.",
+      "note": "Not wired into AI generation. Do not reference from ai-image-generation.service.ts, layout-renderers.ts, or grid-orchestrator.service.ts."
+    },
+    "die_cut_reveal": {
+      "concept": "A solid brand-colour card with a die-cut window shape cut through it, revealing only a fragment of the photo underneath — treating the image like a product peeking through packaging rather than a photo filling a frame.",
+      "visual_structure": "Full canvas is a flat brand-colour card. A single die-cut window (30-45% of canvas area) is positioned off-centre, showing the photo beneath. Caption sits in the untouched card area opposite the window. Fine registration crosses sit at two corners.",
+      "image_mask": "Custom SVG die-cut shape — organic blob or angular packaging cutout, not a rectangle or circle",
+      "typography": "Minimal Sans, small tracked caps",
+      "decorative_elements": [
+        "registration marks",
+        "spot-gloss highlight band",
+        "fold guide dotted line"
+      ],
+      "suitable_posts": [
+        "Product launch",
+        "Offer",
+        "Announcement"
+      ],
+      "implementation_difficulty": "Hard",
+      "why_unique": "Treats the photo as something packaging reveals rather than displays — inverts the usual figure/ground relationship of a template."
+    },
+    "elevation_diagram": {
+      "concept": "The photo is annotated like an architectural elevation drawing — thin dimension lines measure the frame, a scale indicator sits in the margin, and a technical title block anchors the bottom corner like a blueprint sheet.",
+      "visual_structure": "Photo full-bleed or lightly inset. Dimension lines with arrow endpoints run along top and left edges. Small scale ratio text (e.g. '1:20'). Title block bottom-right with 3-4 rows of tiny technical metadata.",
+      "image_mask": "Rectangle, full-bleed",
+      "typography": "Swiss / technical monospace for callouts, thin sans for title block",
+      "decorative_elements": [
+        "dimension lines with arrowheads",
+        "scale indicator",
+        "technical title block",
+        "faint blueprint grid overlay"
+      ],
+      "suitable_posts": [
+        "Before after",
+        "Tips",
+        "Product launch"
+      ],
+      "implementation_difficulty": "Medium",
+      "why_unique": "Borrows the visual grammar of architectural/patent drawings rather than any social template convention — turns the work into a 'specification' rather than a photo."
+    },
+    "unboxing_manifest": {
+      "concept": "Composition styled like a packing slip taped onto the image — a kraft-paper manifest card with a barcode, a typewriter-style contents list, and a torn perforated edge, as if the photo arrived boxed.",
+      "visual_structure": "Photo full-bleed. A kraft-coloured manifest card (25% width) is anchored to one edge with a visible perforated tear line where it 'attaches'. Card contains a barcode block and a short itemised list.",
+      "image_mask": "Rectangle, full-bleed with an overlaid card element",
+      "typography": "Typewriter/mono for manifest text, small sans label",
+      "decorative_elements": [
+        "barcode",
+        "perforation line",
+        "kraft paper texture",
+        "rubber-stamp style date mark"
+      ],
+      "suitable_posts": [
+        "Product launch",
+        "Announcement",
+        "Offer"
+      ],
+      "implementation_difficulty": "Medium",
+      "why_unique": "Frames the content as a shipped/received object (logistics aesthetic) rather than a styled photo — a packaging-world visual language absent from social templates."
+    },
+    "typographic_module_system": {
+      "concept": "A strict Swiss/International Typographic Style module system — thin rule lines divide the canvas into a mathematically proportioned set of zones, with the photo occupying exactly one module and a flush-left headline in another, tied together with coordinate-style labels.",
+      "visual_structure": "Canvas divided by thin rule lines into an asymmetric module system (not a repeating grid of photos — only one photo module exists). Headline flush-left in its own module. Small coordinate labels (e.g. 'A2') mark module corners. One red or brand-colour accent rule.",
+      "image_mask": "Rectangle, confined to one module",
+      "typography": "Swiss — Helvetica-style flush-left, tight leading",
+      "decorative_elements": [
+        "thin rule lines",
+        "coordinate corner labels",
+        "single accent rule"
+      ],
+      "suitable_posts": [
+        "Tips",
+        "Carousel",
+        "Announcement"
+      ],
+      "implementation_difficulty": "Medium",
+      "why_unique": "Only one photo module exists — this is a typographic proportion system (Müller-Brockmann poster logic), not a repeating image grid, and is driven by mathematical rule-line placement rather than a border or split."
+    },
+    "look_number_plate": {
+      "concept": "A runway-lookbook numbering system — a small 'LOOK 01' plate anchored in a corner, full-bleed photo, and a slim sidebar carrying season/collection metadata in tiny tracked caps.",
+      "visual_structure": "Photo full-bleed. Small numbered plate (e.g. 'LOOK 01') in one corner. A very thin vertical rule near one edge separates the photo from a slim metadata sidebar (season, collection name) running the full height.",
+      "image_mask": "Rectangle, full-bleed",
+      "typography": "Fashion — condensed tracked caps",
+      "decorative_elements": [
+        "numbered plate",
+        "thin vertical rule",
+        "season/collection tag"
+      ],
+      "suitable_posts": [
+        "Reels cover",
+        "Story",
+        "Carousel"
+      ],
+      "implementation_difficulty": "Easy",
+      "why_unique": "Borrows runway show numbering conventions rather than any caption-card pattern — the metadata sidebar is bibliographic, not promotional."
+    },
+    "catalog_plate_entry": {
+      "concept": "An auction-catalog or museum-catalog plate page — photo inset with generous cream margin, a 'PLATE No.' numeral, and a provenance-style caption block set in small italic serif with a hanging indent.",
+      "visual_structure": "Photo inset within a generous flat-colour margin (not a border — a page). 'PLATE No.' numeral top-left of the margin. Below the photo, a hanging-indent caption block in the manner of an auction house catalog entry, thin rule above it.",
+      "image_mask": "Rectangle, generously inset",
+      "typography": "Luxury Serif — small italic for the caption block, upright serif for the plate numeral",
+      "decorative_elements": [
+        "plate numeral",
+        "hanging-indent caption rule",
+        "cream page-margin field"
+      ],
+      "suitable_posts": [
+        "Product launch",
+        "Before after",
+        "Announcement"
+      ],
+      "implementation_difficulty": "Medium",
+      "why_unique": "The layout mechanic is a bibliographic catalog entry (numbered plate + provenance caption), not a border treatment — distinct from any frame/mat template already built."
+    },
+    "wax_seal_emblem": {
+      "concept": "A circular embossed emblem badge, like a wax seal or foil stamp, sits at a corner intersection of a full-bleed photo, carrying a monogram or icon with a soft emboss shadow, and a minimal small-caps tagline beneath it.",
+      "visual_structure": "Photo full-bleed. Circular emblem badge (8-12% of canvas width) positioned at a corner or edge intersection, with visible emboss/drop-shadow depth. Small-caps tagline sits directly beneath the badge.",
+      "image_mask": "Rectangle, full-bleed",
+      "typography": "Luxury Serif for the badge monogram, minimal sans for the tagline",
+      "decorative_elements": [
+        "embossed seal badge",
+        "soft directional shadow",
+        "fine ring border on badge"
+      ],
+      "suitable_posts": [
+        "Announcement",
+        "Product launch",
+        "Testimonial"
+      ],
+      "implementation_difficulty": "Medium",
+      "why_unique": "The badge behaves as a certification/heritage mark (wax seal, foil stamp) rather than a logo watermark — a distinct decorative language from the existing monogram treatment."
+    },
+    "folio_spread": {
+      "concept": "Simulates an open coffee-table book spread — a thin centre-gutter shadow splits the canvas into two 'pages', one carrying the photo and the other a large drop-cap opening paragraph in editorial serif.",
+      "visual_structure": "Canvas split by a subtle centre gutter shadow line (not a hard divider) into two halves. One half is the photo; the other is a cream page carrying a large decorative drop-cap first letter followed by body serif text.",
+      "image_mask": "Rectangle, confined to one 'page'",
+      "typography": "Luxury Serif with a large decorative drop-cap",
+      "decorative_elements": [
+        "centre gutter shadow",
+        "drop-cap initial",
+        "page-edge vignette"
+      ],
+      "suitable_posts": [
+        "Tips",
+        "Announcement",
+        "Carousel"
+      ],
+      "implementation_difficulty": "Hard",
+      "why_unique": "Simulates the physical illusion of an open book (gutter shadow + page curvature vignette) rather than a flat panel split — a print-object illusion, not a layout division."
+    },
+    "specimen_label": {
+      "concept": "An apothecary specimen-jar label aesthetic — a centred rectangular label plate with a double-rule border, botanical-style small-caps text stack (Name / Origin / Batch), and tiny corner ornaments.",
+      "visual_structure": "Photo full-bleed, dimmed slightly behind the label. Centred label plate (rectangle, double-rule border) carries 3 stacked short text rows. Tiny plus-sign or dot ornaments mark the plate's four corners.",
+      "image_mask": "Rectangle, full-bleed behind label",
+      "typography": "Luxury Serif small caps, generous letter-spacing",
+      "decorative_elements": [
+        "double-rule label border",
+        "corner ornaments",
+        "botanical-style text stack"
+      ],
+      "suitable_posts": [
+        "Product launch",
+        "Offer",
+        "Tips"
+      ],
+      "implementation_difficulty": "Easy",
+      "why_unique": "Borrows apothecary/specimen labelling conventions (Aesop/Buly aesthetic) — a label plate system, not a caption card or quote card."
+    },
+    "signal_flag_marker": {
+      "concept": "A bold geometric colour-block pennant/flag shape anchored to one edge carries the headline, in the manner of museum wayfinding or exhibition signage, with a hard graphic drop shadow.",
+      "visual_structure": "Photo full-bleed. A triangular or angled-tab flag shape anchored to one edge (top or side), carrying the headline in reversed colour. Flag has a hard offset shadow (no blur) for a physical signage feel.",
+      "image_mask": "Rectangle, full-bleed",
+      "typography": "Museum / bold sans, high contrast",
+      "decorative_elements": [
+        "angled flag/pennant shape",
+        "hard offset drop shadow",
+        "reversed colour headline"
+      ],
+      "suitable_posts": [
+        "Announcement",
+        "Offer",
+        "Reels cover"
+      ],
+      "implementation_difficulty": "Medium",
+      "why_unique": "The headline lives on a physical signage shape (wayfinding pennant) with a hard shadow, not a soft card or bubble — a distinct exhibition-graphics language."
+    },
+    "measure_line_annotation": {
+      "concept": "Thin ruler-style tick marks with numeric labels run along one edge of the frame, and a single leader line points from a measurement to a small callout describing the result — patent-drawing precision aesthetic.",
+      "visual_structure": "Photo full-bleed or lightly inset. Tick-mark ruler runs along one edge with small numeric labels at intervals. One leader line breaks from the ruler to a small text callout box near the relevant part of the image.",
+      "image_mask": "Rectangle",
+      "typography": "Swiss technical, small monospace numerals",
+      "decorative_elements": [
+        "ruler tick marks",
+        "leader line with node",
+        "small technical callout box"
+      ],
+      "suitable_posts": [
+        "Before after",
+        "Tips",
+        "Product launch"
+      ],
+      "implementation_difficulty": "Medium",
+      "why_unique": "Uses patent/technical-drawing annotation logic (measurement + leader line callout) rather than any caption box or bubble convention."
+    },
+    "spec_sheet_minimal": {
+      "concept": "Apple-style product-page minimalism — a tiny centred name in thin tracked caps at the very top, vast negative space, a small centred photo (not full-bleed), and a single thin rule at the bottom carrying 2-3 spec words.",
+      "visual_structure": "Enormous negative space. Small centred photo occupying well under half the canvas. Tiny tracked-caps name centred at the top. One thin horizontal rule near the bottom with short spec words separated by dots.",
+      "image_mask": "Rectangle, deliberately small and centred",
+      "typography": "Minimal Sans, ultra-thin weight, wide tracking",
+      "decorative_elements": [
+        "single bottom rule",
+        "dot separators between spec words"
+      ],
+      "suitable_posts": [
+        "Product launch",
+        "Announcement"
+      ],
+      "implementation_difficulty": "Easy",
+      "why_unique": "Deliberately shrinks the photo and maximises negative space — the opposite move of every existing bold/giant-type layout, which is what makes it read as premium restraint."
+    },
+    "magazine_masthead_cover": {
+      "concept": "A magazine-cover treatment — a masthead wordmark bleeds off the very top edge (only the lower half of the letters visible), the photo dims behind it, and small cover-line text plus an issue number sit along one side like a real magazine cover.",
+      "visual_structure": "Photo full-bleed, dimmed. Masthead wordmark spans the full width at the very top, cropped by the canvas edge. 2-3 small 'cover line' text fragments run down one side. Small issue/date tag in a corner.",
+      "image_mask": "Rectangle, full-bleed",
+      "typography": "Fashion display serif or condensed sans for the masthead, small sans for cover lines",
+      "decorative_elements": [
+        "cropped bleeding masthead",
+        "cover-line text stack",
+        "issue/date corner tag"
+      ],
+      "suitable_posts": [
+        "Announcement",
+        "Reels cover",
+        "Product launch"
+      ],
+      "implementation_difficulty": "Medium",
+      "why_unique": "Specifically simulates a print magazine cover (masthead cropped by the trim edge + cover lines), distinct from any single-word graphic-type treatment already built."
+    },
+    "letterpress_deboss_card": {
+      "concept": "Simulates a letterpress-printed card — the headline carries a subtle deboss/inline shadow effect, the photo sits within a deckle (rough torn-paper) edge, on an ivory stationery background.",
+      "visual_structure": "Ivory/cream background field. Photo inset with a rough deckle-edge boundary (not a clean rectangle). Headline text carries a layered debossed-look shadow, positioned in the surrounding cream field.",
+      "image_mask": "Organic — deckle/torn-paper edge, not a clean rectangle",
+      "typography": "Luxury Serif with a debossed/engraved shadow treatment",
+      "decorative_elements": [
+        "deckle-edge paper boundary",
+        "debossed text shadow",
+        "fine cotton-paper texture"
+      ],
+      "suitable_posts": [
+        "Announcement",
+        "Testimonial",
+        "Offer"
+      ],
+      "implementation_difficulty": "Hard",
+      "why_unique": "Combines a torn-paper photo edge with an engraved/debossed type treatment — a stationery/print-production illusion with no border, frame, or card-shadow precedent in the existing set."
+    },
+    "print_proof_markup": {
+      "concept": "The photo is treated like a pre-press colour proof sheet — thin crop marks sit at all four corners, a small CMYK-style colour bar runs along one edge, and a rotated 'PROOF 01' stamp sits in a corner.",
+      "visual_structure": "Photo full-bleed or lightly inset. Fine crop marks (L-shaped ticks) at all four corners. A slim colour-bar swatch strip along the bottom edge. Small rotated stamp-style proof label in one corner.",
+      "image_mask": "Rectangle",
+      "typography": "Mono/technical for the stamp and colour-bar labels",
+      "decorative_elements": [
+        "corner crop marks",
+        "colour-bar swatch strip",
+        "rotated proof stamp"
+      ],
+      "suitable_posts": [
+        "Behind the scenes",
+        "Announcement",
+        "Tips"
+      ],
+      "implementation_difficulty": "Medium",
+      "why_unique": "Uses pre-press production marks (crop marks, colour bars, proof stamps) as the entire decorative language — a print-production aesthetic with no equivalent in the existing library."
+    },
+    "shadow_box_display": {
+      "concept": "The photo appears to sit inside a recessed shadow-box vitrine — an inner drop shadow simulates depth/recess around the image, a thin inner bevel line traces the recess edge, and a small museum-vitrine label plate sits below.",
+      "visual_structure": "Photo inset with a strong inner shadow simulating a recessed niche (not an outer border). Thin bevel line traces the inner recess edge. Small label plate directly below the recess, museum-vitrine style.",
+      "image_mask": "Rectangle, with simulated depth via inner shadow",
+      "typography": "Museum small caps for the label plate",
+      "decorative_elements": [
+        "inner recess shadow",
+        "bevel line",
+        "vitrine label plate"
+      ],
+      "suitable_posts": [
+        "Product launch",
+        "Before after",
+        "Testimonial"
+      ],
+      "implementation_difficulty": "Hard",
+      "why_unique": "Simulates physical recessed depth (a display niche) via inner shadow rather than an outer mat/border — a fundamentally different illusion from any frame template already built."
+    },
+    "barcode_provenance_tag": {
+      "concept": "A small vertical tag — like a retail garment or provenance tag — hangs from one edge of a full-bleed photo, carrying a barcode and serial number, attached via a thin perforated tear line.",
+      "visual_structure": "Photo full-bleed. A slim vertical tag (10-15% width) hangs from one edge, connected by a thin perforated tear line. Tag carries a barcode graphic and a small serial/batch number.",
+      "image_mask": "Rectangle, full-bleed with an attached tag element",
+      "typography": "Mono/technical for the serial number, small sans for any tag label",
+      "decorative_elements": [
+        "barcode",
+        "serial number",
+        "perforated tear line",
+        "tag hole/eyelet"
+      ],
+      "suitable_posts": [
+        "Product launch",
+        "Offer",
+        "Announcement"
+      ],
+      "implementation_difficulty": "Easy",
+      "why_unique": "References retail garment-tag provenance systems rather than a ticket-stub aesthetic — the tag hangs off the edge as an attached object, not a bordered card."
+    },
+    "precision_reticle_mark": {
+      "concept": "A thin crosshair/reticle mark sits centred on the focal point of the photo, like a precision-targeting mark used in skincare/serum packaging shots, with tiny measurement annotations near it on an ultra-clean field.",
+      "visual_structure": "Photo full-bleed or clinically cropped. A fine crosshair reticle centred on the focal detail, with 1-2 tiny percentage or measurement labels near the reticle arms. Generous clean negative space elsewhere.",
+      "image_mask": "Rectangle, clinical crop",
+      "typography": "Minimal Sans, tiny precise labels",
+      "decorative_elements": [
+        "crosshair reticle",
+        "micro measurement labels",
+        "clinical negative space"
+      ],
+      "suitable_posts": [
+        "Before after",
+        "Product launch",
+        "Tips"
+      ],
+      "implementation_difficulty": "Medium",
+      "why_unique": "A single precision reticle mark (not a grid, not a border) reframes the photo as a clinical/scientific specimen shot — a skincare-campaign visual language, not a caption treatment."
+    },
+    "floor_plan_overlay": {
+      "concept": "A faint architectural floor-plan line drawing is overlaid semi-transparently across the photo, with a small compass/north-arrow icon in a corner and a caption set like a floor-plan room label.",
+      "visual_structure": "Photo full-bleed. Faint blueprint-style floor-plan linework overlaid at low opacity across the whole frame. Small compass/north-arrow icon in one corner. Caption styled as a room-label tag (small boxed text with a leader line).",
+      "image_mask": "Rectangle, full-bleed",
+      "typography": "Swiss technical for the room-label caption",
+      "decorative_elements": [
+        "translucent floor-plan linework",
+        "compass/north-arrow icon",
+        "room-label leader tag"
+      ],
+      "suitable_posts": [
+        "Behind the scenes",
+        "Announcement",
+        "Tips"
+      ],
+      "implementation_difficulty": "Hard",
+      "why_unique": "Overlays architectural plan-drawing linework directly across the photo as a texture/context layer — an entirely different decorative mechanic from any border, split, or card."
+    },
+    "sunlit_negative_field": {
+      "concept": "An extreme asymmetric composition in the Jacquemus/campaign tradition — the photo occupies a very small corner of the canvas within a vast solid or gradient colour field, with a tiny discreet caption in the far opposite corner.",
+      "visual_structure": "Photo occupies roughly 10-15% of the canvas, pushed into one corner. The remaining 85-90% is a flat or soft gradient brand-colour field. A tiny caption sits in the diagonally opposite corner, dwarfed by the space.",
+      "image_mask": "Rectangle, deliberately tiny",
+      "typography": "Fashion, extremely small and discreet",
+      "decorative_elements": [
+        "vast negative colour field",
+        "soft gradient wash",
+        "diagonally opposed micro-caption"
+      ],
+      "suitable_posts": [
+        "Announcement",
+        "Reels cover",
+        "Story"
+      ],
+      "implementation_difficulty": "Easy",
+      "why_unique": "Uses scale and emptiness as the entire statement (campaign-poster restraint) — the most extreme negative-space composition in the library, with no border, card, or graphic device at all."
+    },
+    "thread_stitch_seam": {
+      "concept": "A visible couture stitch-seam runs across the composition, like a tailoring construction line.",
+      "layout_description": "A single stitched seam line (dash-dot thread texture) crosses the frame at an angle, with a small fabric-swatch colour chip resting beside it.",
+      "why_unique": "Borrows tailoring/couture construction lines rather than any card, frame, or split — the seam is structural, not decorative."
+    },
+    "pressed_botanical": {
+      "concept": "Image preserved like a pressed flower between vellum sheets.",
+      "layout_description": "Photo sits under a faint glassine/vellum overlay texture with soft pressed-fibre texture at the edges and a tiny archival date stamp in a corner.",
+      "why_unique": "Simulates a specimen preservation object, not a photo in a container — the vellum layer is translucent texture, not a border."
+    },
+    "light_table_slide": {
+      "concept": "Photo displayed like a backlit transparency on a photographer's light table.",
+      "layout_description": "Image has a soft glow bleed at its edges and a small slide-mount corner clip (only at two corners, not a full frame), suggesting it's resting on backlit glass.",
+      "why_unique": "The 'mount' is partial and physical (a slide holder), and the glow is a lighting effect, not a border treatment."
+    },
+    "monograph_index": {
+      "concept": "A book-chapter tab index runs down one edge.",
+      "layout_description": "Slim colour-coded tabs stack down one side like a monograph's chapter dividers, current tab extended slightly with the caption text.",
+      "why_unique": "Uses bookbinding tab-index logic — navigation-as-decoration — absent from any card or split concept."
+    },
+    "apothecary_pour": {
+      "concept": "A serum-drop pour graphic flows from a corner.",
+      "layout_description": "A thin liquid drip/pour line graphic flows diagonally from one corner into the frame, with a minimal ingredient-style caption beneath it.",
+      "why_unique": "The pour line is a liquid-motion accent, not a static shape or border — reads as skincare campaign motion, not layout structure."
+    },
+    "runway_step_sequence": {
+      "concept": "A dotted footstep path suggests a runway walk direction.",
+      "layout_description": "Faint dotted path/footstep graphic crosses the lower third of the frame with a small step-counter numeral.",
+      "why_unique": "Implies movement and direction rather than static composition — a choreography cue, not a grid or split."
+    },
+    "cartography_route": {
+      "concept": "A thin travel-route line with a single pin crosses the image.",
+      "layout_description": "Dotted map-route line with one location-pin marker and small coordinate text, map-legend styling.",
+      "why_unique": "Borrows cartographic wayfinding — a route, not a border or frame — and implies a journey/origin story."
+    },
+    "linen_press_fold": {
+      "concept": "A single fabric fold crease shadow sits across a linen-textured field.",
+      "layout_description": "Linen-texture background with one soft fold-crease shadow running across it; photo inset within a single fold panel.",
+      "why_unique": "The 'fold' is a fabric crease illusion (soft shadow gradient), distinct from paper-fold or card mechanics."
+    },
+    "studio_backdrop_seam": {
+      "concept": "A faint photography-studio infinity-curve seam is visible behind the subject.",
+      "layout_description": "Subtle horizontal seam line (studio backdrop curve) faintly visible in the background field, small light-meter reading graphic in a corner.",
+      "why_unique": "Reproduces a photo-studio production detail as the decorative element — a behind-the-scenes authenticity cue."
+    },
+    "perfume_diffusion": {
+      "concept": "Soft concentric rings radiate from a focal point like scent diffusing.",
+      "layout_description": "Faint radiating rings emanate outward from one focal point on the photo, with minimal text floating inside the outer ring.",
+      "why_unique": "Uses radiating diffusion rings (scent/sound wave logic) as the sole structural device — no rectilinear element at all."
+    },
+    "loupe_inspection": {
+      "concept": "A jeweler's loupe zooms into one detail of the main image.",
+      "layout_description": "Small circular magnified inset shows a zoomed detail of part of the photo, connected to its source point by a fine leader line.",
+      "why_unique": "The circular inset is a magnification device (optical), not a decorative circle or spotlight — it references a specific detail."
+    },
+    "atelier_sketch_overlay": {
+      "concept": "A designer's croquis sketch line overlays the photo like an atelier reference sheet.",
+      "layout_description": "Faint fashion-illustration sketch linework (croquis proportions) overlaid semi-transparently across the photo.",
+      "why_unique": "Treats the photo as a fashion illustration reference sheet — sketch-over-photo is a design-process aesthetic, not a filter."
+    },
+    "marble_vein_inlay": {
+      "concept": "A marble-veining line motif inlays one edge like a spa countertop.",
+      "layout_description": "Thin marble-vein graphic pattern traces along one edge of the canvas; caption rests on the 'stone' edge.",
+      "why_unique": "Material-inlay aesthetic (stone veining) rather than a border stroke — evokes spa/interior material, not paper or frame."
+    },
+    "gilded_edge_page": {
+      "concept": "A gold-foil line traces one edge like a gilded book page.",
+      "layout_description": "Fine gold line runs along one canvas edge with a small embossed page-corner fold detail.",
+      "why_unique": "References gilded book-edge finishing (a print-production/bookbinding detail), distinct from any border or frame treatment."
+    },
+    "weather_index_report": {
+      "concept": "Presented like a minimalist forecast index card with one big stat.",
+      "layout_description": "A single large stat number/percentage dominates one zone with a small icon, rest of canvas is the photo — clinical data-vis styling.",
+      "why_unique": "Borrows weather-report/data-index visual logic to foreground one number — a stat-card, not a quote or testimonial card."
+    },
+    "still_life_pedestal": {
+      "concept": "The subject rests on an illustrated museum pedestal line drawing.",
+      "layout_description": "A thin illustrated plinth/pedestal line sits beneath the subject, suggesting museum object display without a full vitrine box.",
+      "why_unique": "Implies display via a single drawn pedestal line, not a boxed frame or shadow recess — a much lighter device."
+    },
+    "ateliers_swatch_strip": {
+      "concept": "A paint-fan-deck style swatch strip runs along one edge.",
+      "layout_description": "Slim strip of small colour/material swatch chips along one edge, one chip highlighted as the 'selected' brand colour.",
+      "why_unique": "Uses a material-swatch-deck convention (interior design/fashion ateliers) rather than a palette bar or label."
+    },
+    "postage_frank_mark": {
+      "concept": "A postal franking/cancellation mark sits in a corner.",
+      "layout_description": "Small circular postmark graphic with faint parallel cancellation lines in one corner, editorial correspondence aesthetic.",
+      "why_unique": "A postal/philatelic mark (specific cancellation-line texture) — distinct from a wax seal or emboss badge."
+    },
+    "cinema_slate_marker": {
+      "concept": "A small film-slate corner tag shows scene/take numbers.",
+      "layout_description": "Miniature clapperboard-style tag in one corner with scene/take numerals, rest of canvas full-bleed photo.",
+      "why_unique": "Borrows behind-the-scenes film-production signage as a tiny corner device, not a strip or sequential frame system."
+    },
+    "thermal_gradient_map": {
+      "concept": "A soft heat-map gradient wash suggests thermal/skincare imaging.",
+      "layout_description": "Subtle gradient colour wash (warm-to-cool) overlaid across part of the photo with a minimal temperature-scale legend at the edge.",
+      "why_unique": "Uses a scientific thermal-imaging visual convention — a diagnostic aesthetic unlike any campaign or editorial device already built."
+    },
+    "editorial_margin_notes": {
+      "category": "Editorial/Book",
+      "concept": "Magazine layout with handwritten side annotations and margin callouts."
+    },
+    "chapter_divider": {
+      "category": "Editorial/Book",
+      "concept": "Book chapter opening page with oversized section number."
+    },
+    "cover_story": {
+      "category": "Editorial/Book",
+      "concept": "Magazine cover with masthead, teaser headlines, and hero image.",
+      "note_possible_overlap": "magazine_masthead_cover"
+    },
+    "inside_spread": {
+      "category": "Editorial/Book",
+      "concept": "Open magazine spread connected across two pages.",
+      "note_possible_overlap": "folio_spread"
+    },
+    "pull_quote_feature": {
+      "category": "Editorial/Book",
+      "concept": "Large editorial pull quote integrated into the layout."
+    },
+    "masthead_banner": {
+      "category": "Editorial/Book",
+      "concept": "Magazine-style publication header with metadata."
+    },
+    "folio_layout": {
+      "category": "Editorial/Book",
+      "concept": "Book-inspired layout with page numbers and running headers.",
+      "note_possible_overlap": "folio_spread"
+    },
+    "footnote_editorial": {
+      "category": "Editorial/Book",
+      "concept": "Minimal layout using academic-style footnotes."
+    },
+    "index_listing": {
+      "category": "Editorial/Book",
+      "concept": "Catalog index with numbered content blocks.",
+      "note_possible_overlap": "catalog_plate_entry"
+    },
+    "chapter_tabs": {
+      "category": "Editorial/Book",
+      "concept": "Side navigation tabs inspired by premium books.",
+      "note_possible_overlap": "monograph_index"
+    },
+    "architectural_grid": {
+      "category": "Architectural",
+      "concept": "Building blueprint proportions with strict modular spacing.",
+      "note_possible_overlap": "typographic_module_system"
+    },
+    "floorplan_overlay": {
+      "category": "Architectural",
+      "concept": "Floor-plan inspired thin vector lines over photography.",
+      "note_possible_overlap": "floor_plan_overlay (near-duplicate)"
+    },
+    "elevation_view": {
+      "category": "Architectural",
+      "concept": "Elevation drawing framing around imagery.",
+      "note_possible_overlap": "elevation_diagram (near-duplicate)"
+    },
+    "section_cut": {
+      "category": "Architectural",
+      "concept": "Content separated like an architectural cross-section."
+    },
+    "material_board": {
+      "category": "Architectural",
+      "concept": "Architecture material sample presentation."
+    },
+    "construction_guides": {
+      "category": "Architectural",
+      "concept": "Visible alignment guides become part of the design."
+    },
+    "golden_ratio": {
+      "category": "Architectural",
+      "concept": "Composition follows golden ratio rectangles."
+    },
+    "isometric_frame": {
+      "category": "Architectural",
+      "concept": "Image positioned inside isometric construction."
+    },
+    "grid_coordinates": {
+      "category": "Architectural",
+      "concept": "Coordinate system with X/Y labels.",
+      "note_possible_overlap": "typographic_module_system"
+    },
+    "measurement_frame": {
+      "category": "Architectural",
+      "concept": "Dimension arrows surrounding the image.",
+      "note_possible_overlap": "measure_line_annotation (near-duplicate)"
+    },
+    "museum_label": {
+      "category": "Museum",
+      "concept": "Artwork with museum plaque description."
+    },
+    "archive_box": {
+      "category": "Museum",
+      "concept": "Archival document presentation."
+    },
+    "curator_notes": {
+      "category": "Museum",
+      "concept": "Curator annotation style with reference numbers."
+    },
+    "exhibition_wall": {
+      "category": "Museum",
+      "concept": "Gallery exhibition arrangement."
+    },
+    "artifact_card": {
+      "category": "Museum",
+      "concept": "Historical artifact documentation layout."
+    },
+    "collection_sheet": {
+      "category": "Museum",
+      "concept": "Museum collection inventory aesthetic."
+    },
+    "preservation_frame": {
+      "category": "Museum",
+      "concept": "Archive preservation sleeve effect."
+    },
+    "gallery_catalog": {
+      "category": "Museum",
+      "concept": "Museum catalog product page.",
+      "note_possible_overlap": "catalog_plate_entry"
+    },
+    "display_case": {
+      "category": "Museum",
+      "concept": "Glass display cabinet inspired frame.",
+      "note_possible_overlap": "shadow_box_display (near-duplicate)"
+    },
+    "specimen_board": {
+      "category": "Museum",
+      "concept": "Natural history specimen mounting board."
+    },
+    "product_box": {
+      "category": "Packaging",
+      "concept": "Luxury packaging mockup composition."
+    },
+    "foil_stamp": {
+      "category": "Packaging",
+      "concept": "Foil emboss effect with centered branding.",
+      "note_possible_overlap": "gilded_edge_page"
+    },
+    "label_wrap": {
+      "category": "Packaging",
+      "concept": "Bottle label wraps around imagery."
+    },
+    "hang_tag": {
+      "category": "Packaging",
+      "concept": "Luxury retail hang-tag attached by string.",
+      "note_possible_overlap": "barcode_provenance_tag (near-duplicate)"
+    },
+    "ingredient_card": {
+      "category": "Packaging",
+      "concept": "Ingredient spotlight card."
+    },
+    "seal_of_quality": {
+      "category": "Packaging",
+      "concept": "Wax seal / premium certification badge.",
+      "note_possible_overlap": "wax_seal_emblem (near-duplicate)"
+    },
+    "perfume_insert": {
+      "category": "Packaging",
+      "concept": "Perfume packaging insert aesthetic."
+    },
+    "gift_box": {
+      "category": "Packaging",
+      "concept": "Premium gift presentation layout."
+    },
+    "sample_card": {
+      "category": "Packaging",
+      "concept": "Cosmetic tester sample sheet."
+    },
+    "packaging_flatlay": {
+      "category": "Packaging",
+      "concept": "Packaging exploded flat-lay composition."
+    },
+    "campaign_billboard": {
+      "category": "Fashion Campaign",
+      "concept": "Minimal luxury billboard advertisement."
+    },
+    "runway_invitation": {
+      "category": "Fashion Campaign",
+      "concept": "Fashion show invitation card."
+    },
+    "lookbook_panel": {
+      "category": "Fashion Campaign",
+      "concept": "Sequential fashion campaign panels.",
+      "note_possible_overlap": "look_number_plate"
+    },
+    "casting_card": {
+      "category": "Fashion Campaign",
+      "concept": "Model casting sheet aesthetic."
+    },
+    "model_board": {
+      "category": "Fashion Campaign",
+      "concept": "Agency portfolio presentation."
+    },
+    "backstage_pass": {
+      "category": "Fashion Campaign",
+      "concept": "Fashion backstage credentials."
+    },
+    "fashion_contact_sheet": {
+      "category": "Fashion Campaign",
+      "concept": "Campaign proof selection board."
+    },
+    "editor_pick": {
+      "category": "Fashion Campaign",
+      "concept": "Editor's choice highlighted feature."
+    },
+    "season_drop": {
+      "category": "Fashion Campaign",
+      "concept": "Collection launch announcement."
+    },
+    "campaign_stamp": {
+      "category": "Fashion Campaign",
+      "concept": "Collection release with seasonal stamp."
+    },
+    "ingredient_breakdown": {
+      "category": "Skincare/Beauty",
+      "concept": "Product surrounded by ingredient callouts."
+    },
+    "routine_steps": {
+      "category": "Skincare/Beauty",
+      "concept": "Morning/night skincare routine flow."
+    },
+    "product_compare": {
+      "category": "Skincare/Beauty",
+      "concept": "Elegant side-by-side comparison."
+    },
+    "before_after_slider": {
+      "category": "Skincare/Beauty",
+      "concept": "Fake interactive slider aesthetic."
+    },
+    "feature_highlights": {
+      "category": "Skincare/Beauty",
+      "concept": "Floating feature labels around image."
+    },
+    "price_tag_luxury": {
+      "category": "Skincare/Beauty",
+      "concept": "Premium pricing presentation."
+    },
+    "launch_countdown": {
+      "category": "Skincare/Beauty",
+      "concept": "Product launch countdown card."
+    },
+    "benefit_icons": {
+      "category": "Skincare/Beauty",
+      "concept": "Minimal icon-led benefits section."
+    },
+    "results_dashboard": {
+      "category": "Skincare/Beauty",
+      "concept": "Clinical result metrics presentation.",
+      "note_possible_overlap": "weather_index_report"
+    },
+    "formula_sheet": {
+      "category": "Skincare/Beauty",
+      "concept": "Laboratory formulation inspired design."
+    },
+    "bookmark_layout": {
+      "category": "Paper/Stationery",
+      "concept": "Luxury bookmark overlaps image."
+    },
+    "paper_clip": {
+      "category": "Paper/Stationery",
+      "concept": "Pinned document aesthetic."
+    },
+    "binder_page": {
+      "category": "Paper/Stationery",
+      "concept": "Notebook binder holes and filing tabs."
+    },
+    "masking_tape": {
+      "category": "Paper/Stationery",
+      "concept": "Editorial taped photography."
+    },
+    "vellum_overlay": {
+      "category": "Paper/Stationery",
+      "concept": "Semi-transparent tracing paper overlay.",
+      "note_possible_overlap": "pressed_botanical"
+    },
+    "corner_fold": {
+      "category": "Paper/Stationery",
+      "concept": "Folded paper corner reveal."
+    },
+    "stitched_edge": {
+      "category": "Paper/Stationery",
+      "concept": "Visible stitched binding effect.",
+      "note_possible_overlap": "thread_stitch_seam"
+    },
+    "paper_stack": {
+      "category": "Paper/Stationery",
+      "concept": "Multiple layered paper sheets."
+    },
+    "tracing_sheet": {
+      "category": "Paper/Stationery",
+      "concept": "Architect sketch tracing overlay.",
+      "note_possible_overlap": "atelier_sketch_overlay"
+    },
+    "envelope_insert": {
+      "category": "Paper/Stationery",
+      "concept": "Photo emerging from envelope."
+    },
+    "glass_dashboard": {
+      "category": "Digital UI",
+      "concept": "Glassmorphism dashboard widgets."
+    },
+    "browser_window": {
+      "category": "Digital UI",
+      "concept": "Clean browser-inspired interface."
+    },
+    "mobile_preview": {
+      "category": "Digital UI",
+      "concept": "Phone mockup embedded in layout."
+    },
+    "desktop_workspace": {
+      "category": "Digital UI",
+      "concept": "Creative desktop scene."
+    },
+    "notification_stack": {
+      "category": "Digital UI",
+      "concept": "Stacked notification cards."
+    },
+    "command_palette": {
+      "category": "Digital UI",
+      "concept": "Minimal search/command UI."
+    },
+    "system_cards": {
+      "category": "Digital UI",
+      "concept": "Operating-system inspired panels."
+    },
+    "widget_stack": {
+      "category": "Digital UI",
+      "concept": "Floating dashboard widgets."
+    },
+    "analytics_panel": {
+      "category": "Digital UI",
+      "concept": "Luxury analytics dashboard.",
+      "note_possible_overlap": "results_dashboard"
+    },
+    "floating_toolbar": {
+      "category": "Digital UI",
+      "concept": "Toolbars integrated into composition."
+    },
+    "liquid_shapes": {
+      "category": "Material/Texture",
+      "concept": "Soft organic flowing masks."
+    },
+    "stone_texture": {
+      "category": "Material/Texture",
+      "concept": "Natural stone inspired backgrounds.",
+      "note_possible_overlap": "marble_vein_inlay"
+    },
+    "linen_canvas": {
+      "category": "Material/Texture",
+      "concept": "Premium linen fabric texture.",
+      "note_possible_overlap": "linen_press_fold"
+    },
+    "shadow_play": {
+      "category": "Material/Texture",
+      "concept": "Natural window light shadows."
+    },
+    "botanical_press": {
+      "category": "Material/Texture",
+      "concept": "Pressed botanical specimen style.",
+      "note_possible_overlap": "pressed_botanical"
+    },
+    "ceramic_frame": {
+      "category": "Material/Texture",
+      "concept": "Handmade ceramic inspired borders."
+    },
+    "sand_layers": {
+      "category": "Material/Texture",
+      "concept": "Minimal layered sand forms."
+    },
+    "water_ripple": {
+      "category": "Material/Texture",
+      "concept": "Subtle ripple masking."
+    },
+    "clay_surface": {
+      "category": "Material/Texture",
+      "concept": "Soft sculpted clay aesthetic."
+    },
+    "paper_sculpture": {
+      "category": "Material/Texture",
+      "concept": "3D folded paper composition."
+    },
+    "linen_editorial": {
+      "category": "Editorial/Print/Book",
+      "concept": "The photo's edge dissolves softly into a surrounding linen-texture margin rather than meeting it at a hard boundary.",
+      "visual_hierarchy": "Photo ~70% centred; feathered dissolve transition; caption in the linen margin.",
+      "image_regions": "Centred, soft-edged (no hard crop line)",
+      "text_regions": "Caption sits in the linen margin, not on the photo",
+      "decorative_elements": [
+        "feathered photo-to-texture dissolve",
+        "linen weave pattern",
+        "thread-count micro-texture"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "No other template dissolves the photo edge into its surroundings — every existing edge is a hard crop, mask, or line."
+    },
+    "canvas_print": {
+      "category": "Editorial/Print/Book",
+      "concept": "Image presented as a stretched gallery canvas, with one edge showing a wrapped-canvas shadow as if it turns around a stretcher frame.",
+      "visual_hierarchy": "Photo dominant; one wrapped edge strip; small placard beneath.",
+      "image_regions": "Full photo plus a simulated wrap-around edge on one side",
+      "text_regions": "Small gallery placard below the canvas",
+      "decorative_elements": [
+        "canvas weave texture",
+        "wrapped-edge shadow gradient",
+        "gallery placard"
+      ],
+      "best_use_cases": [
+        "Product launch",
+        "Before after"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Simulates a physical object wrapping around an edge, not a flat photo — distinct from shadow_box_display's recess illusion."
+    },
+    "soft_emboss": {
+      "category": "Editorial/Print/Book",
+      "concept": "A uniform micro-emboss paper texture covers the photo, with a corner monogram visible only through shadow — no ink or fill colour anywhere.",
+      "visual_hierarchy": "Full photo; monogram readable only via light/shadow relief.",
+      "image_regions": "Full-bleed with uniform emboss texture",
+      "text_regions": "None printed — the monogram is a blind emboss",
+      "decorative_elements": [
+        "blind-emboss corner monogram",
+        "fine paper grain overlay"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Testimonial"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "The only mark on the whole canvas is invisible except through shadow — no colour or ink anywhere, unlike any badge, stamp, or foil template."
+    },
+    "blind_deboss": {
+      "category": "Editorial/Print/Book",
+      "concept": "The headline itself is rendered as a shadow-only debossed impression pressed directly into the photo surface.",
+      "visual_hierarchy": "Photo full-bleed; headline reads via relief shadow only, in open negative space.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Headline rendered as relief, not ink",
+      "decorative_elements": [
+        "shadow-only debossed headline"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "Unlike letterpress_deboss_card (a card with an ink-deboss effect on a separate cream field), the deboss happens directly on the photo — no card, no ink, pure shadow-relief type."
+    },
+    "foil_border": {
+      "category": "Editorial/Print/Book",
+      "concept": "A slim metallic line traces the complete perimeter of the canvas as one continuous rectangular outline.",
+      "visual_hierarchy": "Full-bleed photo; continuous 4-edge outline frames it.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Small caption bottom",
+      "decorative_elements": [
+        "continuous 4-edge foil outline",
+        "mitred corner detail"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Offer"
+      ],
+      "implementation_complexity": "Easy",
+      "why_different": "A complete perimeter outline (all four sides), unlike gilded_edge_page's single-edge line — reads as a finishing detail on the whole frame, not a border/mat."
+    },
+    "signature_page": {
+      "category": "Editorial/Print/Book",
+      "concept": "Mimics a signed limited-edition print — a hand-drawn signature graphic and small edition line sit in the corner of a generously margined photo.",
+      "visual_hierarchy": "Photo inset with cream margin; signature + edition text bottom-right.",
+      "image_regions": "Inset, generous margin",
+      "text_regions": "Edition line + signature graphic, corner",
+      "decorative_elements": [
+        "hand-signature graphic",
+        "edition numbering"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Easy",
+      "why_different": "The signature is a personal authentication mark — a different authority device from a wax seal or plate numeral."
+    },
+    "collector_edition": {
+      "category": "Editorial/Print/Book",
+      "concept": "A centred ornamental certificate rectangle with flourish corners sits over a dimmed photo, reading 'COLLECTOR'S EDITION'.",
+      "visual_hierarchy": "Photo dimmed background; ornamental certificate block centred.",
+      "image_regions": "Full-bleed, dimmed",
+      "text_regions": "Certificate heading + small edition text inside the ornamental block",
+      "decorative_elements": [
+        "ornamental corner flourishes",
+        "certificate rectangle border"
+      ],
+      "best_use_cases": [
+        "Product launch",
+        "Announcement"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Ornamental flourish corners are a decorative vocabulary not used in any specimen, label, or plate template so far."
+    },
+    "limited_release": {
+      "category": "Editorial/Print/Book",
+      "concept": "A bold diagonal ribbon banner reading 'LIMITED RELEASE' crosses one corner of the photo at 45°, like a retail limited-stock sticker.",
+      "visual_hierarchy": "Photo full-bleed; diagonal ribbon dominates one corner.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Ribbon text only",
+      "decorative_elements": [
+        "45° diagonal corner ribbon"
+      ],
+      "best_use_cases": [
+        "Offer",
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Easy",
+      "why_different": "The only template using a 45° diagonal corner-ribbon banner — a retail sale-sticker convention absent elsewhere."
+    },
+    "numbered_print": {
+      "category": "Editorial/Print/Book",
+      "concept": "A giant, faint translucent numeral (like a fine-art edition number) watermarks part of the photo, with a small edition caption below.",
+      "visual_hierarchy": "Oversized low-opacity numeral behind/within the photo; small caption beneath.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Small edition caption, bottom",
+      "decorative_elements": [
+        "oversized translucent numeral watermark"
+      ],
+      "best_use_cases": [
+        "Product launch",
+        "Announcement"
+      ],
+      "implementation_complexity": "Easy",
+      "why_different": "Uses a giant NUMBER as the graphic statement, distinct from giant_type_overlay (a word) and asymmetric_monogram (a letter)."
+    },
+    "certificate_insert": {
+      "category": "Editorial/Print/Book",
+      "concept": "A formal certificate-of-authenticity panel sits as a co-equal zone beside the photo, with ornate double-rule border, seal placeholder, and signature line.",
+      "visual_hierarchy": "Photo ~60%, certificate panel ~40%, both equal-weight zones.",
+      "image_regions": "Confined to one zone",
+      "text_regions": "Formal certificate lettering in the other zone",
+      "decorative_elements": [
+        "ornate double-rule border",
+        "seal placeholder circle",
+        "signature line"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "The certificate is a full co-equal panel, not an overlay or badge — a genuine two-zone document split."
+    },
+    "publisher_cover": {
+      "category": "Editorial/Print/Book",
+      "concept": "Mimics a book's front cover — muted photo backdrop, centred title treatment upper-third, small publisher colophon icon at the bottom.",
+      "visual_hierarchy": "Muted photo backdrop; centred title dominant; colophon small and centred at base.",
+      "image_regions": "Full-bleed, muted/desaturated",
+      "text_regions": "Centred title block, upper third",
+      "decorative_elements": [
+        "publisher colophon icon",
+        "muted photo treatment"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "The publisher colophon is a book-trade trademark device, distinct from a brand monogram or wax seal."
+    },
+    "editor_note": {
+      "category": "Editorial/Print/Book",
+      "concept": "A single handwritten-style editorial note with an arrow points to one specific detail in the photo, like a proof correction mark.",
+      "visual_hierarchy": "Photo dominant with a side margin; one focused annotation pointing inward.",
+      "image_regions": "Most of the frame, one-side margin",
+      "text_regions": "Short handwritten note in the margin",
+      "decorative_elements": [
+        "hand-drawn arrow/underline"
+      ],
+      "best_use_cases": [
+        "Tips",
+        "Before after"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A single focused annotation pointing at one detail, unlike editorial_margin_notes' broader multi-annotation approach."
+    },
+    "book_jacket": {
+      "category": "Editorial/Print/Book",
+      "concept": "Simulates a full dust-jacket wrap — a spine-fold shadow near one edge, title block, and a sliver of 'back-cover' text peeking from the opposite edge.",
+      "visual_hierarchy": "Photo as cover art; spine-fold shadow; title upper area; blurb sliver at the far edge.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Title block + tiny wraparound blurb sliver",
+      "decorative_elements": [
+        "spine-fold shadow line",
+        "wraparound blurb sliver"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "Simulates a complete 3D book-jacket wrap (spine + back-cover peek) — more physically complete than folio_spread's flat two-page illusion."
+    },
+    "dust_cover": {
+      "category": "Editorial/Print/Book",
+      "concept": "A translucent protective sleeve appears to float slightly above the photo, with a visible raised edge lip and a shadow gap between the two layers.",
+      "visual_hierarchy": "Two physical layers: photo beneath, offset translucent sleeve above.",
+      "image_regions": "Beneath the sleeve layer",
+      "text_regions": "Minimal sans on the sleeve layer",
+      "decorative_elements": [
+        "translucent sleeve with edge lip",
+        "layered cast shadow"
+      ],
+      "best_use_cases": [
+        "Product launch",
+        "Announcement"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "A literal two-layer physical illusion with a shadow gap between them — distinct from any single-surface overlay or texture template."
+    },
+    "press_proof": {
+      "category": "Editorial/Print/Book",
+      "concept": "Replicates an unfinished newspaper press pull — uneven ink texture, a hand-drawn correction circle on one detail, and a rotated 'PROOF' stamp.",
+      "visual_hierarchy": "Photo with mottled ink texture; one correction mark as focal accent; stamp in a corner.",
+      "image_regions": "Full-bleed with texture",
+      "text_regions": "PROOF stamp only",
+      "decorative_elements": [
+        "uneven ink texture",
+        "hand-drawn correction circle",
+        "proof stamp"
+      ],
+      "best_use_cases": [
+        "Behind the scenes",
+        "Announcement"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Shows an unfinished/imperfect ink pull with a hand correction mark — an editorial-process narrative, unlike print_proof_markup's clean pre-press sheet."
+    },
+    "ink_bleed": {
+      "category": "Editorial/Print/Book",
+      "concept": "Caption typography renders with soft ink-bleed feathering at the letterforms' edges, as if printed on absorbent uncoated paper.",
+      "visual_hierarchy": "Photo full-bleed; caption is the sole decorative device via its own rendering.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Caption with bleed/feather rendering",
+      "decorative_elements": [
+        "ink-bleed feather texture on type only"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Tips"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "The entire decorative effect lives in how the type is rendered, not in any added shape, mark, or border."
+    },
+    "printing_marks": {
+      "category": "Editorial/Print/Book",
+      "concept": "A dense set of production marks — registration crosshairs at all corners, fold-marks at edge midpoints, colour-calibration dots — as if mid-production.",
+      "visual_hierarchy": "Photo full-bleed; production marks scattered functionally around the perimeter.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Small technical labels near marks",
+      "decorative_elements": [
+        "registration crosshairs",
+        "fold marks",
+        "calibration dots"
+      ],
+      "best_use_cases": [
+        "Behind the scenes",
+        "Announcement"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A denser complete mark-set than print_proof_markup's narrower crop+bar approach — reads as an in-progress sheet, not a finished proof."
+    },
+    "trim_guides": {
+      "category": "Editorial/Print/Book",
+      "concept": "A single dashed trim-line rectangle sits inset from the canvas edge with small corner tick marks, like a print bleed/trim guide.",
+      "visual_hierarchy": "Photo full-bleed with one inset dashed guide-rectangle.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Small labels at trim corners",
+      "decorative_elements": [
+        "dashed trim-guide rectangle",
+        "corner tick marks"
+      ],
+      "best_use_cases": [
+        "Behind the scenes",
+        "Announcement"
+      ],
+      "implementation_complexity": "Easy",
+      "why_different": "A single inset guide-rectangle (safe-zone indicator), simpler and more singular than printing_marks' multi-mark production sheet."
+    },
+    "color_proof": {
+      "category": "Editorial/Print/Book",
+      "concept": "A slim strip of colour swatches, each pulled from the photo's own palette and labelled with a colour code, runs along one edge.",
+      "visual_hierarchy": "Photo full-bleed; palette-derived swatch strip along one edge.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Small colour-code labels",
+      "decorative_elements": [
+        "palette-derived swatch strip with codes"
+      ],
+      "best_use_cases": [
+        "Behind the scenes",
+        "Product launch"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Swatches are derived from the actual photo's colours (data-extraction), unlike ateliers_swatch_strip's static brand palette."
+    },
+    "paper_texture": {
+      "category": "Editorial/Print/Book",
+      "concept": "A uniform uncoated-paper grain/tooth texture overlays the whole photo, giving it a matte print-on-paper feel, with a minimal corner caption.",
+      "visual_hierarchy": "Full photo with uniform grain; minimal caption corner.",
+      "image_regions": "Full-bleed with texture",
+      "text_regions": "Minimal corner caption",
+      "decorative_elements": [
+        "uniform fine paper-grain/tooth texture"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Tips"
+      ],
+      "implementation_complexity": "Easy",
+      "why_different": "The simplest device in this batch — a material/finish choice with no other graphic element, functioning purely as a texture treatment."
+    },
+    "radial_grid": {
+      "category": "Architectural",
+      "concept": "Concentric circular grid rings (not rectangular) radiate from a central point; the photo sits within one ring band, thin radial spokes divide the outer rings for captions.",
+      "visual_hierarchy": "Central point radiating outward through concentric rings.",
+      "image_regions": "Confined to one ring band",
+      "text_regions": "Outer ring segments, divided by radial spokes",
+      "decorative_elements": [
+        "concentric ring lines",
+        "radial spoke dividers"
+      ],
+      "best_use_cases": [
+        "Tips",
+        "Announcement"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "The first non-rectangular grid geometry in the library — circular/radial rather than rectilinear."
+    },
+    "spiral_grid": {
+      "category": "Architectural",
+      "concept": "A logarithmic spiral guide line (nautilus-shell proportion) traces through the composition; photo and caption sit at points along the spiral.",
+      "visual_hierarchy": "Elements placed along a spiral curve, largest near the spiral's centre.",
+      "image_regions": "Positioned along the spiral path",
+      "text_regions": "Positioned along the outer spiral arc",
+      "decorative_elements": [
+        "logarithmic spiral guide line"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "Uses spiral geometry as the placement guide, distinct from golden_ratio's straight rectangle subdivisions."
+    },
+    "modular_blocks": {
+      "category": "Architectural",
+      "concept": "Canvas divided into uneven rectangular modules of varying size (Mondrian-style), photo in the largest block, solid colour-fill blocks elsewhere.",
+      "visual_hierarchy": "Largest block is the photo; smaller blocks carry flat brand colours.",
+      "image_regions": "One large module",
+      "text_regions": "Small module, flush with block edge",
+      "decorative_elements": [
+        "uneven block subdivision",
+        "flat colour-fill modules"
+      ],
+      "best_use_cases": [
+        "Tips",
+        "Carousel"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Multiple solid-colour blocks coexist with the photo block — an uneven subdivision, not a uniform grid or single-module system."
+    },
+    "hex_grid": {
+      "category": "Architectural",
+      "concept": "A honeycomb hexagonal grid pattern clips the photo into a hexagon shape, with small surrounding hex cells carrying micro-icons.",
+      "visual_hierarchy": "Central hexagon photo surrounded by smaller icon hexes.",
+      "image_regions": "Hexagon mask, centred",
+      "text_regions": "Small labels in adjacent hex cells",
+      "decorative_elements": [
+        "honeycomb hex-grid pattern",
+        "micro-icons in cells"
+      ],
+      "best_use_cases": [
+        "Product launch",
+        "Tips"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "First hexagonal (6-sided) mask geometry in the library — a non-rectangular, non-circular polygon."
+    },
+    "diamond_grid": {
+      "category": "Architectural",
+      "concept": "45°-rotated rhombus/diamond modules tile part of the canvas; the photo is clipped into one diamond, others left as flat colour fills.",
+      "visual_hierarchy": "One diamond module is the photo; surrounding diamonds are colour blocks.",
+      "image_regions": "Diamond mask",
+      "text_regions": "Adjacent diamond module",
+      "decorative_elements": [
+        "45°-rotated rhombus tiling"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Tips"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A 45°-rotated rhombus tiling — a distinct polygon angle from hex_grid or any rectangular system."
+    },
+    "offset_columns": {
+      "category": "Architectural",
+      "concept": "Vertical columns of varying width run across the canvas, each column vertically offset (some pushed up, some down), creating a syncopated rhythm.",
+      "visual_hierarchy": "Photo occupies the tallest column; others are shorter and offset.",
+      "image_regions": "Tallest column",
+      "text_regions": "Shorter offset columns",
+      "decorative_elements": [
+        "vertically offset column rhythm"
+      ],
+      "best_use_cases": [
+        "Carousel",
+        "Tips"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A syncopated vertical-offset rhythm (columns at different heights) rather than aligned columns — a kinetic structural device."
+    },
+    "stepped_layout": {
+      "category": "Architectural",
+      "concept": "Content blocks cascade diagonally like architectural stepped terraces, each step slightly smaller, photo as the base/largest step.",
+      "visual_hierarchy": "Diagonal cascade from largest (photo) to smallest (caption).",
+      "image_regions": "Largest, base step",
+      "text_regions": "Smaller upper steps",
+      "decorative_elements": [
+        "diagonal stepped-terrace cascade"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Carousel"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A staircase cascade of decreasing blocks — a diagonal stepped hierarchy distinct from any flat grid or split."
+    },
+    "cantilever_layout": {
+      "category": "Architectural",
+      "concept": "One content block appears to project outward beyond its supporting base via offset shadow, simulating a cantilevered overhang; photo sits in the projecting block.",
+      "visual_hierarchy": "A projecting block (photo) appears structurally unsupported, floating past its base.",
+      "image_regions": "The projecting/overhanging block",
+      "text_regions": "The anchored base block",
+      "decorative_elements": [
+        "cantilever overhang shadow illusion"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "Simulates structural overhang physics via shadow and offset — an engineering illusion, not a decorative device."
+    },
+    "bridge_layout": {
+      "category": "Architectural",
+      "concept": "Two anchored content blocks on either edge are connected by a thin 'span' element crossing the negative space between them, like a bridge deck; caption sits on the span.",
+      "visual_hierarchy": "Two anchor points joined by a connecting span carrying the caption.",
+      "image_regions": "One anchor block",
+      "text_regions": "The connecting span",
+      "decorative_elements": [
+        "bridge-deck span line"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Tips"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Two independent anchor points joined by a connecting span — a structural-connection composition unlike any split or card."
+    },
+    "atrium_layout": {
+      "category": "Architectural",
+      "concept": "A central open 'void' (atrium) sits surrounded by a ring of small caption/detail blocks; photo in the atrium centre, lit via a soft top highlight.",
+      "visual_hierarchy": "Central lit void surrounded by a peripheral ring of detail blocks.",
+      "image_regions": "Central void, top-lit",
+      "text_regions": "Ring of small blocks around the perimeter",
+      "decorative_elements": [
+        "soft top-down atrium light highlight"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "A central lit void surrounded by a peripheral ring — a courtyard/atrium spatial logic, not a border or split."
+    },
+    "courtyard_frame": {
+      "category": "Architectural",
+      "concept": "Photo sits centred within a square 'courtyard' negative space, marked by four thin independent architectural corner posts rather than a continuous border.",
+      "visual_hierarchy": "Centred photo, boundary implied by 4 discrete corner posts.",
+      "image_regions": "Centred",
+      "text_regions": "Caption in the courtyard space beside the photo",
+      "decorative_elements": [
+        "four independent corner-post lines"
+      ],
+      "best_use_cases": [
+        "Product launch",
+        "Announcement"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Four independent corner-post markers (not a continuous border line) define the boundary — a post-and-lintel structural suggestion."
+    },
+    "roofline_frame": {
+      "category": "Architectural",
+      "concept": "An angled roofline silhouette (simple gable/pitched-roof shape) caps the top of the composition, photo beneath it like a building facade.",
+      "visual_hierarchy": "Roofline shape at top; photo as the 'facade' below.",
+      "image_regions": "Below the roofline, full width",
+      "text_regions": "Within the roofline gable shape",
+      "decorative_elements": [
+        "pitched-roof silhouette"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "An angled pitched-roof silhouette at the top edge — a specific architectural profile unlike any rectangular or circular framing."
+    },
+    "facade_pattern": {
+      "category": "Architectural",
+      "concept": "A repeating window-grid facade pattern (small rectangular 'window' cutouts in a regular rhythm) overlays part of the canvas at low opacity, photo visible through the windows.",
+      "visual_hierarchy": "Photo visible through a semi-transparent perforated overlay.",
+      "image_regions": "Behind the perforated pattern",
+      "text_regions": "Outside the perforated zone",
+      "decorative_elements": [
+        "repeating perforated window-grid overlay"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Tips"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "A repeating perforated facade pattern as a semi-transparent overlay mask — distinct from any single-mask or single-decoration template."
+    },
+    "steel_beam": {
+      "category": "Architectural",
+      "concept": "A bold horizontal or diagonal 'I-beam' graphic (with visible beam-flange linework) crosses the composition structurally, caption resting on the beam.",
+      "visual_hierarchy": "Photo full-bleed; heavy beam graphic crosses it, carrying the caption.",
+      "image_regions": "Full-bleed",
+      "text_regions": "On the beam graphic",
+      "decorative_elements": [
+        "I-beam flange linework"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "An industrial I-beam structural graphic as the caption-carrying device — a heavy engineering motif distinct from any thin rule or seam."
+    },
+    "blueprint_sheet": {
+      "category": "Architectural",
+      "concept": "The entire canvas background is a blueprint-blue field with white technical linework; photo inset as if it were a technical illustration within the sheet.",
+      "visual_hierarchy": "Full blueprint-coloured field; photo inset as one illustrated element within it.",
+      "image_regions": "Inset within the blueprint field",
+      "text_regions": "Technical linework labels around the photo",
+      "decorative_elements": [
+        "full blueprint-blue background",
+        "white technical linework"
+      ],
+      "best_use_cases": [
+        "Before after",
+        "Tips"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "The whole canvas commits to the blueprint colour/material (not a subtle overlay like floor_plan_overlay) — a complete material commitment."
+    },
+    "engineering_notes": {
+      "category": "Architectural",
+      "concept": "Small numbered technical callouts (1, 2, 3…) with leader lines point to specific parts of the photo, like an engineering drawing's numbered parts list.",
+      "visual_structure_note": "Multiple numbered leader-line callouts across the photo, each tied to a small parts-list entry.",
+      "image_regions": "Full-bleed with callout points",
+      "text_regions": "Numbered parts-list, margin",
+      "decorative_elements": [
+        "numbered leader-line callouts"
+      ],
+      "best_use_cases": [
+        "Before after",
+        "Tips"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Multiple NUMBERED callouts with a corresponding parts list, unlike measure_line_annotation's single leader line."
+    },
+    "technical_margin": {
+      "category": "Architectural",
+      "concept": "One full edge margin is dedicated to dense small technical specification text, like a drawing's title-block margin; photo occupies the main area.",
+      "visual_hierarchy": "Photo dominant; one dense text margin along an edge.",
+      "image_regions": "Main area",
+      "text_regions": "Full-length dense technical margin",
+      "decorative_elements": [
+        "title-block style dense margin text"
+      ],
+      "best_use_cases": [
+        "Tips",
+        "Announcement"
+      ],
+      "implementation_complexity": "Easy",
+      "why_different": "A dedicated verbose technical-text margin, distinct from spec_sheet_minimal's ultra-sparse single rule."
+    },
+    "plan_overlay": {
+      "category": "Architectural",
+      "concept": "A top-down floor-plan-style diagram showing actual room/zone shapes (filled or outlined polygons) overlays the photo at partial opacity.",
+      "visual_hierarchy": "Photo visible beneath filled zone-shapes representing spatial areas.",
+      "image_regions": "Full-bleed, beneath the plan shapes",
+      "text_regions": "Zone labels within each shape",
+      "decorative_elements": [
+        "filled/outlined room-zone polygons"
+      ],
+      "best_use_cases": [
+        "Behind the scenes",
+        "Tips"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "Shows actual room/zone shapes (not just linework), unlike floor_plan_overlay's single compass+label focus — a spatial zoning diagram."
+    },
+    "drafting_table": {
+      "category": "Architectural",
+      "concept": "The photo appears to rest at an angle on an illustrated drafting-table surface, with a T-square/ruler graphic laid across one edge.",
+      "visual_hierarchy": "Tilted work-surface illusion with a tool laid across it.",
+      "image_regions": "Tilted, on the 'table' surface",
+      "text_regions": "Beside the ruler graphic",
+      "decorative_elements": [
+        "tilted drafting-table surface",
+        "T-square/ruler graphic"
+      ],
+      "best_use_cases": [
+        "Behind the scenes",
+        "Announcement"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "Implies a physical tilted workspace with a tool laid on top — a workspace-object illusion distinct from any flat overlay."
+    },
+    "construction_panel": {
+      "category": "Architectural",
+      "concept": "Thick yellow-and-black hazard-stripe construction-site dividers separate the photo from a caption zone.",
+      "visual_hierarchy": "Photo and caption zone separated by a hazard-stripe divider bar.",
+      "image_regions": "One side of the divider",
+      "text_regions": "Other side of the divider",
+      "decorative_elements": [
+        "diagonal hazard-stripe divider"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Offer"
+      ],
+      "implementation_complexity": "Easy",
+      "why_different": "A hazard-stripe (diagonal yellow/black) divider is a construction-site safety motif unlike any other divider line in the library."
+    },
+    "serum_focus": {
+      "category": "Skincare/Beauty",
+      "concept": "A single serum droplet is illustrated mid-fall toward the photo's focal point, with a small ripple graphic marking the point of impact.",
+      "visual_hierarchy": "Droplet trajectory leads the eye to the impact point.",
+      "image_regions": "Full-bleed, impact point as focal detail",
+      "text_regions": "Caption below the impact ripple",
+      "decorative_elements": [
+        "falling droplet illustration",
+        "impact ripple"
+      ],
+      "best_use_cases": [
+        "Product launch",
+        "Before after"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Shows a droplet in motion with an impact moment — a narrative beat distinct from apothecary_pour's continuous flowing line."
+    },
+    "cream_texture": {
+      "category": "Skincare/Beauty",
+      "concept": "A dimensional, glossy swipe of cream-texture graphic partially overlays one corner of the photo, like a product texture smear on a lightbox.",
+      "visual_hierarchy": "Photo dominant; textured smear as a tactile accent in one corner.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Opposite the smear",
+      "decorative_elements": [
+        "dimensional glossy cream-texture smear"
+      ],
+      "best_use_cases": [
+        "Product launch",
+        "Tips"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "A rendered dimensional product-texture smear (not a flat graphic) — a tactile material rendering unique to this template."
+    },
+    "lipstick_swatch": {
+      "category": "Skincare/Beauty",
+      "concept": "A bold lipstick-swipe swatch shape with visible waxy stroke texture sits as a colour-block accent beside the photo.",
+      "visual_hierarchy": "Photo and swatch as two co-equal colour zones.",
+      "image_regions": "One zone",
+      "text_regions": "On or beside the swatch",
+      "decorative_elements": [
+        "waxy lipstick-swipe stroke shape"
+      ],
+      "best_use_cases": [
+        "Product launch",
+        "Offer"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A cosmetic swipe gesture with waxy stroke texture — a beauty-application gesture as the sole graphic device."
+    },
+    "brush_stroke": {
+      "category": "Skincare/Beauty",
+      "concept": "An expressive single brush-stroke shape (makeup-brush gesture) masks or accents part of the photo, with visible bristle-texture edges.",
+      "visual_hierarchy": "Organic irregular stroke shape cuts across the photo.",
+      "image_regions": "Masked by the stroke shape",
+      "text_regions": "Outside the stroke",
+      "decorative_elements": [
+        "bristle-edge brush-stroke mask"
+      ],
+      "best_use_cases": [
+        "Product launch",
+        "Tips"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "An organic expressive gesture shape (irregular bristle edges) — unlike any geometric or symmetric mask in the library."
+    },
+    "palette_board": {
+      "category": "Skincare/Beauty",
+      "concept": "A small eyeshadow-palette-style grid of colour swatches sits in a corner like a physical compact, each cell a brand colour, one 'swatched'.",
+      "visual_hierarchy": "Photo dominant; small compact-grid accent in a corner.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Small label beneath the palette",
+      "decorative_elements": [
+        "compact-style pressed-colour grid"
+      ],
+      "best_use_cases": [
+        "Product launch",
+        "Tips"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Mimics a physical cosmetic compact object (grid of pressed colour pans) — distinct from ateliers_swatch_strip's paint-deck strip."
+    },
+    "shade_selector": {
+      "category": "Skincare/Beauty",
+      "concept": "A horizontal shade gradient bar with a small selector/pointer marker indicates one shade along a spectrum, next to the photo.",
+      "visual_hierarchy": "Gradient bar with pointer as a compact accent beside the photo.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Shade name beside the pointer",
+      "decorative_elements": [
+        "gradient spectrum bar",
+        "selector pointer marker"
+      ],
+      "best_use_cases": [
+        "Product launch",
+        "Offer"
+      ],
+      "implementation_complexity": "Easy",
+      "why_different": "An interactive-feeling selector pointer on a gradient — implies a choice/configurator moment, a retail-UI reference."
+    },
+    "ingredient_circle": {
+      "category": "Skincare/Beauty",
+      "concept": "Small circular icons for 3-4 key ingredients orbit around the photo's edge like satellites, connected by thin orbital-path lines.",
+      "visual_hierarchy": "Photo centred; icons orbit at the periphery on visible paths.",
+      "image_regions": "Centred",
+      "text_regions": "Small labels beside each orbiting icon",
+      "decorative_elements": [
+        "orbital path lines",
+        "satellite ingredient icons"
+      ],
+      "best_use_cases": [
+        "Product launch",
+        "Tips"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Multiple satellite icons on orbital paths — a systemic/orbital diagram device, not a single reticle or static list."
+    },
+    "routine_calendar": {
+      "category": "Skincare/Beauty",
+      "concept": "A small 7-day calendar-week grid sits in a corner with 2-3 days marked/highlighted to indicate routine frequency.",
+      "visual_hierarchy": "Photo dominant; small calendar-week accent in a corner.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Day labels on the calendar grid",
+      "decorative_elements": [
+        "7-day calendar-week grid"
+      ],
+      "best_use_cases": [
+        "Tips",
+        "Product launch"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "An actual calendar-week object — a time/schedule reference distinct from any other diagram in the library."
+    },
+    "treatment_journey": {
+      "category": "Skincare/Beauty",
+      "concept": "A horizontal dotted path with 3-4 numbered milestone markers crosses the lower third, each marker representing a treatment stage.",
+      "visual_hierarchy": "Photo dominant; milestone path along the bottom.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Small labels at each milestone",
+      "decorative_elements": [
+        "dotted milestone path",
+        "numbered stage markers"
+      ],
+      "best_use_cases": [
+        "Before after",
+        "Tips"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A multi-stage process timeline with numbered milestones, distinct from runway_step_sequence's directional footstep cue."
+    },
+    "skin_layers": {
+      "category": "Skincare/Beauty",
+      "concept": "A cross-section illustration showing 2-3 translucent horizontal 'skin layer' bands overlays part of the photo, like a dermatological diagram.",
+      "visual_hierarchy": "Photo with a layered cross-section diagram inset over one area.",
+      "image_regions": "Full-bleed with the diagram inset",
+      "text_regions": "Layer labels beside each band",
+      "decorative_elements": [
+        "translucent layered cross-section bands"
+      ],
+      "best_use_cases": [
+        "Before after",
+        "Tips"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "A dermatological cross-section diagram — a scientific/anatomical illustration device distinct from any texture or material overlay."
+    },
+    "beauty_manifesto": {
+      "category": "Skincare/Beauty",
+      "concept": "A short editorial manifesto paragraph in large-leading serif type occupies half the canvas, photo the other half, with no other decoration.",
+      "visual_hierarchy": "Text and photo as two equal-weight halves.",
+      "image_regions": "One half",
+      "text_regions": "Other half, multi-sentence paragraph",
+      "decorative_elements": [],
+      "best_use_cases": [
+        "Announcement",
+        "Tips"
+      ],
+      "implementation_complexity": "Easy",
+      "why_different": "A substantial manifesto-length paragraph as an equal-weight half — distinct from any single-line caption/headline template."
+    },
+    "luxury_formula": {
+      "category": "Skincare/Beauty",
+      "concept": "An ingredient/formula percentage breakdown (nutrition-label style: '2% Retinol, 5% Niacinamide…') sits in a clean panel beside the photo.",
+      "visual_hierarchy": "Photo and formula-list panel as two zones.",
+      "image_regions": "One zone",
+      "text_regions": "Percentage-list panel",
+      "decorative_elements": [
+        "nutrition-label-style percentage list"
+      ],
+      "best_use_cases": [
+        "Product launch",
+        "Tips"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A literal percentage breakdown list — a data-transparency device distinct from ingredient_breakdown's looser callout style."
+    },
+    "texture_closeup": {
+      "category": "Skincare/Beauty",
+      "concept": "The photo is deliberately cropped to an extreme macro close-up of skin/product texture, with a small 'zoom level' indicator in the corner.",
+      "visual_hierarchy": "The entire frame IS the zoomed detail.",
+      "image_regions": "Full-bleed, extreme macro crop",
+      "text_regions": "Small zoom-indicator label",
+      "decorative_elements": [
+        "zoom-level indicator graphic"
+      ],
+      "best_use_cases": [
+        "Before after",
+        "Product launch"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "An extreme macro crop as the entire photo (not an inset detail like loupe_inspection's small zoom circle)."
+    },
+    "dropper_layout": {
+      "category": "Skincare/Beauty",
+      "concept": "The composition is masked so a serum-dropper-bottle silhouette shape frames part of the image, caption within the dropper silhouette.",
+      "visual_hierarchy": "Product-silhouette mask dominates the composition.",
+      "image_regions": "Within the dropper silhouette",
+      "text_regions": "Within the silhouette shape",
+      "decorative_elements": [
+        "dropper-bottle silhouette mask"
+      ],
+      "best_use_cases": [
+        "Product launch",
+        "Offer"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "Uses a product-silhouette shaped mask (a branded object outline) — distinct from any organic or geometric mask."
+    },
+    "powder_dust": {
+      "category": "Skincare/Beauty",
+      "concept": "A soft particle/dust graphic (loose powder scatter) drifts delicately across one corner of the photo.",
+      "visual_hierarchy": "Photo dominant; particulate texture as ambient atmosphere in one zone.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Away from the dust scatter",
+      "decorative_elements": [
+        "translucent particle/dust scatter"
+      ],
+      "best_use_cases": [
+        "Product launch",
+        "Announcement"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A scatter of loose particulate texture as ambient atmosphere — a particulate-physics effect unlike any solid graphic device."
+    },
+    "before_process_after": {
+      "category": "Skincare/Beauty",
+      "concept": "Three sequential zones show before/mid-process/after stages side by side with small stage-number tags.",
+      "visual_hierarchy": "Three equal zones in a left-to-right narrative sequence.",
+      "image_regions": "All three zones",
+      "text_regions": "Small stage-number tag per zone",
+      "decorative_elements": [
+        "three-stage sequence dividers",
+        "stage-number tags"
+      ],
+      "best_use_cases": [
+        "Before after"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A three-stage sequence (not two, like split_before_after) with the process stage explicitly shown — a richer narrative arc."
+    },
+    "clinic_protocol": {
+      "category": "Skincare/Beauty",
+      "concept": "A clinical checklist-style panel (numbered protocol steps with checkbox icons) sits beside the photo, styled like a medical treatment sheet.",
+      "visual_hierarchy": "Photo and checklist panel as two zones.",
+      "image_regions": "One zone",
+      "text_regions": "Checklist panel",
+      "decorative_elements": [
+        "checkbox icons",
+        "numbered protocol steps"
+      ],
+      "best_use_cases": [
+        "Tips",
+        "Before after"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A checkbox/checklist protocol format — a clinical-documentation convention distinct from any narrative or diagram template."
+    },
+    "beauty_prescription": {
+      "category": "Skincare/Beauty",
+      "concept": "Styled like a pharmacy prescription pad — perforated top edge, ruled lines, a small Rx-style icon, treatment written in script.",
+      "visual_hierarchy": "Prescription-pad object as the whole composition frame.",
+      "image_regions": "Within the ruled prescription area",
+      "text_regions": "Script treatment text on the ruled lines",
+      "decorative_elements": [
+        "perforated top edge",
+        "Rx icon",
+        "ruled prescription lines"
+      ],
+      "best_use_cases": [
+        "Tips",
+        "Product launch"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A prescription-pad object simulation — a specific pharmacy-document reference unlike any other template."
+    },
+    "treatment_plan": {
+      "category": "Skincare/Beauty",
+      "concept": "A Gantt-chart-style horizontal timeline bar breaks a treatment plan into labelled phases of varying length.",
+      "visual_hierarchy": "Photo dominant; Gantt bar beneath breaking the plan into phases.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Phase labels on the Gantt bar",
+      "decorative_elements": [
+        "Gantt-style phase timeline bar"
+      ],
+      "best_use_cases": [
+        "Tips",
+        "Before after"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "A project-management Gantt/timeline bar chart — a data-visualisation convention genuinely distinct from any calendar or journey-path device."
+    },
+    "consultation_sheet": {
+      "category": "Skincare/Beauty",
+      "concept": "Mimics an intake/consultation clipboard form — small form-field lines with tiny labels ('Concern:', 'Goal:') sit beside the photo.",
+      "visual_hierarchy": "Photo and form-field panel as two zones.",
+      "image_regions": "One zone",
+      "text_regions": "Labelled blank form-field lines",
+      "decorative_elements": [
+        "clipboard form-field lines"
+      ],
+      "best_use_cases": [
+        "Tips",
+        "Before after"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A literal form/clipboard-field simulation — an intake-document convention distinct from any list, checklist, or prescription pad."
+    },
+    "street_poster": {
+      "category": "Fashion Campaign",
+      "concept": "The photo is styled like a flyposted street poster, with slightly torn/weathered edges and a second underlying poster layer peeking from beneath one corner.",
+      "visual_hierarchy": "Weathered top poster with a hint of a previous layer beneath.",
+      "image_regions": "Full-bleed, torn-edge treatment",
+      "text_regions": "Weathered caption on the top layer",
+      "decorative_elements": [
+        "torn/weathered poster edges",
+        "peeking underlying poster layer"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Reels cover"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "Shows a second poster layer beneath the visible one — a street-signage archaeology effect unlike any single-layer template."
+    },
+    "billboard_mockup": {
+      "category": "Fashion Campaign",
+      "concept": "The photo is presented within an illustrated billboard structure (support poles, sky backdrop visible around it), viewed from a slight low angle.",
+      "visual_hierarchy": "Billboard structure and environment frame the photo as a scene.",
+      "image_regions": "Within the billboard panel",
+      "text_regions": "On the billboard face",
+      "decorative_elements": [
+        "billboard support poles",
+        "sky backdrop",
+        "low-angle perspective"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Reels cover"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "Places the photo within an illustrated environment (structure + sky + angle), not just a flat treatment on the photo itself."
+    },
+    "fashion_zine": {
+      "category": "Fashion Campaign",
+      "concept": "A DIY punk-zine aesthetic — photocopied-texture grain, cut-and-paste mismatched-size headline lettering, and a staple-mark graphic in the corner.",
+      "visual_hierarchy": "Raw photocopy texture with ransom-note headline dominant.",
+      "image_regions": "Full-bleed with photocopy grain",
+      "text_regions": "Mismatched cut-and-paste headline",
+      "decorative_elements": [
+        "photocopy grain texture",
+        "cut-and-paste lettering",
+        "staple-mark graphic"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Reels cover"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A DIY zine production language (ransom-note lettering + photocopy grain + staple) unlike any polished editorial device."
+    },
+    "campaign_foldout": {
+      "category": "Fashion Campaign",
+      "concept": "Simulates a tri-fold foldout ad — two faint vertical fold-crease lines divide the canvas into three unequal panels, main photo in the centre panel.",
+      "visual_hierarchy": "Three panels of unequal width, centre panel dominant.",
+      "image_regions": "Centre panel",
+      "text_regions": "Side panels",
+      "decorative_elements": [
+        "two vertical fold-crease lines"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Carousel"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Two fold creases creating three panels (a tri-fold), distinct from folio_spread's single two-page gutter fold."
+    },
+    "runway_sequence": {
+      "category": "Fashion Campaign",
+      "concept": "Three small sequential thumbnail frames along the bottom edge suggest a runway walk sequence (approach/turn/exit), main photo large above them.",
+      "visual_hierarchy": "Large hero photo dominant; small sequence strip subordinate beneath.",
+      "image_regions": "Main hero area + 3 small thumbnails",
+      "text_regions": "Small labels under each thumbnail",
+      "decorative_elements": [
+        "sequential thumbnail strip"
+      ],
+      "best_use_cases": [
+        "Reels cover",
+        "Carousel"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A highlight-reel/contact-strip hybrid using thumbnails (not full sprocket-strip frames like filmstrip_grid's decoration)."
+    },
+    "polaroid_wall": {
+      "category": "Fashion Campaign",
+      "concept": "Several small polaroid-style photo frames (white borders, blank caption strip) scatter/overlap at slight rotations behind or beside the main photo.",
+      "visual_hierarchy": "Scattered polaroid objects at varied rotations around the main image.",
+      "image_regions": "Main photo + several small polaroid insets",
+      "text_regions": "Blank caption strips on each polaroid",
+      "decorative_elements": [
+        "multiple rotated polaroid-frame objects"
+      ],
+      "best_use_cases": [
+        "Carousel",
+        "Behind the scenes"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "Multiple overlapping polaroid-object frames at varied rotations — a physical scattered-photos collage illusion, distinct from any single-frame template."
+    },
+    "editor_shortlist": {
+      "category": "Fashion Campaign",
+      "concept": "A small checklist of thumbnail alternates with one marked/circled as 'selected' sits beside the main photo, like an editor's contact-sheet pick.",
+      "visual_hierarchy": "Main photo dominant; small rejected-alternates strip beside it.",
+      "image_regions": "Main photo + small alternate thumbnails",
+      "text_regions": "Selection mark/circle label",
+      "decorative_elements": [
+        "circled 'selected' mark on one thumbnail"
+      ],
+      "best_use_cases": [
+        "Behind the scenes",
+        "Carousel"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Shows rejected alternates alongside the selected image (a curation-decision narrative), distinct from fashion_contact_sheet's broader proof board."
+    },
+    "designer_notes": {
+      "category": "Fashion Campaign",
+      "concept": "Handwritten-style annotations specifically about fabric/construction details point to parts of a garment in the photo.",
+      "visual_hierarchy": "Photo dominant with construction-specific annotations pointing inward.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Fabric/stitch annotation notes",
+      "decorative_elements": [
+        "hand-drawn construction-detail leader lines"
+      ],
+      "best_use_cases": [
+        "Behind the scenes",
+        "Tips"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Annotations reference garment construction specifically, a fashion-design-process specificity distinct from editor_note's general editorial comment."
+    },
+    "season_catalog": {
+      "category": "Fashion Campaign",
+      "concept": "A small seasonal icon (sun/snowflake/leaf) plus season name sits in a corner tag, catalog-style page number in the opposite corner.",
+      "visual_hierarchy": "Photo full-bleed; small seasonal tag + page number as corner accents.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Season name + page number",
+      "decorative_elements": [
+        "seasonal icon tag"
+      ],
+      "best_use_cases": [
+        "Carousel",
+        "Announcement"
+      ],
+      "implementation_complexity": "Easy",
+      "why_different": "A seasonal icon system (weather/season symbol) as the categorisation device — distinct from any text-only season tag."
+    },
+    "collection_board": {
+      "category": "Fashion Campaign",
+      "concept": "A moodboard-style arrangement of the main photo alongside 2-3 small colour/fabric swatch chips pinned around it, on a corkboard texture background.",
+      "visual_hierarchy": "Main photo with pinned swatch chips scattered around it on a textured backdrop.",
+      "image_regions": "Main photo, pinned",
+      "text_regions": "Small labels on swatch chips",
+      "decorative_elements": [
+        "corkboard texture background",
+        "pinned swatch chips"
+      ],
+      "best_use_cases": [
+        "Behind the scenes",
+        "Carousel"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "A corkboard/pinboard background with pinned elements — a physical pinboard illusion distinct from any flat swatch strip."
+    },
+    "style_manifesto": {
+      "category": "Fashion Campaign",
+      "concept": "A single bold declarative sentence in extra-large italic serif dominates the composition, photo cropped small beneath it as supporting evidence.",
+      "visual_hierarchy": "Text dominates above the photo in scale — an inverted hierarchy.",
+      "image_regions": "Small, subordinate",
+      "text_regions": "Large dominant declarative sentence",
+      "decorative_elements": [],
+      "best_use_cases": [
+        "Announcement",
+        "Reels cover"
+      ],
+      "implementation_complexity": "Easy",
+      "why_different": "Text dominates over the photo in scale — an inverted hierarchy distinct from every photo-dominant template."
+    },
+    "fashion_archive": {
+      "category": "Fashion Campaign",
+      "concept": "Styled like an archival fashion-house ledger page — faint ruled horizontal lines across the whole background, small archive reference code.",
+      "visual_hierarchy": "Full-canvas ledger-ruled background with photo and reference code overlaid.",
+      "image_regions": "Inset over the ruled background",
+      "text_regions": "Archive reference code",
+      "decorative_elements": [
+        "full-canvas ledger-ruled lines"
+      ],
+      "best_use_cases": [
+        "Behind the scenes",
+        "Announcement"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A full-canvas ledger-ruled-lines background — a bookkeeping/archive-paper texture distinct from any blank or textured field."
+    },
+    "agency_board": {
+      "category": "Fashion Campaign",
+      "concept": "A modeling-agency comp-card layout — small headshot plus 3 tiny stat lines (placeholder measurement style) beside the main photo.",
+      "visual_hierarchy": "Main photo dominant; comp-card stat block subordinate.",
+      "image_regions": "Main photo + small headshot inset",
+      "text_regions": "Stat-line list",
+      "decorative_elements": [
+        "comp-card stat lines"
+      ],
+      "best_use_cases": [
+        "Behind the scenes",
+        "Carousel"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A comp-card/stat-line format (agency talent-sheet convention) — a talent-representation document style unlike any other template."
+    },
+    "portfolio_case": {
+      "category": "Fashion Campaign",
+      "concept": "The photo appears to sit within an illustrated portfolio case/sleeve with a visible zipper or clasp graphic along one edge.",
+      "visual_hierarchy": "Case-object illusion frames the photo.",
+      "image_regions": "Within the case sleeve",
+      "text_regions": "On the case exterior",
+      "decorative_elements": [
+        "zipper/clasp hardware illustration"
+      ],
+      "best_use_cases": [
+        "Behind the scenes",
+        "Announcement"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "A zipper/clasp hardware illustration — a functional-hardware decorative vocabulary not used elsewhere."
+    },
+    "campaign_brief": {
+      "category": "Fashion Campaign",
+      "concept": "Styled like an internal brief document — small 'OBJECTIVE:', 'AUDIENCE:' field labels with short text sit in a side panel, photo the main visual.",
+      "visual_hierarchy": "Photo dominant; strategy-field panel subordinate.",
+      "image_regions": "Main area",
+      "text_regions": "Field-labelled brief panel",
+      "decorative_elements": [
+        "strategy-document field labels"
+      ],
+      "best_use_cases": [
+        "Behind the scenes",
+        "Tips"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Internal strategy-document field labels — a business-document convention distinct from consultation_sheet's clinical intake form."
+    },
+    "press_release": {
+      "category": "Fashion Campaign",
+      "concept": "Mimics a press-release header — 'FOR IMMEDIATE RELEASE' small caps line at the top with a dateline, photo below as the accompanying image.",
+      "visual_hierarchy": "Release header dominant at top; photo as supporting image beneath.",
+      "image_regions": "Lower area",
+      "text_regions": "Release header + dateline",
+      "decorative_elements": [
+        "press-release header convention"
+      ],
+      "best_use_cases": [
+        "Announcement"
+      ],
+      "implementation_complexity": "Easy",
+      "why_different": "A specific press-release document header convention (dateline + release line) — a newsroom document simulation."
+    },
+    "brand_manifest": {
+      "category": "Fashion Campaign",
+      "concept": "A numbered list of brand values/pillars ('1. Quality 2. Craft 3. Integrity') sits in a column beside the photo, sparse and declarative.",
+      "visual_hierarchy": "Photo and numbered values column as two zones.",
+      "image_regions": "One zone",
+      "text_regions": "Numbered values list",
+      "decorative_elements": [
+        "numbered values list"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Tips"
+      ],
+      "implementation_complexity": "Easy",
+      "why_different": "A numbered VALUES list (not a routine, checklist, or protocol) — a declarative brand-philosophy document distinct from any process-oriented list."
+    },
+    "lookbook_story": {
+      "category": "Fashion Campaign",
+      "concept": "Two photos (main + one small inset) are connected by a thin dotted narrative line suggesting sequence/story progression, with a small 'Chapter 1' style tag.",
+      "visual_hierarchy": "Main photo and inset linked by a visible narrative connector line.",
+      "image_regions": "Main photo + one small inset",
+      "text_regions": "Chapter tag near the connector",
+      "decorative_elements": [
+        "dotted narrative connector line",
+        "chapter tag"
+      ],
+      "best_use_cases": [
+        "Carousel",
+        "Announcement"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Connects two images via a narrative-sequence line with chapter tagging — a two-image story-linking device distinct from any single-image template."
+    },
+    "editorial_stack": {
+      "category": "Fashion Campaign",
+      "concept": "3-4 thin horizontal caption strips of decreasing width stack like a printed masthead hierarchy (headline/subhead/kicker/byline) above the photo.",
+      "visual_hierarchy": "Full typographic hierarchy stack above the photo.",
+      "image_regions": "Lower area",
+      "text_regions": "Stacked 4-tier hierarchy",
+      "decorative_elements": [
+        "decreasing-width caption strip stack"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Tips"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A complete masthead hierarchy (4 distinct text tiers of decreasing prominence) — more elaborate than any single-headline template."
+    },
+    "fashion_banner": {
+      "category": "Fashion Campaign",
+      "concept": "A slim horizontal banner strip crosses the photo with a repeating marquee-style visual pattern (same word repeating), like a runway show banner.",
+      "visual_hierarchy": "Photo full-bleed; repeating marquee strip crosses it.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Repeated word/phrase in the marquee strip",
+      "decorative_elements": [
+        "repeating marquee-style text pattern"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Reels cover"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A repeated marquee/ticker-style text pattern — a rhythmic repetition device unlike any single-instance caption."
+    },
+    "ios_widget": {
+      "category": "Digital UI",
+      "concept": "The photo sits within a rounded-corner iOS-style widget card with a small app-icon-style badge and subtle inner shadow, mimicking a home-screen widget.",
+      "visual_hierarchy": "Widget card frame dominant, photo fills it.",
+      "image_regions": "Within the rounded widget card",
+      "text_regions": "Small caption on the widget card",
+      "decorative_elements": [
+        "rounded widget card frame",
+        "app-icon badge",
+        "inner shadow"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Mimics a specific OS widget convention (rounded corners + app badge + inner shadow) — a recognisable platform-specific UI reference."
+    },
+    "android_cards": {
+      "category": "Digital UI",
+      "concept": "Material-Design-style elevated card with a coloured accent strip along one edge and a floating action button (FAB) circle graphic in the corner.",
+      "visual_hierarchy": "Elevated card frame with a FAB accent.",
+      "image_regions": "Within the elevated card",
+      "text_regions": "Caption on the card",
+      "decorative_elements": [
+        "Material elevation shadow",
+        "accent strip",
+        "FAB circle"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Material Design elevation + FAB circle — a distinct OS design-language reference (Android) from ios_widget's iOS convention."
+    },
+    "dashboard_clean": {
+      "category": "Digital UI",
+      "concept": "A minimal single-stat dashboard tile (big number, small label, thin sparkline) sits beside the photo.",
+      "visual_hierarchy": "Photo and single-stat tile as two zones.",
+      "image_regions": "One zone",
+      "text_regions": "Big number + label on the stat tile",
+      "decorative_elements": [
+        "thin sparkline trend graph"
+      ],
+      "best_use_cases": [
+        "Tips",
+        "Product launch"
+      ],
+      "implementation_complexity": "Easy",
+      "why_different": "Includes a sparkline (tiny trend graph) — a data-trend visualisation element not used in any other template."
+    },
+    "analytics_story": {
+      "category": "Digital UI",
+      "concept": "A vertical Instagram-story-style segmented progress bar sits at the very top (like story viewing progress dots), photo below.",
+      "visual_hierarchy": "Progress-dot bar at top, photo dominant below.",
+      "image_regions": "Below the progress bar",
+      "text_regions": "Caption below the photo",
+      "decorative_elements": [
+        "segmented story progress-bar dots"
+      ],
+      "best_use_cases": [
+        "Story",
+        "Reels cover"
+      ],
+      "implementation_complexity": "Easy",
+      "why_different": "A segmented progress-bar (social-app story UI convention) — a platform-chrome reference distinct from any print-based device."
+    },
+    "device_frame": {
+      "category": "Digital UI",
+      "concept": "The photo is shown inset within an illustrated smartphone device frame (rounded bezel, notch, side buttons), like a screenshot mockup.",
+      "visual_hierarchy": "Device bezel frame dominant, photo as the 'screen'.",
+      "image_regions": "Within the device screen area",
+      "text_regions": "Caption outside the device frame",
+      "decorative_elements": [
+        "device bezel",
+        "notch",
+        "side buttons"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "A full physical device bezel illustration (buttons, notch) — the most literal hardware-mockup device in the set."
+    },
+    "browser_tabs": {
+      "category": "Digital UI",
+      "concept": "Small browser tab shapes with tiny favicon dots sit along the top edge like open browser tabs, photo fills the 'page' below.",
+      "visual_hierarchy": "Tab row at top, photo as the page content below.",
+      "image_regions": "Below the tab row",
+      "text_regions": "Small text in the active tab",
+      "decorative_elements": [
+        "multiple browser tab shapes",
+        "favicon dots"
+      ],
+      "best_use_cases": [
+        "Behind the scenes",
+        "Tips"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Multiple tab shapes implying several open pages — a multi-tab browser-chrome reference distinct from a single window frame."
+    },
+    "desktop_cards": {
+      "category": "Digital UI",
+      "concept": "Several small floating rounded cards of varying size scatter loosely across a desktop-style backdrop, main photo the largest card.",
+      "visual_hierarchy": "Loosely scattered cards of varying size, largest is the photo.",
+      "image_regions": "Largest card",
+      "text_regions": "Smaller scattered cards",
+      "decorative_elements": [
+        "loosely scattered rounded cards"
+      ],
+      "best_use_cases": [
+        "Carousel",
+        "Behind the scenes"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Loose scattered cards of varying size (not aligned/stacked) — a casual desktop-clutter arrangement distinct from any aligned grid or stack."
+    },
+    "command_bar": {
+      "category": "Digital UI",
+      "concept": "A search/command-palette bar (rounded pill shape with a cursor-blink graphic and placeholder text) floats centred over the photo.",
+      "visual_hierarchy": "Command bar as a centred floating accent over the full-bleed photo.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Placeholder text in the command bar",
+      "decorative_elements": [
+        "rounded pill command bar",
+        "blinking cursor graphic"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Tips"
+      ],
+      "implementation_complexity": "Easy",
+      "why_different": "Includes a blinking-cursor detail implying live/active input — a micro-interaction illusion unique to this template."
+    },
+    "floating_panels": {
+      "category": "Digital UI",
+      "concept": "2-3 translucent glass panels of different sizes float at slightly different implied depths (via blur/shadow intensity) over the photo.",
+      "visual_hierarchy": "Multiple panels layered at different depths over the photo.",
+      "image_regions": "Full-bleed beneath the panels",
+      "text_regions": "Text on each glass panel",
+      "decorative_elements": [
+        "multi-depth translucent glass panels"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "Multiple panels at different implied depths (varying blur amounts) — a layered-depth illusion distinct from a single flat glass panel."
+    },
+    "timeline_cards": {
+      "category": "Digital UI",
+      "concept": "A small vertical timeline with dot markers and a connecting line runs down one side, each dot linked to a mini caption card.",
+      "visual_hierarchy": "Vertical timeline with linked caption cards down one side.",
+      "image_regions": "Main area",
+      "text_regions": "Mini cards at each timeline dot",
+      "decorative_elements": [
+        "vertical timeline with dot markers"
+      ],
+      "best_use_cases": [
+        "Tips",
+        "Carousel"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A vertical timeline with connected dot-markers (chronological UI convention) — distinct from treatment_journey's horizontal milestone path."
+    },
+    "search_results": {
+      "category": "Digital UI",
+      "concept": "Mimics a search-results list — photo as the top 'result' with a small URL-style breadcrumb line and 2 muted 'related result' placeholder lines below.",
+      "visual_hierarchy": "Top result (photo) dominant, muted related results beneath.",
+      "image_regions": "Top result area",
+      "text_regions": "Breadcrumb + muted related-result lines",
+      "decorative_elements": [
+        "URL-style breadcrumb",
+        "muted related-result placeholders"
+      ],
+      "best_use_cases": [
+        "Tips",
+        "Announcement"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Shows related/alternate results beneath the main one (implying a search context) — a discovery/browsing narrative distinct from any single-focus template."
+    },
+    "profile_layout": {
+      "category": "Digital UI",
+      "concept": "A circular avatar crop plus a small stat row (placeholder counter numbers) sits above the main photo grid, like a social profile header.",
+      "visual_hierarchy": "Profile header (avatar + stats) above the main content grid.",
+      "image_regions": "Avatar crop + main grid",
+      "text_regions": "Stat-row numbers",
+      "decorative_elements": [
+        "circular avatar crop",
+        "stat-counter row"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Carousel"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Includes a stat row (multiple small numeric counters side by side) — distinct from testimonial_card's avatar+quote focus with no stats."
+    },
+    "app_showcase": {
+      "category": "Digital UI",
+      "concept": "The photo is displayed within a rounded app-icon-shaped mask (superellipse/squircle), small app name label beneath.",
+      "visual_hierarchy": "Squircle-masked photo dominant, label beneath.",
+      "image_regions": "Squircle mask",
+      "text_regions": "App name label",
+      "decorative_elements": [
+        "squircle (superellipse) mask"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A squircle (superellipse) mask shape — a specific geometric mask distinct from circle, rectangle, or hexagon."
+    },
+    "widget_columns": {
+      "category": "Digital UI",
+      "concept": "Three narrow equal-width widget columns of different content types (photo, stat, caption) sit side by side like a widget dashboard row.",
+      "visual_hierarchy": "Three parallel equal-weight content-type columns.",
+      "image_regions": "One column",
+      "text_regions": "Stat column + caption column",
+      "decorative_elements": [
+        "three-column widget row dividers"
+      ],
+      "best_use_cases": [
+        "Tips",
+        "Carousel"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Three distinct simultaneous content types in parallel columns — a true multi-widget dashboard row, more complex than any two-zone split."
+    },
+    "quick_actions": {
+      "category": "Digital UI",
+      "concept": "A row of small rounded action-button chips (icon + label) sits beneath the photo like a UI quick-actions bar.",
+      "visual_hierarchy": "Photo dominant; action-chip row beneath.",
+      "image_regions": "Full-bleed above",
+      "text_regions": "Labels on each action chip",
+      "decorative_elements": [
+        "rounded action-button chip row"
+      ],
+      "best_use_cases": [
+        "Offer",
+        "Product launch"
+      ],
+      "implementation_complexity": "Easy",
+      "why_different": "A row of discrete actionable-looking button chips implies interactivity/choice — a UI-affordance device unlike any static label."
+    },
+    "status_board": {
+      "category": "Digital UI",
+      "concept": "A kanban-style board with 2-3 small labelled columns ('To Book' / 'In Progress' / 'Complete') with the photo as a card within one column.",
+      "visual_hierarchy": "Full kanban board structure, photo as one card within it.",
+      "image_regions": "Card within one kanban column",
+      "text_regions": "Column headers",
+      "decorative_elements": [
+        "kanban column dividers",
+        "card-in-column styling"
+      ],
+      "best_use_cases": [
+        "Behind the scenes",
+        "Tips"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "A full kanban board structure with the photo as a card inside one column — a project-management board metaphor entirely new to the set."
+    },
+    "notification_feed": {
+      "category": "Digital UI",
+      "concept": "2-3 stacked notification-style banners (rounded rectangles with small icon + timestamp) overlay the top of the photo like a phone lock-screen.",
+      "visual_hierarchy": "Stacked notification banners over the top of the full-bleed photo.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Notification text + timestamps",
+      "decorative_elements": [
+        "stacked notification banners with timestamps"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Tips"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Includes timestamps on each notification (implying real-time sequence) — a lock-screen stack, temporally specific unlike any static card."
+    },
+    "calendar_cards": {
+      "category": "Digital UI",
+      "concept": "A small month-calendar grid with one date circled sits beside the photo, appointment-booking style.",
+      "visual_hierarchy": "Photo and month-calendar grid as two zones.",
+      "image_regions": "One zone",
+      "text_regions": "Date labels on the calendar",
+      "decorative_elements": [
+        "month-calendar grid",
+        "circled date marker"
+      ],
+      "best_use_cases": [
+        "Offer",
+        "Tips"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "An actual calendar month grid (not just a week strip like routine_calendar) — a full monthly date-picker reference."
+    },
+    "insight_panel": {
+      "category": "Digital UI",
+      "concept": "A single 'insight' callout card with a lightbulb-style icon and one short tip sentence sits over a corner of the photo.",
+      "visual_hierarchy": "Photo dominant; small insight callout as a corner accent.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Short tip sentence in the callout",
+      "decorative_elements": [
+        "lightbulb-style insight icon"
+      ],
+      "best_use_cases": [
+        "Tips"
+      ],
+      "implementation_complexity": "Easy",
+      "why_different": "A single-tip callout with an icon specifically implying an insight/idea moment — a micro-content format distinct from any longer text panel."
+    },
+    "metric_dashboard": {
+      "category": "Digital UI",
+      "concept": "3 small circular progress-ring gauges (like fitness-app rings) sit in a row beneath the photo, each representing a different metric.",
+      "visual_hierarchy": "Photo dominant; ring-gauge row beneath as a metric summary.",
+      "image_regions": "Full-bleed above",
+      "text_regions": "Metric labels beside each ring",
+      "decorative_elements": [
+        "circular progress-ring gauges"
+      ],
+      "best_use_cases": [
+        "Before after",
+        "Tips"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "Multiple circular progress rings (not bars, not sparklines) — a specific fitness-app gauge convention, visually distinct from any bar or numeric stat."
+    },
+    "pressed_leaves_collection": {
+      "category": "Material/Texture",
+      "concept": "Several individually rendered pressed-leaf silhouettes (varied botanical shapes) scatter across one corner of the photo, overlapping slightly.",
+      "visual_hierarchy": "Photo dominant; scattered leaf collection as a corner accent.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Away from the leaf cluster",
+      "decorative_elements": [
+        "multiple overlapping pressed-leaf silhouettes"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Multiple distinct leaf silhouettes scattered (a naturalist collection), richer than pressed_botanical's single specimen + vellum texture."
+    },
+    "stone_layers": {
+      "category": "Material/Texture",
+      "concept": "The background shows stacked/layered flat stone slabs (like a zen rock stack) viewed from the side, photo inset as if resting atop the stack.",
+      "visual_hierarchy": "Balanced stone-stack illustration supporting the inset photo.",
+      "image_regions": "Inset atop the stack",
+      "text_regions": "Beside the stack",
+      "decorative_elements": [
+        "stacked/balanced rock-cairn illustration"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "A stacked/balanced rock-cairn implying physical equilibrium — a sculptural object, not a flat material texture like stone_texture."
+    },
+    "wood_grain": {
+      "category": "Material/Texture",
+      "concept": "Fine wood-grain texture with visible growth rings overlays the background field, with a thin darker 'knot' detail placed off-centre.",
+      "visual_hierarchy": "Photo with wood-texture field; knot as a focal accent.",
+      "image_regions": "Full-bleed with texture",
+      "text_regions": "Away from the knot",
+      "decorative_elements": [
+        "wood-grain growth rings",
+        "knot detail"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Tips"
+      ],
+      "implementation_complexity": "Easy",
+      "why_different": "Includes a wood knot detail (an organic irregularity marker) as a focal accent — distinct from any uniform texture field."
+    },
+    "linen_fold_dimensional": {
+      "category": "Material/Texture",
+      "concept": "Linen fabric texture is shown with a visible three-dimensional fold creating an actual raised fold silhouette across the frame.",
+      "visual_hierarchy": "Raised 3D fold silhouette crosses the composition.",
+      "image_regions": "Full-bleed with the fold",
+      "text_regions": "In the flatter zone beside the fold",
+      "decorative_elements": [
+        "raised 3D fold silhouette with light/shadow modelling"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "A raised 3D fold silhouette (light/shadow modelling a physical ridge), more dimensional than linen_press_fold's flat crease shadow."
+    },
+    "organic_shadow": {
+      "category": "Material/Texture",
+      "concept": "An irregular, organic-shaped soft shadow (like a plant's shadow) falls across part of the photo, implying an off-frame light source and object.",
+      "visual_hierarchy": "Photo dominant; irregular organic shadow as atmosphere.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Away from the shadow",
+      "decorative_elements": [
+        "irregular organic-shaped shadow"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Tips"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "An irregular organic shadow shape (implying an off-frame plant/object) rather than a geometric or architectural shadow."
+    },
+    "sunlight_window": {
+      "category": "Material/Texture",
+      "concept": "A window-pane-shaped light patch (with visible mullion cross-shadow) falls across the photo as if sunlight streams through a nearby window.",
+      "visual_hierarchy": "Photo dominant; window-light patch as atmosphere.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Away from the light patch",
+      "decorative_elements": [
+        "window-mullion cross-shadow light pattern"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Tips"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A specific window-mullion cross-shadow light pattern (a precise light-source geometry) rather than generic shadow_play."
+    },
+    "glass_reflection": {
+      "category": "Material/Texture",
+      "concept": "A subtle diagonal glass-reflection streak (light glare band) crosses the photo, as if viewed through glass.",
+      "visual_hierarchy": "Photo dominant; diagonal glare streak as atmosphere.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Away from the glare streak",
+      "decorative_elements": [
+        "diagonal glass-glare streak"
+      ],
+      "best_use_cases": [
+        "Product launch",
+        "Announcement"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A diagonal glare/reflection streak simulating viewing-through-glass (a shop window), distinct from glass_dashboard's UI glassmorphism panel."
+    },
+    "botanical_curve": {
+      "category": "Material/Texture",
+      "concept": "A single elegant curved botanical stem/vine line traces across the composition from corner to corner, minimal and linear.",
+      "visual_hierarchy": "One continuous curved vine line crossing the frame.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Beside the vine line",
+      "decorative_elements": [
+        "single continuous curved vine line"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Tips"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "One continuous curved vine line (a linear botanical gesture) versus pressed_leaves_collection's scattered discrete shapes."
+    },
+    "marble_plate": {
+      "category": "Material/Texture",
+      "concept": "A solid marble-texture plate/slab sits as a distinct panel beside the photo, full material presentation.",
+      "visual_hierarchy": "Photo and marble panel as two equal-weight zones.",
+      "image_regions": "One zone",
+      "text_regions": "On the marble panel",
+      "decorative_elements": [
+        "full solid marble-texture panel"
+      ],
+      "best_use_cases": [
+        "Product launch",
+        "Announcement"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A full solid marble panel (equal-weight zone) rather than marble_vein_inlay's thin edge-line accent."
+    },
+    "ceramic_tile": {
+      "category": "Material/Texture",
+      "concept": "A repeating small ceramic-tile grid pattern (grout lines visible) borders one edge of the photo, with handmade glaze-variation texture per tile.",
+      "visual_hierarchy": "Photo dominant; tile-grid border along one edge.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Away from the tile border",
+      "decorative_elements": [
+        "repeating tile grid with grout lines",
+        "per-tile glaze variation"
+      ],
+      "best_use_cases": [
+        "Product launch",
+        "Announcement"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A repeating tile-grid with grout lines and per-tile glaze variation — a handmade-tile material reference distinct from ceramic_frame's border-only concept."
+    },
+    "fabric_layers": {
+      "category": "Material/Texture",
+      "concept": "2-3 different fabric textures (linen, silk, wool swatches) are layered with slight overlap and offset, like a textile mood-board stack.",
+      "visual_hierarchy": "Layered fabric swatches as a compositional stack.",
+      "image_regions": "One zone",
+      "text_regions": "Beside the fabric stack",
+      "decorative_elements": [
+        "multiple layered fabric-type swatches"
+      ],
+      "best_use_cases": [
+        "Behind the scenes",
+        "Product launch"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Multiple distinct fabric types layered together (a textile combination), richer than any single-texture template."
+    },
+    "cotton_texture": {
+      "category": "Material/Texture",
+      "concept": "Soft cotton-fibre texture with visible fluffy fibre edges frames the photo's border organically.",
+      "visual_hierarchy": "Photo with a soft fluffy-textured border.",
+      "image_regions": "Centred, organically bordered",
+      "text_regions": "In the cotton-texture margin",
+      "decorative_elements": [
+        "fluffy cotton-fibre edge texture"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A soft fluffy fibre-edge texture (cotton) versus letterpress_deboss_card's rough torn-paper deckle edge — a different material entirely."
+    },
+    "earth_tones": {
+      "category": "Material/Texture",
+      "concept": "The composition is built around a warm earth-tone gradient wash (terracotta-to-sand) with a thin horizon-line graphic suggesting a landscape.",
+      "visual_hierarchy": "Gradient wash field with a horizon line as the sole structural anchor.",
+      "image_regions": "Small, within the landscape field",
+      "text_regions": "Above or below the horizon line",
+      "decorative_elements": [
+        "earth-tone gradient wash",
+        "horizon line"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Tips"
+      ],
+      "implementation_complexity": "Easy",
+      "why_different": "Includes a horizon line (landscape reference) — a geographic/environmental compositional anchor unlike any material swatch."
+    },
+    "natural_frame": {
+      "category": "Material/Texture",
+      "concept": "The photo is bordered by an illustrated arrangement of small natural objects (pebbles, twigs) forming an organic irregular frame edge.",
+      "visual_hierarchy": "Photo bordered by an assembled ring of natural objects.",
+      "image_regions": "Centred within the object border",
+      "text_regions": "Outside the natural-object border",
+      "decorative_elements": [
+        "assembled pebble/twig border objects"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "A frame made of discrete object illustrations (pebbles/twigs placed individually) rather than a continuous texture or line — an assembled-object border."
+    },
+    "shadow_grid": {
+      "category": "Material/Texture",
+      "concept": "A grid of small geometric shadow blocks (like light through a lattice/screen) falls across the photo in a repeating pattern.",
+      "visual_hierarchy": "Photo dominant; repeating lattice-shadow pattern as atmosphere.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Away from the densest shadow area",
+      "decorative_elements": [
+        "repeating lattice-light shadow grid"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Tips"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A repeating grid of shadow shapes (lattice-light pattern) — distinct from sunlight_window's single window-pane shadow."
+    },
+    "clay_pattern": {
+      "category": "Material/Texture",
+      "concept": "A hand-sculpted clay-relief pattern (organic bumps/ridges, like unglazed pottery) textures a border band around the photo.",
+      "visual_hierarchy": "Photo centred within a sculpted-relief border band.",
+      "image_regions": "Centred",
+      "text_regions": "Within the relief border band",
+      "decorative_elements": [
+        "sculpted clay-relief border texture"
+      ],
+      "best_use_cases": [
+        "Product launch",
+        "Announcement"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A sculpted relief pattern (dimensional bumps, not flat colour) — a tactile ceramic-craft texture distinct from ceramic_tile's flat glazed grid."
+    },
+    "sand_curves": {
+      "category": "Material/Texture",
+      "concept": "Soft flowing sand-dune-style curved lines (like wind-rippled sand) trace across the lower portion of the photo.",
+      "visual_hierarchy": "Photo dominant; dune curves as a lower-third accent.",
+      "image_regions": "Full-bleed",
+      "text_regions": "Upper area, away from the curves",
+      "decorative_elements": [
+        "wind-rippled dune curve lines"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Tips"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Wind-rippled dune curves (a specific natural erosion pattern) — distinct from water_surface's reflective-water concept."
+    },
+    "water_surface": {
+      "category": "Material/Texture",
+      "concept": "The photo's lower portion shows a reflective water-surface effect with a soft mirrored reflection of the upper image.",
+      "visual_hierarchy": "Upper photo mirrored softly in a lower water-reflection zone.",
+      "image_regions": "Full-bleed, with mirrored lower portion",
+      "text_regions": "In the reflection zone",
+      "decorative_elements": [
+        "mirrored water-reflection effect"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "An actual mirrored reflection of the photo itself (not just a ripple texture) — a reflection-doubling illusion unique to this template."
+    },
+    "leaf_overlay": {
+      "category": "Material/Texture",
+      "concept": "A single large leaf silhouette (translucent, oversized) overlays across the entire photo like a natural vignette/veil.",
+      "visual_hierarchy": "Oversized translucent leaf veils most of the frame.",
+      "image_regions": "Full-bleed beneath the veil",
+      "text_regions": "In the clearer negative space of the leaf shape",
+      "decorative_elements": [
+        "oversized translucent leaf veil"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "One oversized translucent leaf covering most of the frame (a veil effect) — distinct in scale from pressed_leaves_collection's small scattered collection."
+    },
+    "moss_texture": {
+      "category": "Material/Texture",
+      "concept": "Soft, dense moss-green micro-texture covers a border band around the photo, with tiny highlight dots suggesting dew.",
+      "visual_hierarchy": "Photo centred within a dewy moss-textured border.",
+      "image_regions": "Centred",
+      "text_regions": "Within the moss border band",
+      "decorative_elements": [
+        "dense moss micro-texture",
+        "dew highlight dots"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Includes dew-drop highlight details on the moss — a micro-detail (moisture) unlike any dry material texture in the set."
+    },
+    "cutout_overlap": {
+      "category": "Composition/Layout Algorithm",
+      "concept": "Two photo crops overlap each other at an angle with a hard-edge overlap boundary, like layered cut-paper shapes with no gradient blend.",
+      "visual_hierarchy": "Two overlapping crops, hard boundary where they meet.",
+      "image_regions": "Two overlapping photo crops",
+      "text_regions": "In the negative space beside the overlap",
+      "decorative_elements": [
+        "hard-edge cutout overlap boundary"
+      ],
+      "best_use_cases": [
+        "Carousel",
+        "Announcement"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Two overlapping photo crops with a hard edge boundary — a paper-cutout collage algorithm distinct from any single-photo template."
+    },
+    "floating_ribbons": {
+      "category": "Composition/Layout Algorithm",
+      "concept": "2-3 curved ribbon-shaped image crops (bent rectangles, not straight) float across the canvas at different angles.",
+      "visual_hierarchy": "Multiple curved image-ribbons floating at varied angles.",
+      "image_regions": "Within each curved ribbon shape",
+      "text_regions": "In the gaps between ribbons",
+      "decorative_elements": [
+        "curved ribbon-shaped image masks"
+      ],
+      "best_use_cases": [
+        "Carousel",
+        "Announcement"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "Curved (non-rectilinear) image-crop ribbons — a bent-shape masking algorithm unlike any straight-edge crop."
+    },
+    "angled_panels": {
+      "category": "Composition/Layout Algorithm",
+      "concept": "3-4 photo/colour panels are arranged at varied non-90° angles (like scattered cards on a table), overlapping slightly.",
+      "visual_hierarchy": "Independently-angled overlapping panels.",
+      "image_regions": "Largest angled panel",
+      "text_regions": "Smaller angled panels",
+      "decorative_elements": [
+        "scattered non-orthogonal panel arrangement"
+      ],
+      "best_use_cases": [
+        "Carousel",
+        "Behind the scenes"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Multiple panels at independent non-orthogonal angles (not a single rotation) — a scattered-table arrangement algorithm."
+    },
+    "wave_columns": {
+      "category": "Composition/Layout Algorithm",
+      "concept": "Vertical column dividers follow a gentle sine-wave curve instead of straight lines, photo clipped between two wave-curves.",
+      "visual_hierarchy": "Photo confined between two curved wave-boundaries.",
+      "image_regions": "Between the wave curves",
+      "text_regions": "Outside the wave-bounded zone",
+      "decorative_elements": [
+        "sine-wave curved column dividers"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Carousel"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "Sine-wave curved column boundaries (mathematical curve dividers) — a unique non-linear division algorithm."
+    },
+    "circular_story": {
+      "category": "Composition/Layout Algorithm",
+      "concept": "Content is arranged along a circular path — caption text curves around a circle — photo centred within the circle.",
+      "visual_hierarchy": "Circular text path surrounding a centred photo.",
+      "image_regions": "Centred circle",
+      "text_regions": "Curved along the circle's circumference",
+      "decorative_elements": [
+        "circular-path curved typography"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "Text that follows a circular curve (not straight lines) — a typographic-path algorithm distinct from any linear caption."
+    },
+    "ring_focus": {
+      "category": "Composition/Layout Algorithm",
+      "concept": "A thin ring outline surrounds a specific focal detail in the photo (not the whole photo), like a magnifying halo, rest of frame normal.",
+      "visual_hierarchy": "Localized ring highlight on one detail within an otherwise normal photo.",
+      "image_regions": "Full photo, with one ringed detail",
+      "text_regions": "Beside the ringed detail",
+      "decorative_elements": [
+        "localized focus-ring outline"
+      ],
+      "best_use_cases": [
+        "Before after",
+        "Tips"
+      ],
+      "implementation_complexity": "Easy",
+      "why_different": "The ring highlights a specific detail within the photo (not the whole frame) — a localized-focus algorithm distinct from loupe_inspection's separate zoomed inset."
+    },
+    "arc_sequence": {
+      "category": "Composition/Layout Algorithm",
+      "concept": "3-4 small content elements are arranged along a curved arc path (not a straight line or full circle), like beads on a curved wire.",
+      "visual_hierarchy": "Elements placed along a partial arc, largest at one end.",
+      "image_regions": "One position on the arc",
+      "text_regions": "Other positions on the arc",
+      "decorative_elements": [
+        "partial-arc placement path"
+      ],
+      "best_use_cases": [
+        "Carousel",
+        "Tips"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A partial arc (not full circle, not straight line) placement path — a distinct intermediate curve geometry."
+    },
+    "diagonal_crop": {
+      "category": "Composition/Layout Algorithm",
+      "concept": "The photo is cropped by a single bold diagonal line into two unequal triangular zones, one photo, one solid colour.",
+      "visual_hierarchy": "Two triangular zones split by one diagonal line.",
+      "image_regions": "One triangular zone",
+      "text_regions": "The solid-colour triangular zone",
+      "decorative_elements": [
+        "single bold diagonal crop line"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Offer"
+      ],
+      "implementation_complexity": "Easy",
+      "why_different": "A diagonal (not vertical/horizontal) hard split into triangular zones — a different cut angle than any existing split template."
+    },
+    "offset_window": {
+      "category": "Composition/Layout Algorithm",
+      "concept": "A rectangular 'window' crop of the photo is deliberately offset/shifted off-centre, overlapping and bleeding off the canvas edge; rest is solid colour.",
+      "visual_hierarchy": "Off-centre photo window partially cropped by the canvas edge.",
+      "image_regions": "Offset window, partially bleeding off-edge",
+      "text_regions": "In the surrounding solid-colour field",
+      "decorative_elements": [
+        "deliberately off-centre bleeding photo window"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Product launch"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "The photo window deliberately bleeds off the canvas edge on one side — an intentionally incomplete-window algorithm."
+    },
+    "stacked_columns": {
+      "category": "Composition/Layout Algorithm",
+      "concept": "3-4 thin vertical photo strips of the SAME image (different crops) stand side by side like sliced repetition.",
+      "visual_hierarchy": "Repeated slit-scan strips of the same photo.",
+      "image_regions": "All strips (same source image)",
+      "text_regions": "Small caption strip among them",
+      "decorative_elements": [
+        "repeated vertical slit-scan strips"
+      ],
+      "best_use_cases": [
+        "Carousel",
+        "Announcement"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "Repeats the same photo as multiple sliced vertical strips (a slit-scan repetition) — distinct from any single-instance photo template."
+    },
+    "vertical_story": {
+      "category": "Composition/Layout Algorithm",
+      "concept": "Content flows in a single continuous vertical reading path (headline → photo → caption → CTA) with a connecting thin vertical guide line, phone-story optimised.",
+      "visual_hierarchy": "Single unbroken vertical path with a visible connecting guide line.",
+      "image_regions": "Middle of the vertical path",
+      "text_regions": "Top (headline) and bottom (CTA) of the path",
+      "decorative_elements": [
+        "connecting vertical guide line"
+      ],
+      "best_use_cases": [
+        "Story",
+        "Reels cover"
+      ],
+      "implementation_complexity": "Easy",
+      "why_different": "A single unbroken vertical reading path with a literal connecting guide line — an explicit reading-order algorithm made visible."
+    },
+    "horizontal_story": {
+      "category": "Composition/Layout Algorithm",
+      "concept": "The same continuous-reading-path concept as vertical_story, but flowing left-to-right along a horizontal guide line, landscape-optimised.",
+      "visual_hierarchy": "Single unbroken horizontal path with a visible connecting guide line.",
+      "image_regions": "Middle of the horizontal path",
+      "text_regions": "Left (headline) and right (CTA) of the path",
+      "decorative_elements": [
+        "connecting horizontal guide line"
+      ],
+      "best_use_cases": [
+        "Carousel",
+        "Announcement"
+      ],
+      "implementation_complexity": "Easy",
+      "why_different": "The horizontal reading-path equivalent of vertical_story — an orthogonally opposite companion algorithm for landscape formats."
+    },
+    "broken_grid": {
+      "category": "Composition/Layout Algorithm",
+      "concept": "A regular grid is deliberately 'broken' by one element that overflows/breaks out of its assigned cell boundary, creating visual tension.",
+      "visual_hierarchy": "Regular grid with one rule-breaking overflow element.",
+      "image_regions": "The overflowing element",
+      "text_regions": "Within the regular grid cells",
+      "decorative_elements": [
+        "intentional grid-cell overflow"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Tips"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "Intentional rule-breaking (one element escapes its grid cell) — a tension/contrast algorithm, the opposite instinct of every orderly grid template."
+    },
+    "fragment_layout": {
+      "category": "Composition/Layout Algorithm",
+      "concept": "The photo appears shattered into 4-5 irregular polygon fragments with small gaps between them (like broken glass), reassembled with slight offsets.",
+      "visual_hierarchy": "Fragmented polygon pieces of the photo with visible gaps.",
+      "image_regions": "All fragments (same source image)",
+      "text_regions": "In a gap between fragments",
+      "decorative_elements": [
+        "shattered polygon fragment gaps"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Carousel"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "The photo itself is fragmented into irregular polygon pieces with gaps — a deconstruction algorithm unlike any single-mask template."
+    },
+    "negative_blocks": {
+      "category": "Composition/Layout Algorithm",
+      "concept": "Solid-colour blocks are cut OUT of the photo (punching holes to reveal a colour field behind), the inverse of a normal photo-on-background composition.",
+      "visual_hierarchy": "Photo with subtractive cut-out holes revealing colour beneath.",
+      "image_regions": "Photo minus the cut-out areas",
+      "text_regions": "Within the revealed colour cut-outs",
+      "decorative_elements": [
+        "subtractive cut-out colour blocks"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Offer"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "Colour blocks remove parts of the photo (negative/subtractive masking) rather than adding on top — an inverse figure-ground algorithm."
+    },
+    "mask_layers": {
+      "category": "Composition/Layout Algorithm",
+      "concept": "3 semi-transparent shape masks (circle, triangle, rectangle) overlap at different opacities across the photo, creating a layered Venn-like composition.",
+      "visual_hierarchy": "Multiple overlapping semi-transparent shape masks at varied opacity.",
+      "image_regions": "Visible through each mask shape differently",
+      "text_regions": "In the densest overlap zone or outside all masks",
+      "decorative_elements": [
+        "overlapping multi-shape semi-transparent masks"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Carousel"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "Multiple overlapping semi-transparent shape masks of different geometries simultaneously — a compound-mask algorithm distinct from any single-shape mask."
+    },
+    "pixel_frame": {
+      "category": "Composition/Layout Algorithm",
+      "concept": "The photo's border dissolves into visible pixelation/mosaic blocks that gradually increase in size toward the edge.",
+      "visual_hierarchy": "Sharp photo centre degrading into larger pixel blocks toward the edge.",
+      "image_regions": "Sharp centre, pixelated edge gradient",
+      "text_regions": "In the sharp centre zone",
+      "decorative_elements": [
+        "gradient pixelation toward the edge"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Reels cover"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A gradient pixelation effect (blocks increasing in size toward the edge) — a resolution-degradation algorithm unique to this template."
+    },
+    "floating_numbers": {
+      "category": "Composition/Layout Algorithm",
+      "concept": "Large translucent numerals in a scattered sequence (1-2-3) float at different positions/sizes across the photo, rather than one static numeral.",
+      "visual_hierarchy": "Scattered sequence of translucent numbers at varied scale.",
+      "image_regions": "Full-bleed beneath the numeral sequence",
+      "text_regions": "Small caption among the numbers",
+      "decorative_elements": [
+        "scattered translucent numeral sequence"
+      ],
+      "best_use_cases": [
+        "Carousel",
+        "Tips"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A scattered sequence of numbers at varied position/scale (not one static numeral like numbered_print) — implies counting/sequence across the frame."
+    },
+    "caption_cloud": {
+      "category": "Composition/Layout Algorithm",
+      "concept": "Several short caption fragments (single words/short phrases) scatter in a loose 'word cloud' arrangement of varying sizes across the photo.",
+      "visual_hierarchy": "Distributed word-cloud fragments of varying scale.",
+      "image_regions": "Full-bleed beneath the word cloud",
+      "text_regions": "Scattered word/phrase fragments",
+      "decorative_elements": [
+        "loose word-cloud text arrangement"
+      ],
+      "best_use_cases": [
+        "Announcement",
+        "Tips"
+      ],
+      "implementation_complexity": "Medium",
+      "why_different": "A word cloud (multiple independent text fragments at varying scale) rather than one coherent caption sentence — a distributed-text algorithm."
+    },
+    "outline_focus": {
+      "category": "Composition/Layout Algorithm",
+      "concept": "The photo is rendered mostly as a soft, desaturated wash with ONE specific object/detail rendered in full sharp outline/contour, everything else soft.",
+      "visual_hierarchy": "Soft desaturated field with one sharply outlined focal detail.",
+      "image_regions": "Full-bleed, mostly soft",
+      "text_regions": "In the soft desaturated field",
+      "decorative_elements": [
+        "selective sharp-contour outline on one detail"
+      ],
+      "best_use_cases": [
+        "Before after",
+        "Product launch"
+      ],
+      "implementation_complexity": "Hard",
+      "why_different": "Selective sharpness (one contour-outlined detail against an entirely soft/desaturated field) — a focus-isolation algorithm distinct from any texture or crop-based device."
+    }
   }
 }

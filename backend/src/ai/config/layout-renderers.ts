@@ -20,7 +20,12 @@ export type LayoutTemplate = {
   showFooter: boolean;
 };
 
-export const LAYOUT_TEMPLATES: Record<string, LayoutTemplate> = layoutTemplatesConfig as Record<string, LayoutTemplate>;
+// `_proposed_template_agent_library` in the JSON is a design catalog for a future Template Agent —
+// it has a different shape (concept/visual_structure/etc, not base/textTemplate/decoration) and is
+// excluded here so it can never be matched by resolveLayoutTemplate() or reach the renderer.
+const { _proposed_template_agent_library, ...activeLayoutTemplates } = layoutTemplatesConfig as any;
+
+export const LAYOUT_TEMPLATES: Record<string, LayoutTemplate> = activeLayoutTemplates as Record<string, LayoutTemplate>;
 
 export function resolveLayoutTemplate(layoutType: string): LayoutTemplate {
   return LAYOUT_TEMPLATES[layoutType] ?? LAYOUT_TEMPLATES['passepartout_text']!;
