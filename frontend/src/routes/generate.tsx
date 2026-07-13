@@ -1118,6 +1118,12 @@ const REFINE_OPTIONS = [
   "+ Create alternate version",
 ];
 
+// Turns a stored snake_case value (contentPillar, layoutType) into a readable label.
+function humanizeSlug(value?: string | null): string {
+  if (!value) return "";
+  return value.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
+
 // Maps the backend `generatedBy` tag to a friendly label. Unknown models fall
 // back to the raw tag, so labels always reflect what actually produced the option.
 const MODEL_LABELS: Record<string, string> = {
@@ -1425,6 +1431,23 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep, onRe
         </button>
       </div>
 
+      {/* Pillar / layout — shows why the Grid Analyzer picked this shape */}
+      {(contentItem.contentPillar || contentItem.layoutType) && (
+        <div className="flex flex-wrap gap-2">
+          {contentItem.contentPillar && (
+            <span className="inline-flex items-center gap-1.5 text-[9px] uppercase tracking-widest text-taupe border hairline px-2.5 py-1">
+              <span className="size-1.5 rounded-full bg-sage shrink-0" />
+              Pillar&nbsp;<span className="text-foreground font-semibold">{humanizeSlug(contentItem.contentPillar)}</span>
+            </span>
+          )}
+          {contentItem.layoutType && (
+            <span className="inline-flex items-center gap-1.5 text-[9px] uppercase tracking-widest text-taupe border hairline px-2.5 py-1">
+              Layout&nbsp;<span className="text-foreground font-semibold">{humanizeSlug(contentItem.layoutType)}</span>
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Option tabs */}
       {variants.length > 1 && (
         <div className="grid gap-px bg-border border hairline" style={{ gridTemplateColumns: `repeat(${variants.length}, 1fr)` }}>
@@ -1508,21 +1531,41 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep, onRe
                 ))}
               </div>
 
-              {/* Main image — 9:16 story ratio */}
-              <div className="relative flex-1 flex items-center justify-center bg-nude/10 p-4">
-                <div className="relative overflow-hidden shadow-lg" style={{ maxWidth: '240px', width: '100%' }}>
-                  <div className="aspect-[9/16] relative overflow-hidden">
-                  <img
-                    src={storyFrames[safeFrame]?.url}
-                    alt={storyFrames[safeFrame]?.label}
-                    className="absolute inset-0 w-full h-full object-cover"
-                  />
-                  <div className="absolute top-2 left-2 bg-foreground/70 px-2 py-0.5">
-                    <p className="text-[9px] uppercase tracking-widest text-offwhite">{safeFrame + 1} / {storyFrames.length}</p>
-                  </div>
-                  <div className="absolute top-2 right-2 bg-foreground/70 px-2 py-0.5">
-                    <p className="text-[9px] uppercase tracking-widest text-nude">{storyFrames[safeFrame]?.label}</p>
-                  </div>
+              {/* Main image — 9:16 story ratio, styled as an actual phone/story mockup */}
+              <div className="relative flex-1 flex items-center justify-center bg-nude/10 p-6">
+                <div
+                  className="relative overflow-hidden rounded-[22px] shadow-lg"
+                  style={{ maxWidth: '220px', width: '100%', border: '6px solid var(--foreground)' }}
+                >
+                  <div className="aspect-[9/16] relative overflow-hidden bg-foreground">
+                    <img
+                      src={storyFrames[safeFrame]?.url}
+                      alt={storyFrames[safeFrame]?.label}
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
+
+                    {/* Instagram-style segmented progress bar */}
+                    <div className="absolute top-2 left-2 right-2 flex gap-1 z-10">
+                      {storyFrames.map((_: any, i: number) => (
+                        <span key={i} className="flex-1 h-[2.5px] rounded-full bg-white/35 overflow-hidden">
+                          <span
+                            className="block h-full bg-white transition-all duration-300"
+                            style={{ width: i <= safeFrame ? '100%' : '0%' }}
+                          />
+                        </span>
+                      ))}
+                    </div>
+
+                    {/* Bottom scrim + frame label, like a story caption sticker */}
+                    <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-black/70 to-transparent" />
+                    <div className="absolute bottom-3 left-3 right-3">
+                      <p className="text-[8px] uppercase tracking-widest text-nude/80 mb-0.5">
+                        Frame {safeFrame + 1} of {storyFrames.length}
+                      </p>
+                      <p className="text-xs font-medium text-offwhite leading-snug">
+                        {storyFrames[safeFrame]?.label}
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
