@@ -315,6 +315,7 @@ export class AppointmentService {
 
     const brandDna = await this.prisma.brandDNA.findUnique({
       where: { unique_current_brand_dna: { tenantId, isCurrent: true } },
+      select: { brandDnaV2: true },
     });
     if (!brandDna) throw new BadRequestException('Brand DNA must be configured before using asset library images');
 
