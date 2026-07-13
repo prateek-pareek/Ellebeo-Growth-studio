@@ -476,39 +476,7 @@ function ContentCard({
           }
         />
         
-        {/* Navigation arrows directly on the grid card */}
-        {slides.length > 1 && !blocked && (
-          <>
-            {cardSlideIndex > 0 && (
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); setCardSlideIndex(cardSlideIndex - 1); }}
-                className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white size-5 flex items-center justify-center rounded-full text-[10px] font-bold transition-all shadow-md z-10"
-              >
-                ←
-              </button>
-            )}
-            {cardSlideIndex < slides.length - 1 && (
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); setCardSlideIndex(cardSlideIndex + 1); }}
-                className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white size-5 flex items-center justify-center rounded-full text-[10px] font-bold transition-all shadow-md z-10"
-              >
-                →
-              </button>
-            )}
-            
-            {/* Page Dots Indicator */}
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1 bg-black/40 px-2 py-1 rounded-full backdrop-blur-sm z-10">
-              {slides.map((_: any, idx: number) => (
-                <span
-                  key={idx}
-                  className={`size-1.5 rounded-full transition-all ${idx === cardSlideIndex ? "bg-white scale-110" : "bg-white/40"}`}
-                />
-              ))}
-            </div>
-          </>
-        )}
+        {/* Navigation arrows directly on the grid card removed as requested */}
 
         <div className="absolute top-3 left-3 z-10">
           <StatePill state={state} />
@@ -526,6 +494,21 @@ function ContentCard({
       <div className="flex flex-col flex-1 p-3">
         <p className="eyebrow mb-1">{item.type} · {item.pillar}</p>
         <h3 className="font-serif text-base mb-1.5 leading-snug">{item.title}</h3>
+        
+        {item.designDetails && !blocked && (
+          <div className="flex flex-wrap gap-1.5 mb-2.5 mt-1">
+            <span className="inline-flex items-center gap-1 bg-nude/40 text-foreground/70 text-[8px] uppercase tracking-widest px-1.5 py-0.5 rounded border border-border">
+              <span className="opacity-50">Base:</span> {item.designDetails.base?.replace(/_/g, ' ') || 'Standard'}
+            </span>
+            <span className="inline-flex items-center gap-1 bg-nude/40 text-foreground/70 text-[8px] uppercase tracking-widest px-1.5 py-0.5 rounded border border-border">
+              <span className="opacity-50">Text:</span> {item.designDetails.text?.replace(/_/g, ' ') || 'Standard'}
+            </span>
+            <span className="inline-flex items-center gap-1 bg-nude/40 text-foreground/70 text-[8px] uppercase tracking-widest px-1.5 py-0.5 rounded border border-border">
+              <span className="opacity-50">Deco:</span> {item.designDetails.deco?.replace(/_/g, ' ') || 'None'}
+            </span>
+          </div>
+        )}
+
         {!blocked ? (
           <p className="text-xs text-taupe leading-relaxed line-clamp-3 mb-3">{item.caption}</p>
         ) : (

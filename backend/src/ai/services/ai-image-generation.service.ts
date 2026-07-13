@@ -290,6 +290,7 @@ export class AiImageGenerationService {
     generatorModel?: 'gemini' | 'dalle' | 'both';
     backgroundBrandColor?: string;
     accentBrandColor?: string;
+    depthBrandColor?: string;
     moodboardVisionSummary?: string;
   }): Promise<{ url: string; variants?: { gemini?: string; dalle?: string } }> {
     const {
@@ -310,6 +311,7 @@ export class AiImageGenerationService {
       generatorModel = 'both',
       backgroundBrandColor = '#F7F4EF',
       accentBrandColor = '#D4A373',
+      depthBrandColor = '#1E1E1C',
       moodboardVisionSummary,
     } = params;
 
@@ -456,20 +458,19 @@ CRITICAL IMAGE REQUIREMENTS:
     const dalleTask = (async () => {
       if (generatorModel === 'gemini') return null;
       try {
-        console.log(`Generating GPT Image 2 image for slide ${index}...`);
+        console.log(`Generating GPT Image 1 image for slide ${index}...`);
         const response = await openai.images.generate({
-          model: 'gpt-image-2',
+          model: 'gpt-image-1',
           prompt: cleanPrompt,
-          size: outputSize === '1024x1536' ? '1024x1792' as any : '1024x1024',
+          size: outputSize === '1024x1536' ? '1024x1536' as any : '1024x1024',
         });
-        const url = response.data?.[0]?.url;
-        if (url) {
-          const buf = await downloadImageAsBuffer(url);
-          return buf.toString('base64');
+        const base64 = response.data?.[0]?.b64_json;
+        if (base64) {
+          return base64;
         }
         return null;
       } catch (err) {
-        console.warn(`GPT Image 2 generation failed for slide ${index}:`, err);
+        console.warn(`GPT Image 1 generation failed for slide ${index}:`, err);
         return null;
       }
     })();
@@ -478,7 +479,7 @@ CRITICAL IMAGE REQUIREMENTS:
 
     // Both models should generate - return both for technician to choose
     if (geminiResult || dalleResult) {
-      console.log(`✅ Image generation complete for slide ${index}:`);
+      console.log(`Image generation finished for slide ${index}:`);
       if (geminiResult) console.log(`   • Gemini: Generated ✅`);
       if (dalleResult) console.log(`   • DALL-E: Generated ✅`);
       if (!geminiResult) console.log(`   • Gemini: Failed ❌`);
@@ -512,6 +513,7 @@ CRITICAL IMAGE REQUIREMENTS:
       footerBrandToggle,
       backgroundBrandColor,
       accentBrandColor,
+      depthBrandColor,
       outputSize
     });
 
@@ -577,9 +579,10 @@ CRITICAL IMAGE REQUIREMENTS:
     generatorModel?: 'gemini' | 'dalle' | 'both';
     backgroundBrandColor?: string;
     accentBrandColor?: string;
+    depthBrandColor?: string;
     moodboardVisionSummary?: string;
   }): Promise<GeneratedSlide[]> {
-    const { afterPhotoUrl, beforePhotoUrl, concepts, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', moodboardVisionSummary, ...rest } = params;
+    const { afterPhotoUrl, beforePhotoUrl, concepts, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', depthBrandColor = '#1E1E1C', moodboardVisionSummary, ...rest } = params;
     const total = concepts.length;
 
     // Derive pool dynamically from JSON config — never goes stale when new layouts are added
@@ -648,6 +651,7 @@ CRITICAL IMAGE REQUIREMENTS:
             generatorModel,
             backgroundBrandColor,
             accentBrandColor,
+            depthBrandColor,
             moodboardVisionSummary
           });
           return {
@@ -688,9 +692,10 @@ CRITICAL IMAGE REQUIREMENTS:
     generatorModel?: 'gemini' | 'dalle' | 'both';
     backgroundBrandColor?: string;
     accentBrandColor?: string;
+    depthBrandColor?: string;
     moodboardVisionSummary?: string;
   }): Promise<GeneratedSlide[]> {
-    const { afterPhotoUrl, beforePhotoUrl, frames, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', moodboardVisionSummary, ...rest } = params;
+    const { afterPhotoUrl, beforePhotoUrl, frames, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', depthBrandColor = '#1E1E1C', moodboardVisionSummary, ...rest } = params;
     const total = frames.length;
 
     // Derive pool dynamically from JSON config — never goes stale when new layouts are added
@@ -757,6 +762,7 @@ CRITICAL IMAGE REQUIREMENTS:
             generatorModel,
             backgroundBrandColor,
             accentBrandColor,
+            depthBrandColor,
             moodboardVisionSummary
           });
           return {
@@ -796,6 +802,7 @@ CRITICAL IMAGE REQUIREMENTS:
     footerBrandToggle?: boolean;
     backgroundBrandColor?: string;
     accentBrandColor?: string;
+    depthBrandColor?: string;
     outputSize?: string;
   }): Promise<string> {
     const {
@@ -817,6 +824,7 @@ CRITICAL IMAGE REQUIREMENTS:
       footerBrandToggle = true,
       backgroundBrandColor = '#F7F4EF',
       accentBrandColor = '#D4A373',
+      depthBrandColor = '#1E1E1C',
       outputSize
     } = params;
 
@@ -978,6 +986,7 @@ CRITICAL IMAGE REQUIREMENTS:
       const template = resolveLayoutTemplate(layoutType);
 
       const baseResult = await BASE_TREATMENTS[template.base]!({
+        layoutType,
         imageBuffer,
         beforePhotoUrl,
         w, h,
@@ -1011,14 +1020,21 @@ CRITICAL IMAGE REQUIREMENTS:
         }
       };
 
-      // Determine text color using brand palette colors instead of binary white/black
-      const panelLuminance = getLuminance(validBrandColor);
-      const isLightPanel = panelLuminance > 175;
-      const dynamicTextColor = isLightPanel ? validBrandColor : validBackgroundColor;
+      // Determine text color using luminance to guarantee WCAG contrast
+      // Use the exact background color that the text will sit on depending on the layout type
+      const isFullBleed = template.base === 'full_bleed_base' || template.base === 'universal_dynamic_base' || layoutType === 'look_number_plate';
+      
+      // If it's full bleed, the text sits on the photo. We default to using depthBrandColor unless we calculate photo luminance.
+      // If it's bordered/split, the text sits on the validBackgroundColor.
+      const textSurfaceColor = isFullBleed ? validBrandColor : validBackgroundColor;
+      
+      const surfaceLuminance = getLuminance(textSurfaceColor);
+      const isLightSurface = surfaceLuminance > 150; // Threshold for legibility
+      const dynamicTextColor = isLightSurface ? depthBrandColor : validBackgroundColor; // Dark on Light, Light on Dark
 
       const footerLuminance = getLuminance(validSecondaryColor);
-      const isLightFooter = footerLuminance > 175;
-      const dynamicFooterTextColor = isLightFooter ? validBrandColor : validBackgroundColor;
+      const isLightFooter = footerLuminance > 150;
+      const dynamicFooterTextColor = isLightFooter ? depthBrandColor : validBackgroundColor;
 
       let posterTextColor = '#FFFFFF';
       if (template.textTemplate === 'poster_high_contrast') {
@@ -1046,7 +1062,7 @@ CRITICAL IMAGE REQUIREMENTS:
 
       // ── Step 3: Assemble SVG overlays — dispatched from layout-templates.config.json ──
       const textCtx = {
-        w, h, dynamicFontSize, dyOffset, escapedLines, lines, overlayText: finalOverlayText, maxLength,
+        layoutType, w, h, dynamicFontSize, dyOffset, escapedLines, lines, overlayText: finalOverlayText, maxLength,
         dynamicTextColor, posterTextColor, validBrandColor, validSecondaryColor,
         brandFont, bodyFont, escapedSpacedName, photoDataUri, escapeXml,
       };
@@ -1055,8 +1071,8 @@ CRITICAL IMAGE REQUIREMENTS:
         : '';
 
       const decoCtx = {
-        w, h, paddingX, paddingTop, paddingBottom, innerW, innerH,
-        validBrandColor, validSecondaryColor, brandFont, rawName, photoDataUri,
+        layoutType, w, h, paddingX, paddingTop, paddingBottom, innerW, innerH,
+        validBrandColor, validSecondaryColor, validBackgroundColor, brandFont, rawName, photoDataUri,
       };
       const visualAdditions = template.decoration
         ? (DECORATIONS[template.decoration]?.(decoCtx) ?? '')

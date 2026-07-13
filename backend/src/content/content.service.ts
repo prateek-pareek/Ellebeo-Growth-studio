@@ -71,7 +71,22 @@ export class ContentService {
       const jobPayload = r.generationJob?.jobPayload as any;
       const goal = jobPayload?.goal ?? null;
 
-      return { ...r, processedImageUrlFeed: imageUrlMap[r.id] ?? null, postFormat, goal };
+      let designDetails = null;
+      if (r.layoutType) {
+        try {
+          const legacyTemplates = require('../ai/config/layout-templates.config.json');
+          const newTemplates = require('../ai/config/template-library.json');
+          const t = legacyTemplates[r.layoutType] || newTemplates[r.layoutType] || {};
+          
+          let base = legacyTemplates[r.layoutType] ? t.base : (t.concept || t.category || 'Standard');
+          let text = legacyTemplates[r.layoutType] ? t.textTemplate : (t.visual_structure?.text_regions || 'Centered');
+          let deco = legacyTemplates[r.layoutType] ? t.decoration : (t.visual_structure?.decorative_elements || 'None');
+          
+          designDetails = { base, text, deco };
+        } catch (e) {}
+      }
+
+      return { ...r, processedImageUrlFeed: imageUrlMap[r.id] ?? null, postFormat, goal, designDetails };
     });
     return data;
   }

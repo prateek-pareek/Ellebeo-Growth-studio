@@ -76,15 +76,15 @@ export class ReelScriptChain {
 
     const systemPrompt = `You are writing a voiceover script for a social media Reel for ${brandDNA.businessName}.
 The voiceover must sound EXACTLY like this person when they speak:
-- Tone: ${brandDNA.primaryTone?.replace(/_/g, ' ') ?? 'warm and friendly'}
-- They refer to their clients as: "${brandDNA.clientTerminology ?? 'clients'}"
+- Tone: ${(brandDNA.primaryTone ?? '').replace(/_/g, ' ') || 'warm and friendly'}
+- They prefer to use this vocabulary: "${brandDNA.vocabularyPreferred.join(', ') || 'clients'}"
 - Their target client: ${brandDNA.primaryPersona ?? brandDNA.oneLiner ?? 'beauty lovers who value quality'}
 
 STRICT RULES:
 - Maximum ${maxWords} words (spoken at natural pace = 15 seconds maximum)
 - No filler words (um, uh, like, basically)
 - Must hook immediately — first 3 words must be compelling
-- Never use these words: ${brandDNA.blacklistedWords.join(', ')}
+- Never use these words: ${brandDNA.vocabularyBlacklist.join(', ')}
 - Written to be SPOKEN, not read — use natural speech rhythm`;
 
     const userPrompt = `Write a voiceover script for a Reel based on this content:
@@ -103,7 +103,7 @@ Return ONLY this JSON (no markdown):
 
 Set stability (0.0-1.0), similarityBoost (0.0-1.0), and style (0.0-1.0) based on the brand tone.
 Higher stability = more consistent/controlled delivery. Higher style = more expressive.
-For ${brandDNA.primaryTone.replace(/_/g, ' ')} tone: choose appropriate values.`;
+For ${(brandDNA.primaryTone ?? '').replace(/_/g, ' ')} tone: choose appropriate values.`;
 
     const response = await this.getModel().invoke([
       new SystemMessage(wrapSystemPrompt(systemPrompt)),
@@ -114,7 +114,7 @@ For ${brandDNA.primaryTone.replace(/_/g, ' ')} tone: choose appropriate values.`
       ? response.content
       : JSON.stringify(response.content);
 
-    const result = parseReelScriptOutput(content, brandDNA.primaryTone);
+    const result = parseReelScriptOutput(content, brandDNA.primaryTone ?? '');
 
     // Hard enforce word limit — truncate if model exceeded it
     if (result.wordCount > maxWords) {

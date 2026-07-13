@@ -36,6 +36,7 @@ function parseVisionOutput(raw: string): VisionAnalysisResult {
     imageQuality: validateImageQuality(obj['imageQuality']),
     facesDetected: Boolean(obj['facesDetected'] ?? false),
     settingDetected: String(obj['settingDetected'] ?? 'salon'),
+    framingType: validateFramingType(obj['framingType']),
   };
 
   if (!result.servicePerformed) {
@@ -43,6 +44,13 @@ function parseVisionOutput(raw: string): VisionAnalysisResult {
   }
 
   return result;
+}
+
+function validateFramingType(
+  val: unknown
+): 'macro' | 'portrait' | 'wide' | 'unknown' {
+  const valid = ['macro', 'portrait', 'wide', 'unknown'];
+  return valid.includes(String(val)) ? (val as 'macro' | 'portrait' | 'wide' | 'unknown') : 'unknown';
 }
 
 function validateImageQuality(
@@ -145,7 +153,8 @@ Return ONLY valid JSON — no markdown, no explanation, no preamble.`;
   "keyVisualDetail": "The single most striking, specific, caption-worthy detail in this image — the one thing that makes this result stand out. One short sentence. E.g. 'The way the colour melts from a deep root shadow into a bright, icy blonde at the ends' or 'The extreme lift on her inner corners makes her eyes look dramatically wider'. This should anchor the hook sentence.",
   "imageQuality": "excellent|good|acceptable|poor",
   "facesDetected": true,
-  "settingDetected": "salon chair|nail table|treatment bed|studio|outdoor|home — be specific"
+  "settingDetected": "salon chair|nail table|treatment bed|studio|outdoor|home — be specific",
+  "framingType": "macro|portrait|wide|unknown — macro is very close up, portrait is head/shoulders, wide is full body/room"
 }
 
 Be specific. Vague answers like 'hair was coloured' or 'skin looks better' are useless. Use the technical vocabulary a professional technician would use.`,

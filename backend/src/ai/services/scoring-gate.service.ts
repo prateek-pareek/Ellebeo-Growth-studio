@@ -73,53 +73,61 @@ export class ScoringGateService {
       textBox
     } = params;
 
-    // ── Layer 1: Face Embedding Similarity Check (Objective CV) ──
-    if (originalPhotoBuffer && generatedPhotoBuffer) {
-      // Calculate face structural similarity
-      let diff = 0;
-      const limit = Math.min(originalPhotoBuffer.length, generatedPhotoBuffer.length);
-      for (let i = 0; i < limit; i += 100) {
-        diff += Math.abs(originalPhotoBuffer[i] - generatedPhotoBuffer[i]);
-      }
-      const similarity = 1 - (diff / ((limit / 100) * 255));
+    // ── Layer 1 & 2: Face Protection & Overlap Auditor (Gemini Vision) ──
+    const geminiKey = process.env['GEMINI_API_KEY'];
+    if (originalPhotoBuffer && generatedPhotoBuffer && geminiKey) {
+      try {
+        const aiClient = new GoogleGenerativeAI(geminiKey);
+        const model = aiClient.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-      if (similarity < 0.992) {
-        const tag = 'face_distorted';
-        if (tenantId && prisma) {
-          await this.persistFailureLog(prisma, tenantId, 'CONTENT', tag, 0);
-        }
-        return {
-          passed: false,
-          score: 30,
-          failures: [`Face identity altered or distorted (Similarity: ${similarity.toFixed(4)} < 0.992)`],
-          reason: `Quality gate failed: Face feature verification mismatch.`,
-          failureType: 'CONTENT',
-          reasonTag: tag,
-        };
-      }
-    }
+        const prompt = `You are a strict compliance auditor for a medical aesthetics brand. Compare the original client photo with the final rendered post.
+Answer STRICTLY with a JSON object:
+{
+  "face_distorted": true/false,
+  "text_overlaps_face": true/false
+}
+"face_distorted": Is the client's face distorted, hallucinated, warped, or inappropriately cropped?
+"text_overlaps_face": Is any typography, text box, or decoration blocking the client's face?`;
 
-    // ── Layer 2: Geometrical Overlap Check (Rules Engine) ──
-    if (faceBox && textBox) {
-      const intersects = (r1: any, r2: any) => {
-        return !(r2.x > r1.x + r1.w ||
-          r2.x + r2.w < r1.x ||
-          r2.y > r1.y + r1.h ||
-          r2.y + r2.h < r1.y);
-      };
-      if (intersects(faceBox, textBox)) {
-        const tag = 'text_overlaps_face';
-        if (tenantId && prisma) {
-          await this.persistFailureLog(prisma, tenantId, 'LAYOUT', tag, 0);
-        }
-        return {
-          passed: false,
-          score: 50,
-          failures: ['Geometrical rule broken: Text bounding box overlaps detected face area.'],
-          reason: 'Quality gate failed: Layout boundary collision.',
-          failureType: 'LAYOUT',
-          reasonTag: tag,
+        const originalPart = {
+          inlineData: { data: originalPhotoBuffer.toString('base64'), mimeType: 'image/jpeg' },
         };
+        const generatedPart = {
+          inlineData: { data: generatedPhotoBuffer.toString('base64'), mimeType: 'image/png' },
+        };
+
+        const result = await model.generateContent([prompt, originalPart, generatedPart]);
+        const responseText = result.response.text().trim();
+        const cleaned = responseText.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
+        const parsed = JSON.parse(cleaned);
+
+        if (parsed.face_distorted) {
+          const tag = 'face_distorted';
+          if (tenantId && prisma) await this.persistFailureLog(prisma, tenantId, 'CONTENT', tag, 0);
+          return {
+            passed: false,
+            score: 30,
+            failures: ['Face Protection failed: The client face appears distorted, warped, or badly cropped.'],
+            reason: 'Quality gate failed: Face distortion detected.',
+            failureType: 'CONTENT',
+            reasonTag: tag,
+          };
+        }
+
+        if (parsed.text_overlaps_face) {
+          const tag = 'text_overlaps_face';
+          if (tenantId && prisma) await this.persistFailureLog(prisma, tenantId, 'LAYOUT', tag, 0);
+          return {
+            passed: false,
+            score: 50,
+            failures: ['Face Protection failed: Text or graphics are overlapping the focal subject face.'],
+            reason: 'Quality gate failed: Layout boundary collision.',
+            failureType: 'LAYOUT',
+            reasonTag: tag,
+          };
+        }
+      } catch (err) {
+        console.error('[Gemini Vision Face Protection Error]:', err);
       }
     }
 
@@ -161,7 +169,6 @@ export class ScoringGateService {
     }
 
     // ── Layer 3: Subjective Brand Check (Gemini Vision) ──
-    const geminiKey = process.env['GEMINI_API_KEY'];
     if (generatedPhotoBuffer && geminiKey) {
       try {
         const aiClient = new GoogleGenerativeAI(geminiKey);

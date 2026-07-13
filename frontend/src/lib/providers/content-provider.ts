@@ -22,6 +22,8 @@ export type ContentItem = {
   sourceAppointmentId?: string;
   updatedAt: string;
   platformVariants?: any;
+  layoutType?: string;
+  designDetails?: { base: string; text: string; deco: string } | null;
 };
 
 export type Appointment = {
@@ -109,6 +111,8 @@ function mapRow(row: any): { item: ContentItem; appointment: Appointment | null 
     sourceAppointmentId: row.appointmentId,
     updatedAt: row.updatedAt ? new Date(row.updatedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'Recently',
     platformVariants: row.platformVariants || null,
+    layoutType: row.layoutType || undefined,
+    designDetails: row.designDetails || null,
   };
 
   let appointment: Appointment | null = null;
