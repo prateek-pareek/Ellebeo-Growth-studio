@@ -9,7 +9,10 @@ export type BrandDnaView = {
   voiceTones: string[];
   powers: string[];
   palette: string[];
+  paletteLabeled: Array<{ role: string; hex: string }>;
   moodboard: string[];
+  moodboardLabeled: Array<{ url: string; usage: string }>;
+  assetLibrary: Array<{ id: string; url: string; assetType: string; usageRule: string; consentStatus: string }>;
   logoUrl: string;
   logoPosition: string;
   aestheticDirection: string;
@@ -53,6 +56,12 @@ function mapCloudRow(dna: any): BrandDnaView {
   const pillars = dna.pillars || [];
   const goals = dna.goals || [];
 
+  // brandDnaV2 carries the richer per-image moodboard usage tags and the full
+  // asset library — neither is mirrored to scalar columns the way palette/moodboardUrls are.
+  const v2 = typeof dna.brandDnaV2 === "string" ? JSON.parse(dna.brandDnaV2) : dna.brandDnaV2;
+  const v2Moodboard: any[] = Array.isArray(v2?.moodboard) ? v2.moodboard : [];
+  const v2AssetLibrary: any[] = Array.isArray(v2?.asset_library) ? v2.asset_library : [];
+
   const weight = pillars.length > 0 ? Math.floor(100 / pillars.length) : 0;
   const mappedPillars = pillars.map((p: any, i: number) => ({
     name: p.label,
@@ -84,9 +93,31 @@ function mapCloudRow(dna: any): BrandDnaView {
     powers: ["Caption tone and word choice", "Template recommendations", "Campaign goals and CTAs", "Calendar pacing and pillar mix", "Profile bio and service descriptions"],
     palette: [
       dna.primaryBrandColor,
-      dna.secondaryBrandColor
+      dna.secondaryBrandColor,
+      dna.backgroundBrandColor,
+      dna.accentBrandColor,
+      dna.depthBrandColor,
     ].filter(Boolean),
-    moodboard: [],
+    paletteLabeled: [
+      { role: "Primary", hex: dna.primaryBrandColor },
+      { role: "Secondary", hex: dna.secondaryBrandColor },
+      { role: "Background", hex: dna.backgroundBrandColor },
+      { role: "Accent", hex: dna.accentBrandColor },
+      { role: "Depth", hex: dna.depthBrandColor },
+    ].filter((c) => Boolean(c.hex)),
+    moodboard: dna.moodboardUrls || [],
+    moodboardLabeled: v2Moodboard.length > 0
+      ? v2Moodboard.filter((m) => m.storage_path).map((m) => ({ url: m.storage_path, usage: m.usage || "" }))
+      : (dna.moodboardUrls || []).map((url: string) => ({ url, usage: "" })),
+    assetLibrary: v2AssetLibrary
+      .filter((a) => a.storage_path)
+      .map((a) => ({
+        id: a.id || a.storage_path,
+        url: a.storage_path,
+        assetType: a.asset_type || "",
+        usageRule: a.usage_rule || "",
+        consentStatus: a.consent_status || "",
+      })),
     logoUrl: dna.logoUrl || "",
     logoPosition: dna.logoPosition || "bottom_right",
     aestheticDirection: dna.aestheticDirection || "",
