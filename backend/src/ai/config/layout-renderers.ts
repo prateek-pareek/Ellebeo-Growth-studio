@@ -10,6 +10,7 @@
 
 import sharp from 'sharp';
 import layoutTemplatesConfig from './layout-templates.config.json';
+import { processPortraitFit } from '../services/ai-image-generation.service';
 
 export type LayoutTemplate = {
   base: string;
@@ -42,7 +43,9 @@ export type BaseCtx = {
   paddingBottom: number;
   innerW: number;
   innerH: number;
+  validBrandColor: string;
   validSecondaryColor: string;
+  validBackgroundColor: string;
   downloadImageAsBuffer: (url: string) => Promise<Buffer>;
 };
 
@@ -54,31 +57,37 @@ export type BaseResult = {
   compositeRight: number;
 };
 
-const borderedDefault = (ctx: BaseCtx): BaseResult => ({
-  baseImage: sharp(ctx.imageBuffer).resize(ctx.innerW, ctx.innerH, { fit: 'cover' }),
+// Uses processPortraitFit: contain + blurred background — never crops faces on tall photos
+const borderedDefault = async (ctx: BaseCtx): Promise<BaseResult> => ({
+  baseImage: sharp(await processPortraitFit(ctx.imageBuffer, ctx.innerW, ctx.innerH, ctx.validBackgroundColor)),
   compositeTop: ctx.paddingTop,
   compositeBottom: ctx.paddingBottom,
   compositeLeft: ctx.paddingX,
   compositeRight: ctx.paddingX,
 });
 
-const fullBleedBase = (ctx: BaseCtx): BaseResult => ({
-  baseImage: sharp(ctx.imageBuffer),
-  compositeTop: ctx.paddingTop,
-  compositeBottom: ctx.paddingBottom,
-  compositeLeft: ctx.paddingX,
-  compositeRight: ctx.paddingX,
+// Full-bleed: resize to canvas dimensions so SVG overlay coordinates match
+const fullBleedBase = async (ctx: BaseCtx): Promise<BaseResult> => ({
+  baseImage: sharp(await processPortraitFit(ctx.imageBuffer, ctx.w, ctx.h, ctx.validBackgroundColor)),
+  compositeTop: 0,
+  compositeBottom: 0,
+  compositeLeft: 0,
+  compositeRight: 0,
 });
 
 export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResult>> = {
-  bordered_default: async (ctx) => borderedDefault(ctx),
+  bordered_default: async (ctx) => await borderedDefault(ctx),
 
-  full_bleed: async (ctx) => fullBleedBase(ctx),
+  full_bleed: async (ctx) => await fullBleedBase(ctx),
 
-  full_bleed_duotone: async (ctx) => fullBleedBase(ctx),
+  full_bleed_duotone: async (ctx) => {
+    const base = await fullBleedBase(ctx);
+    base.baseImage = base.baseImage.greyscale().tint(ctx.validBrandColor as any);
+    return base;
+  },
 
   solid_canvas_full: async (ctx) => ({
-    baseImage: sharp({ create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor } }),
+    baseImage: sharp({ create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validBackgroundColor } }),
     compositeTop: 0,
     compositeBottom: 0,
     compositeLeft: 0,
@@ -86,7 +95,7 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
   }),
 
   solid_canvas_bordered: async (ctx) => ({
-    baseImage: sharp({ create: { width: ctx.innerW, height: ctx.innerH, channels: 3, background: ctx.validSecondaryColor } }),
+    baseImage: sharp({ create: { width: ctx.innerW, height: ctx.innerH, channels: 3, background: ctx.validBackgroundColor } }),
     compositeTop: ctx.paddingTop,
     compositeBottom: ctx.paddingBottom,
     compositeLeft: ctx.paddingX,
@@ -99,7 +108,7 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
     const compositeTop = Math.floor(ctx.h * 0.05);
     const compositeLeft = Math.floor(ctx.w * 0.05);
     return {
-      baseImage: sharp(ctx.imageBuffer).resize(monoW, monoH, { fit: 'cover' }),
+      baseImage: sharp(await processPortraitFit(ctx.imageBuffer, monoW, monoH, ctx.validBackgroundColor)),
       compositeTop,
       compositeLeft,
       compositeBottom: ctx.h - monoH - compositeTop,
@@ -111,8 +120,8 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
     if (!ctx.beforePhotoUrl) return borderedDefault(ctx);
     try {
       const beforeBuffer = await ctx.downloadImageAsBuffer(ctx.beforePhotoUrl);
-      const leftHalf = await sharp(beforeBuffer).resize(Math.round(ctx.innerW / 2), ctx.innerH, { fit: 'cover' }).toBuffer();
-      const rightHalf = await sharp(ctx.imageBuffer).resize(Math.round(ctx.innerW / 2), ctx.innerH, { fit: 'cover' }).toBuffer();
+      const leftHalf = await processPortraitFit(beforeBuffer, Math.round(ctx.innerW / 2), ctx.innerH, ctx.validBackgroundColor);
+      const rightHalf = await processPortraitFit(ctx.imageBuffer, Math.round(ctx.innerW / 2), ctx.innerH, ctx.validBackgroundColor);
       const baseImage = sharp({
         create: { width: ctx.innerW, height: ctx.innerH, channels: 3, background: '#000000' },
       }).composite([
@@ -132,8 +141,8 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
         <svg width="${ctx.innerW}" height="${ctx.innerH}" xmlns="http://www.w3.org/2000/svg">
           <path d="M 0 ${ctx.innerH} L 0 ${Math.round(ctx.innerH * 0.42)} A ${Math.round(ctx.innerW / 2)} ${Math.round(ctx.innerH * 0.42)} 0 0 1 ${ctx.innerW} ${Math.round(ctx.innerH * 0.42)} L ${ctx.innerW} ${ctx.innerH} Z" fill="#fff"/>
         </svg>`;
-      const archPhoto = await sharp(ctx.imageBuffer)
-        .resize(ctx.innerW, ctx.innerH, { fit: 'cover' })
+      const fittedBuffer = await processPortraitFit(ctx.imageBuffer, ctx.innerW, ctx.innerH, ctx.validBackgroundColor);
+      const archPhoto = await sharp(fittedBuffer)
         .composite([{ input: Buffer.from(archMaskSvg), blend: 'dest-in' }])
         .png()
         .toBuffer();
@@ -188,7 +197,7 @@ export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
 
   translucent_left_panel: (ctx) => `
       <!-- Text inside the blurred brand side-panel -->
-      <text x="${ctx.w * 0.25}" y="${ctx.h / 2 - 40}" class="overlay-text text-centered" style="font-size: ${ctx.dynamicFontSize}px; fill: #FFFFFF;">
+      <text x="${ctx.w * 0.25}" y="${ctx.h / 2 - 40}" class="overlay-text text-centered" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.dynamicTextColor};">
         ${tspans(ctx, `${ctx.w * 0.25}`)}
       </text>`,
 
@@ -200,7 +209,7 @@ export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
 
   duotone_high_contrast: (ctx) => `
       <!-- High contrast centred text over the duotone-treated photo -->
-      <text x="${ctx.w / 2}" y="${ctx.h - 150}" class="overlay-text text-centered" style="fill: #FFFFFF; font-size: ${ctx.dynamicFontSize}px; letter-spacing: 4px;">
+      <text x="${ctx.w / 2}" y="${ctx.h - 150}" class="overlay-text text-centered" style="fill: ${ctx.dynamicTextColor}; font-size: ${ctx.dynamicFontSize}px; letter-spacing: 4px;">
         ${tspans(ctx, `${ctx.w / 2}`)}
       </text>`,
 
@@ -225,7 +234,7 @@ export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
     return `
       <!-- Oversized single-word graphic type statement behind the caption -->
       <text x="${ctx.w / 2}" y="${Math.round(ctx.h * 0.42)}" text-anchor="middle" font-family="'${ctx.brandFont}', Georgia, serif" font-weight="bold" font-size="${giantFontSize}px" fill="${ctx.validBrandColor}" fill-opacity="0.92">${giantWord}</text>
-      <text x="${ctx.w / 2}" y="${ctx.h - 150}" class="overlay-text text-centered" style="font-size: ${ctx.dynamicFontSize}px; fill: #FFFFFF;">
+      <text x="${ctx.w / 2}" y="${ctx.h - 150}" class="overlay-text text-centered" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.dynamicTextColor};">
         ${tspans(ctx, `${ctx.w / 2}`)}
       </text>`;
   },
@@ -234,10 +243,10 @@ export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
     const posterFontSize = ctx.dynamicFontSize + 34;
     return `
       <!-- Bold stacked headline top-aligned, vertical brand tag along the right edge -->
-      <text x="${ctx.w / 2}" y="${Math.round(ctx.h * 0.16)}" text-anchor="middle" font-family="'${ctx.brandFont}', system-ui, sans-serif" font-weight="bold" font-size="${posterFontSize}px" fill="#FFFFFF" letter-spacing="1px">
+      <text x="${ctx.w / 2}" y="${Math.round(ctx.h * 0.16)}" text-anchor="middle" font-family="'${ctx.brandFont}', system-ui, sans-serif" font-weight="bold" font-size="${posterFontSize}px" fill="${ctx.posterTextColor}" letter-spacing="1px">
         ${ctx.escapedLines.map((line, idx) => `<tspan x="${ctx.w / 2}" dy="${idx === 0 ? 0 : posterFontSize * 1.05}">${line}</tspan>`).join('')}
       </text>
-      <text x="${ctx.w - 30}" y="${ctx.h / 2}" text-anchor="middle" font-family="'${ctx.brandFont}', system-ui, sans-serif" font-weight="bold" font-size="22px" fill="#FFFFFF" fill-opacity="0.75" letter-spacing="6px" transform="rotate(90 ${ctx.w - 30} ${ctx.h / 2})">${ctx.escapedSpacedName}</text>`;
+      <text x="${ctx.w - 30}" y="${ctx.h / 2}" text-anchor="middle" font-family="'${ctx.brandFont}', system-ui, sans-serif" font-weight="bold" font-size="22px" fill="${ctx.validBrandColor}" fill-opacity="0.85" letter-spacing="6px" transform="rotate(90 ${ctx.w - 30} ${ctx.h / 2})">${ctx.escapedSpacedName}</text>`;
   },
 
   speech_bubble: (ctx) => {
@@ -263,11 +272,11 @@ export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
       <!-- Circular avatar crop of the same photo + name + quote card -->
       <defs><clipPath id="avatarClip"><circle cx="${avatarCx}" cy="${avatarCy}" r="${avatarR}" /></clipPath></defs>
       <image href="${ctx.photoDataUri}" x="${avatarCx - avatarR}" y="${avatarCy - avatarR}" width="${avatarR * 2}" height="${avatarR * 2}" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatarClip)" />
-      <circle cx="${avatarCx}" cy="${avatarCy}" r="${avatarR}" fill="none" stroke="#FFFFFF" stroke-width="4" />
-      <text x="${avatarCx + avatarR + 20}" y="${avatarCy - 5}" font-family="'${ctx.brandFont}', system-ui, sans-serif" font-weight="bold" font-size="24px" fill="#FFFFFF">${ctx.escapedSpacedName}</text>
-      <text x="${avatarCx + avatarR + 20}" y="${avatarCy + 26}" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-size="15px" fill="#FFFFFF" fill-opacity="0.85" letter-spacing="2px">VERIFIED CLIENT</text>
-      <rect x="60" y="${cardY}" width="${ctx.w - 120}" height="${70 + ctx.lines.length * ctx.dyOffset}" rx="18" fill="#000000" fill-opacity="0.45" />
-      <text x="90" y="${cardY + 42}" class="overlay-text text-left" style="font-size: ${ctx.dynamicFontSize}px; fill: #FFFFFF;">
+      <circle cx="${avatarCx}" cy="${avatarCy}" r="${avatarR}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="4" />
+      <text x="${avatarCx + avatarR + 20}" y="${avatarCy - 5}" font-family="'${ctx.brandFont}', system-ui, sans-serif" font-weight="bold" font-size="24px" fill="${ctx.posterTextColor}">${ctx.escapedSpacedName}</text>
+      <text x="${avatarCx + avatarR + 20}" y="${avatarCy + 26}" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-size="15px" fill="${ctx.posterTextColor}" fill-opacity="0.85" letter-spacing="2px">VERIFIED CLIENT</text>
+      <rect x="60" y="${cardY}" width="${ctx.w - 120}" height="${70 + ctx.lines.length * ctx.dyOffset}" rx="18" fill="${ctx.validSecondaryColor}" fill-opacity="0.9" />
+      <text x="90" y="${cardY + 42}" class="overlay-text text-left" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.dynamicTextColor};">
         ${tspans(ctx, '90')}
       </text>`;
   },
@@ -278,6 +287,132 @@ export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
       <text x="50" y="${Math.round(ctx.h * 0.42) + 40}" class="overlay-text text-left" style="font-size: ${ctx.dynamicFontSize + 4}px; fill: ${ctx.dynamicTextColor};">
         ${tspans(ctx, '50')}
       </text>`,
+
+  // ── Premium Calendar / Wax-Stamp Date Tile ──────────────────────────────
+  editorial_date_stamp: (ctx) => {
+    const now = new Date();
+    const monthNames = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+    const month = monthNames[now.getMonth()];
+    const day = String(now.getDate()).padStart(2, '0');
+    const year = String(now.getFullYear());
+    const cx = Math.round(ctx.w / 2);
+    const cy = Math.round(ctx.h / 2);
+    const r = Math.round(Math.min(ctx.w, ctx.h) * 0.28);
+    return `
+      <!-- Outer double-ring vintage wax seal -->
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="3" />
+      <circle cx="${cx}" cy="${cy}" r="${r - 12}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1.5" stroke-dasharray="6 4" />
+      <!-- Decorative cross lines inside the seal -->
+      <line x1="${cx - r + 30}" y1="${cy}" x2="${cx - r + 60}" y2="${cy}" stroke="${ctx.validBrandColor}" stroke-width="1.5" />
+      <line x1="${cx + r - 60}" y1="${cy}" x2="${cx + r - 30}" y2="${cy}" stroke="${ctx.validBrandColor}" stroke-width="1.5" />
+      <!-- Month arc text along the top of the seal -->
+      <text x="${cx}" y="${cy - r + 50}" text-anchor="middle" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-size="16px" letter-spacing="6px" fill="${ctx.validBrandColor}" fill-opacity="0.7">${month}</text>
+      <!-- Day: Large centered number -->
+      <text x="${cx}" y="${cy + 22}" text-anchor="middle" font-family="'${ctx.brandFont}', Georgia, serif" font-weight="bold" font-size="92px" fill="${ctx.dynamicTextColor}">${day}</text>
+      <!-- Year below the day -->
+      <text x="${cx}" y="${cy + 68}" text-anchor="middle" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-size="20px" letter-spacing="8px" fill="${ctx.validBrandColor}" fill-opacity="0.8">${year}</text>
+      <!-- Brand name at bottom of seal -->
+      <text x="${cx}" y="${cy + r - 28}" text-anchor="middle" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-size="11px" letter-spacing="5px" fill="${ctx.validBrandColor}" fill-opacity="0.6">${ctx.escapedSpacedName}</text>`;
+  },
+
+  // ── Premium Certificate Signature Card ──────────────────────────────────
+  technician_signature_card: (ctx) => {
+    const cx = Math.round(ctx.w / 2);
+    const cy = Math.round(ctx.h / 2);
+    const cardW = Math.round(ctx.w * 0.72);
+    const cardH = Math.round(ctx.h * 0.52);
+    const cardX = Math.round((ctx.w - cardW) / 2);
+    const cardY = Math.round((ctx.h - cardH) / 2);
+    // Generate a smooth, flowing SVG signature path from the brand name
+    const nameChars = ctx.escapedSpacedName.replace(/\s+/g, '').slice(0, 10);
+    const sigStartX = cardX + Math.round(cardW * 0.18);
+    const sigY = cardY + Math.round(cardH * 0.62);
+    const sigWidth = Math.round(cardW * 0.64);
+    // Create a believable signature curve using cubic beziers
+    const cp1x = sigStartX + Math.round(sigWidth * 0.2);
+    const cp1y = sigY - 35;
+    const cp2x = sigStartX + Math.round(sigWidth * 0.5);
+    const cp2y = sigY + 25;
+    const endX = sigStartX + sigWidth;
+    const endY = sigY - 8;
+    return `
+      <!-- Outer certificate double-border frame -->
+      <rect x="${cardX}" y="${cardY}" width="${cardW}" height="${cardH}" rx="4" fill="none" stroke="${ctx.validBrandColor}" stroke-width="2.5" />
+      <rect x="${cardX + 10}" y="${cardY + 10}" width="${cardW - 20}" height="${cardH - 20}" rx="2" fill="none" stroke="${ctx.validBrandColor}" stroke-width="0.8" />
+      <!-- Certificate header: brand tagline -->
+      <text x="${cx}" y="${cardY + 55}" text-anchor="middle" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-size="11px" letter-spacing="5px" fill="${ctx.validBrandColor}" fill-opacity="0.7">CERTIFICATE OF CARE</text>
+      <!-- Brand name as a large editorial wordmark -->
+      <text x="${cx}" y="${cardY + Math.round(cardH * 0.38)}" text-anchor="middle" font-family="'${ctx.brandFont}', Georgia, serif" font-weight="bold" font-size="38px" fill="${ctx.dynamicTextColor}" letter-spacing="2px">${ctx.escapedSpacedName}</text>
+      <!-- Thin horizontal divider line -->
+      <line x1="${cardX + 60}" y1="${cardY + Math.round(cardH * 0.46)}" x2="${cardX + cardW - 60}" y2="${cardY + Math.round(cardH * 0.46)}" stroke="${ctx.validBrandColor}" stroke-width="1" stroke-opacity="0.5" />
+      <!-- Hand-drawn flowing script signature path -->
+      <path d="M ${sigStartX} ${sigY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${endX} ${endY}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="2" stroke-linecap="round" />
+      <!-- Small flourish dot at the end -->
+      <circle cx="${endX + 6}" cy="${endY}" r="3" fill="${ctx.validBrandColor}" />
+      <!-- Footer: "Est. YEAR" -->
+      <text x="${cx}" y="${cardY + cardH - 28}" text-anchor="middle" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-size="12px" letter-spacing="4px" fill="${ctx.validBrandColor}" fill-opacity="0.6">EST. ${new Date().getFullYear()}</text>`;
+  },
+
+  // ── Randomized Always-On Text Overlays ──────────────────────────────────
+  randomized_overlay: (ctx) => {
+    // Generate a deterministic random index based on the text length and image size so it's stable per render
+    const seed = ctx.overlayText.length + ctx.w + ctx.h;
+    const styleIndex = seed % 6;
+    
+    switch (styleIndex) {
+      case 0: {
+        // Giant transparent word
+        const giantWord = ctx.escapeXml((ctx.lines[0] || ctx.overlayText).split(/\s+/)[0]!.toUpperCase().slice(0, 12));
+        return `
+          <text x="${ctx.w / 2}" y="${ctx.h / 2 + 50}" text-anchor="middle" font-family="'${ctx.brandFont}', Georgia, serif" font-weight="bold" font-size="160px" fill="${ctx.validBrandColor}" fill-opacity="0.15">${giantWord}</text>
+          <text x="${ctx.w / 2}" y="${ctx.h - 150}" class="overlay-text text-centered" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.dynamicTextColor};">
+            ${tspans(ctx, `${ctx.w / 2}`)}
+          </text>`;
+      }
+      case 1: {
+        // Bottom-left caption
+        return `
+          <text x="80" y="${ctx.h - 160}" class="overlay-text text-left" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.dynamicTextColor}; fill-opacity: 0.85;">
+            ${tspans(ctx, '80')}
+          </text>`;
+      }
+      case 2: {
+        // Vertical side text (right edge) + top left caption
+        return `
+          <text x="${ctx.w - 40}" y="${ctx.h / 2}" text-anchor="middle" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-weight="bold" font-size="18px" fill="${ctx.validBrandColor}" fill-opacity="0.6" letter-spacing="4px" transform="rotate(90 ${ctx.w - 40} ${ctx.h / 2})">${ctx.escapedSpacedName}</text>
+          <text x="60" y="120" class="overlay-text text-left" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.dynamicTextColor}; fill-opacity: 0.9;">
+            ${tspans(ctx, '60')}
+          </text>`;
+      }
+      case 3: {
+        // Top overlay banner
+        return `
+          <rect x="0" y="0" width="${ctx.w}" height="${120 + ctx.lines.length * ctx.dyOffset}" fill="${ctx.validSecondaryColor}" fill-opacity="0.8" />
+          <text x="${ctx.w / 2}" y="90" class="overlay-text text-centered" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.validBrandColor};">
+            ${tspans(ctx, `${ctx.w / 2}`)}
+          </text>`;
+      }
+      case 4: {
+        // Diagonal watermark text
+        return `
+          <text x="${ctx.w / 2}" y="${ctx.h / 2}" text-anchor="middle" transform="rotate(-30 ${ctx.w / 2} ${ctx.h / 2})" font-family="'${ctx.brandFont}', Georgia, serif" font-weight="bold" font-size="80px" fill="${ctx.validBrandColor}" fill-opacity="0.25">
+            ${ctx.escapeXml(ctx.overlayText.substring(0, 20))}
+          </text>
+          <text x="${ctx.w / 2}" y="${ctx.h - 130}" class="overlay-text text-centered" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.dynamicTextColor};">
+            ${tspans(ctx, `${ctx.w / 2}`)}
+          </text>`;
+      }
+      case 5:
+      default: {
+        // Center bold statement
+        return `
+          <rect x="50" y="${ctx.h / 2 - 60}" width="${ctx.w - 100}" height="${80 + ctx.lines.length * ctx.dyOffset}" rx="8" fill="${ctx.validBrandColor}" fill-opacity="0.9" />
+          <text x="${ctx.w / 2}" y="${ctx.h / 2}" class="overlay-text text-centered" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.validSecondaryColor};">
+            ${tspans(ctx, `${ctx.w / 2}`)}
+          </text>`;
+      }
+    }
+  },
 };
 
 // ── Decorations (Step 3 structural overlays) ────────────────────────────────
@@ -298,6 +433,14 @@ export type DecoCtx = {
 };
 
 export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
+  brand_scrim_heavy: (ctx) => `
+      <!-- Heavy brand-colored scrim to make backgrounds semi-transparent behind hero elements -->
+      <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" fill="${ctx.validBrandColor}" fill-opacity="0.55" />`,
+
+  dark_scrim_overlay: (ctx) => `
+      <!-- Deep luxury dark scrim overlay -->
+      <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" fill="${ctx.validBrandColor}" fill-opacity="0.32" />`,
+
   monogram_watermark: (ctx) => `
       <!-- Large single-character monogram watermark in negative space -->
       <text x="${ctx.w * 0.82}" y="${ctx.h * 0.76}" fill="${ctx.validSecondaryColor}" fill-opacity="0.07" font-family="'${ctx.brandFont}', Georgia, serif" font-size="300px" font-weight="bold" text-anchor="middle">

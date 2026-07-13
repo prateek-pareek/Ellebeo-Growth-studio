@@ -360,7 +360,7 @@ function ContentPage() {
           ) : filtered.length === 0 ? (
             <EmptyState onClear={clearFilters} hasFilters={hasActiveFilters} />
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
               {filtered.map((c) => (
                 <ContentCard
                   key={c.id}
@@ -452,6 +452,12 @@ function ContentCard({
       setConfirm(false);
     }
   };
+  const platformVariants = item.platformVariants;
+  const isCarousel = platformVariants?.type === "carousel";
+  const isStory = platformVariants?.type === "story";
+  const slides = isCarousel ? (platformVariants?.slides ?? []) : isStory ? (platformVariants?.frames ?? []) : [];
+  const [cardSlideIndex, setCardSlideIndex] = useState(0);
+
   const state   = item.state.toLowerCase();
   const blocked = state === "blocked";
   const isDraft = state === "draft" || state === "needs review";
@@ -459,21 +465,56 @@ function ContentCard({
   return (
     <article className="group flex flex-col border border-border bg-card shadow-sm hover:shadow-md transition-shadow overflow-hidden">
       {/* Image */}
-      <div className="aspect-[4/5] overflow-hidden bg-nude/30 relative border-b border-border">
+      <div className="aspect-[4/5] overflow-hidden bg-nude/30 relative border-b border-border hover:cursor-pointer" onClick={onReview}>
         <img
-          src={item.image}
+          src={slides.length > 0 ? slides[cardSlideIndex]?.url : item.image}
           alt={item.title}
           loading="lazy"
           className={
-            "w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.02] " +
+            "w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.01] " +
             (blocked ? "opacity-40 grayscale" : "")
           }
         />
-        <div className="absolute top-3 left-3">
+        
+        {/* Navigation arrows directly on the grid card */}
+        {slides.length > 1 && !blocked && (
+          <>
+            {cardSlideIndex > 0 && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setCardSlideIndex(cardSlideIndex - 1); }}
+                className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white size-5 flex items-center justify-center rounded-full text-[10px] font-bold transition-all shadow-md z-10"
+              >
+                ←
+              </button>
+            )}
+            {cardSlideIndex < slides.length - 1 && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setCardSlideIndex(cardSlideIndex + 1); }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white size-5 flex items-center justify-center rounded-full text-[10px] font-bold transition-all shadow-md z-10"
+              >
+                →
+              </button>
+            )}
+            
+            {/* Page Dots Indicator */}
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1 bg-black/40 px-2 py-1 rounded-full backdrop-blur-sm z-10">
+              {slides.map((_: any, idx: number) => (
+                <span
+                  key={idx}
+                  className={`size-1.5 rounded-full transition-all ${idx === cardSlideIndex ? "bg-white scale-110" : "bg-white/40"}`}
+                />
+              ))}
+            </div>
+          </>
+        )}
+
+        <div className="absolute top-3 left-3 z-10">
           <StatePill state={state} />
         </div>
         {blocked && (
-          <div className="absolute inset-0 flex items-center justify-center">
+          <div className="absolute inset-0 flex items-center justify-center z-10">
             <div className="bg-foreground/90 text-offwhite px-3 py-2 text-[10px] uppercase tracking-widest backdrop-blur">
               Locked · consent declined
             </div>
@@ -482,20 +523,20 @@ function ContentCard({
       </div>
 
       {/* Body */}
-      <div className="flex flex-col flex-1 p-4">
-        <p className="eyebrow mb-1.5">{item.type} · {item.pillar}</p>
-        <h3 className="font-serif text-lg mb-2 leading-snug">{item.title}</h3>
+      <div className="flex flex-col flex-1 p-3">
+        <p className="eyebrow mb-1">{item.type} · {item.pillar}</p>
+        <h3 className="font-serif text-base mb-1.5 leading-snug">{item.title}</h3>
         {!blocked ? (
-          <p className="text-sm text-taupe leading-relaxed line-clamp-3 mb-4">{item.caption}</p>
+          <p className="text-xs text-taupe leading-relaxed line-clamp-3 mb-3">{item.caption}</p>
         ) : (
-          <p className="text-sm text-taupe leading-relaxed mb-4">
+          <p className="text-xs text-taupe leading-relaxed mb-3">
             The client declined consent. We won't preview, schedule or publish this draft.
           </p>
         )}
       </div>
 
       {/* Meta strip */}
-      <div className="bg-muted border-t border-border px-4 py-3">
+      <div className="bg-muted border-t border-border px-3 py-2.5">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] uppercase tracking-widest text-taupe mb-2">
           {appointment && (
             <span>{appointment.clientName.split(" ")[0]} · {appointment.category}</span>

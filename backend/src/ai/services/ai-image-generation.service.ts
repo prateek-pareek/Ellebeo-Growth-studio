@@ -1,10 +1,10 @@
 // ============================================================================
-// ai-image-generation.service.ts — Multi-model Image Generation (Gemini > GPT-Image-1)
-// Takes real before/after photo + brand context → beautiful designed image
+// ai-image-generation.service.ts â€” Multi-model Image Generation (Gemini > GPT-Image-1)
+// Takes real before/after photo + brand context â†’ beautiful designed image
 //
 // CRITICAL ARCHITECTURE NOTE:
 // - Gemini (gemini-2.5-flash-image): Uses vision+generation. Treats input photo as
-//   reference context to preserve. SAFE for face/identity — will NOT beautify or alter faces.
+//   reference context to preserve. SAFE for face/identity â€” will NOT beautify or alter faces.
 // - GPT (gpt-image-1): Uses images.edit() which implies "enhance/edit" semantics.
 //   REQUIRES explicit face-preservation instructions in prompts to prevent facial alterations.
 //
@@ -18,7 +18,7 @@ import * as https from 'https';
 import * as http from 'http';
 import { GoogleGenAI } from '@google/genai';
 import sharp from 'sharp';
-import { resolveLayoutTemplate, BASE_TREATMENTS, TEXT_TEMPLATES, DECORATIONS } from '../config/layout-renderers';
+import { resolveLayoutTemplate, BASE_TREATMENTS, TEXT_TEMPLATES, DECORATIONS, LAYOUT_TEMPLATES } from '../config/layout-renderers';
 
 const openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
 
@@ -26,6 +26,10 @@ export interface GeneratedSlide {
   url: string;
   label: string;
   title: string;
+  variants?: {
+    gemini?: string;
+    dalle?: string;
+  };
 }
 
 export interface SlideInput {
@@ -48,6 +52,68 @@ export async function downloadImageAsBuffer(url: string): Promise<Buffer> {
     }).on('error', reject);
   });
 }
+
+export async function processPortraitFit(imageBuffer: Buffer, targetW: number, targetH: number, backgroundColor: string = '#F7F4EF'): Promise<Buffer> {
+  try {
+    const metadata = await sharp(imageBuffer).metadata();
+    const inputW = metadata.width || targetW;
+    const inputH = metadata.height || targetH;
+
+    let baseSharp = sharp(imageBuffer);
+
+    // Upscale if smaller than 80% of target canvas to prevent pixelation
+    if (inputW < targetW * 0.8 || inputH < targetH * 0.8) {
+      baseSharp = baseSharp.resize({
+        width: Math.max(inputW * 2, targetW),
+        height: Math.max(inputH * 2, targetH),
+        fit: 'inside',
+        kernel: 'lanczos3'
+      });
+      // Skip aggressive sharpening for very small images as it creates artifacts
+    } else {
+      // Apply aggressive HD sharpening, light color modulation, and gamma correction for premium output
+      baseSharp = baseSharp.sharpen({ sigma: 2.2, m1: 0.6, m2: 3.5 });
+    }
+
+    const enhancedBuffer = await baseSharp
+      .modulate({ saturation: 1.06, brightness: 1.02 })
+      .gamma(1.1)
+      .toBuffer();
+
+    // Always contain the original photo fully and layer it on a blurred version to prevent awkward zooming or cropping of faces
+    const blurBase = await sharp(enhancedBuffer)
+      .resize(targetW, targetH, { fit: 'cover' })
+      .blur(50)
+      .toBuffer();
+
+    // Tint the blur with the brand's background color to create a unified premium look
+    const colorOverlaySvg = `<svg width="${targetW}" height="${targetH}"><rect x="0" y="0" width="${targetW}" height="${targetH}" fill="${backgroundColor}" fill-opacity="0.45" /></svg>`;
+    const tintedBg = await sharp(blurBase)
+      .composite([{ input: Buffer.from(colorOverlaySvg), blend: 'over' }])
+      .png()
+      .toBuffer();
+
+    const containedImg = await sharp(enhancedBuffer)
+      .resize(targetW, targetH, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .toBuffer();
+
+    return await sharp(tintedBg)
+      .composite([{ input: containedImg }])
+      .png()
+      .toBuffer();
+  } catch (err) {
+    console.error('[Sharp Portrait Fit Error] Falling back to raw contain:', err);
+    try {
+      return await sharp(imageBuffer)
+        .resize(targetW, targetH, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .png()
+        .toBuffer();
+    } catch {
+      return imageBuffer;
+    }
+  }
+}
+
 
 // In-memory cache for fonts to prevent repeated network calls
 const fontCache: Record<string, string> = {};
@@ -85,7 +151,7 @@ async function fetchGoogleFontBase64(fontFamily: string): Promise<string> {
     const fontUrl = urlMatch[1];
     const fontBuffer = await downloadImageAsBuffer(fontUrl);
     const base64 = fontBuffer.toString('base64');
-    
+
     fontCache[fontFamily] = base64;
     return base64;
   } catch (err: any) {
@@ -112,16 +178,16 @@ function buildBeforeSlidePrompt(params: {
   const { overlayText, businessName, brandColor } = params;
   return `You are a social media designer adding a minimal text overlay to a BEFORE photo for "${businessName}".
 
-CRITICAL — this is the BEFORE image in a before/after transformation post:
-- Preserve the photo EXACTLY as it is — no color grading, no filters, no enhancements, no cinematic treatment
+CRITICAL â€” this is the BEFORE image in a before/after transformation post:
+- Preserve the photo EXACTLY as it is â€” no color grading, no filters, no enhancements, no cinematic treatment
 - The photo must look raw and natural so the contrast with the AFTER photo is powerful and believable
 - Do NOT add bokeh, light leaks, glamour lighting, or any beautification effect
 - Do NOT make the skin/hair/nails look better than reality
 
 ONLY ADD:
-- A small, clean text label "${overlayText}" — place it in the bottom-left corner
+- A small, clean text label "${overlayText}" â€” place it in the bottom-left corner
 - Use a thin semi-transparent dark pill or rectangle behind the text (rgb 0,0,0 at 55% opacity)
-- Text in clean white, small size, all-caps tracking — minimal, unobtrusive
+- Text in clean white, small size, all-caps tracking â€” minimal, unobtrusive
 - A tiny "BEFORE" badge in brand color ${brandColor} in the top-left corner
 
 CONTENT SAFETY: family-friendly, professional, no nudity or intimate areas.`;
@@ -145,18 +211,18 @@ This is a real photo of a ${serviceType}. Your task: overlay a clean, elegant te
 Brand palette: primary ${brandColor}, secondary ${secondaryColor}.
 Aesthetic direction: ${aesthetic || 'minimal, premium beauty editorial, high-fashion editorial'}.
 
-PHOTO PRESERVATION (ABSOLUTE — non-negotiable):
-- Preserve the original photo exactly as it is — this is the HERO of the image.
+PHOTO PRESERVATION (ABSOLUTE â€” non-negotiable):
+- Preserve the original photo exactly as it is â€” this is the HERO of the image.
 - The person in the photo must remain COMPLETELY UNCHANGED in every detail.
 - Do NOT modify ANY facial features, facial structure, skin tone, eye placement, nose shape, mouth, chin, or jawline.
 - Do NOT alter facial expressions or head position.
-- Do NOT retouch, airbrush, smooth, or beautify skin or faces — keep raw, real, and textured.
+- Do NOT retouch, airbrush, smooth, or beautify skin or faces â€” keep raw, real, and textured.
 - Do NOT apply any filters, color grading, or tone adjustments to the face or skin.
 - Do NOT change hair color, hair texture, or hair styling.
 - Do NOT modify body shape, proportion, or posture.
 - Do NOT crop, remove, or replace the background. Keep the natural environment, background wood, towels, and salon context fully intact.
 - Do NOT add bokeh, light leaks, glamour lighting, or any beautification effects.
-- No AI-generated faces, bodies, or features — only add design overlays to EXISTING elements.
+- No AI-generated faces, bodies, or features â€” only add design overlays to EXISTING elements.
 
 VISUAL DESIGN DIRECTION:
 - The text overlay must look premium, minimalist, and editorial.
@@ -219,7 +285,13 @@ export class AiImageGenerationService {
     brandFont?: string;
     bodyFont?: string;
     visualRanking?: string[];
-  }): Promise<string> {
+    capitalizationRule?: string;
+    footerBrandToggle?: boolean;
+    generatorModel?: 'gemini' | 'dalle' | 'both';
+    backgroundBrandColor?: string;
+    accentBrandColor?: string;
+    moodboardVisionSummary?: string;
+  }): Promise<{ url: string; variants?: { gemini?: string; dalle?: string } }> {
     const {
       photoUrl, beforePhotoUrl, overlayText, index, isFirst, isLast, isBeforePhoto,
       tenantId, businessName, brandColor,
@@ -227,49 +299,56 @@ export class AiImageGenerationService {
       aesthetic = 'minimal editorial premium beauty',
       serviceType = 'beauty treatment',
       outputSize = '1024x1024' as '1024x1024' | '1024x1536',
+      layoutType = 'passepartout_text',
       customPrompt,
       totalSlides = 4,
-      layoutType = 'passepartout_text',
       brandFont,
       bodyFont,
-      visualRanking = []
+      visualRanking = [],
+      capitalizationRule = 'uppercase',
+      footerBrandToggle = true,
+      generatorModel = 'both',
+      backgroundBrandColor = '#F7F4EF',
+      accentBrandColor = '#D4A373',
+      moodboardVisionSummary,
     } = params;
 
-    const prompt = customPrompt || (isBeforePhoto
-      ? buildBeforeSlidePrompt({ overlayText: '', businessName, brandColor })
-      : buildSlidePrompt({
-        overlayText: '',
-        businessName,
-        brandColor,
-        secondaryColor,
-        aesthetic,
-        serviceType,
+    // Fast-path: Skip AI image generation entirely for text-only editorial layouts
+    if (layoutType === 'text_only_editorial') {
+      console.log(`[TEXT ONLY EDITORIAL] Bypassing AI image generator for slide ${index} and creating solid brand colored tile.`);
+      const brandedBase64 = await this.overlayBrandingAndText({
+        base64Image: '',
+        overlayText,
         isFirst,
         isLast,
-      }));
+        brandColor,
+        secondaryColor,
+        businessName,
+        index,
+        totalSlides,
+        brandFont,
+        bodyFont,
+        layoutType,
+        beforePhotoUrl,
+        visualRanking,
+        capitalizationRule,
+        footerBrandToggle,
+        backgroundBrandColor,
+        accentBrandColor,
+        outputSize
+      });
+      const url = await uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
+      return { url };
+    }
 
-    const facePreservationClause = `
+    let cleanPrompt = '';
+    let imageBuffer: Buffer | null = null;
 
-CRITICAL FACE & BODY PRESERVATION (for GPT model):
-- DO NOT alter any facial features, expressions, or identity markers
-- DO NOT beautify, smooth, or enhance skin, face, or complexion
-- DO NOT change eye color, placement, or appearance
-- DO NOT modify nose, mouth, chin, or jaw shape
-- DO NOT adjust facial structure in any way
-- DO NOT change body shape, proportions, or posture
-- The person in the original photo must be completely recognizable and unchanged
-- Only add design elements (text boxes, overlays) — NO image editing or retouching of the person`;
-
-    const cleanPrompt = prompt + facePreservationClause + "\n\nCRITICAL: Do NOT write, draw, or render any text overlays, titles, or caption boxes directly onto the image. The image must contain only the raw photographic result.";
-
-    const imageBuffer = await downloadImageAsBuffer(photoUrl);
-
-    // Senior AI Engineer decision: If we have a real client photo, bypass DALL-E / Gemini image edit
-    // to enforce 100% face/photo preservation and reduce API cost to $0.
     const isRealClientPhoto = photoUrl && (photoUrl.startsWith('http') || photoUrl.includes('raw_assets') || photoUrl.includes('storage') || photoUrl.includes('temp'));
-    
+
     if (isRealClientPhoto) {
       console.log(`[PASS-THROUGH SHARP COMPOSITOR] Bypassing AI image editor for slide ${index} to guarantee 100% client face preservation.`);
+      imageBuffer = await downloadImageAsBuffer(photoUrl);
       const base64Image = imageBuffer.toString('base64');
       const brandedBase64 = await this.overlayBrandingAndText({
         base64Image,
@@ -286,107 +365,134 @@ CRITICAL FACE & BODY PRESERVATION (for GPT model):
         layoutType,
         beforePhotoUrl,
         visualRanking,
+        capitalizationRule,
+        footerBrandToggle,
+        backgroundBrandColor,
+        accentBrandColor
       });
-      return uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
+      const url = await uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
+      return { url };
     }
 
-    console.log(`\n==================================================`);
-    console.log(`[AI IMAGE PROMPT FOR SLIDE ${index}]:`);
-    console.log(cleanPrompt);
-    console.log(`==================================================\n`);
+    // Compile dynamic lifestyle/studio assets for non-booking educational/moodboard posts
+    // Subjects use Brand DNA aesthetic direction instead of hardcoded beige/travertine
+    const brandAestheticHint = aesthetic || 'minimal, premium beauty editorial';
+    const lifestyleSubjects = [
+      `a luxury minimalist ${serviceType} treatment room in ${brandAestheticHint} style, using brand color palette: primary ${brandColor}, secondary ${secondaryColor}, background ${backgroundBrandColor}, accent ${accentBrandColor}`,
+      `close-up macro shot of elegant, organic botanical ingredients and natural elements used in ${serviceType}, styled in ${brandAestheticHint} aesthetic, color-matched to palette: ${brandColor}, ${secondaryColor}, ${accentBrandColor}`,
+      `clean architectural details of a premium ${serviceType} space with beautiful natural lighting and shadows, color palette matching: primary ${brandColor}, secondary ${secondaryColor}, background ${backgroundBrandColor}`,
+      `macro photography of smooth textures, glass serum bottles, or high-end products related to ${serviceType}, styled in ${brandAestheticHint} aesthetic, brand colors: ${brandColor}, ${secondaryColor}, ${accentBrandColor}`,
+      `an abstract, flowing composition of soft silk, water ripples, or natural textures evoking the feeling of a premium ${serviceType}, in exact brand colors: ${brandColor}, ${secondaryColor}, ${accentBrandColor}`,
+    ];
+    const chosenSubject = lifestyleSubjects[index % lifestyleSubjects.length];
 
-    const geminiKey = process.env['GEMINI_API_KEY'];
-    if (geminiKey && geminiKey.length > 0) {
+    const prompt = customPrompt || (isBeforePhoto
+      ? buildBeforeSlidePrompt({ overlayText: '', businessName, brandColor })
+      : buildSlidePrompt({
+        overlayText: '',
+        businessName,
+        brandColor,
+        secondaryColor,
+        aesthetic,
+        serviceType,
+        isFirst,
+        isLast,
+      }));
+
+    const rankingStyleText = visualRanking && visualRanking.length > 0
+      ? `Visual style priorities: ${visualRanking.join(', ')}`
+      : 'minimal, premium beauty editorial';
+
+    // Build moodboard context block for the image generation AI
+    const moodboardBlock = moodboardVisionSummary
+      ? `\n- MOODBOARD DIRECTION (from brand reference images — match this feel): ${moodboardVisionSummary}`
+      : '';
+
+    const facePreservationClause = `
+    
+CRITICAL IMAGE REQUIREMENTS:
+- Subject: ${chosenSubject}
+- BRAND COLOR PALETTE (MANDATORY — the generated image MUST use these exact colors as the dominant palette):
+  * Primary brand color: ${brandColor}
+  * Secondary brand color: ${secondaryColor}
+  * Background color: ${backgroundBrandColor}
+  * Accent color: ${accentBrandColor}
+  * The image's dominant tones, surfaces, backgrounds, and accents MUST visually match these hex colors. Do NOT invent your own color scheme.
+- Aesthetic style: ${brandAestheticHint}. ${rankingStyleText}${moodboardBlock}
+- Photographic quality: Captured on a medium-format 80MP camera, ultra-detailed textures, razor-sharp focus on details, Hasselblad/Leica photography style, 8k resolution, cinematic natural lighting.
+- Do NOT feature any people, faces, or bodies. Focus entirely on organic, luxury interiors and clinic product details.
+- The image must look like a professional, high-fashion campaign photography asset.
+- CRITICAL: Do NOT write, draw, or render any text overlays, titles, or logo elements directly onto the image. The image must contain only the raw photographic result.`;
+
+    cleanPrompt = prompt + facePreservationClause;
+
+
+
+    let base64 = '';
+
+    // Real client photos are already handled and returned early in the pass-through compositor block.
+    // Standard text-to-image asset generation happens below for lifestyle/concept slides.
+    console.log(`Generating lifestyle base images using generatorModel: ${generatorModel} for slide ${index}...`);
+
+    const geminiTask = (async () => {
+      if (generatorModel === 'dalle') return null;
+      const geminiKey = process.env['GEMINI_API_KEY'];
+      if (!geminiKey) return null;
       try {
-        console.log(`Attempting image generation with Gemini (Nano Banana) for slide ${index}...`);
         const aiClient = new GoogleGenAI({ apiKey: geminiKey });
         const response = await aiClient.models.generateContent({
           model: 'gemini-2.5-flash-image',
-          contents: [
-            {
-              inlineData: {
-                mimeType: 'image/jpeg',
-                data: imageBuffer.toString('base64'),
-              },
-            },
-            cleanPrompt,
-          ],
-          config: {
-            responseModalities: ['image'],
-          } as any,
+          contents: cleanPrompt,
+          config: { responseModalities: ['image'] } as any,
         });
-
-        // Debug logging block for Senior AI telemetry analysis
-        console.log(`[DEBUG Gemini API Response Metadata for Slide ${index}]:`, JSON.stringify(response, (key, value) => {
-          if (key === 'data' && typeof value === 'string' && value.length > 200) {
-            return `${value.slice(0, 50)}... [Base64 Truncated: ${value.length} chars]`;
-          }
-          return value;
-        }, 2));
-
-        const outputPart = response.candidates?.[0]?.content?.parts?.find(
-          (part: any) => part.inlineData
-        );
-        const base64Data = outputPart?.inlineData?.data;
-
-        if (base64Data) {
-          console.log(`Gemini image generation successful for slide ${index}!`);
-          const brandedBase64 = await this.overlayBrandingAndText({
-            base64Image: base64Data,
-            overlayText,
-            isFirst,
-            isLast,
-            brandColor,
-            secondaryColor,
-            businessName,
-            index,
-            totalSlides,
-          });
-          return uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
-        } else {
-          console.warn(`Gemini returned empty image data for slide ${index}. Falling back to OpenAI.`);
-        }
+        const outputPart = response.candidates?.[0]?.content?.parts?.find((part: any) => part.inlineData);
+        return outputPart?.inlineData?.data || null;
       } catch (err) {
-        console.error(`Gemini image generation failed for slide ${index}:`, err);
-        console.log(`Falling back to OpenAI for slide ${index}...`);
+        console.error(`Gemini generation failed for slide ${index}:`, err);
+        return null;
       }
+    })();
+
+    const dalleTask = (async () => {
+      if (generatorModel === 'gemini') return null;
+      try {
+        console.log(`Generating GPT Image 2 image for slide ${index}...`);
+        const response = await openai.images.generate({
+          model: 'gpt-image-2',
+          prompt: cleanPrompt,
+          size: outputSize === '1024x1536' ? '1024x1792' as any : '1024x1024',
+        });
+        const url = response.data?.[0]?.url;
+        if (url) {
+          const buf = await downloadImageAsBuffer(url);
+          return buf.toString('base64');
+        }
+        return null;
+      } catch (err) {
+        console.warn(`GPT Image 2 generation failed for slide ${index}:`, err);
+        return null;
+      }
+    })();
+
+    const [geminiResult, dalleResult] = await Promise.all([geminiTask, dalleTask]);
+
+    // Both models should generate - return both for technician to choose
+    if (geminiResult || dalleResult) {
+      console.log(`✅ Image generation complete for slide ${index}:`);
+      if (geminiResult) console.log(`   • Gemini: Generated ✅`);
+      if (dalleResult) console.log(`   • DALL-E: Generated ✅`);
+      if (!geminiResult) console.log(`   • Gemini: Failed ❌`);
+      if (!dalleResult) console.log(`   • DALL-E: Failed ❌`);
+
+      // Use primary result for main display, store both for technician choice
+      base64 = geminiResult || dalleResult || '';
+    } else {
+      throw new Error(`No image generated from any model for slide ${index}`);
     }
 
-    console.log(`Using OpenAI to generate slide ${index}...`);
-    const imageFile = new File([imageBuffer], 'photo.jpg', { type: 'image/jpeg' });
+    if (!base64) throw new Error(`OpenAI image generation failed completely for slide ${index}`);
 
-    // Senior engineer enhancement: For face preservation, add explicit constraints
-    // These instructions override default behavior and enforce photo authenticity
-    const facePreservationInstructions = `
-You MUST follow these strict rules when processing this image:
-1. IDENTITY PRESERVATION: The person's face and body must remain EXACTLY as in the original photo
-2. NO BEAUTIFICATION: Do not smooth, enhance, or improve skin appearance in any way
-3. NO FACIAL ALTERATIONS: Do not modify any facial features — eyes, nose, mouth, cheeks, jaw must remain unchanged
-4. AUTHENTIC TEXTURE: Preserve all natural skin texture, lines, and marks from the original
-5. NO BODY MODIFICATIONS: Do not alter body shape, posture, or proportions
-6. BACKGROUND PRESERVATION: Keep all background elements exactly as they are
-7. ONLY TEXT OVERLAYS: The ONLY addition should be the text box and design elements — nothing else should be modified
-
-This is a legal and compliance requirement. Failure to preserve the person's identity and appearance is unacceptable.`;
-
-    // Append preservation instructions to prompt
-    const strengthenedPrompt = cleanPrompt + "\n\n" + facePreservationInstructions;
-
-    const response = await openai.images.edit({
-      model: 'gpt-image-1',
-      image: imageFile,
-      prompt: strengthenedPrompt,
-      size: outputSize,
-    });
-
-    const base64 = response.data?.[0]?.b64_json;
-    if (!base64) throw new Error('gpt-image-1 returned no image data');
-
-    // Senior engineer logging: Track GPT image generation for compliance
-    console.log(`[GPT IMAGE ${index}] Generated with face-preservation constraints applied`);
-    console.log(`[GPT IMAGE ${index}] Original prompt length: ${cleanPrompt.length} chars`);
-    console.log(`[GPT IMAGE ${index}] Output: ${base64.substring(0, 50)}... (face preservation enforced)`);
-
+    // Apply branding/text overlay to both models' images
     const brandedBase64 = await this.overlayBrandingAndText({
       base64Image: base64,
       overlayText,
@@ -400,9 +506,55 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
       brandFont,
       bodyFont,
       layoutType,
+      beforePhotoUrl,
       visualRanking,
+      capitalizationRule,
+      footerBrandToggle,
+      backgroundBrandColor,
+      accentBrandColor,
+      outputSize
     });
-    return uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
+
+    // Upload primary image
+    const primaryUrl = await uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}_primary`);
+
+    // If both models generated images, also upload the alternative
+    let variants: { gemini?: string; dalle?: string } | undefined;
+    if (geminiResult && dalleResult && generatorModel === 'both') {
+      // Apply overlay to alternative image for comparison
+      const altBase64 = geminiResult === base64 ? dalleResult : geminiResult;
+      const brandedAltBase64 = await this.overlayBrandingAndText({
+        base64Image: altBase64,
+        overlayText,
+        isFirst,
+        isLast,
+        brandColor,
+        secondaryColor,
+        businessName,
+        index,
+        totalSlides,
+        brandFont,
+        bodyFont,
+        layoutType,
+        beforePhotoUrl,
+        visualRanking,
+        capitalizationRule,
+        footerBrandToggle,
+        backgroundBrandColor,
+        accentBrandColor,
+        outputSize
+      });
+
+      const altUrl = await uploadBase64ToFirebase(brandedAltBase64, tenantId, `slide_${index}_alt`);
+
+      // Return both variants for technician choice
+      variants = {
+        gemini: geminiResult === base64 ? primaryUrl : altUrl,
+        dalle: dalleResult === base64 ? primaryUrl : altUrl,
+      };
+    }
+
+    return { url: primaryUrl, variants };
   }
 
   async generateCarousel(params: {
@@ -420,28 +572,62 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
     brandFont?: string;
     bodyFont?: string;
     visualRanking?: string[];
+    capitalizationRule?: string;
+    footerBrandToggle?: boolean;
+    generatorModel?: 'gemini' | 'dalle' | 'both';
+    backgroundBrandColor?: string;
+    accentBrandColor?: string;
+    moodboardVisionSummary?: string;
   }): Promise<GeneratedSlide[]> {
-    const { afterPhotoUrl, beforePhotoUrl, concepts, artDirectorBrief, layoutType = 'passepartout_text', visualRanking = [], ...rest } = params;
+    const { afterPhotoUrl, beforePhotoUrl, concepts, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', moodboardVisionSummary, ...rest } = params;
     const total = concepts.length;
+
+    // Derive pool dynamically from JSON config — never goes stale when new layouts are added
+    const layoutPool = Object.keys(LAYOUT_TEMPLATES);
+
+    // Select unique layouts without repeats
+    const uniqueLayoutsForSlides: string[] = [];
+    let pool = [...layoutPool];
+    for (let i = 0; i < total; i++) {
+      let chosen = '';
+      if (i === 0) {
+        // Slide 1 (Cover) should prefer a striking template if available
+        const coverOptions = ['poster_cover', 'translucent_split', 'passepartout_text'];
+        chosen = coverOptions.find(o => pool.includes(o)) || pool[0];
+      } else {
+        const randomIndex = Math.floor(Math.random() * pool.length);
+        chosen = pool[randomIndex] || 'passepartout_text';
+      }
+      uniqueLayoutsForSlides.push(chosen);
+      pool = pool.filter(l => l !== chosen);
+      if (pool.length === 0) pool = [...layoutPool]; // Reset if total slides exceeds layout count
+    }
 
     const slides = await Promise.all(
       concepts.map(async (concept, i) => {
         const isFirst = i === 0;
         const isLast = i === total - 1;
-        // Cover + Result (total - 2) + CTA use after photo; middle concern slides use before photo
-        const usingBefore = !isFirst && !isLast && (i !== total - 2) && !!beforePhotoUrl;
-        const photoUrl = usingBefore ? beforePhotoUrl! : afterPhotoUrl;
+        // Cover uses after photo (or before if available); slide 3 (reveal) uses after photo. Non-outcome slides generate lifestyle assets.
+        let photoUrl: string | undefined = undefined;
+        let usingBefore = false;
+        if (isFirst) {
+          photoUrl = afterPhotoUrl;
+        } else if (i === 1 && beforePhotoUrl) {
+          photoUrl = beforePhotoUrl;
+          usingBefore = true;
+        } else if (i === 2 || i === total - 2) {
+          photoUrl = afterPhotoUrl;
+        }
 
         const brief = artDirectorBrief?.find(b => b.index === concept.index);
-
-        // Only apply split_before_after on the first slide (cover) of a carousel
-        const currentSlideLayout = (isFirst && layoutType === 'split_before_after')
-          ? 'split_before_after'
-          : (layoutType === 'split_before_after' ? 'passepartout_text' : layoutType);
+        let currentSlideLayout = uniqueLayoutsForSlides[i];
+        if (isLast) {
+          currentSlideLayout = 'transparent_scrim';
+        }
 
         try {
-          const url = await this.generateSlide({
-            photoUrl,
+          const result = await this.generateSlide({
+            photoUrl: photoUrl || '',
             beforePhotoUrl,
             overlayText: concept.overlayText,
             title: concept.title,
@@ -452,14 +638,26 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
             outputSize: '1024x1024',
             customPrompt: brief?.artDirectorPrompt,
             ...rest,
-            brandColor: brief?.panelHexColor || rest.brandColor,
-            secondaryColor: brief?.textColorHex || rest.secondaryColor,
+            brandColor: rest.brandColor,
+            secondaryColor: rest.secondaryColor,
             totalSlides: total,
             layoutType: currentSlideLayout,
             visualRanking,
+            capitalizationRule,
+            footerBrandToggle,
+            generatorModel,
+            backgroundBrandColor,
+            accentBrandColor,
+            moodboardVisionSummary
           });
-          return { url, title: concept.title, label: `SLIDE ${String(concept.index).padStart(2, '0')}` };
-        } catch {
+          return {
+            url: result.url,
+            title: concept.title,
+            label: `SLIDE ${String(concept.index).padStart(2, '0')}`,
+            variants: result.variants
+          };
+        } catch (err) {
+          console.error(`Failed to generate slide ${concept.index}:`, err);
           return null;
         }
       })
@@ -481,31 +679,64 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
     aesthetic?: string;
     serviceType?: string;
     artDirectorBrief?: any[];
-    layoutType?: string;
     brandFont?: string;
     bodyFont?: string;
     visualRanking?: string[];
+    capitalizationRule?: string;
+    footerBrandToggle?: boolean;
+    layoutType?: string;
+    generatorModel?: 'gemini' | 'dalle' | 'both';
+    backgroundBrandColor?: string;
+    accentBrandColor?: string;
+    moodboardVisionSummary?: string;
   }): Promise<GeneratedSlide[]> {
-    const { afterPhotoUrl, beforePhotoUrl, frames, artDirectorBrief, layoutType = 'passepartout_text', visualRanking = [], ...rest } = params;
+    const { afterPhotoUrl, beforePhotoUrl, frames, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', moodboardVisionSummary, ...rest } = params;
     const total = frames.length;
+
+    // Derive pool dynamically from JSON config — never goes stale when new layouts are added
+    const layoutPool = Object.keys(LAYOUT_TEMPLATES);
+
+    // Select unique layouts without repeats
+    const uniqueLayoutsForFrames: string[] = [];
+    let pool = [...layoutPool];
+    for (let i = 0; i < total; i++) {
+      let chosen = '';
+      if (i === 0) {
+        // Frame 1 (Cover) should prefer a striking template if available
+        const coverOptions = ['poster_cover', 'translucent_split', 'passepartout_text'];
+        chosen = coverOptions.find(o => pool.includes(o)) || pool[0];
+      } else {
+        const randomIndex = Math.floor(Math.random() * pool.length);
+        chosen = pool[randomIndex] || 'passepartout_text';
+      }
+      uniqueLayoutsForFrames.push(chosen);
+      pool = pool.filter(l => l !== chosen);
+      if (pool.length === 0) pool = [...layoutPool]; // Reset if total frames exceeds layout count
+    }
 
     const results = await Promise.all(
       frames.map(async (frame, i) => {
         const isFirst = i === 0;
         const isLast = i === total - 1;
-        const usingBefore = isFirst && !!beforePhotoUrl;
-        const photoUrl = usingBefore ? beforePhotoUrl! : afterPhotoUrl;
+        // Cover uses before photo (if available) or after; slide 3 (reveal) uses after photo. Non-outcome frames generate lifestyle assets.
+        let photoUrl: string | undefined = undefined;
+        let usingBefore = false;
+        if (isFirst) {
+          photoUrl = beforePhotoUrl || afterPhotoUrl;
+          usingBefore = !!beforePhotoUrl;
+        } else if (i === 2 || i === total - 2) {
+          photoUrl = afterPhotoUrl;
+        }
 
         const brief = artDirectorBrief?.find(b => b.index === frame.index);
-
-        // Only apply split_before_after on the first frame (cover) of a story sequence
-        const currentSlideLayout = (isFirst && layoutType === 'split_before_after')
-          ? 'split_before_after'
-          : (layoutType === 'split_before_after' ? 'passepartout_text' : layoutType);
+        let currentSlideLayout = uniqueLayoutsForFrames[i];
+        if (isLast) {
+          currentSlideLayout = 'transparent_scrim';
+        }
 
         try {
-          const url = await this.generateSlide({
-            photoUrl,
+          const result = await this.generateSlide({
+            photoUrl: photoUrl || '',
             beforePhotoUrl,
             overlayText: frame.overlayText,
             title: frame.title,
@@ -516,14 +747,26 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
             outputSize: '1024x1536',
             customPrompt: brief?.artDirectorPrompt,
             ...rest,
-            brandColor: brief?.panelHexColor || rest.brandColor,
-            secondaryColor: brief?.textColorHex || rest.secondaryColor,
+            brandColor: rest.brandColor,
+            secondaryColor: rest.secondaryColor,
             totalSlides: total,
             layoutType: currentSlideLayout,
             visualRanking,
+            capitalizationRule,
+            footerBrandToggle,
+            generatorModel,
+            backgroundBrandColor,
+            accentBrandColor,
+            moodboardVisionSummary
           });
-          return { url, title: frame.title, label: `FRAME ${String(frame.index).padStart(2, '0')}` };
-        } catch {
+          return {
+            url: result.url,
+            title: frame.title,
+            label: `FRAME ${String(frame.index).padStart(2, '0')}`,
+            variants: result.variants
+          };
+        } catch (err) {
+          console.error(`Failed to generate frame ${frame.index}:`, err);
           return null;
         }
       })
@@ -549,22 +792,32 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
     brandFont?: string;
     bodyFont?: string;
     visualRanking?: string[];
+    capitalizationRule?: string;
+    footerBrandToggle?: boolean;
+    backgroundBrandColor?: string;
+    accentBrandColor?: string;
+    outputSize?: string;
   }): Promise<string> {
-    const { 
-      base64Image, 
-      overlayText, 
-      isFirst, 
-      isLast, 
-      brandColor, 
-      secondaryColor, 
-      businessName, 
-      index, 
-      totalSlides, 
-      layoutType = 'passepartout_text', 
+    const {
+      base64Image,
+      overlayText,
+      isFirst,
+      isLast,
+      brandColor,
+      secondaryColor,
+      businessName,
+      index,
+      totalSlides,
+      layoutType = 'passepartout_text',
       beforePhotoUrl,
       brandFont = 'Playfair Display',
       bodyFont = 'Inter',
-      visualRanking = []
+      visualRanking = [],
+      capitalizationRule = 'uppercase',
+      footerBrandToggle = true,
+      backgroundBrandColor = '#F7F4EF',
+      accentBrandColor = '#D4A373',
+      outputSize
     } = params;
 
     const hasText = overlayText && overlayText.trim().length > 0;
@@ -579,21 +832,51 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
           .replace(/'/g, '&apos;');
       };
 
-      const imageBuffer = Buffer.from(base64Image, 'base64');
-      const metadata = await sharp(imageBuffer).metadata();
-      const originalW = metadata.width || 1024;
-      const originalH = metadata.height || 1024;
-      const photoMimeType = metadata.format === 'jpeg' ? 'image/jpeg' : metadata.format === 'webp' ? 'image/webp' : 'image/png';
-      const photoDataUri = `data:${photoMimeType};base64,${base64Image}`;
+      let imageBuffer: Buffer;
+      let isStory = false;
+      let originalW = 1080;
+      let originalH = 1080;
+      let photoDataUri = '';
+
+      if (base64Image) {
+        imageBuffer = Buffer.from(base64Image, 'base64');
+        const metadata = await sharp(imageBuffer).metadata();
+        originalW = metadata.width || 1024;
+        originalH = metadata.height || 1024;
+        const photoMimeType = metadata.format === 'jpeg' ? 'image/jpeg' : metadata.format === 'webp' ? 'image/webp' : 'image/png';
+        photoDataUri = `data:${photoMimeType};base64,${base64Image}`;
+        isStory = originalH > originalW;
+      } else {
+        isStory = outputSize === '1024x1536';
+        originalW = 1080;
+        originalH = isStory ? 1620 : 1080;
+        imageBuffer = await sharp({
+          create: {
+            width: originalW,
+            height: originalH,
+            channels: 4,
+            background: { r: 0, g: 0, b: 0, alpha: 0 }
+          }
+        }).png().toBuffer();
+        photoDataUri = `data:image/png;base64,${imageBuffer.toString('base64')}`;
+      }
 
       // Force high-definition target canvas dimensions (Instagram standards)
-      const isStory = originalH > originalW;
       const w = 1080;
       const h = isStory ? 1620 : 1080;
 
+      // Ensure every slide has text for layouts that use randomized_overlay
+      let finalOverlayText = overlayText;
+      if (!overlayText || overlayText.trim().length === 0) {
+        if (layoutType === 'passepartout_clean' || layoutType === 'full_bleed_clean') {
+          finalOverlayText = businessName || 'AUTHENTIC WORK';
+        }
+      }
+      const hasText = finalOverlayText && finalOverlayText.trim().length > 0;
+
       const lines: string[] = [];
       if (hasText) {
-        const words = overlayText.split(/\s+/);
+        const words = finalOverlayText.split(/\s+/);
         let currentLine = '';
         for (const word of words) {
           if ((currentLine + word).length > 28) {
@@ -619,17 +902,33 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
       // Use dynamic brand colors
       const validBrandColor = brandColor.startsWith('#') ? brandColor : '#161616';
       const validSecondaryColor = secondaryColor.startsWith('#') ? secondaryColor : '#161616';
+      const validBackgroundColor = backgroundBrandColor.startsWith('#') ? backgroundBrandColor : '#F7F4EF';
+      const validAccentColor = accentBrandColor.startsWith('#') ? accentBrandColor : '#D4A373';
 
       const rawName = (businessName || 'RAW CANVAS').trim().toUpperCase();
       const spacedName = rawName.split('').join(' ');
 
       const escapedSpacedName = escapeXml(spacedName);
-      const escapedLines = lines.map(line => escapeXml(line.toUpperCase()));
+
+      // Formatting helper mapped to Brand DNA capitalization rules
+      const formatTextByRule = (text: string, rule: string): string => {
+        const clean = text.trim();
+        const ruleLower = rule.toLowerCase();
+        if (ruleLower.includes('sentence')) {
+          return clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase();
+        } else if (ruleLower.includes('title') || ruleLower.includes('first_letter') || ruleLower.includes('capitalisation') || ruleLower.includes('heading')) {
+          return clean.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+        }
+        return clean.toUpperCase(); // default UPPERCASE
+      };
+
+      const formattedLines = lines.map(line => formatTextByRule(line, capitalizationRule));
+      const escapedLines = formattedLines.map(line => escapeXml(line));
 
       const slideNumText = String(index || 1).padStart(2, '0');
       const totalSlidesText = String(totalSlides || 4).padStart(2, '0');
 
-      // ── MAPPING STYLE RANKINGS DYNAMICALLY (Production-Grade Lookup) ──
+      // â”€â”€ MAPPING STYLE RANKINGS DYNAMICALLY (Production-Grade Lookup) â”€â”€
       const STYLE_GEOMETRY: Record<string, { borderPercent: number; letterSpacing: string }> = {
         quiet_luxury: { borderPercent: 0.03, letterSpacing: '5px' },
         editorial_beauty: { borderPercent: 0.04, letterSpacing: '3px' },
@@ -645,30 +944,37 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
 
       const primaryRanking = visualRanking[0] || 'quiet_luxury';
       const geometry = STYLE_GEOMETRY[primaryRanking] || { borderPercent: 0.04, letterSpacing: '2px' };
-      
+
       const borderPercent = geometry.borderPercent;
       const headingLetterSpacing = geometry.letterSpacing;
 
-      // Dynamic brand footer spacing based on name length to prevent overlaps/clippings
-      let footerLetterSpacing = 5;
-      let footerFontSize = 13;
-      if (escapedSpacedName.length > 35) {
-        footerLetterSpacing = 1;
-        footerFontSize = 10;
-      } else if (escapedSpacedName.length > 25) {
+      // Dynamic brand footer spacing based on name length to prevent overlaps/clippings but keep it readable (not micro)
+      let footerLetterSpacing = 6;
+      let footerFontSize = 18; // Base increased from 13 to 18
+      
+      if (escapedSpacedName.length < 15) {
+        // Short names can be larger and more spaced out
+        footerFontSize = 24;
+        footerLetterSpacing = 8;
+      } else if (escapedSpacedName.length > 35) {
+        // Very long names
         footerLetterSpacing = 2;
-        footerFontSize = 11;
+        footerFontSize = 14; // Minimum readability increased from 10 to 14
+      } else if (escapedSpacedName.length > 25) {
+        // Medium-long names
+        footerLetterSpacing = 3;
+        footerFontSize = 16;
       }
 
       // True Passepartout Layout Calculations using dynamic borders
-      const paddingX = Math.floor(w * borderPercent); 
-      const paddingTop = Math.floor(h * borderPercent); 
+      const paddingX = Math.floor(w * borderPercent);
+      const paddingTop = Math.floor(h * borderPercent);
       const paddingBottom = 200; // Deep bottom margin for text & footer
 
       const innerW = w - (paddingX * 2);
       const innerH = h - (paddingTop + paddingBottom);
 
-      // ── Step 1: Process Base Image — dispatched from layout-templates.config.json ──
+      // â”€â”€ Step 1: Process Base Image â€” dispatched from layout-templates.config.json â”€â”€
       const template = resolveLayoutTemplate(layoutType);
 
       const baseResult = await BASE_TREATMENTS[template.base]!({
@@ -677,7 +983,9 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
         w, h,
         paddingX, paddingTop, paddingBottom,
         innerW, innerH,
+        validBrandColor,
         validSecondaryColor,
+        validBackgroundColor,
         downloadImageAsBuffer,
       });
       let baseImage = baseResult.baseImage;
@@ -686,7 +994,10 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
       let compositeLeft = baseResult.compositeLeft;
       let compositeRight = baseResult.compositeRight;
 
-      // ── Step 2: Auto-detect Contrast for Borderless Poster Covers & Slide Backgrounds ──
+
+
+
+      // â”€â”€ Step 2: Auto-detect Contrast for Borderless Poster Covers & Slide Backgrounds â”€â”€
       const getLuminance = (hex: string): number => {
         try {
           const cleaned = hex.replace('#', '');
@@ -700,14 +1011,14 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
         }
       };
 
-      // Determine text color based on background panel contrast
+      // Determine text color using brand palette colors instead of binary white/black
       const panelLuminance = getLuminance(validBrandColor);
-      const isLightPanel = panelLuminance > 175; // Threshold for cream/off-white
-      const dynamicTextColor = isLightPanel ? '#1E1E1C' : '#FFFFFF';
+      const isLightPanel = panelLuminance > 175;
+      const dynamicTextColor = isLightPanel ? validBrandColor : validBackgroundColor;
 
       const footerLuminance = getLuminance(validSecondaryColor);
       const isLightFooter = footerLuminance > 175;
-      const dynamicFooterTextColor = isLightFooter ? '#1E1E1C' : '#FFFFFF';
+      const dynamicFooterTextColor = isLightFooter ? validBrandColor : validBackgroundColor;
 
       let posterTextColor = '#FFFFFF';
       if (template.textTemplate === 'poster_high_contrast') {
@@ -735,7 +1046,7 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
 
       // ── Step 3: Assemble SVG overlays — dispatched from layout-templates.config.json ──
       const textCtx = {
-        w, h, dynamicFontSize, dyOffset, escapedLines, lines, overlayText, maxLength,
+        w, h, dynamicFontSize, dyOffset, escapedLines, lines, overlayText: finalOverlayText, maxLength,
         dynamicTextColor, posterTextColor, validBrandColor, validSecondaryColor,
         brandFont, bodyFont, escapedSpacedName, photoDataUri, escapeXml,
       };
@@ -755,27 +1066,44 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
       const brandFontBase64 = await fetchGoogleFontBase64(brandFont);
       const bodyFontBase64 = await fetchGoogleFontBase64(bodyFont);
 
+      // Pre-compile dynamic font faces to avoid nested template literal parsing issues
+      const brandFontFace = brandFontBase64
+        ? `@font-face {
+            font-family: '${brandFont}';
+            src: url('data:font/ttf;base64,${brandFontBase64}') format('truetype');
+            font-weight: bold;
+            font-style: normal;
+          }`
+        : `@import url('https://fonts.googleapis.com/css2?family=${encodeURIComponent(brandFont)}:wght@700&display=swap');`;
+
+      const bodyFontFace = bodyFontBase64
+        ? `@font-face {
+            font-family: '${bodyFont}';
+            src: url('data:font/ttf;base64,${bodyFontBase64}') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+          }`
+        : `@import url('https://fonts.googleapis.com/css2?family=${encodeURIComponent(bodyFont)}:wght@400&display=swap');`;
+
+      // Pre-compile conditional SVG components
+      const watermarkText = (layoutType !== 'full_bleed_clean' && layoutType !== 'poster_cover')
+        ? `<text x="${w / 2}" y="${h / 2.2}" fill="#ffffff" fill-opacity="0.10" font-family="'${brandFont}', system-ui, sans-serif" font-size="28px" font-weight="bold" transform="rotate(-30 ${w / 2} ${h / 2.2})" text-anchor="middle" letter-spacing="8px">
+            AUTHENTIC WORK â€¢ ${escapedSpacedName}
+          </text>`
+        : '';
+
+      const footerSection = (layoutType !== 'poster_cover')
+        ? `<rect x="0" y="${h - 85}" width="${w}" height="85" class="footer-bg" />
+          ${footerBrandToggle ? `<text x="60" y="${h - 35}" class="footer-brand">${escapedSpacedName}</text>` : ''}
+          <text x="${w - 60}" y="${h - 35}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`
+        : '';
+
       const svgString = `
         <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <style>
-              ${brandFontBase64 ? `
-              @font-face {
-                font-family: '${brandFont}';
-                src: url('data:font/ttf;base64,${brandFontBase64}') format('truetype');
-                font-weight: bold;
-                font-style: normal;
-              }
-              ` : `@import url('https://fonts.googleapis.com/css2?family=${encodeURIComponent(brandFont)}:wght@700&amp;display=swap');`}
-              
-              ${bodyFontBase64 ? `
-              @font-face {
-                font-family: '${bodyFont}';
-                src: url('data:font/ttf;base64,${bodyFontBase64}') format('truetype');
-                font-weight: normal;
-                font-style: normal;
-              }
-              ` : `@import url('https://fonts.googleapis.com/css2?family=${encodeURIComponent(bodyFont)}:wght@400&amp;display=swap');`}
+              ${brandFontFace}
+              ${bodyFontFace}
               
               .overlay-text { font-family: '${brandFont}', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 26px; font-weight: bold; fill: ${dynamicTextColor}; letter-spacing: ${headingLetterSpacing}; }
               .text-centered { text-anchor: middle; }
@@ -789,19 +1117,36 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
           <!-- Anti-theft transparent brand watermark across the image area (not shown on clean full bleed) -->
           ${template.showWatermark ? `
           <text x="${w / 2}" y="${h / 2.2}" fill="#ffffff" fill-opacity="0.10" font-family="'${brandFont}', system-ui, sans-serif" font-size="28px" font-weight="bold" transform="rotate(-30 ${w / 2} ${h / 2.2})" text-anchor="middle" letter-spacing="8px">
-            AUTHENTIC WORK • ${escapedSpacedName}
+            AUTHENTIC WORK â€¢ ${escapedSpacedName}
           </text>
           ` : ''}
 
           ${visualAdditions}
           ${textPanelSvg}
           
-          <!-- Minimalist Editorial Footer (hidden only on poster covers) -->
-          ${template.showFooter ? `
-          <rect x="0" y="${h - 60}" width="${w}" height="60" class="footer-bg" />
-          <text x="60" y="${h - 25}" class="footer-brand">${escapedSpacedName}</text>
-          <text x="${w - 60}" y="${h - 25}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>
-          ` : ''}
+          <!-- Brand identity mark: randomly placed so the grid stays diverse -->
+          ${template.showFooter ? (() => {
+            const footerStyle = ((index ?? 0) + (totalSlides ?? 4)) % 5;
+            if (footerStyle === 0) {
+              // Classic footer bar
+              return `<rect x="0" y="${h - 60}" width="${w}" height="60" class="footer-bg" />
+              <text x="60" y="${h - 25}" class="footer-brand">${escapedSpacedName}</text>
+              <text x="${w - 60}" y="${h - 25}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`;
+            } else if (footerStyle === 1) {
+              // Top-left corner floating wordmark
+              return `<text x="50" y="52" font-family="'${bodyFont}', system-ui, sans-serif" font-size="13px" font-weight="600" letter-spacing="4px" fill="${validSecondaryColor}" fill-opacity="0.85" text-transform="uppercase">${escapedSpacedName}</text>
+              <line x1="50" y1="62" x2="${Math.min(50 + escapedSpacedName.length * 8, 300)}" y2="62" stroke="${validSecondaryColor}" stroke-width="1" stroke-opacity="0.5" />`;
+            } else if (footerStyle === 2) {
+              // Bottom-right corner slide counter only — super minimal
+              return `<text x="${w - 60}" y="${h - 25}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`;
+            } else if (footerStyle === 3) {
+              // Vertical side tag — editorial magazine style
+              return `<text x="${w - 24}" y="${Math.round(h * 0.62)}" font-family="'${bodyFont}', system-ui, sans-serif" font-size="11px" font-weight="600" letter-spacing="5px" fill="${validBrandColor}" fill-opacity="0.7" transform="rotate(90 ${w - 24} ${Math.round(h * 0.62)})">${escapedSpacedName}</text>`;
+            } else {
+              // Pure transparent — no footer at all for this slide
+              return '';
+            }
+          })() : ''}
         </svg>
       `;
 
@@ -811,20 +1156,11 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
         .png()
         .toBuffer();
 
-      // ── Step 4: Composite image scaling and margins — grouped by the base treatment ──
+      // â”€â”€ Step 4: Composite image scaling and margins â€” grouped by the base treatment â”€â”€
       let compositeBuffer: Buffer;
       if (template.base === 'solid_canvas_full') {
         // baseImage is already a fully-built w x h canvas (solid panel + photo embedded via SVG)
         compositeBuffer = await baseImage
-          .composite([{ input: highResSvgBuffer, blend: 'over' }])
-          .png()
-          .toBuffer();
-      } else if (template.base === 'full_bleed' || template.base === 'full_bleed_duotone') {
-        let fullBleedImage = sharp(imageBuffer).resize(w, h, { fit: 'cover' });
-        if (template.base === 'full_bleed_duotone') {
-          fullBleedImage = fullBleedImage.greyscale().tint(validBrandColor as any);
-        }
-        compositeBuffer = await fullBleedImage
           .composite([{ input: highResSvgBuffer, blend: 'over' }])
           .png()
           .toBuffer();
@@ -835,14 +1171,14 @@ This is a legal and compliance requirement. Failure to preserve the person's ide
             bottom: compositeBottom,
             left: compositeLeft,
             right: compositeRight,
-            background: validBrandColor
+            background: validBackgroundColor
           })
           .composite([{ input: highResSvgBuffer, blend: 'over' }])
           .png()
           .toBuffer();
       }
 
-      // ── Step 5: Finish Control (Overlay microscopic gray noise overlay for matte texture) ──
+      // â”€â”€ Step 5: Finish Control (Overlay microscopic gray noise overlay for matte texture) â”€â”€
       try {
         const noiseSize = 256;
         const noisePixels = Buffer.alloc(noiseSize * noiseSize * 2); // 2 channels: Grayscale (Y) + Alpha (A)
