@@ -1,0 +1,170 @@
+{
+  "passepartout_text": {
+    "base": "bordered_default",
+    "textTemplate": "passepartout_bottom",
+    "decoration": null,
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "passepartout_clean": {
+    "base": "bordered_default",
+    "textTemplate": "randomized_overlay",
+    "decoration": null,
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "full_bleed_clean": {
+    "base": "full_bleed",
+    "textTemplate": "randomized_overlay",
+    "decoration": null,
+    "showWatermark": false,
+    "showFooter": true
+  },
+  "split_before_after": {
+    "base": "split_before_after",
+    "textTemplate": "passepartout_bottom",
+    "decoration": null,
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "asymmetric_monogram": {
+    "base": "asymmetric_offset",
+    "textTemplate": "left_negative_space",
+    "decoration": "monogram_watermark",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "translucent_split": {
+    "base": "full_bleed",
+    "textTemplate": "translucent_left_panel",
+    "decoration": "translucent_pane",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "poster_cover": {
+    "base": "full_bleed",
+    "textTemplate": "poster_high_contrast",
+    "decoration": null,
+    "showWatermark": false,
+    "showFooter": false
+  },
+  "postcard_ticket": {
+    "base": "bordered_default",
+    "textTemplate": "passepartout_bottom",
+    "decoration": "ticket_notches_dashed",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "editorial_arch": {
+    "base": "arch_mask",
+    "textTemplate": "passepartout_bottom",
+    "decoration": "arch_outline",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "text_only_editorial": {
+    "base": "solid_canvas_bordered",
+    "textTemplate": "quote_centered_middle",
+    "decoration": null,
+    "showWatermark": false,
+    "showFooter": true
+  },
+  "filmstrip_grid": {
+    "base": "bordered_default",
+    "textTemplate": "passepartout_bottom",
+    "decoration": "film_sprockets",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "handwritten_note": {
+    "base": "full_bleed",
+    "textTemplate": "rotated_note_card",
+    "decoration": null,
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "gallery_frame": {
+    "base": "bordered_default",
+    "textTemplate": "passepartout_bottom",
+    "decoration": "gallery_hairline",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "duotone_editorial": {
+    "base": "full_bleed_duotone",
+    "textTemplate": "duotone_high_contrast",
+    "decoration": null,
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "side_panel_split": {
+    "base": "solid_canvas_full",
+    "textTemplate": "side_panel_label",
+    "decoration": "side_photo_embed",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "bold_editorial_poster": {
+    "base": "full_bleed",
+    "textTemplate": "stacked_headline_tag",
+    "decoration": null,
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "giant_type_overlay": {
+    "base": "full_bleed",
+    "textTemplate": "giant_word_plus_caption",
+    "decoration": null,
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "chat_bubble_quote": {
+    "base": "full_bleed",
+    "textTemplate": "speech_bubble",
+    "decoration": null,
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "testimonial_card": {
+    "base": "full_bleed",
+    "textTemplate": "testimonial_avatar_card",
+    "decoration": null,
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "transparent_scrim": {
+    "base": "full_bleed",
+    "textTemplate": "poster_high_contrast",
+    "decoration": "dark_scrim_overlay",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "premium_diptyque": {
+    "base": "split_before_after",
+    "textTemplate": "passepartout_bottom",
+    "decoration": "gallery_hairline",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "art_director_split": {
+    "base": "solid_canvas_full",
+    "textTemplate": "side_panel_label",
+    "decoration": "side_photo_embed",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "date_highlight": {
+    "base": "full_bleed",
+    "textTemplate": "editorial_date_stamp",
+    "decoration": "brand_scrim_heavy",
+    "showWatermark": false,
+    "showFooter": true
+  },
+  "signature_feature": {
+    "base": "full_bleed",
+    "textTemplate": "technician_signature_card",
+    "decoration": "brand_scrim_heavy",
+    "showWatermark": false,
+    "showFooter": true
+  }
+}

@@ -41,6 +41,9 @@ import { ScoringGateService } from '../services/scoring-gate.service';
 import { BrandStrategistChain } from '../chains/brand-strategist.chain';
 import { CreativeDirectorChain } from '../chains/creative-director.chain';
 import { GridOrchestratorService } from '../services/grid-orchestrator.service';
+import { MoodboardVisionChain } from '../chains/moodboard-vision.chain';
+import { AssetLibraryVisionChain, type AssetLibraryItemInput } from '../chains/asset-library-vision.chain';
+import { TemplateAgentService } from '../services/template-agent.service';
 
 type NotifyFn = (dto: {
   tenantId: string;
@@ -77,6 +80,9 @@ export class GenerationOrchestrator {
   private readonly brandStrategistChain: BrandStrategistChain;
   private readonly creativeDirectorChain: CreativeDirectorChain;
   private readonly gridOrchestrator: GridOrchestratorService;
+  private readonly moodboardVisionChain: MoodboardVisionChain;
+  private readonly assetLibraryVisionChain: AssetLibraryVisionChain;
+  private readonly templateAgent: TemplateAgentService;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -113,6 +119,9 @@ export class GenerationOrchestrator {
     this.creativeDirectorChain = new CreativeDirectorChain();
     // PrismaClient from NestJS main passes a PrismaService which is compatible
     this.gridOrchestrator = new GridOrchestratorService(prisma as any);
+    this.moodboardVisionChain = new MoodboardVisionChain();
+    this.assetLibraryVisionChain = new AssetLibraryVisionChain();
+    this.templateAgent = new TemplateAgentService();
   }
 
   // --------------------------------------------------------------------------
@@ -168,15 +177,35 @@ export class GenerationOrchestrator {
     // Always advance through processing_vision â€” required by state machine regardless of whether images exist
     await this.transitionState(jobId, 'processing_image', 'processing_vision');
 
-    if (payload.imageAssets.length > 0) {
-      await this.progressEmitter.emit(jobId, tenantId, 'processing_vision');
+    // Run appointment image vision + moodboard vision in parallel (both non-fatal)
+    const moodboardUrls: string[] = Array.isArray((brandDNA as any).moodboardUrls)
+      ? (brandDNA as any).moodboardUrls.filter(Boolean)
+      : [];
+    const moodboardLabels: string[] = Array.isArray((brandDNA as any).moodboardLabels)
+      ? (brandDNA as any).moodboardLabels
+      : [];
 
+    let moodboardVisionSummary: string | null = null;
+    let assetLibraryVisionSummary: string | null = null;
+
+    // Extract asset library items from brandDnaV2 JSON, respecting usage and consent rules
+    const rawAssetLibrary: AssetLibraryItemInput[] = (() => {
+      try {
+        const v2 = brandDNA.brandDnaV2
+          ? (typeof brandDNA.brandDnaV2 === 'string' ? JSON.parse(brandDNA.brandDnaV2) : brandDNA.brandDnaV2) as Record<string, any>
+          : null;
+        return Array.isArray(v2?.asset_library) ? v2.asset_library : [];
+      } catch { return []; }
+    })();
+
+    const appointmentVisionTask = (async () => {
+      if (payload.imageAssets.length === 0) return;
+      await this.progressEmitter.emit(jobId, tenantId, 'processing_vision');
       const primaryImage = payload.imageAssets[0]!;
       const isLocalVisionUrl = primaryImage.rawStoragePath.startsWith('http://localhost') ||
-                               primaryImage.rawStoragePath.startsWith('http://127.');
-
-      if (!isLocalVisionUrl) try {
-        // Only use Cloudinary URL if we have an actual cloudinaryPublicId â€” otherwise fall back to rawStoragePath
+        primaryImage.rawStoragePath.startsWith('http://127.');
+      if (isLocalVisionUrl) return;
+      try {
         const imageUrl = (process.env['CLOUDINARY_CLOUD_NAME'] && primaryImage.cloudinaryPublicId)
           ? `https://res.cloudinary.com/${process.env['CLOUDINARY_CLOUD_NAME']}/image/upload/${primaryImage.cloudinaryPublicId}`
           : primaryImage.rawStoragePath;
@@ -187,10 +216,32 @@ export class GenerationOrchestrator {
           cachedResult: primaryImage.visionAnalysisCache,
         });
         visionResult = visionAnalysis.result;
-      } catch (err) {
-        // Vision failure is non-fatal â€” caption still generated from appointment context
+      } catch {
+        // Non-fatal â€” caption still generated from appointment context
       }
-    }
+    })();
+
+    const moodboardVisionTask = (async () => {
+      if (moodboardUrls.length === 0) return;
+      try {
+        const summary = await this.moodboardVisionChain.analyse(moodboardUrls, moodboardLabels);
+        if (summary) moodboardVisionSummary = summary;
+      } catch {
+        // Non-fatal â€” generation continues without moodboard vision if it fails
+      }
+    })();
+
+    const assetLibraryVisionTask = (async () => {
+      if (rawAssetLibrary.length === 0) return;
+      try {
+        const summary = await this.assetLibraryVisionChain.analyse(rawAssetLibrary);
+        if (summary) assetLibraryVisionSummary = summary;
+      } catch {
+        // Non-fatal â€” generation continues without asset library vision if it fails
+      }
+    })();
+
+    await Promise.all([appointmentVisionTask, moodboardVisionTask, assetLibraryVisionTask]);
 
     // â”€â”€ Step 2: Prompt Building â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     await this.transitionState(jobId, 'processing_vision', 'building_prompt');
@@ -206,10 +257,10 @@ export class GenerationOrchestrator {
       },
     });
 
-    const isMedical = appointment?.serviceCategory === 'injectables_cosmetic' || 
-                      appointment?.serviceCategory === 'laser_treatments';
+    const isMedical = appointment?.serviceCategory === 'injectables_cosmetic' ||
+      appointment?.serviceCategory === 'laser_treatments';
     const category = isMedical ? 'medical_aesthetics' : 'general';
-    
+
     // Fetch active MasterPrompt based on mapped category
     const masterPrompt = await this.prisma.masterPrompt.findFirst({
       where: { category, isActive: true },
@@ -222,14 +273,14 @@ export class GenerationOrchestrator {
     const tieredDna = filterDnaForTier(brandDNA as unknown as Record<string, any>, generationOptions.userTier) as typeof brandDNA;
     // log tier filter applied (observable in backend stdout)
 
-    let determinedGrid = { pillar: 'client_results', layout: 'passepartout_text' };
+    let determinedGrid: any = { pillar: 'client_results', layout: 'passepartout_text', gridConstraints: '' };
     try {
       determinedGrid = await this.gridOrchestrator.determineNextLayoutAndPillar(tenantId);
       if (payload.businessGoal === 'build_brand_authority') {
         determinedGrid.pillar = 'education_tips';
         console.log(`[GRID ROTATOR OVERRIDE]: Forced Pillar="education_tips" because businessGoal is "build_brand_authority" (Educate).`);
       }
-      console.log(`[GRID ROTATOR]: Selected Pillar="${determinedGrid.pillar}" Layout="${determinedGrid.layout}" for tenant ${tenantId}`);
+      console.log(`[GRID ROTATOR]: Selected Pillar="${determinedGrid.pillar}" with Constraints: "${determinedGrid.gridConstraints}" for tenant ${tenantId}`);
     } catch (gridErr) {
       console.error('[GRID ROTATOR ERROR] Failed to compute grid, falling back to default:', gridErr);
     }
@@ -261,6 +312,8 @@ export class GenerationOrchestrator {
       },
       contentPillar: determinedGrid.pillar,
       recentFeedback,
+      moodboardVisionSummary: moodboardVisionSummary ?? undefined,
+      assetLibraryVisionSummary: assetLibraryVisionSummary ?? undefined,
     });
 
     // ── Step 3: Caption Generation ──────────────────────────────────────────
@@ -275,16 +328,16 @@ export class GenerationOrchestrator {
     modelUsed = `${llmConfig.provider}/${llmConfig.modelId}`;
 
     try {
-      const blacklist = brandDNA.vocabularyBlacklist ?? brandDNA.blacklistedWords ?? [];
-      
+      const blacklist = brandDNA.vocabularyBlacklist;
+
       const antiAIGlossary = ["transformation", "radiant", "rejuvenated", "delve", "journey", "oasis", "sanctuary", "meticulous", "nestled", "whimsical", "unveil", "elevate", "glow up", "game-changer", "luxurious", "indulge"];
-      
+
       const generateWithEnforcement = async (angle: 'technical' | 'empathetic', promptContext: any) => {
         let attempts = 0;
         let lastResult: any;
         // Deep copy prompt to allow appending penalty instructions without bleeding across options
         let currentPrompt = { ...promptContext, userPrompt: promptContext.userPrompt };
-        
+
         while (attempts < 2) {
           lastResult = await this.brandStrategistChain.generate({
             assembledPrompt: currentPrompt,
@@ -292,17 +345,17 @@ export class GenerationOrchestrator {
             llmConfig,
             angle,
           });
-          
+
           const textToCheck = `${lastResult.caption} ${lastResult.hookSentence}`.toLowerCase();
           const foundBannedAI = antiAIGlossary.find(word => textToCheck.includes(word.toLowerCase()));
           const foundBlacklisted = blacklist.find((word: string) => textToCheck.includes(word.toLowerCase()));
-          
+
           const violatingWord = foundBannedAI || foundBlacklisted;
-          
+
           if (!violatingWord) {
             return lastResult; // Passed the enforcement gate
           }
-          
+
           // Failed gate -> Append strict penalty and retry
           currentPrompt.userPrompt += `\n\nCRITICAL PENALTY: Your previous attempt was rejected because you used the banned word/phrase "${violatingWord}". You are acting like a generic AI. Rewrite this using conversational, authentic human vocabulary only.`;
           attempts++;
@@ -368,7 +421,30 @@ export class GenerationOrchestrator {
       componentStatus.caption = 'failed';
     }
 
-    // â”€â”€ Step 4: Platform Variants (conditional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Step 3.5: Template Agent Layout Selection ─────────────────────────────
+    if (captionResult) {
+      try {
+        const isCarouselOpt = (generationOptions.outputFormats as string[]).includes('carousel');
+        const agentDecision = await this.templateAgent.selectTemplate({
+          brief: captionResult.caption,
+          brandName: brandDNA.businessName || 'Brand',
+          aesthetic: (brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA.visualRanking) : null) ?? brandDNA.aestheticDirection ?? 'minimal editorial',
+          textLength: captionResult.caption.length,
+          slideIndex: 0,
+          totalSlides: isCarouselOpt ? 4 : 1,
+          gridConstraints: determinedGrid.gridConstraints,
+          visionResult: visionResult,
+        });
+
+        // Assign directly to allow Universal Dynamic Renderer to handle new templates
+        determinedGrid.layout = agentDecision.selected_layout_id;
+        console.log(`[TEMPLATE AGENT] Intelligent selection passed to rendering engine: ${determinedGrid.layout}`);
+      } catch (err) {
+        console.error('[Orchestrator Step 3.5 Template Agent Error]:', err);
+      }
+    }
+
+    // ── Step 4: Platform Variants (conditional) ───────────────────────────────
     if (captionResult && generationOptions.platform.length > 1) {
       try {
         platformVariants = await this.platformVariantChain.generateVariants({
@@ -404,7 +480,7 @@ export class GenerationOrchestrator {
 
       // Localhost URLs can't be reached by Cloudinary/OpenAI â€” use Sharp instead
       const isLocalUrl = primaryAsset.rawStoragePath.startsWith('http://localhost') ||
-                         primaryAsset.rawStoragePath.startsWith('http://127.');
+        primaryAsset.rawStoragePath.startsWith('http://127.');
       const useCloudinary = !!process.env['CLOUDINARY_CLOUD_NAME'] && !isLocalUrl;
 
       try {
@@ -498,7 +574,7 @@ Requirements:
             let aiFeedUrl = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
             // Apply logo overlay if set in Brand DNA
             if (brandDNA.logoUrl) {
-              aiFeedUrl = await this.logoOverlay.applyLogo({ imageUrl: aiFeedUrl, logoUrl: brandDNA.logoUrl, position: brandDNA.logoPosition, tenantId });
+              aiFeedUrl = await this.logoOverlay.applyLogo({ imageUrl: aiFeedUrl, logoUrl: brandDNA.logoUrl as string, position: brandDNA.logoPosition as any, tenantId });
             }
             imageResult = { ...imageResult, variants: { ...imageResult.variants, feedUrl: aiFeedUrl } };
             aiImageCostUSD = AI_CONFIG.imageCosts['gpt-image-1-1024'];
@@ -522,10 +598,11 @@ Requirements:
     let carouselSlides: CarouselSlides | null = null;
     const isCarousel = (generationOptions.outputFormats as string[]).includes('carousel');
     const afterPhotoUrl = payload.imageAssets.find(a => a.isAfterPhoto)?.rawStoragePath
-      ?? payload.imageAssets[0]?.rawStoragePath;
+      ?? payload.imageAssets[0]?.rawStoragePath
+      ?? '';
     const beforePhotoUrl = payload.imageAssets.find(a => a.isBeforePhoto)?.rawStoragePath;
 
-    if (isCarousel && afterPhotoUrl && captionResult) {
+    if (isCarousel && captionResult) {
       try {
         const conceptResult = await this.carouselConceptChain.generate({
           hookSentence: captionResult.hookSentence || captionResult.caption.slice(0, 80),
@@ -566,10 +643,16 @@ Requirements:
             brandFont: headingFont,
             bodyFont: bodyFont,
             visualRanking: brandDNA.visualRanking ?? [],
+            capitalizationRule: (brandDNA.brandDnaV2 as any)?.typography?.capitalization_rule || (brandDNA.brandDnaV2 as any)?.typography?.capitalizationRule || 'uppercase',
+            footerBrandToggle: (brandDNA.brandDnaV2 as any)?.typography?.footer_brand_toggle !== false && (brandDNA.brandDnaV2 as any)?.typography?.footerBrandToggle !== false,
+            backgroundBrandColor: brandDNA.backgroundBrandColor ?? '#F7F4EF',
+            accentBrandColor: brandDNA.accentBrandColor ?? '#D4A373',
+            depthBrandColor: brandDNA.depthBrandColor ?? '#1E1E1C',
+            moodboardVisionSummary: moodboardVisionSummary ?? undefined,
           });
           // Apply logo to each carousel slide
           const slidesWithLogo = brandDNA.logoUrl
-            ? await Promise.all(aiSlides.map(async s => ({ ...s, url: await this.logoOverlay.applyLogo({ imageUrl: s.url, logoUrl: brandDNA.logoUrl, position: brandDNA.logoPosition, tenantId }) })))
+            ? await Promise.all(aiSlides.map(async s => ({ ...s, url: await this.logoOverlay.applyLogo({ imageUrl: s.url, logoUrl: brandDNA.logoUrl as string, position: brandDNA.logoPosition as any, tenantId }) })))
             : aiSlides;
           carouselSlides = { type: 'carousel', slides: slidesWithLogo };
         } catch (aiErr) {
@@ -592,7 +675,7 @@ Requirements:
     // â”€â”€ Step 5.65: Story Frames (conditional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     let storyOutput: StoryOutput | null = null;
     const isStory = (generationOptions.outputFormats as string[]).includes('story');
-    if (isStory && afterPhotoUrl && captionResult) {
+    if (isStory && captionResult) {
       try {
         const storyFrames = await this.storyFrameChain.generate({
           hookSentence: captionResult.hookSentence || captionResult.caption.slice(0, 80),
@@ -630,9 +713,14 @@ Requirements:
             brandFont: headingFont,
             bodyFont: bodyFont,
             visualRanking: brandDNA.visualRanking ?? [],
+            capitalizationRule: (brandDNA.brandDnaV2 as any)?.typography?.capitalization_rule || (brandDNA.brandDnaV2 as any)?.typography?.capitalizationRule || 'uppercase',
+            footerBrandToggle: (brandDNA.brandDnaV2 as any)?.typography?.footer_brand_toggle !== false && (brandDNA.brandDnaV2 as any)?.typography?.footerBrandToggle !== false,
+            backgroundBrandColor: brandDNA.backgroundBrandColor ?? '#F7F4EF',
+            accentBrandColor: brandDNA.accentBrandColor ?? '#D4A373',
+            moodboardVisionSummary: moodboardVisionSummary ?? undefined,
           });
           const framesWithLogo = brandDNA.logoUrl
-            ? await Promise.all(aiFrames.map(async f => ({ ...f, url: await this.logoOverlay.applyLogo({ imageUrl: f.url, logoUrl: brandDNA.logoUrl, position: brandDNA.logoPosition, tenantId }) })))
+            ? await Promise.all(aiFrames.map(async f => ({ ...f, url: await this.logoOverlay.applyLogo({ imageUrl: f.url, logoUrl: brandDNA.logoUrl as string, position: brandDNA.logoPosition as any, tenantId }) })))
             : aiFrames;
           storyOutput = { type: 'story', frames: framesWithLogo };
         } catch (aiErr) {
@@ -651,7 +739,7 @@ Requirements:
       }
     }
 
-    // â”€â”€ Step 5.66: Reel Shot Storyboard (conditional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Step 5.66: Reel Shot Storyboard (conditional) ──────────────────────────────────────────
     let reelShotResult: ReelShotResult | null = null;
     const isReel = (generationOptions.outputFormats as string[]).includes('reel');
     if (isReel && captionResult) {
@@ -691,17 +779,40 @@ Requirements:
       }
     }
 
-    // â”€â”€ Step 6: Scoring & Compliance Gate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Step 6: Scoring & Compliance Gate ─────────────────────────
+    let originalPhotoBuffer: Buffer | undefined;
+    let generatedPhotoBuffer: Buffer | undefined;
+
+    try {
+      const origUrl = payload.imageAssets[0]?.rawStoragePath;
+      const genUrl = imageResult?.variants?.feedUrl;
+      
+      if (origUrl && genUrl) {
+        const [origRes, genRes] = await Promise.all([
+          fetch(origUrl),
+          fetch(genUrl)
+        ]);
+        if (origRes.ok && genRes.ok) {
+          originalPhotoBuffer = Buffer.from(await origRes.arrayBuffer());
+          generatedPhotoBuffer = Buffer.from(await genRes.arrayBuffer());
+        }
+      }
+    } catch (e) {
+      console.warn('[Validation Engine] Failed to fetch image buffers for Face Protection analysis.', e);
+    }
+
     const scoringResult = await this.scoringGate.evaluate({
       caption: captionResult?.caption ?? '',
       hashtags: captionResult?.hashtags ?? [],
-      blacklist: brandDNA.vocabularyBlacklist ?? brandDNA.blacklistedWords ?? [],
+      blacklist: brandDNA.vocabularyBlacklist,
       hasBefore: !!beforePhotoUrl,
       beforeAfterAllowed: consentCheck.activeRestrictions?.allow_before_after !== false,
       isCarousel: isCarousel,
       slidesCount: carouselSlides?.slides?.length ?? 0,
       tenantId,
       prisma: this.prisma,
+      originalPhotoBuffer,
+      generatedPhotoBuffer,
     });
 
     // â”€â”€ Step 6.5: Persist Result â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -735,7 +846,7 @@ Requirements:
     await this.prisma.generationJob.update({
       where: { id: jobId },
       data: { estimatedCostUsd: totalCostUSD },
-    }).catch(() => {});
+    }).catch(() => { });
     await this.progressEmitter.emit(jobId, tenantId, targetState);
 
     // â”€â”€ Step 8: Notify tenant â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -745,7 +856,7 @@ Requirements:
       title: 'Content ready to review',
       body: 'Your new post is ready. Tap to review and schedule.',
       data: { contentItemId, jobId },
-    }).catch(() => {});
+    }).catch(() => { });
 
     return {
       jobId,
@@ -863,7 +974,7 @@ Requirements:
         completedAt: new Date().toISOString(),
       };
     } catch (err) {
-      await this.prisma.generationJob.update({ where: { id: jobId }, data: { state: 'failed' } }).catch(() => {});
+      await this.prisma.generationJob.update({ where: { id: jobId }, data: { state: 'failed' } }).catch(() => { });
       await this.progressEmitter.emit(jobId, tenantId, 'failed');
       throw err;
     }
@@ -933,12 +1044,12 @@ Requirements:
         platformVariants: params.carouselSlides
           ? (params.carouselSlides as unknown as Prisma.InputJsonValue)
           : params.storyOutput
-              ? (params.storyOutput as unknown as Prisma.InputJsonValue)
-              : params.reelShotResult
-                ? (params.reelShotResult as unknown as Prisma.InputJsonValue)
-                : platformVariants
-                  ? (platformVariants as unknown as Prisma.InputJsonValue)
-                  : Prisma.JsonNull,
+            ? (params.storyOutput as unknown as Prisma.InputJsonValue)
+            : params.reelShotResult
+              ? (params.reelShotResult as unknown as Prisma.InputJsonValue)
+              : platformVariants
+                ? (platformVariants as unknown as Prisma.InputJsonValue)
+                : Prisma.JsonNull,
         reelScript: reelScriptResult?.script ?? null,
         completedAt: new Date(),
         contentPillar: contentPillar ?? null,

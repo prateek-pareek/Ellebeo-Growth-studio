@@ -61,7 +61,8 @@ export class LogoOverlayService {
             gravity,
             x: 20,
             y: 20,
-            opacity: 90,
+            opacity: 95, // Increased opacity
+            effect: 'shadow:50', // Add shadow to guarantee contrast against light and dark splits
             crop: 'fit',
           },
           { quality: 'auto', fetch_format: 'auto' },

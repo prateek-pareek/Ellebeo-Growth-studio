@@ -11,7 +11,7 @@ import type { GenerationJobPayload } from '../types/job-payload.types';
 // Connection config for BullMQ (separate from general Redis client)
 // ---------------------------------------------------------------------------
 
-const bullMQConnection = {
+export const bullMQConnection = {
   host: process.env['REDIS_HOST'] ?? 'localhost',
   port: parseInt(process.env['REDIS_PORT'] ?? '6379', 10),
   password: process.env['REDIS_PASSWORD'],
@@ -96,6 +96,33 @@ export const videoAssemblyQueue = new Queue<VideoAssemblyJobPayload>(
 );
 
 // ---------------------------------------------------------------------------
+// Queue: publish-scheduled
+// Delayed jobs — each job fires exactly at the post's scheduledFor time.
+// jobId = scheduledPostId so we can remove/replace without storing a separate ref.
+// Concurrency: 5 | Retry: 3x exponential (30s base) | Timeout: 120s
+// ---------------------------------------------------------------------------
+
+export interface PublishScheduledJobPayload {
+  scheduledPostId: string;
+  tenantId: string;
+}
+
+export const PUBLISH_SCHEDULED_QUEUE = 'publish-scheduled';
+
+export const publishScheduledQueue = new Queue<PublishScheduledJobPayload>(
+  PUBLISH_SCHEDULED_QUEUE,
+  {
+    connection: bullMQConnection,
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 30_000 },
+      removeOnComplete: { count: 200 },
+      removeOnFail: { count: 200 },
+    },
+  },
+);
+
+// ---------------------------------------------------------------------------
 // Queue: dead-letter-queue
 // No workers — jobs land here for manual review + alerting
 // ---------------------------------------------------------------------------
@@ -151,6 +178,7 @@ export async function closeAllQueues(): Promise<void> {
     contentGenerationQueue.close(),
     imageProcessingQueue.close(),
     videoAssemblyQueue.close(),
+    publishScheduledQueue.close(),
     deadLetterQueue.close(),
     contentGenerationQueueEvents.close(),
     imageProcessingQueueEvents.close(),

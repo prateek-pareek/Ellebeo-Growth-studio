@@ -13,6 +13,17 @@ export const Route = createFileRoute("/brand")({
   component: BrandPage,
 });
 
+function humanizeTag(value: string): string {
+  if (!value) return "";
+  return value.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
+
+function consentDotClass(status: string): string {
+  if (status === "owned" || status === "client_consented") return "bg-sage";
+  if (status === "no_consent") return "bg-destructive";
+  return "bg-taupe";
+}
+
 function BrandPage() {
   const { data: brandDNA, loading, isEmpty, error, refresh } = useBrandDna();
   const location = useLocation();
@@ -144,12 +155,13 @@ function BrandPage() {
               {/* Colours */}
               <div className="px-5 py-4 grid grid-cols-[9rem_1fr] gap-4 items-center">
                 <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Colours</span>
-                {brandDNA.palette.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {brandDNA.palette.map((c) => (
-                      <div key={c} className="flex flex-col items-center gap-1">
-                        <div className="size-8 rounded-sm ring-1 ring-border shrink-0" style={{ backgroundColor: c }} />
-                        <span className="text-[9px] text-taupe font-mono">{c}</span>
+                {brandDNA.paletteLabeled.length > 0 ? (
+                  <div className="flex flex-wrap gap-3">
+                    {brandDNA.paletteLabeled.map((c) => (
+                      <div key={c.role} className="flex flex-col items-center gap-1">
+                        <div className="size-8 rounded-sm ring-1 ring-border shrink-0" style={{ backgroundColor: c.hex }} />
+                        <span className="text-[9px] uppercase tracking-widest text-taupe">{c.role}</span>
+                        <span className="text-[9px] text-taupe font-mono">{c.hex}</span>
                       </div>
                     ))}
                   </div>
@@ -300,23 +312,68 @@ function BrandPage() {
             </div>
           </div>
 
-          {brandDNA.moodboard.length > 0 && (
-            <>
-              <h2 className="eyebrow mb-4 pb-3 border-b hairline">Moodboard</h2>
-              <div className="grid grid-cols-3 gap-2">
-                {brandDNA.moodboard.map((src, i) => (
-                  <div
-                    key={i}
-                    className={
-                      "overflow-hidden ring-1 ring-border " +
-                      (i % 5 === 0 ? "aspect-[3/4] col-span-2 row-span-2" : "aspect-square")
-                    }
-                  >
-                    <img src={src} alt="moodboard" className="w-full h-full object-cover" loading="lazy" />
+          {brandDNA.moodboardLabeled.length > 0 && (
+            <div className="mb-10">
+              <div className="flex items-center justify-between mb-4 pb-3 border-b hairline">
+                <h2 className="eyebrow">Moodboard</h2>
+                <span className="text-[10px] uppercase tracking-widest text-taupe">
+                  {brandDNA.moodboardLabeled.length} reference{brandDNA.moodboardLabeled.length > 1 ? "s" : ""}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                {brandDNA.moodboardLabeled.map((m, i) => (
+                  <div key={i} className="group relative aspect-square overflow-hidden rounded-sm ring-1 ring-border bg-muted">
+                    <img
+                      src={m.url}
+                      alt="Moodboard reference"
+                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      loading="lazy"
+                    />
+                    {m.usage && (
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-2 pt-6 pb-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <p className="text-[9px] uppercase tracking-widest text-offwhite">{humanizeTag(m.usage)}</p>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
-            </>
+            </div>
+          )}
+
+          {brandDNA.assetLibrary.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-4 pb-3 border-b hairline">
+                <h2 className="eyebrow">Asset library</h2>
+                <span className="text-[10px] uppercase tracking-widest text-taupe">
+                  {brandDNA.assetLibrary.length} file{brandDNA.assetLibrary.length > 1 ? "s" : ""}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                {brandDNA.assetLibrary.map((a) => (
+                  <div key={a.id} className="group relative aspect-square overflow-hidden rounded-sm ring-1 ring-border bg-muted">
+                    <img
+                      src={a.url}
+                      alt={a.assetType || "Brand asset"}
+                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      loading="lazy"
+                    />
+                    <div className="absolute top-1.5 left-1.5 flex items-center gap-1">
+                      <span className={"size-1.5 rounded-full shrink-0 " + consentDotClass(a.consentStatus)} title={humanizeTag(a.consentStatus)} />
+                      {a.assetType && (
+                        <span className="text-[8px] uppercase tracking-widest text-offwhite bg-foreground/70 px-1.5 py-0.5">
+                          {humanizeTag(a.assetType)}
+                        </span>
+                      )}
+                    </div>
+                    {a.usageRule && (
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-2 pt-6 pb-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <p className="text-[9px] uppercase tracking-widest text-offwhite">{humanizeTag(a.usageRule)}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </section>
 

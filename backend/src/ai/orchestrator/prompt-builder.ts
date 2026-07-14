@@ -136,8 +136,10 @@ export class PromptBuilder {
       originalText?: string | null;
       editedText?: string | null;
     }>;
+    moodboardVisionSummary?: string;
+    assetLibraryVisionSummary?: string;
   }): Promise<AssembledPrompt> {
-    const { brandDNA, visionResult, businessGoal, goldenExamples, platform, serviceCategory = 'general', masterPromptText, consentRestrictions, appointmentContext, contentPillar, recentFeedback } = params;
+    const { brandDNA, visionResult, businessGoal, goldenExamples, platform, serviceCategory = 'general', masterPromptText, consentRestrictions, appointmentContext, contentPillar, recentFeedback, moodboardVisionSummary, assetLibraryVisionSummary } = params;
 
     const { brandDNAFragment, brandDNACacheHit } = await this.getBrandDNAFragment(brandDNA);
     const { goldenExamplesFragment, goldenExamplesCacheHit } =
@@ -240,6 +242,12 @@ You MUST format/orient this post to align with the '${contentPillar.toUpperCase(
       '## IMAGE ANALYSIS',
       visionSection || '(No image provided — generate based on appointment context only)',
       '',
+      moodboardVisionSummary ? '## MOODBOARD VISUAL DIRECTION (extracted from brand reference images)' : '',
+      moodboardVisionSummary ?? '',
+      moodboardVisionSummary ? '' : '',
+      assetLibraryVisionSummary ? '## BRAND ENVIRONMENT CONTEXT (extracted from asset library)' : '',
+      assetLibraryVisionSummary ?? '',
+      assetLibraryVisionSummary ? '' : '',
       contentPillar ? '## DYNAMIC CONTENT PILLAR' : '',
       pillarInstruction,
       contentPillar ? '' : '',
@@ -285,8 +293,8 @@ You MUST format/orient this post to align with the '${contentPillar.toUpperCase(
     const { previousCaption, previousHashtags, tweakInstruction, brandDNA } = params;
 
     const systemPrompt = `You are editing a social media caption for ${brandDNA.businessName}.
-Their brand voice is: ${brandDNA.primaryTone.replace(/_/g, ' ')}.
-They NEVER use these words: ${brandDNA.blacklistedWords.join(', ')}.
+Their brand voice is: ${(brandDNA.primaryTone ?? '').replace(/_/g, ' ')}.
+They NEVER use these words: ${brandDNA.vocabularyBlacklist.join(', ')}.
 Make ONLY the specific change requested. Preserve the brand voice exactly.
 Return JSON with the same structure as the original caption.`;
 
@@ -335,8 +343,8 @@ ${CRAFT_RULES}`;
     const str = (v: unknown, fallback = '') => (v != null ? String(v) : fallback);
     const tone = (v: unknown) => str(v).replace(/_/g, ' ');
 
-    const preferred = arr(dna.vocabularyPreferred ?? dna.preferredVocabulary);
-    const blacklist = arr(dna.vocabularyBlacklist ?? dna.blacklistedWords);
+    const preferred = arr(dna.vocabularyPreferred);
+    const blacklist = arr(dna.vocabularyBlacklist);
     const doNotSay = arr(dna.doNotSay);
     const painPoints = arr(dna.clientPainPoints);
 

@@ -165,15 +165,22 @@ export function AppShell() {
     );
   }
 
+  const isPlansCallback = useMemo(() => {
+    if (pathname !== "/plans") return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.has("success") || params.has("canceled");
+  }, [pathname]);
+
   useEffect(() => {
     if (loading) return;
+    if (isPlansCallback) return;
     if (!user && !AUTH_ROUTES.includes(pathname)) {
       navigate({ to: "/landing" });
     }
     if (user && AUTH_ROUTES.includes(pathname)) {
       navigate({ to: "/" });
     }
-  }, [loading, user, pathname, navigate]);
+  }, [loading, user, pathname, navigate, isPlansCallback]);
 
   if (loading) {
     return (
@@ -183,7 +190,7 @@ export function AppShell() {
     );
   }
 
-  if (AUTH_ROUTES.includes(pathname)) {
+  if (isPlansCallback || AUTH_ROUTES.includes(pathname)) {
     return <Outlet />;
   }
 

@@ -82,6 +82,15 @@ export class ConfirmUploadDto {
   isBeforePhoto?: boolean;
 }
 
+export class AttachAssetLibraryImageDto {
+  @IsString()
+  storagePath: string;
+
+  @IsBoolean()
+  @IsOptional()
+  isBeforePhoto?: boolean;
+}
+
 export class PaginationQueryDto {
   @IsOptional()
   @Type(() => Number)

@@ -17,6 +17,7 @@ export interface VisionAnalysisResult {
   imageQuality: 'excellent' | 'good' | 'acceptable' | 'poor';
   facesDetected: boolean;
   settingDetected: string;
+  framingType: 'macro' | 'portrait' | 'wide' | 'unknown';
 }
 
 // ---------------------------------------------------------------------------
