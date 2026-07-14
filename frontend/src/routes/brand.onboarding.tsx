@@ -238,7 +238,7 @@ function BrandDnaForm() {
     return (
       <div className="mt-6 lg:mt-10">
         <p className="eyebrow mb-5">Brand DNA · Published</p>
-        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight">
+        <h1 className="page-title">
           Saved to your <span className="italic">Brand DNA</span>.
         </h1>
         <p className="mt-6 text-base text-taupe leading-relaxed">
@@ -271,7 +271,7 @@ function BrandDnaForm() {
       <div className="flex flex-wrap items-center gap-3 mb-5">
         <p className="eyebrow">Brand DNA</p>
       </div>
-      <h1 className="font-serif text-4xl sm:text-5xl lg:text-[3.25rem] leading-[1.05] tracking-tight mb-5">
+      <h1 className="page-title mb-5">
         Your <span className="italic">brand bible</span>, built for AI.
       </h1>
       <p className="text-sm text-taupe leading-relaxed max-w-[60ch] mb-2">
@@ -336,7 +336,7 @@ function BrandDnaForm() {
       </div>
 
       {/* Two-column layout */}
-      <div className="grid grid-cols-12 gap-8 lg:gap-12">
+      <div className="grid grid-cols-12 gap-8 lg:gap-10">
 
         {/* Accordion sections */}
         <div className="col-span-12 lg:col-span-8 space-y-3">

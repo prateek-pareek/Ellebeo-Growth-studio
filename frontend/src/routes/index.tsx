@@ -106,7 +106,7 @@ function HomePage() {
             Live
           </span>
         </div>
-        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight max-w-[22ch]">
+        <h1 className="page-title max-w-[22ch]">
           {greeting}, <span className="italic text-taupe">{firstName}.</span>
         </h1>
         <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[52ch]">
@@ -133,7 +133,7 @@ function HomePage() {
             <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-muted-foreground group-hover:text-taupe transition-colors">
               Review
             </p>
-            <p className="mt-2 font-serif text-4xl tabular-nums">{postsReadyForReview}</p>
+            <p className="mt-2 stat-figure">{postsReadyForReview}</p>
             <p className="text-xs text-taupe mt-1 mb-3">posts ready for review</p>
             <span className="text-[10px] uppercase tracking-widest text-foreground border-b border-foreground/40 pb-0.5 group-hover:border-foreground transition-colors">
               Open queue →
@@ -144,7 +144,7 @@ function HomePage() {
             <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-muted-foreground group-hover:text-taupe transition-colors">
               Consent
             </p>
-            <p className="mt-2 font-serif text-4xl tabular-nums">{consentPending}</p>
+            <p className="mt-2 stat-figure">{consentPending}</p>
             <p className="text-xs text-taupe mt-1 mb-3">client consent waiting</p>
             <Link
               to="/appointments"
@@ -162,7 +162,7 @@ function HomePage() {
             <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-muted-foreground group-hover:text-taupe transition-colors">
               This week
             </p>
-            <p className="mt-2 font-serif text-4xl tabular-nums">{scheduledThisWeek}</p>
+            <p className="mt-2 stat-figure">{scheduledThisWeek}</p>
             <p className="text-xs text-taupe mt-1 mb-3">posts scheduled</p>
             <span className="text-[10px] uppercase tracking-widest text-foreground border-b border-foreground/40 pb-0.5 group-hover:border-foreground transition-colors">
               Open calendar →
@@ -186,7 +186,7 @@ function HomePage() {
         </div>
 
         {!brandDNA ? (
-          <div className="flex flex-col items-center justify-center border-2 border-dashed border-border m-6 py-12 text-center bg-muted/20">
+          <div className="flex flex-col items-center justify-center border-2 border-dashed border-border m-6 py-10 text-center bg-muted/20">
             <p className="eyebrow mb-2">Not set up yet</p>
             <p className="text-sm text-taupe mb-4 max-w-[40ch] mx-auto">
               Build your Brand DNA to power every piece of content this account generates.
@@ -342,7 +342,7 @@ function HomePage() {
             </div>
             <div className="p-6">
               <div className="flex items-baseline justify-between mb-2">
-                <span className="font-serif text-5xl tabular-nums">{bookingsThisWeek}</span>
+                <span className="stat-figure-lg">{bookingsThisWeek}</span>
                 {bookingTarget > 0 && (
                   <span className="text-xs text-taupe uppercase tracking-widest">target {bookingTarget}</span>
                 )}
