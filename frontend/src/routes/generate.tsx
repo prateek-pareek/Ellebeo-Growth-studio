@@ -1264,11 +1264,22 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep, onRe
   const safeSlide = Math.min(activeSlide, Math.max(0, carouselSlides.length - 1));
   const safeFrame = Math.min(activeSlide, Math.max(0, storyFrames.length - 1));
 
+  // Determine active image URL based on selected text variant
+  const getVariantUrl = (slideData: any) => {
+    if (!slideData) return null;
+    const isGeminiText = opt?.generatedBy?.toLowerCase().includes('gemini');
+    if (slideData.variants) {
+      if (isGeminiText && slideData.variants.gemini) return slideData.variants.gemini;
+      if (!isGeminiText && slideData.variants.dalle) return slideData.variants.dalle;
+    }
+    return slideData.url;
+  };
+
   // For single-image posts: primary processed image or first frame url
   const singleImageUrl: string | null =
     contentItem.processedImageUrlFeed ||
-    (isCarousel ? carouselSlides[0]?.url : undefined) ||
-    (isStory ? storyFrames[0]?.url : undefined) ||
+    (isCarousel ? getVariantUrl(carouselSlides[0]) : undefined) ||
+    (isStory ? getVariantUrl(storyFrames[0]) : undefined) ||
     null;
 
   const charCount = (opt.caption ?? "").length;
@@ -1539,7 +1550,7 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep, onRe
                 >
                   <div className="aspect-[9/16] relative overflow-hidden bg-foreground">
                     <img
-                      src={storyFrames[safeFrame]?.url}
+                      src={getVariantUrl(storyFrames[safeFrame])}
                       alt={storyFrames[safeFrame]?.label}
                       className="absolute inset-0 w-full h-full object-cover"
                     />
@@ -1780,7 +1791,7 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep, onRe
               {/* Main slide — 1:1 square carousel ratio */}
               <div className="relative aspect-square overflow-hidden">
                 <img
-                  src={carouselSlides[safeSlide]?.url}
+                  src={getVariantUrl(carouselSlides[safeSlide])}
                   alt={carouselSlides[safeSlide]?.label ?? `Slide ${safeSlide + 1}`}
                   className="absolute inset-0 w-full h-full object-cover"
                 />

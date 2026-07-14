@@ -72,6 +72,11 @@ export class TemplateAgentService {
       }
     }
 
+    let textConstraints = '';
+    if (textLength === 0) {
+      textConstraints = `\n- TEXT CONSTRAINT (CRITICAL): There is absolutely NO overlay text for this slide. You MUST NOT select any layout that relies on text blocks or text backgrounds (like 'editorial_stack' or 'translucent_left_panel'). You MUST select a clean, image-focused layout.`;
+    }
+
     const systemPrompt = `
 You are an elite Art Director and Template Agent for a premium MedSpa / Beauty marketing studio.
 Your job is to select the absolute best visual layout from our Template Library for a given slide.
@@ -81,7 +86,7 @@ CONTEXT:
 - Brand Aesthetic: ${aesthetic}
 - Slide Position: ${slideIndex + 1} of ${totalSlides}
 - Overlay Text Length: ${textLength} characters
-${gridConstraints ? `- GRID CONSTRAINTS (CRITICAL): ${gridConstraints}` : ''}${visionConstraints}
+${gridConstraints ? `- GRID CONSTRAINTS (CRITICAL): ${gridConstraints}` : ''}${visionConstraints}${textConstraints}
 
 BRIEF FOR THIS SLIDE:
 ${brief || 'Standard beautifully aesthetic post.'}
