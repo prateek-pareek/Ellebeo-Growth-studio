@@ -70,10 +70,10 @@ function ProfilePage() {
     <div>
 
       {/* ── Page header ──────────────────────────────────────────────────── */}
-      <header className="mt-6 lg:mt-10 mb-10 flex flex-wrap items-end justify-between gap-6">
+      <header className="mt-6 lg:mt-8 mb-8 flex flex-wrap items-end justify-between gap-6">
         <div className="max-w-[60ch]">
-          <p className="eyebrow mb-5">Profile optimisation</p>
-          <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight">
+          <p className="eyebrow mb-4">Profile optimisation</p>
+          <h1 className="page-title">
             Make your Elle.Be.O profile <span className="italic">work harder</span>.
           </h1>
           <p className="mt-6 text-base sm:text-lg text-taupe leading-relaxed">
@@ -129,14 +129,14 @@ function ProfilePage() {
         </div>
       </header>
 
-      <div className="grid grid-cols-12 gap-8 lg:gap-12">
+      <div className="grid grid-cols-12 gap-8 lg:gap-10">
 
         {/* ── Left: Profile strength ────────────────────────────────────── */}
         <section className="col-span-12 lg:col-span-5">
           <h2 className="eyebrow mb-6">Profile strength</h2>
           <div className="artifact p-8">
             <div className="flex items-baseline justify-between mb-3">
-              <span className="font-serif text-5xl tabular-nums">
+              <span className="stat-figure-lg">
                 {profile.completion}
                 <span className="text-base text-taupe font-sans">%</span>
               </span>

@@ -76,12 +76,12 @@ function GrantedView({ data }: { data: NonNullable<ReturnType<typeof useConsentR
 
   return (
     <div>
-      <header className="mt-6 lg:mt-10 mb-10 max-w-[68ch]">
-        <div className="flex items-center gap-3 mb-5 flex-wrap">
+      <header className="mt-6 lg:mt-8 mb-8 max-w-[68ch]">
+        <div className="flex items-center gap-3 mb-4 flex-wrap">
           <p className="eyebrow">Consent record</p>
           <span className="text-[9px] uppercase tracking-widest border hairline border-sage px-2 py-1 text-sage">Granted</span>
         </div>
-        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight">
+        <h1 className="page-title">
           <span className="italic">{appointment.clientName}</span> has consented.
         </h1>
         <p className="mt-6 text-base sm:text-lg text-taupe leading-relaxed">
@@ -90,7 +90,7 @@ function GrantedView({ data }: { data: NonNullable<ReturnType<typeof useConsentR
         </p>
       </header>
 
-      <div className="grid grid-cols-12 gap-8 lg:gap-12">
+      <div className="grid grid-cols-12 gap-8 lg:gap-10">
         {/* Permission breakdown — now editable */}
         <section className="col-span-12 lg:col-span-7">
           <div className="flex items-center justify-between mb-4">
@@ -281,7 +281,7 @@ function RequestView({ data }: { data: NonNullable<ReturnType<typeof useConsentR
             <span className="text-[9px] uppercase tracking-widest border hairline border-destructive px-2 py-1 text-destructive">Declined</span>
           )}
         </div>
-        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight">
+        <h1 className="page-title">
           Ask <span className="italic">{appointment.clientName}</span> what's okay.
         </h1>
         <p className="mt-6 text-base sm:text-lg text-taupe leading-relaxed">
@@ -289,7 +289,7 @@ function RequestView({ data }: { data: NonNullable<ReturnType<typeof useConsentR
         </p>
       </header>
 
-      <div className="grid grid-cols-12 gap-8 lg:gap-12">
+      <div className="grid grid-cols-12 gap-8 lg:gap-10">
         {/* Permissions checklist */}
         <section className="col-span-12 lg:col-span-7">
           <h2 className="eyebrow mb-4">What you're asking the client to approve</h2>

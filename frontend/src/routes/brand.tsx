@@ -69,7 +69,7 @@ function BrandPage() {
             </span>
           )}
         </div>
-        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight max-w-[22ch]">
+        <h1 className="page-title max-w-[22ch]">
           Your Brand DNA is <span className="italic text-taupe">ready</span>.
         </h1>
         <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[52ch]">
@@ -127,7 +127,7 @@ function BrandPage() {
         </div>
       </section>
 
-      <div className="grid grid-cols-12 gap-8 lg:gap-12">
+      <div className="grid grid-cols-12 gap-8 lg:gap-10">
         {/* ── Identity & palette ───────────────────────────────────────── */}
         <section className="col-span-12 lg:col-span-5">
           {/* Visual identity — definition table */}
@@ -289,7 +289,7 @@ function BrandPage() {
                 <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-muted-foreground group-hover:text-taupe transition-colors">
                   Bookings per week
                 </p>
-                <p className="mt-2 font-serif text-4xl tabular-nums text-foreground">
+                <p className="mt-2 stat-figure text-foreground">
                   {brandDNA.goals.bookingsPerWeek}
                 </p>
               </div>
@@ -297,7 +297,7 @@ function BrandPage() {
                 <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-muted-foreground group-hover:text-taupe transition-colors">
                   Posts per week
                 </p>
-                <p className="mt-2 font-serif text-4xl tabular-nums text-foreground">
+                <p className="mt-2 stat-figure text-foreground">
                   {brandDNA.goals.postsPerWeek}
                 </p>
               </div>
@@ -305,7 +305,7 @@ function BrandPage() {
                 <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-muted-foreground group-hover:text-taupe transition-colors">
                   Focus services
                 </p>
-                <p className="mt-2 font-serif text-4xl tabular-nums text-foreground">
+                <p className="mt-2 stat-figure text-foreground">
                   {brandDNA.goals.focusServices.length}
                 </p>
               </div>
@@ -436,7 +436,7 @@ function BrandEmptyState() {
       />
       <div className="pl-4 sm:pl-5">
         <p className="eyebrow mb-4">Brand DNA · the intelligence layer</p>
-        <h1 className="font-serif text-4xl sm:text-5xl leading-[1.05] tracking-tight">
+        <h1 className="page-title">
           Your Brand DNA is <span className="italic">not set up yet</span>.
         </h1>
         <p className="mt-5 text-base sm:text-lg text-taupe leading-relaxed">

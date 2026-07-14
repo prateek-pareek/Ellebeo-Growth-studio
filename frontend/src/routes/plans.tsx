@@ -256,9 +256,9 @@ function PlansPage() {
         </div>
 
         {/* Header */}
-        <header className="mb-14">
+        <header className="mb-10">
           <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-taupe mb-3">Subscription plans</p>
-          <h1 className="font-serif text-5xl sm:text-6xl leading-[1.05] tracking-tight">
+          <h1 className="page-title">
             Choose your <span className="italic text-taupe">studio</span>.
           </h1>
           <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[52ch]">

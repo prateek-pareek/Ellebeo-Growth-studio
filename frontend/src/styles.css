@@ -143,4 +143,31 @@
   .hairline {
     border-color: oklch(0.58 0.025 50 / 0.18);
   }
+  /* Global page-header title — single source for size across all app pages */
+  .page-title {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    line-height: 1.05;
+    font-size: 1.875rem; /* text-3xl */
+  }
+  @media (min-width: 40rem) {
+    .page-title { font-size: 2.25rem; } /* sm:text-4xl */
+  }
+  @media (min-width: 64rem) {
+    .page-title { font-size: 3rem; } /* lg:text-5xl */
+  }
+  /* Global stat figure — dashboard/summary numbers */
+  .stat-figure {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+    font-size: 1.875rem; /* text-3xl */
+  }
+  .stat-figure-lg {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+    font-size: 2.25rem; /* text-4xl */
+  }
 }
