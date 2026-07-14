@@ -407,7 +407,7 @@ function GeneratePage() {
             </span>
           )}
         </div>
-        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight max-w-[20ch]">
+        <h1 className="page-title max-w-[20ch]">
           Turn this appointment into <span className="italic text-taupe">content.</span>
         </h1>
         <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[52ch]">

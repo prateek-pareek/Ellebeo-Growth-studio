@@ -24,9 +24,9 @@ function CampaignsPage() {
 
   return (
     <div>
-      <header className="mt-6 lg:mt-10 mb-10 max-w-[68ch]">
-        <p className="eyebrow mb-5">Campaigns</p>
-        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight">
+      <header className="mt-6 lg:mt-8 mb-8 max-w-[68ch]">
+        <p className="eyebrow mb-4">Campaigns</p>
+        <h1 className="page-title">
           Run a <span className="italic">campaign</span> with a clear goal.
         </h1>
         <p className="mt-6 text-base sm:text-lg text-taupe leading-relaxed">
@@ -34,7 +34,7 @@ function CampaignsPage() {
         </p>
       </header>
 
-      <section className="mb-16">
+      <section className="mb-10">
         <h2 className="eyebrow mb-6">Start from a goal</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-px bg-border border hairline">
           {PRESETS.map((p) => (

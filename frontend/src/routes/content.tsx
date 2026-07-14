@@ -127,7 +127,7 @@ function ContentPage() {
             </span>
           )}
         </div>
-        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight max-w-[22ch]">
+        <h1 className="page-title max-w-[22ch]">
           Every draft, post and <span className="italic text-taupe">publish</span> in one place.
         </h1>
         <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[52ch]">
@@ -804,7 +804,7 @@ function ActivePill({ label, onRemove }: { label: string; onRemove: () => void }
 
 function EmptyState({ hasFilters, onClear }: { hasFilters: boolean; onClear: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center border-2 border-dashed border-border bg-muted/20 py-14 text-center">
+    <div className="flex flex-col items-center justify-center border-2 border-dashed border-border bg-muted/20 py-10 text-center">
       <p className="eyebrow mb-3">No content matches</p>
       <p className="font-serif text-2xl mb-3">
         {hasFilters ? "Nothing here with those filters." : "Your library is empty."}

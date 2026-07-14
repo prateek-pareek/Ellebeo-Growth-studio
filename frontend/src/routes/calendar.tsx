@@ -74,10 +74,10 @@ function CalendarPage() {
 
   return (
     <>
-      <header className="mt-6 lg:mt-10 mb-10 flex flex-wrap items-end justify-between gap-6">
+      <header className="mt-6 lg:mt-8 mb-8 flex flex-wrap items-end justify-between gap-6">
         <div className="max-w-[60ch]">
-          <p className="eyebrow mb-5">Calendar</p>
-          <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight">
+          <p className="eyebrow mb-4">Calendar</p>
+          <h1 className="page-title">
             <span className="italic">{month}</span>
           </h1>
           <p className="mt-6 text-base sm:text-lg text-taupe leading-relaxed">
@@ -129,7 +129,7 @@ function CalendarPage() {
       </div>
 
       {/* Calendar grid */}
-      <div className="grid grid-cols-7 gap-px bg-border border hairline mb-12">
+      <div className="grid grid-cols-7 gap-px bg-border border hairline mb-8">
         {Array.from({ length: totalCells }, (_, i) => {
           const day = i - startOffset + 1;
           const inMonth = day >= 1 && day <= daysInMonth;
@@ -208,7 +208,7 @@ function CalendarPage() {
       </div>
 
       {/* Legend */}
-      <div className="flex flex-wrap items-center gap-6 mb-12 text-[10px] uppercase tracking-widest text-taupe">
+      <div className="flex flex-wrap items-center gap-6 mb-8 text-[10px] uppercase tracking-widest text-taupe">
         <span className="flex items-center gap-2"><span className="size-1.5 rounded-full bg-foreground" /> Scheduled</span>
         <span className="flex items-center gap-2"><span className="size-1.5 rounded-full bg-taupe/60" /> Draft</span>
         <span className="flex items-center gap-2"><span className="size-1.5 rounded-full bg-sage" /> Published</span>
@@ -216,7 +216,7 @@ function CalendarPage() {
         <span className="flex items-center gap-2"><span className="text-[8px] uppercase tracking-widest">Quiet</span> Quiet weekday</span>
       </div>
 
-      <div className="grid grid-cols-12 gap-8 lg:gap-12">
+      <div className="grid grid-cols-12 gap-8 lg:gap-10">
         {/* Posting cadence */}
         <section className="col-span-12 lg:col-span-5">
           <h3 className="eyebrow mb-4">Posting cadence — {month}</h3>
