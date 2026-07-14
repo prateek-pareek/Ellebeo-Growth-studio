@@ -1090,7 +1090,7 @@ CRITICAL IMAGE REQUIREMENTS:
             font-weight: bold;
             font-style: normal;
           }`
-        : `@import url('https://fonts.googleapis.com/css2?family=${encodeURIComponent(brandFont)}:wght@700&display=swap');`;
+        : `@import url('https://fonts.googleapis.com/css2?family=${encodeURIComponent(brandFont)}:wght@700&amp;display=swap');`;
 
       const bodyFontFace = bodyFontBase64
         ? `@font-face {
@@ -1099,7 +1099,7 @@ CRITICAL IMAGE REQUIREMENTS:
             font-weight: normal;
             font-style: normal;
           }`
-        : `@import url('https://fonts.googleapis.com/css2?family=${encodeURIComponent(bodyFont)}:wght@400&display=swap');`;
+        : `@import url('https://fonts.googleapis.com/css2?family=${encodeURIComponent(bodyFont)}:wght@400&amp;display=swap');`;
 
       // Pre-compile conditional SVG components
       const watermarkText = (layoutType !== 'full_bleed_clean' && layoutType !== 'poster_cover')
