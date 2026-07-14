@@ -44,6 +44,7 @@ import { GridOrchestratorService } from '../services/grid-orchestrator.service';
 import { MoodboardVisionChain } from '../chains/moodboard-vision.chain';
 import { AssetLibraryVisionChain, type AssetLibraryItemInput } from '../chains/asset-library-vision.chain';
 import { TemplateAgentService } from '../services/template-agent.service';
+import { ImageEnhancementService } from '../services/image-enhancement.service';
 
 type NotifyFn = (dto: {
   tenantId: string;
@@ -83,6 +84,7 @@ export class GenerationOrchestrator {
   private readonly moodboardVisionChain: MoodboardVisionChain;
   private readonly assetLibraryVisionChain: AssetLibraryVisionChain;
   private readonly templateAgent: TemplateAgentService;
+  private readonly imageEnhancementService: ImageEnhancementService;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -122,6 +124,7 @@ export class GenerationOrchestrator {
     this.moodboardVisionChain = new MoodboardVisionChain();
     this.assetLibraryVisionChain = new AssetLibraryVisionChain();
     this.templateAgent = new TemplateAgentService();
+    this.imageEnhancementService = new ImageEnhancementService();
   }
 
   // --------------------------------------------------------------------------
@@ -597,10 +600,19 @@ Requirements:
 
     let carouselSlides: CarouselSlides | null = null;
     const isCarousel = (generationOptions.outputFormats as string[]).includes('carousel');
-    const afterPhotoUrl = payload.imageAssets.find(a => a.isAfterPhoto)?.rawStoragePath
+    let afterPhotoUrl = payload.imageAssets.find(a => a.isAfterPhoto)?.rawStoragePath
       ?? payload.imageAssets[0]?.rawStoragePath
       ?? '';
-    const beforePhotoUrl = payload.imageAssets.find(a => a.isBeforePhoto)?.rawStoragePath;
+    let beforePhotoUrl = payload.imageAssets.find(a => a.isBeforePhoto)?.rawStoragePath;
+
+    // Ticket 5: AI Super Resolution and Inpainting
+    const brandColor = brandDNA.primaryBrandColor ?? '#1a1a1a';
+    if (afterPhotoUrl) {
+      afterPhotoUrl = await this.imageEnhancementService.enhanceImage(afterPhotoUrl, moodboardVisionSummary ?? '', brandColor);
+    }
+    if (beforePhotoUrl) {
+      beforePhotoUrl = await this.imageEnhancementService.enhanceImage(beforePhotoUrl, moodboardVisionSummary ?? '', brandColor);
+    }
 
     if (isCarousel && captionResult) {
       try {
