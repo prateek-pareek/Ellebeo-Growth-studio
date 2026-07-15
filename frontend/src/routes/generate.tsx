@@ -1267,11 +1267,17 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep, onRe
   // Determine active image URL based on selected text variant
   const getVariantUrl = (slideData: any) => {
     if (!slideData) return null;
+    
+    // Check if the current selected option is Gemini
     const isGeminiText = opt?.generatedBy?.toLowerCase().includes('gemini');
+    
+    // If the slide has variants, prefer the one matching the current text model
     if (slideData.variants) {
       if (isGeminiText && slideData.variants.gemini) return slideData.variants.gemini;
       if (!isGeminiText && slideData.variants.dalle) return slideData.variants.dalle;
     }
+    
+    // Fallback if variants are missing or specific model image is missing
     return slideData.url;
   };
 
@@ -1574,7 +1580,7 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep, onRe
                         Frame {safeFrame + 1} of {storyFrames.length}
                       </p>
                       <p className="text-xs font-medium text-offwhite leading-snug">
-                        {storyFrames[safeFrame]?.label}
+                        {storyFrames[safeFrame]?.title || storyFrames[safeFrame]?.label || `FRAME 0${safeFrame + 1}`}
                       </p>
                     </div>
                   </div>
@@ -1611,7 +1617,7 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep, onRe
                         {String(i + 1).padStart(2, '0')}
                       </span>
                       <span className="text-xs font-medium truncate">
-                        {frame.title ?? frame.label ?? `Frame ${i + 1}`}
+                        {frame.title || frame.label || `Frame ${i + 1}`}
                       </span>
                     </button>
                   ))}

@@ -62,17 +62,29 @@ export class SharpImagePipelineService {
   ): Promise<string> {
     const { width, height } = PLATFORM_DIMS[format];
 
-    let pipeline = sharp(imageBuffer)
-      .resize(width, height, { fit: 'cover', position: 'attention' }); // attention = smart crop
-
-    // No face detection — apply light blur to entire image when consent denies face
+    // Smart Portrait Fit: Avoid aggressive face zooming by containing the image over a blurred background
+    let pipeline = sharp(imageBuffer);
     if (blurFaces) {
-      pipeline = pipeline.blur(8);
+      pipeline = pipeline.blur(8); // No face detection — apply light blur to entire image when consent denies face
     }
+    
+    const processedBuffer = await pipeline.toBuffer();
 
-    const processed = await pipeline.jpeg({ quality: 88 }).toBuffer();
+    const containedImg = await sharp(processedBuffer)
+      .resize(width, height, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .toBuffer();
 
-    return this.uploadToFirebase(processed, tenantId, format);
+    const blurBase = await sharp(processedBuffer)
+      .resize(width, height, { fit: 'cover' })
+      .blur(40)
+      .toBuffer();
+
+    const composited = await sharp(blurBase)
+      .composite([{ input: containedImg }])
+      .jpeg({ quality: 88 })
+      .toBuffer();
+
+    return this.uploadToFirebase(composited, tenantId, format);
   }
 
   private async uploadToFirebase(

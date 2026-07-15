@@ -60,8 +60,9 @@ export class TemplateAgentService {
     totalSlides: number;
     gridConstraints?: string;
     visionResult?: import('../types/chain-output.types').VisionAnalysisResult | null;
+    excludeLayouts?: string[];
   }): Promise<{ selected_layout_id: string; reasoning: string }> {
-    const { brief, brandName, aesthetic, textLength, slideIndex, totalSlides, gridConstraints, visionResult } = params;
+    const { brief, brandName, aesthetic, textLength, slideIndex, totalSlides, gridConstraints, visionResult, excludeLayouts = [] } = params;
 
     let visionConstraints = '';
     if (visionResult) {
@@ -99,7 +100,8 @@ INSTRUCTIONS:
 3. Select the SINGLE most appropriate template ID that visually matches the intent.
 4. If this is slide 1 (cover), prefer highly visual/hook layouts. If it is a middle slide with lots of text, prefer layouts with clear text regions.
 5. YOU MUST OBEY THE GRID CONSTRAINTS (if provided). If the grid constraints say "Avoid heavy text", you MUST filter your selection to layouts with minimal text regions.
-6. Return your decision strictly in valid JSON format.
+6. EXCLUSIONS: You MUST NOT select any of these layout IDs: ${excludeLayouts.join(', ')}. Pick a different valid layout.
+7. Return your decision strictly in valid JSON format.
 
 JSON SCHEMA EXPECTED:
 {
@@ -114,7 +116,7 @@ JSON SCHEMA EXPECTED:
         model: 'gpt-4o', // Fast and smart enough for routing
         messages: [{ role: 'system', content: systemPrompt }],
         response_format: { type: 'json_object' },
-        temperature: 0.4, // Keep it deterministic but creative
+        temperature: 0.8, // Increased for creative diversity across generations
         max_tokens: 250,
       });
 
