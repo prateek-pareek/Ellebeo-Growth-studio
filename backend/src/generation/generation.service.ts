@@ -47,6 +47,7 @@ export class GenerationService {
         ? await this.prisma.consentRecord.findUnique({ where: { id: appointment.consentRecordId } })
         : await this.prisma.consentRecord.findFirst({
           where: { clientId: appointment.clientId, tenantId, isCurrent: true },
+          orderBy: { updatedAt: 'desc' },
         });
 
       if (!consentRecord || consentRecord.status !== 'granted') {
@@ -62,11 +63,14 @@ export class GenerationService {
       throw new BadRequestException('Brand DNA must be configured before generation');
     }
 
-    // ── Daily limit gate for subscribed tiers (tier1/tier2) ──────────────────
-    const limits = this.getTierLimits(tier);
+    // ── Daily limit gate — admin-configurable per tier ────────────────────────
+    // Applies to all 5 paid commercial tiers (tier1-tier5). 'free' is excluded
+    // here — it has its own separate lifetime trial/purchased-pack gate below,
+    // which already serves the same cost-protection purpose for that tier.
+    const limits = await this.getTierLimits(tier);
     const usage = await this.getTodayUsage(tenantId);
 
-    if (!trialBypassed && ['tier1', 'tier2'].includes(tier)) {
+    if (!trialBypassed && ['tier1', 'tier2', 'tier3', 'tier4', 'tier5'].includes(tier)) {
       if (usage.generations >= limits.generations) {
         throw new ForbiddenException({
           error: 'DAILY_LIMIT_REACHED',
@@ -252,7 +256,7 @@ export class GenerationService {
   async getRateLimitStatus(tenantId: string) {
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
 
-    const limits = this.getTierLimits(tenant?.subscriptionTier ?? 'free');
+    const limits = await this.getTierLimits(tenant?.subscriptionTier ?? 'free');
     const usage = await this.getTodayUsage(tenantId);
 
     const TRIAL_LIMIT = 2;
@@ -291,18 +295,55 @@ export class GenerationService {
     return { priceUsd: settings.priceUsd, generationsIncluded: settings.generationsIncluded };
   }
 
-  private getTierLimits(tier: string): { generations: number; reels: number } {
-    const LIMITS: Record<string, { generations: number; reels: number }> = {
-      free: { generations: 5, reels: 2 },
-      standard: { generations: 50, reels: 10 },
-      premium: { generations: 999, reels: 999 },
-      tier1: { generations: 2, reels: 0 },
-      tier2: { generations: 2, reels: 2 },
-      tier3: { generations: 999, reels: 20 },
-      tier4: { generations: 999, reels: 20 },
-      tier5: { generations: 999, reels: 999 },
-    };
-    return LIMITS[tier] ?? LIMITS['free'];
+  // Defaults match the limits that were hardcoded here before tier limits
+  // became admin-editable — used only to self-seed the DB table on first read.
+  private static readonly DEFAULT_TIER_LIMITS: Record<string, { generations: number; reels: number }> = {
+    free: { generations: 5, reels: 2 },
+    standard: { generations: 50, reels: 10 },
+    premium: { generations: 999, reels: 999 },
+    tier1: { generations: 2, reels: 0 },
+    tier2: { generations: 2, reels: 2 },
+    tier3: { generations: 999, reels: 20 },
+    tier4: { generations: 999, reels: 20 },
+    tier5: { generations: 999, reels: 999 },
+  };
+
+  private tierLimitsCache: { data: Record<string, { generations: number; reels: number }>; fetchedAt: number } | null = null;
+  private static readonly TIER_LIMITS_CACHE_TTL_MS = 60_000;
+
+  private async loadTierLimits(): Promise<Record<string, { generations: number; reels: number }>> {
+    if (this.tierLimitsCache && Date.now() - this.tierLimitsCache.fetchedAt < GenerationService.TIER_LIMITS_CACHE_TTL_MS) {
+      return this.tierLimitsCache.data;
+    }
+
+    let rows = await this.prisma.tierGenerationLimits.findMany();
+
+    if (rows.length === 0) {
+      // First-ever read — seed the table with today's defaults so behavior is
+      // unchanged until an admin actually edits a tier via the admin portal.
+      await this.prisma.tierGenerationLimits.createMany({
+        data: Object.entries(GenerationService.DEFAULT_TIER_LIMITS).map(([tier, v]) => ({
+          tier: tier as any,
+          generationsPerDay: v.generations,
+          reelsPerDay: v.reels,
+        })),
+        skipDuplicates: true,
+      });
+      rows = await this.prisma.tierGenerationLimits.findMany();
+    }
+
+    const data: Record<string, { generations: number; reels: number }> = {};
+    for (const row of rows) {
+      data[row.tier] = { generations: row.generationsPerDay, reels: row.reelsPerDay };
+    }
+
+    this.tierLimitsCache = { data, fetchedAt: Date.now() };
+    return data;
+  }
+
+  private async getTierLimits(tier: string): Promise<{ generations: number; reels: number }> {
+    const data = await this.loadTierLimits();
+    return data[tier] ?? GenerationService.DEFAULT_TIER_LIMITS['free']!;
   }
 
   private async getTodayUsage(tenantId: string): Promise<{ generations: number; reels: number }> {

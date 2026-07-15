@@ -477,9 +477,9 @@ export class GenerationOrchestrator {
     // â”€â”€ Step 5.5: Image Processing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     let imageResult: ImageProcessingResult | null = null;
     let aiImageCostUSD = 0;
+    const consentShowFace = !!(consentCheck.activeRestrictions as any)?.show_face;
     if (payload.imageAssets.length > 0) {
       const primaryAsset = payload.imageAssets[0]!;
-      const consentShowFace = !!(consentCheck.activeRestrictions as any)?.show_face;
 
       // Localhost URLs can't be reached by Cloudinary/OpenAI â€” use Sharp instead
       const isLocalUrl = primaryAsset.rawStoragePath.startsWith('http://localhost') ||
@@ -525,17 +525,30 @@ export class GenerationOrchestrator {
     }
 
     // â”€â”€ Step 5.55: AI-designed feed image (gpt-image-1) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    const feedPhotoUrl = payload.imageAssets.find(a => a.isAfterPhoto)?.rawStoragePath
+    const feedPhotoUrlRaw = payload.imageAssets.find(a => a.isAfterPhoto)?.rawStoragePath
       ?? payload.imageAssets[0]?.rawStoragePath;
 
+    let feedPhotoUrl: string | undefined = feedPhotoUrlRaw;
+    if (feedPhotoUrlRaw && !consentShowFace) {
+      try {
+        feedPhotoUrl = await this.sharpPipeline.blurImage(feedPhotoUrlRaw, tenantId);
+      } catch (err) {
+        console.error('[Orchestrator Step 5.55 Consent Blur Error]:', err);
+        feedPhotoUrl = undefined; // fail closed â€” never send an unblurred face to the AI model
+      }
+    }
+
     if (feedPhotoUrl && captionResult && imageResult) {
+      const safeFeedPhotoUrl = feedPhotoUrl;
       try {
         const feedPrompt = `Transform this beauty photo into a professional Instagram feed post for "${brandDNA.businessName}".
 Brand colors: ${brandDNA.primaryBrandColor ?? '#1a1a1a'} and ${brandDNA.secondaryBrandColor ?? '#f5f0eb'}.
 Aesthetic: ${(brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA.visualRanking) : null) ?? brandDNA.aestheticDirection ?? 'minimal editorial premium beauty'}.
 Caption hook: "${captionResult.hookSentence || captionResult.caption.slice(0, 80)}"
 Requirements:
-- Keep the real photo as the main visual â€” preserve the person/hair authentically
+${consentShowFace
+  ? '- Keep the real photo as the main visual â€” preserve the person/hair authentically'
+  : '- The client\'s face is already obscured for privacy â€” do NOT sharpen, restore, reconstruct, or otherwise reveal any facial detail; keep it fully obscured'}
 - Add subtle brand-matched design: clean typography, brand color accents
 - Minimal overlay â€” let the photo shine
 - Professional beauty industry aesthetic
@@ -545,8 +558,8 @@ Requirements:
           const https = await import('https');
           const http = await import('http');
           return new Promise<Buffer>((resolve, reject) => {
-            const protocol = feedPhotoUrl.startsWith('https') ? https : http;
-            (protocol as any).get(feedPhotoUrl, (res: any) => {
+            const protocol = safeFeedPhotoUrl.startsWith('https') ? https : http;
+            (protocol as any).get(safeFeedPhotoUrl, (res: any) => {
               const chunks: Buffer[] = [];
               res.on('data', (c: Buffer) => chunks.push(c));
               res.on('end', () => resolve(Buffer.concat(chunks)));
@@ -593,8 +606,12 @@ Requirements:
     const beforeAsset = payload.imageAssets.find(a => a.isBeforePhoto && a.rawStoragePath);
     if (beforeAsset && process.env['CLOUDINARY_CLOUD_NAME']) {
       try {
+        // Consent gate: only upload the raw (unblurred) before-photo when face display is allowed
         beforeCloudinaryId = beforeAsset.cloudinaryPublicId
-          ?? await this.imagePipeline.uploadUrl(beforeAsset.rawStoragePath, tenantId);
+          ?? await this.imagePipeline.uploadUrl(
+            consentShowFace ? beforeAsset.rawStoragePath : await this.sharpPipeline.blurImage(beforeAsset.rawStoragePath, tenantId),
+            tenantId,
+          );
       } catch { /* non-fatal */ }
     }
 
@@ -604,6 +621,28 @@ Requirements:
       ?? payload.imageAssets[0]?.rawStoragePath
       ?? '';
     let beforePhotoUrl = payload.imageAssets.find(a => a.isBeforePhoto)?.rawStoragePath;
+
+    // Consent gate: blur the raw source photos before any further AI processing
+    // (enhancement/carousel/story) touches them â€” never let an unblurred face
+    // reach a downstream AI image model when consent denies face display.
+    if (!consentShowFace) {
+      if (afterPhotoUrl) {
+        try {
+          afterPhotoUrl = await this.sharpPipeline.blurImage(afterPhotoUrl, tenantId);
+        } catch (err) {
+          console.error('[Orchestrator Step 5.6 Consent Blur Error]:', err);
+          afterPhotoUrl = '';
+        }
+      }
+      if (beforePhotoUrl) {
+        try {
+          beforePhotoUrl = await this.sharpPipeline.blurImage(beforePhotoUrl, tenantId);
+        } catch (err) {
+          console.error('[Orchestrator Step 5.6 Consent Blur Error]:', err);
+          beforePhotoUrl = undefined;
+        }
+      }
+    }
 
     // Ticket 5: AI Super Resolution and Inpainting
     const brandColor = brandDNA.primaryBrandColor ?? '#1a1a1a';

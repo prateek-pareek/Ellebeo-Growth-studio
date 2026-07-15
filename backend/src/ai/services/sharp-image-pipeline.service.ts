@@ -46,6 +46,19 @@ export class SharpImagePipelineService {
   }
 
   // --------------------------------------------------------------------------
+  // Whole-image blur — applied to a raw source photo BEFORE it is handed to an
+  // external AI image model, whenever consent denies face display. A strong
+  // sigma is used (vs. the lighter one for display variants) so the model
+  // cannot "sharpen"/reconstruct facial detail back out of the source.
+  // --------------------------------------------------------------------------
+
+  async blurImage(rawImageUrl: string, tenantId: string): Promise<string> {
+    const imageBuffer = await this.fetchImage(rawImageUrl);
+    const processed = await sharp(imageBuffer).blur(25).jpeg({ quality: 88 }).toBuffer();
+    return this.uploadToFirebase(processed, tenantId, 'consent-blur');
+  }
+
+  // --------------------------------------------------------------------------
 
   private async fetchImage(url: string): Promise<Buffer> {
     const res = await fetch(url);

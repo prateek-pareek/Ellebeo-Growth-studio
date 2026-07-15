@@ -107,7 +107,22 @@ export class BookingImportService {
         },
       });
 
-      // 3. Create consent record from CRM consent data
+      // 3. Demote any existing current consent record for this client first —
+      // otherwise multiple rows can end up isCurrent:true simultaneously, and
+      // downstream "current consent" lookups (no deterministic tie-break) can
+      // non-deterministically resolve to a stale/declined record instead of
+      // whatever was most recently granted.
+      const priorCurrentConsent = await tx.consentRecord.findFirst({
+        where: { clientId: client.id, tenantId, isCurrent: true },
+      });
+      if (priorCurrentConsent) {
+        await tx.consentRecord.update({
+          where: { id: priorCurrentConsent.id },
+          data: { isCurrent: false, supersededAt: new Date() },
+        });
+      }
+
+      // 4. Create consent record from CRM consent data
       const consentRecord = await tx.consentRecord.create({
         data: {
           tenantId,
@@ -123,10 +138,17 @@ export class BookingImportService {
           consentMethod: 'crm',
           grantedAt: allowMarketingContent ? new Date() : undefined,
           crmBookingId: bookingId,
+          isCurrent: true,
         },
       });
 
-      // 4. Import questionnaire answers
+      // Link this appointment directly to the consent record just created for it
+      await tx.appointment.update({
+        where: { id: appointment.id },
+        data: { consentRecordId: consentRecord.id },
+      });
+
+      // 5. Import questionnaire answers
       if (questionnaire?.data && typeof questionnaire.data === "object") {
         const entries = Object.entries(
           questionnaire.data as Record<string, unknown>,
