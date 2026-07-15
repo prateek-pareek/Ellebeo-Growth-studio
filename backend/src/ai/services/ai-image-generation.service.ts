@@ -19,6 +19,7 @@ import * as http from 'http';
 import { GoogleGenAI } from '@google/genai';
 import sharp from 'sharp';
 import { resolveLayoutTemplate, BASE_TREATMENTS, TEXT_TEMPLATES, DECORATIONS, LAYOUT_TEMPLATES } from '../config/layout-renderers';
+import { TemplateAgentService } from './template-agent.service';
 
 const openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
 
@@ -262,6 +263,11 @@ BODY SLIDE:
 }
 
 export class AiImageGenerationService {
+  private templateAgent: TemplateAgentService;
+
+  constructor() {
+    this.templateAgent = new TemplateAgentService();
+  }
 
   async generateSlide(params: {
     photoUrl: string;
@@ -588,22 +594,53 @@ CRITICAL IMAGE REQUIREMENTS:
     // Derive pool dynamically from JSON config — never goes stale when new layouts are added
     const layoutPool = Object.keys(LAYOUT_TEMPLATES);
 
-    // Select unique layouts without repeats
+    // Prepare vision summary mapping
+    const isZoomedFace = moodboardVisionSummary ? (moodboardVisionSummary.toLowerCase().includes('macro') || moodboardVisionSummary.toLowerCase().includes('zoomed') || moodboardVisionSummary.toLowerCase().includes('close-up')) : false;
+
+    const visionResultStub = isZoomedFace ? { framingType: 'macro', facesDetected: true } as any : undefined;
+
+    // Select unique layouts intelligently using Template Agent
     const uniqueLayoutsForSlides: string[] = [];
     let pool = [...layoutPool];
+    
     for (let i = 0; i < total; i++) {
       let chosen = '';
       if (i === 0) {
-        // Slide 1 (Cover) should prefer a striking template if available
-        const coverOptions = ['poster_cover', 'translucent_split', 'passepartout_text'];
-        chosen = coverOptions.find(o => pool.includes(o)) || pool[0];
+        // Cover uses agent
+        const agentDecision = await this.templateAgent.selectTemplate({
+          brief: concepts[i]?.overlayText || 'Cover slide',
+          brandName: params.businessName || 'Brand',
+          aesthetic: params.aesthetic || 'minimal editorial',
+          textLength: (concepts[i]?.overlayText || '').length,
+          slideIndex: 0,
+          totalSlides: total,
+          visionResult: visionResultStub,
+          excludeLayouts: uniqueLayoutsForSlides
+        });
+        chosen = agentDecision.selected_layout_id;
       } else {
-        const randomIndex = Math.floor(Math.random() * pool.length);
-        chosen = pool[randomIndex] || 'passepartout_text';
+        // Body slides use agent too
+        const agentDecision = await this.templateAgent.selectTemplate({
+          brief: concepts[i]?.overlayText || 'Body slide',
+          brandName: params.businessName || 'Brand',
+          aesthetic: params.aesthetic || 'minimal editorial',
+          textLength: (concepts[i]?.overlayText || '').length,
+          slideIndex: i,
+          totalSlides: total,
+          visionResult: visionResultStub,
+          excludeLayouts: uniqueLayoutsForSlides
+        });
+        chosen = agentDecision.selected_layout_id;
+        
+        // Prevent dupes locally
+        if (uniqueLayoutsForSlides.includes(chosen) && pool.length > 0) {
+           chosen = pool[Math.floor(Math.random() * pool.length)] || chosen;
+        }
       }
+      
       uniqueLayoutsForSlides.push(chosen);
       pool = pool.filter(l => l !== chosen);
-      if (pool.length === 0) pool = [...layoutPool]; // Reset if total slides exceeds layout count
+      if (pool.length === 0) pool = [...layoutPool];
     }
 
     const slides = await Promise.all(
@@ -701,22 +738,51 @@ CRITICAL IMAGE REQUIREMENTS:
     // Derive pool dynamically from JSON config — never goes stale when new layouts are added
     const layoutPool = Object.keys(LAYOUT_TEMPLATES);
 
-    // Select unique layouts without repeats
+    // Prepare vision summary mapping
+    const isZoomedFace = moodboardVisionSummary ? (moodboardVisionSummary.toLowerCase().includes('macro') || moodboardVisionSummary.toLowerCase().includes('zoomed') || moodboardVisionSummary.toLowerCase().includes('close-up')) : false;
+
+    const visionResultStub = isZoomedFace ? { framingType: 'macro', facesDetected: true } as any : undefined;
+
+    // Select unique layouts intelligently using Template Agent
     const uniqueLayoutsForFrames: string[] = [];
     let pool = [...layoutPool];
+    
     for (let i = 0; i < total; i++) {
       let chosen = '';
       if (i === 0) {
-        // Frame 1 (Cover) should prefer a striking template if available
-        const coverOptions = ['poster_cover', 'translucent_split', 'passepartout_text'];
-        chosen = coverOptions.find(o => pool.includes(o)) || pool[0];
+        // Cover uses agent
+        const agentDecision = await this.templateAgent.selectTemplate({
+          brief: frames[i]?.overlayText || 'Cover frame',
+          brandName: params.businessName || 'Brand',
+          aesthetic: params.aesthetic || 'minimal editorial',
+          textLength: (frames[i]?.overlayText || '').length,
+          slideIndex: 0,
+          totalSlides: total,
+          visionResult: visionResultStub
+        });
+        chosen = agentDecision.selected_layout_id;
       } else {
-        const randomIndex = Math.floor(Math.random() * pool.length);
-        chosen = pool[randomIndex] || 'passepartout_text';
+        // Body frames use agent too
+        const agentDecision = await this.templateAgent.selectTemplate({
+          brief: frames[i]?.overlayText || 'Body frame',
+          brandName: params.businessName || 'Brand',
+          aesthetic: params.aesthetic || 'minimal editorial',
+          textLength: (frames[i]?.overlayText || '').length,
+          slideIndex: i,
+          totalSlides: total,
+          visionResult: visionResultStub
+        });
+        chosen = agentDecision.selected_layout_id;
+        
+        // Prevent dupes locally
+        if (uniqueLayoutsForFrames.includes(chosen) && pool.length > 0) {
+           chosen = pool[Math.floor(Math.random() * pool.length)] || chosen;
+        }
       }
+      
       uniqueLayoutsForFrames.push(chosen);
       pool = pool.filter(l => l !== chosen);
-      if (pool.length === 0) pool = [...layoutPool]; // Reset if total frames exceeds layout count
+      if (pool.length === 0) pool = [...layoutPool];
     }
 
     const results = await Promise.all(
