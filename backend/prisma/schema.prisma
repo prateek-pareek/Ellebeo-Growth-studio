@@ -236,6 +236,20 @@ model PlanSettings {
   @@schema("platform")
 }
 
+// One row per subscription tier — the daily generation/reel allowance for that
+// tier. Admin-editable so the business can cap AI cost exposure per plan
+// without a redeploy. Rows are self-seeded (see GenerationService.getTierLimits)
+// with today's hardcoded defaults on first read of an empty table.
+model TierGenerationLimits {
+  tier              SubscriptionTier @id
+  generationsPerDay Int              @default(5) @map("generations_per_day")
+  reelsPerDay       Int              @default(2) @map("reels_per_day")
+  updatedAt         DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("tier_generation_limits")
+  @@schema("platform")
+}
+
 model MasterPrompt {
   id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   category     PromptCategory
