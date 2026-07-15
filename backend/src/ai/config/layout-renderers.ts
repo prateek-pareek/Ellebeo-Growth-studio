@@ -236,12 +236,47 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
         return fullBleedBase(ctx);
       }
     } else {
-      // Full Bleed Tint Logic MVP
+      // Fallback: standard full bleed image (untinted)
       const base = await fullBleedBase(ctx);
-      // Give it a subtle, elegant tint based on the brand color to distinguish it from basic full bleed
-      base.baseImage = base.baseImage.tint(ctx.validBrandColor as any).modulate({ brightness: 0.8 });
+      // Removed the brandColor tinting to preserve true Before/After treatment colors
       return base;
     }
+  },
+
+  polaroid_stack: async (ctx) => {
+    const minDim = Math.floor(Math.min(ctx.w, ctx.h) * 0.85);
+    const photo = await processPortraitFit(ctx.imageBuffer, minDim, minDim, ctx.validBackgroundColor);
+    const frameW = minDim + 60;
+    const frameH = minDim + 160;
+    const polaroidFrame = await sharp({ create: { width: frameW, height: frameH, channels: 3, background: '#ffffff' } }).png().toBuffer();
+    const baseImage = sharp({ create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor } })
+      .composite([
+        { input: polaroidFrame, top: Math.floor((ctx.h - frameH)/2), left: Math.floor((ctx.w - frameW)/2) },
+        { input: photo, top: Math.floor((ctx.h - frameH)/2) + 30, left: Math.floor((ctx.w - frameW)/2) + 30 }
+      ]);
+    return { baseImage, compositeTop: Math.floor((ctx.h - frameH)/2) + minDim + 50, compositeBottom: ctx.paddingBottom, compositeLeft: Math.floor((ctx.w - frameW)/2) + 40, compositeRight: Math.floor((ctx.w - frameW)/2) + 40 };
+  },
+
+  circle_crop: async (ctx) => {
+    const minDim = Math.floor(Math.min(ctx.w, ctx.h) * 0.75);
+    const photo = await processPortraitFit(ctx.imageBuffer, minDim, minDim, ctx.validBackgroundColor);
+    const circleSvg = Buffer.from(`<svg width="${minDim}" height="${minDim}"><circle cx="${minDim/2}" cy="${minDim/2}" r="${minDim/2}" fill="white"/></svg>`);
+    const masked = await sharp(photo).composite([{ input: circleSvg, blend: 'dest-in' }]).png().toBuffer();
+    const baseImage = sharp({ create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor } })
+      .composite([{ input: masked, top: Math.floor((ctx.h - minDim)/2), left: Math.floor((ctx.w - minDim)/2) }]);
+    return { baseImage, compositeTop: Math.floor((ctx.h - minDim)/2) + minDim + 40, compositeBottom: ctx.paddingBottom, compositeLeft: ctx.paddingX, compositeRight: ctx.paddingX };
+  },
+
+  torn_paper_edge: async (ctx) => {
+    const photo = await processPortraitFit(ctx.imageBuffer, ctx.w, ctx.h, ctx.validBackgroundColor);
+    const tearSvg = Buffer.from(`
+      <svg width="${ctx.w}" height="${ctx.h}" xmlns="http://www.w3.org/2000/svg">
+        <path d="M 0 0 L ${ctx.w} 0 L ${ctx.w} ${ctx.h - 150} Q ${ctx.w * 0.75} ${ctx.h - 180} ${ctx.w / 2} ${ctx.h - 130} T 0 ${ctx.h - 160} Z" fill="white"/>
+      </svg>`);
+    const masked = await sharp(photo).composite([{ input: tearSvg, blend: 'dest-in' }]).png().toBuffer();
+    const baseImage = sharp({ create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor } })
+      .composite([{ input: masked, top: 0, left: 0 }]);
+    return { baseImage, compositeTop: ctx.h - 120, compositeBottom: 20, compositeLeft: ctx.paddingX, compositeRight: ctx.paddingX };
   },
 };
 
@@ -503,6 +538,27 @@ export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
     }
   },
 
+  editorial_magazine_cover: (ctx) => {
+    const giantWord = ctx.escapeXml((ctx.lines[0] || ctx.overlayText).split(/\\s+/)[0]!.toUpperCase().slice(0, 15));
+    return `
+      <!-- Giant text at top covering the full width -->
+      <text x="${ctx.w / 2}" y="${Math.round(ctx.h * 0.15)}" text-anchor="middle" font-family="'${ctx.brandFont}', system-ui, serif" font-weight="normal" font-size="140px" fill="${ctx.dynamicTextColor}" fill-opacity="0.95" letter-spacing="12px">${giantWord}</text>
+      <text x="${ctx.w / 2}" y="${ctx.h - 100}" class="overlay-text text-centered" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.dynamicTextColor};">
+        ${ctx.escapedLines.map((line, idx) => `<tspan x="${ctx.w / 2}" dy="${idx === 0 ? 0 : ctx.dyOffset}">${line}</tspan>`).join('')}
+      </text>`;
+  },
+
+  minimalist_corner_text: (ctx) => {
+    return `
+      <!-- Extremely tiny text pinned to top-left and bottom-right -->
+      <text x="50" y="60" class="overlay-text text-left" style="font-size: 18px; fill: ${ctx.dynamicTextColor}; letter-spacing: 4px; font-weight: bold;">
+        ${ctx.escapedSpacedName}
+      </text>
+      <text x="${ctx.w - 50}" y="${ctx.h - 50}" class="overlay-text text-right" style="font-size: 20px; fill: ${ctx.dynamicTextColor}; letter-spacing: 2px;">
+        ${ctx.escapedLines.map((line, idx) => `<tspan x="${ctx.w - 50}" dy="${idx === 0 ? 0 : 25}">${line}</tspan>`).join('')}
+      </text>`;
+  },
+
   universal_dynamic_text: (ctx) => {
     const metadata = (templateLibraryData as any)[ctx.layoutType] || {};
     const textRegions = (metadata.visual_structure?.text_regions || '').toLowerCase();
@@ -536,7 +592,6 @@ export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
           ${tspans(ctx, '60')}
         </text>`;
     } else if (isBottomLeft) {
-      // Dynamic Bottom Left Poster MVP
       return `
         <!-- Dynamic Bottom Left Poster Block -->
         <text x="40" y="${ctx.h - (ctx.lines.length * ctx.dyOffset) - 60}" class="overlay-text text-left" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.dynamicTextColor}; font-weight: bold;">
@@ -621,6 +676,19 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     }
     return `<!-- Film sprocket perforations along both edges -->${holes}`;
   },
+
+  masking_tape_corners: (ctx) => `
+      <!-- Masking tape overlays at top-left and bottom-right corners -->
+      <polygon points="20,80 100,50 110,80 30,110" fill="#E8E5DF" fill-opacity="0.8" transform="rotate(-15 65 80)" />
+      <polygon points="${ctx.w - 100},${ctx.h - 80} ${ctx.w - 20},${ctx.h - 50} ${ctx.w - 30},${ctx.h - 20} ${ctx.w - 110},${ctx.h - 50}" fill="#E8E5DF" fill-opacity="0.8" transform="rotate(15 ${ctx.w - 65} ${ctx.h - 50})" />`,
+
+  gold_foil_accents: (ctx) => `
+      <!-- Elegant thin gold foil lines decorating the edges -->
+      <rect x="30" y="30" width="${ctx.w - 60}" height="${ctx.h - 60}" fill="none" stroke="#D4AF37" stroke-width="2" />
+      <circle cx="30" cy="30" r="4" fill="#D4AF37" />
+      <circle cx="${ctx.w - 30}" cy="30" r="4" fill="#D4AF37" />
+      <circle cx="30" cy="${ctx.h - 30}" r="4" fill="#D4AF37" />
+      <circle cx="${ctx.w - 30}" cy="${ctx.h - 30}" r="4" fill="#D4AF37" />`,
 
   arch_outline: (ctx) => `
       <!-- Fine vector outline retracing the dome mask edge -->

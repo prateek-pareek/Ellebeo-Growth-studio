@@ -85,7 +85,7 @@ export class ImageEnhancementService {
       const bgPrompt = `A completely empty luxury beauty studio background, empty room, no people, smooth aesthetic: ${moodboardVisionSummary}. Ambient accent color: ${brandColor}. Highly realistic 4k photography.`;
 
       const sdxlOutput = await runWithRetry(
-        'stability-ai/sdxl-inpainting:5c7d5dc6dd8bf75c1acaa8565735e7986bc5b66206b55cca93cb72c9bf15ccaa',
+        'stability-ai/stable-diffusion-inpainting:95b7223104132402a9ae91cc677285bc5eb997834bd2349fa486f53910fd68b3',
         {
           input: {
             image: baseImageDataUri,
@@ -93,8 +93,8 @@ export class ImageEnhancementService {
             prompt: bgPrompt,
             width: 1024,
             height: 1024,
-            num_inference_steps: 30,
-            scheduler: 'K_EULER'
+            prompt_strength: 0.99,
+            num_inference_steps: 30
           }
         }
       );
