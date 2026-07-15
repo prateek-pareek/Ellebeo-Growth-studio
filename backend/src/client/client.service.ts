@@ -56,7 +56,8 @@ export class ClientService {
   async getConsent(tenantId: string, id: string) {
     await this.getClient(tenantId, id);
     return this.prisma.consentRecord.findFirst({
-      where: { clientId: id, tenantId, isCurrent: true }
+      where: { clientId: id, tenantId, isCurrent: true },
+      orderBy: { updatedAt: 'desc' },
     });
   }
 
@@ -64,16 +65,13 @@ export class ClientService {
     await this.getClient(tenantId, id);
 
     return this.prisma.$transaction(async (tx) => {
-      const current = await tx.consentRecord.findFirst({
-        where: { clientId: id, tenantId, isCurrent: true }
+      // Demote ALL current records, not just one — self-heals any client that
+      // already has multiple isCurrent:true rows (e.g. from a CRM import that
+      // didn't demote the prior current record before this fix).
+      await tx.consentRecord.updateMany({
+        where: { clientId: id, tenantId, isCurrent: true },
+        data: { isCurrent: false, supersededAt: new Date() },
       });
-
-      if (current) {
-        await tx.consentRecord.update({
-          where: { id: current.id },
-          data: { isCurrent: false, supersededAt: new Date() }
-        });
-      }
 
       const newConsent = await tx.consentRecord.create({
         data: {
@@ -86,11 +84,12 @@ export class ClientService {
         }
       });
 
-      // Link all active appointments for this client to the new consent record
-      await tx.appointment.updateMany({
-        where: { clientId: id, tenantId, deletedAt: null },
-        data: { consentRecordId: newConsent.id },
-      });
+      // Note: appointments are NOT bulk-relinked to this record here.
+      // Appointment.consentRecordId is unique, so pointing every one of the
+      // client's appointments at the same newConsent.id would violate that
+      // constraint and roll back this entire grant for any client with 2+
+      // appointments. Appointments without their own pinned consent record
+      // resolve consent dynamically via the isCurrent lookup instead.
 
       return newConsent;
     });
@@ -100,19 +99,23 @@ export class ClientService {
     await this.getClient(tenantId, id);
 
     const consent = await this.prisma.consentRecord.findFirst({
-      where: { clientId: id, tenantId, isCurrent: true }
+      where: { clientId: id, tenantId, isCurrent: true },
+      orderBy: { updatedAt: 'desc' },
     });
 
     if (!consent) throw new NotFoundException('Consent record not found');
 
-    // Trigger the database cascade block by updating status
-    const updatedConsent = await this.prisma.consentRecord.update({
-      where: { id: consent.id },
+    // Withdraw every isCurrent:true record for this client, not just one —
+    // if duplicates exist, leaving any of them granted would let generation
+    // still treat the client as consenting.
+    await this.prisma.consentRecord.updateMany({
+      where: { clientId: id, tenantId, isCurrent: true },
       data: {
         status: 'withdrawn',
         withdrawalReason: dto.withdrawalReason,
       }
     });
+    const updatedConsent = await this.prisma.consentRecord.findUniqueOrThrow({ where: { id: consent.id } });
 
     // Find affected items to return
     const blockedContent = await this.prisma.contentItem.findMany({

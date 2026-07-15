@@ -47,6 +47,7 @@ export class GenerationService {
         ? await this.prisma.consentRecord.findUnique({ where: { id: appointment.consentRecordId } })
         : await this.prisma.consentRecord.findFirst({
           where: { clientId: appointment.clientId, tenantId, isCurrent: true },
+          orderBy: { updatedAt: 'desc' },
         });
 
       if (!consentRecord || consentRecord.status !== 'granted') {
