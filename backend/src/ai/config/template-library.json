@@ -3135,5 +3135,715 @@
     ],
     "implementation_complexity": "Hard",
     "why_different": "Selective sharpness (one contour-outlined detail against an entirely soft/desaturated field) — a focus-isolation algorithm distinct from any texture or crop-based device."
+  },
+
+  "museum_label_caption": {
+    "category": "Editorial & Luxury",
+    "name": "Museum Label",
+    "concept": "Artwork-style presentation with a small caption tag, as if the photo were an exhibited piece.",
+    "layout_description": "Photo generously matted, small rectangular label plate beneath it carrying title/medium-style caption text in tracked caps.",
+    "why_unique": "Presents the work as a curated exhibit piece rather than a social post — the label plate is the caption device."
+  },
+  "gallery_wall": {
+    "category": "Editorial & Luxury",
+    "name": "Gallery Wall",
+    "concept": "Multiple framed images arranged like an exhibition wall.",
+    "layout_description": "Two or three thinly framed image panels of varying size arranged asymmetrically on a flat wall-colour field, generous gaps between frames.",
+    "why_unique": "Simulates a physical exhibition hang rather than a single photo or split — plural framed objects on a wall."
+  },
+  "fine_art_frame": {
+    "category": "Editorial & Luxury",
+    "name": "Fine Art Frame",
+    "concept": "Thick premium border with generous, deliberate spacing around the photo.",
+    "layout_description": "Wide flat-colour mat (heavier than a standard border) surrounds the photo, caption sits in the lower mat area in small serif type.",
+    "why_unique": "The mat weight itself is the luxury signal — an oversized frame proportion rather than a thin hairline border."
+  },
+  "designer_portfolio": {
+    "category": "Editorial & Luxury",
+    "name": "Designer Portfolio",
+    "concept": "Clean portfolio sheet layout as if presenting a single piece of work.",
+    "layout_description": "Photo aligned to one side on a flat field, small project-style metadata block (title, category, year) opposite it in a tight column.",
+    "why_unique": "Reads as a portfolio case study page rather than a promotional card — metadata block, not a caption."
+  },
+  "fashion_editorial": {
+    "category": "Editorial & Luxury",
+    "name": "Fashion Editorial",
+    "concept": "Magazine-inspired full-bleed composition with restrained typography.",
+    "layout_description": "Full-bleed photo, single line of tracked-cap text low on the frame, no card or panel breaking the image.",
+    "why_unique": "Pure full-bleed with no structural device at all — the restraint itself is the differentiator."
+  },
+  "vogue_white_space": {
+    "category": "Editorial & Luxury",
+    "name": "Vogue White Space",
+    "concept": "Large negative space with elegant, deliberate typography.",
+    "layout_description": "Photo occupies a fraction of the canvas, the remainder is a flat pale field carrying a single elegant headline set small and precise.",
+    "why_unique": "Negative space is the majority of the canvas, not a margin — the photo is the accent, not the subject of the layout."
+  },
+  "monochrome_editorial": {
+    "category": "Editorial & Luxury",
+    "name": "Monochrome Editorial",
+    "concept": "Single-tone luxury styling across the whole composition.",
+    "layout_description": "Photo and background rendered in one restrained tonal family, thin single-weight rule separates a caption strip at the bottom.",
+    "why_unique": "Tonal unification (photo and field share one hue family) rather than a duotone filter or colour block."
+  },
+  "luxury_lookbook": {
+    "category": "Editorial & Luxury",
+    "name": "Luxury Lookbook",
+    "concept": "Curated collection showcase presenting the work as a seasonal edit.",
+    "layout_description": "Photo inset with a slim vertical edge column carrying a short curated list (2-3 lines) of related items or looks.",
+    "why_unique": "The edge column reads as a curated edit list, not a caption or metadata block."
+  },
+  "signature_margin": {
+    "category": "Editorial & Luxury",
+    "name": "Signature Margin",
+    "concept": "Asymmetrical margins give the composition an editorial, hand-set feel.",
+    "layout_description": "Photo pushed hard to one edge with a wide asymmetric margin on the opposite side carrying a short flush-left caption.",
+    "why_unique": "Margins are deliberately unequal on purpose (not a centred mat) — an editorial page-layout convention."
+  },
+  "premium_catalog": {
+    "category": "Editorial & Luxury",
+    "name": "Premium Catalog",
+    "concept": "Product/service catalog presentation with restrained pricing-page styling.",
+    "layout_description": "Photo inset top, thin rule below separates a small catalog-style detail row (name, short descriptor) in the manner of a print catalog entry.",
+    "why_unique": "Catalog-entry convention (photo plus a single detail row) rather than a full caption card."
+  },
+
+  "glass_grid": {
+    "category": "Architectural & Geometric",
+    "name": "Glass Grid",
+    "concept": "Translucent glass-like panels divide the composition.",
+    "layout_description": "Photo sits behind a set of thin translucent panel outlines forming an irregular grid, one panel slightly tinted to hold the caption.",
+    "why_unique": "Panels are translucent structural outlines, not opaque cards — the grid reads as glass, not paper."
+  },
+  "floating_panel_stack": {
+    "category": "Architectural & Geometric",
+    "name": "Floating Panels",
+    "concept": "Layered cards with visible depth stack above the base photo.",
+    "layout_description": "Two or three small rectangular panels with soft drop shadows overlap at staggered depths above the full-bleed photo, one carries the caption.",
+    "why_unique": "Depth is expressed through layered shadow stacking rather than a single flat card."
+  },
+  "offset_windows": {
+    "category": "Architectural & Geometric",
+    "name": "Offset Windows",
+    "concept": "Staggered image windows break the photo into offset rectangles.",
+    "layout_description": "Photo divided into two or three unequal rectangular windows offset from a shared grid line, thin gaps between them.",
+    "why_unique": "Windows are deliberately offset from alignment rather than a clean split or repeating grid."
+  },
+  "modern_blueprint": {
+    "category": "Architectural & Geometric",
+    "name": "Modern Blueprint",
+    "concept": "Structured technical grid gives the composition a drafting-table feel.",
+    "layout_description": "Faint fine grid lines run across the full canvas, photo inset on-grid, small technical-style caption label bottom corner.",
+    "why_unique": "The grid is a visible technical drafting reference, not a hidden alignment aid."
+  },
+  "perspective_blocks": {
+    "category": "Architectural & Geometric",
+    "name": "Perspective Blocks",
+    "concept": "Angled geometric sections suggest architectural perspective.",
+    "layout_description": "Canvas split by one or two diagonal lines into angled trapezoidal sections, photo fills the largest section, caption in a smaller angled block.",
+    "why_unique": "Sections are angled/trapezoidal rather than rectangular — implies depth and perspective, not a flat split."
+  },
+  "skyline_layout": {
+    "category": "Architectural & Geometric",
+    "name": "Skyline Layout",
+    "concept": "Tall vertical composition evokes a skyline silhouette.",
+    "layout_description": "Photo cropped tall and narrow, flanked by two slim vertical bands of varying height suggesting a skyline silhouette, caption low.",
+    "why_unique": "The flanking bands are proportioned like a skyline silhouette, not decorative borders."
+  },
+  "vertical_architecture": {
+    "category": "Architectural & Geometric",
+    "name": "Vertical Architecture",
+    "concept": "Stacked architectural framing emphasises verticality.",
+    "layout_description": "Photo stacked between two thin horizontal structural lines top and bottom, tall column proportions, caption set vertically along one edge.",
+    "why_unique": "Verticality is structural (stacked framing lines), not achieved through crop alone."
+  },
+  "concrete_geometry": {
+    "category": "Architectural & Geometric",
+    "name": "Concrete Geometry",
+    "concept": "Bold rectangular divisions in a muted concrete palette.",
+    "layout_description": "Canvas divided into two or three bold flat rectangular blocks in muted grey/stone tones, photo in the largest block.",
+    "why_unique": "Palette and block weight evoke poured concrete rather than paper or card divisions."
+  },
+  "window_cutouts": {
+    "category": "Architectural & Geometric",
+    "name": "Window Cutouts",
+    "concept": "Peek-through image frames reveal the photo through cut shapes.",
+    "layout_description": "Solid colour field with one or two rectangular cutout windows revealing fragments of the photo beneath, rest of the photo hidden.",
+    "why_unique": "The photo is only ever seen through cutout apertures — never displayed whole."
+  },
+  "floating_cards": {
+    "category": "Architectural & Geometric",
+    "name": "Floating Cards",
+    "concept": "Detached card-style elements hover independently over the photo.",
+    "layout_description": "Full-bleed photo with one small detached rounded card floating with a soft shadow, entirely separate from any border or edge.",
+    "why_unique": "The card is fully detached from the canvas edges (floating mid-frame), not anchored to a corner or edge."
+  },
+
+  "organic_layers": {
+    "category": "Organic & Soft",
+    "name": "Organic Layers",
+    "concept": "Flowing overlapping shapes give the composition a soft, layered feel.",
+    "layout_description": "Two or three soft irregular organic shapes overlap semi-transparently across the photo, caption nested in the calmest overlap area.",
+    "why_unique": "Shapes are freeform organic outlines, not geometric blocks or circles."
+  },
+  "soft_blob_composition": {
+    "category": "Organic & Soft",
+    "name": "Soft Blob Composition",
+    "concept": "Rounded abstract sections replace hard rectangular divisions.",
+    "layout_description": "Canvas divided by one large soft blob shape (rounded, asymmetric) rather than a straight line, photo fills the blob, caption sits outside it.",
+    "why_unique": "The division mechanic is a single rounded blob silhouette, not a mask, circle, or rectangle."
+  },
+  "watercolor_frame": {
+    "category": "Organic & Soft",
+    "name": "Watercolor Frame",
+    "concept": "Soft painted border effect surrounds the photo.",
+    "layout_description": "Photo edges fade into a soft irregular watercolour-wash border with visible pigment bleed texture, caption in the wash area.",
+    "why_unique": "The border edge is a painted bleed texture, not a hard line, mat, or vector frame."
+  },
+  "botanical_border": {
+    "category": "Organic & Soft",
+    "name": "Botanical Border",
+    "concept": "Leaf-inspired framing traces the photo edge.",
+    "layout_description": "Fine botanical line-illustration (leaves/stems) traces along one or two edges of the photo, caption nested among the foliage line work.",
+    "why_unique": "The framing motif is illustrated botanical linework, not a geometric or material border."
+  },
+  "leaf_shadow_layout": {
+    "category": "Organic & Soft",
+    "name": "Leaf Shadow Layout",
+    "concept": "Subtle natural shadows suggest dappled light through foliage.",
+    "layout_description": "Faint leaf-shaped shadow shapes fall softly across part of the photo as if from natural light through plants, caption sits outside the shadow area.",
+    "why_unique": "The decorative device is a lighting effect (cast shadow), not a printed shape or overlay graphic."
+  },
+  "linen_texture": {
+    "category": "Organic & Soft",
+    "name": "Linen Texture",
+    "concept": "Fabric-inspired premium background gives quiet tactile warmth.",
+    "layout_description": "Photo inset on a visible woven-linen texture field, caption set directly on the linen in small serif type.",
+    "why_unique": "The field itself carries a woven fabric texture rather than a flat colour or paper grain."
+  },
+  "handmade_paper": {
+    "category": "Organic & Soft",
+    "name": "Handmade Paper",
+    "concept": "Artisanal paper feel with a deckled, uneven edge.",
+    "layout_description": "Photo inset within a field showing visible deckled/torn paper-edge texture and faint fibre flecks, caption below in a hand-set serif.",
+    "why_unique": "The edge is an irregular handmade deckle, not a clean cut border or mat."
+  },
+  "natural_canvas": {
+    "category": "Organic & Soft",
+    "name": "Natural Canvas",
+    "concept": "Textured minimal surface evokes raw canvas cloth.",
+    "layout_description": "Photo inset on a visible woven-canvas texture field with a slightly irregular hand-set caption placement, no hard structural lines.",
+    "why_unique": "Texture and slight irregularity replace any grid or alignment system entirely."
+  },
+  "earth_tone_editorial": {
+    "category": "Organic & Soft",
+    "name": "Earth Tone Editorial",
+    "concept": "Warm muted palette layout in clay, sand, and stone tones.",
+    "layout_description": "Photo lightly tinted toward a warm earth palette, generous flat earth-tone margin carries the caption in a soft serif.",
+    "why_unique": "The palette shift itself (toward clay/sand/stone) is the device, applied consistently to both photo and field."
+  },
+  "pebble_composition": {
+    "category": "Organic & Soft",
+    "name": "Pebble Composition",
+    "concept": "Smooth rounded placements suggest arranged river pebbles.",
+    "layout_description": "Two or three small rounded-rectangle elements of varying size are arranged loosely like pebbles beneath the main photo, one holds the caption.",
+    "why_unique": "Element arrangement follows an organic scattered-pebble logic rather than a grid or stack."
+  },
+
+  "gold_foil_accent": {
+    "category": "Luxury Branding",
+    "name": "Gold Foil Accent",
+    "concept": "Metallic highlight styling traces a single premium accent line.",
+    "layout_description": "Photo full-bleed or lightly inset, one fine metallic-gold line or small foil motif accents a corner or edge, caption set nearby in a thin serif.",
+    "why_unique": "The metallic accent is a single restrained line/motif, not a full foil border or heavy embellishment."
+  },
+  "embossed_card": {
+    "category": "Luxury Branding",
+    "name": "Embossed Card",
+    "concept": "Raised-paper luxury effect gives the caption card a tactile quality.",
+    "layout_description": "Photo full-bleed, small caption card with a soft emboss/deboss shadow effect (not flat colour) sits in a lower corner.",
+    "why_unique": "The card reads as physically raised/pressed paper via soft directional shading, not a flat rounded rectangle."
+  },
+  "matte_black_layout": {
+    "category": "Luxury Branding",
+    "name": "Matte Black Layout",
+    "concept": "Dark premium aesthetic with a matte black field.",
+    "layout_description": "Photo inset on a deep matte-black field, caption in a fine light-weight sans, single thin light-toned rule beneath it.",
+    "why_unique": "The near-black field itself is the luxury signal, distinct from any lighter duotone or scrim treatment."
+  },
+  "champagne_minimal": {
+    "category": "Luxury Branding",
+    "name": "Champagne Minimal",
+    "concept": "Soft gold minimalism with a pale champagne palette.",
+    "layout_description": "Photo inset generously on a pale champagne-toned field, one thin gold hairline separates the caption area, nothing else on the canvas.",
+    "why_unique": "Extreme restraint (one hairline only) paired with a specific champagne palette, not a bordered or scrimmed treatment."
+  },
+  "luxury_ribbon": {
+    "category": "Luxury Branding",
+    "name": "Luxury Ribbon",
+    "concept": "Elegant ribbon separators divide the composition like gift packaging.",
+    "layout_description": "A thin ribbon-like band crosses one corner or edge of the full-bleed photo, small caption sits just beneath the ribbon.",
+    "why_unique": "The ribbon is a packaging-style diagonal band, not a straight rule or scrim."
+  },
+  "boutique_showcase": {
+    "category": "Luxury Branding",
+    "name": "Boutique Showcase",
+    "concept": "High-end brand presentation as if displayed in a boutique window.",
+    "layout_description": "Photo inset within a generous flat-colour field bordered by a very thin frame line, small brand-name label centred beneath like a shop plaque.",
+    "why_unique": "The plaque-style label beneath centres the brand name as if it were a boutique signage element."
+  },
+  "premium_brand_sheet": {
+    "category": "Luxury Branding",
+    "name": "Premium Brand Sheet",
+    "concept": "Identity-focused composition presenting the work like a brand guideline sheet.",
+    "layout_description": "Photo occupies one zone, adjacent zone carries a small brand-mark and one line of positioning text, thin divider rule between zones.",
+    "why_unique": "Reads as a brand identity spec sheet (mark plus positioning line), not a promotional caption."
+  },
+  "elegant_invitation": {
+    "category": "Luxury Branding",
+    "name": "Elegant Invitation",
+    "concept": "Invitation-style luxury card treatment.",
+    "layout_description": "Photo inset within a generous pale card field with a fine border rule, caption centred in a formal serif as if reading an invitation.",
+    "why_unique": "Typographic centring and formal serif treatment specifically evoke a printed invitation card."
+  },
+  "luxury_collection": {
+    "category": "Luxury Branding",
+    "name": "Luxury Collection",
+    "concept": "Curated premium lineup presentation.",
+    "layout_description": "Photo inset top with a slim horizontal strip beneath carrying two or three small tonal swatches representing a collection range.",
+    "why_unique": "The swatch strip implies a broader curated range rather than describing the single photo."
+  },
+  "designer_identity": {
+    "category": "Luxury Branding",
+    "name": "Designer Identity",
+    "concept": "Fashion-brand inspired layout foregrounding the maker's name.",
+    "layout_description": "Photo inset with the brand or technician name set very large in a fashion-house wordmark style along one edge, small caption beneath it.",
+    "why_unique": "The name itself, set oversized, is the primary graphic device rather than the photo or a caption."
+  },
+
+  "before_journey": {
+    "category": "Storytelling & Journey",
+    "name": "Before Journey",
+    "concept": "Before/after presentation with a narrative flow rather than a hard split.",
+    "layout_description": "Before image faded/smaller in one corner leading into the larger after photo, a thin arrow or path line connects them.",
+    "why_unique": "The connecting path line implies a journey/sequence rather than a symmetrical side-by-side split."
+  },
+  "transformation_timeline": {
+    "category": "Storytelling & Journey",
+    "name": "Transformation Timeline",
+    "concept": "Chronological progress layout across a visible timeline.",
+    "layout_description": "A thin horizontal timeline line runs across the lower third with two or three small markers representing stages, main photo above it.",
+    "why_unique": "Progress is expressed via an explicit timeline axis with stage markers, not a before/after pair."
+  },
+  "client_spotlight": {
+    "category": "Storytelling & Journey",
+    "name": "Client Spotlight",
+    "concept": "Hero portrait treatment paired with a short quote.",
+    "layout_description": "Photo full-bleed or lightly inset, a short quote line sits in generous negative space with a small attribution line beneath it.",
+    "why_unique": "The quote is attributed and freestanding (not inside a speech-bubble card), reading as an editorial pull-quote."
+  },
+  "testimonial_focus": {
+    "category": "Storytelling & Journey",
+    "name": "Testimonial Focus",
+    "concept": "Review-first composition where the words lead and the photo supports.",
+    "layout_description": "Testimonial text set large and central, small photo inset in a corner as supporting evidence rather than the main subject.",
+    "why_unique": "Text is the dominant element and the photo is demoted to a corner accent — an inversion of the usual photo-led hierarchy."
+  },
+  "experience_story": {
+    "category": "Storytelling & Journey",
+    "name": "Experience Story",
+    "concept": "Emotional storytelling sequence across a soft narrative field.",
+    "layout_description": "Photo inset with a short multi-line narrative caption (2-3 short sentences) set in generous leading beneath it, quiet pacing.",
+    "why_unique": "The caption is a short narrative passage rather than a single hook line or tag."
+  },
+  "behind_the_chair": {
+    "category": "Storytelling & Journey",
+    "name": "Behind The Chair",
+    "concept": "Stylist/process feature framing the professional at work.",
+    "layout_description": "Photo full-bleed, small process-note label in a corner naming the technique or step being shown, understated caption below.",
+    "why_unique": "The corner label names a specific technique/process, framing the photo as documentation of a skill in progress."
+  },
+  "treatment_journey_steps": {
+    "category": "Storytelling & Journey",
+    "name": "Treatment Journey",
+    "concept": "Step-by-step treatment visuals presented as a numbered sequence.",
+    "layout_description": "Photo inset with two or three small numbered step tags arranged along one edge, each with a short label describing that stage.",
+    "why_unique": "Numbered step tags describe a multi-stage process attached to a single photo, not a full grid of separate images."
+  },
+  "step_reveal": {
+    "category": "Storytelling & Journey",
+    "name": "Step Reveal",
+    "concept": "Staged reveal panels suggest progressive disclosure.",
+    "layout_description": "Photo partially masked by one or two overlapping panel shapes that appear to be sliding away, revealing the image beneath.",
+    "why_unique": "Panels imply a reveal-in-progress moment, not a static split or window cutout."
+  },
+  "process_narrative": {
+    "category": "Storytelling & Journey",
+    "name": "Process Narrative",
+    "concept": "Instructional story flow guiding the eye through a sequence.",
+    "layout_description": "Photo inset with a thin dotted guide line leading from a small numeral to the caption text, instructional-diagram pacing.",
+    "why_unique": "The dotted guide line explicitly sequences numeral-to-caption as an instructional reading path."
+  },
+  "customer_moment": {
+    "category": "Storytelling & Journey",
+    "name": "Customer Moment",
+    "concept": "Candid client highlight capturing a genuine in-the-moment feel.",
+    "layout_description": "Photo full-bleed with minimal intervention, a small timestamp-style caption tag sits unobtrusively in one corner.",
+    "why_unique": "Minimal styling and a timestamp-style tag lean into candour rather than polish."
+  },
+
+  "runway_layout": {
+    "category": "High Fashion",
+    "name": "Runway Layout",
+    "concept": "Fashion show inspired composition with a walk-length frame.",
+    "layout_description": "Photo cropped tall like a runway walk shot, small look-number tag in a corner, caption set in condensed tracked caps low on the frame.",
+    "why_unique": "The tall runway-walk crop and look-number tag are borrowed directly from show photography conventions."
+  },
+  "model_card": {
+    "category": "High Fashion",
+    "name": "Model Card",
+    "concept": "Agency-style profile sheet presentation.",
+    "layout_description": "Photo inset with a slim side column of small stat-style labels (name, category, measurements-style rows) beside it, comp-card styling.",
+    "why_unique": "The stat-row side column specifically replicates agency comp-card formatting."
+  },
+  "fashion_strip": {
+    "category": "High Fashion",
+    "name": "Fashion Strip",
+    "concept": "Vertical runway frames arranged as a narrow filmstrip.",
+    "layout_description": "Photo cropped into a tall narrow vertical strip flanked by thin dark margin bands on either side, minimal caption at the base.",
+    "why_unique": "Extreme narrow vertical cropping (filmstrip proportions) rather than a standard frame ratio."
+  },
+  "couture_spread": {
+    "category": "High Fashion",
+    "name": "Couture Spread",
+    "concept": "Luxury fashion spread with generous editorial breathing room.",
+    "layout_description": "Photo occupies roughly two-thirds of the canvas, remaining third is a flat field carrying a single refined caption line.",
+    "why_unique": "The two-thirds/one-third division specifically mimics a magazine double-page spread ratio, not a symmetric split."
+  },
+  "editorial_cover": {
+    "category": "High Fashion",
+    "name": "Editorial Cover",
+    "concept": "Magazine cover treatment with masthead-style hierarchy.",
+    "layout_description": "Full-bleed photo, small masthead-style wordmark along the top edge, one bold cover-line headline low on the frame.",
+    "why_unique": "The masthead-plus-coverline hierarchy specifically references a magazine cover, not a poster or banner."
+  },
+  "fashion_collection_sheet": {
+    "category": "High Fashion",
+    "name": "Collection Sheet",
+    "concept": "Collection showcase grid presenting the work as part of a range.",
+    "layout_description": "Main photo larger on one side, two or three small thumbnail-scale swatch images arranged in a tight column beside it.",
+    "why_unique": "Small companion thumbnails alongside the hero photo imply a fuller collection, not a single-image caption."
+  },
+  "campaign_layout": {
+    "category": "High Fashion",
+    "name": "Campaign Layout",
+    "concept": "Ad-campaign composition with bold, confident typography.",
+    "layout_description": "Full-bleed photo, one large bold campaign-style headline set low with generous letter-spacing, small brand tag opposite it.",
+    "why_unique": "Typography weight and confidence (bold, spaced, campaign-scale) is the primary device, not a card or panel."
+  },
+  "lookbook_fold": {
+    "category": "High Fashion",
+    "name": "Lookbook Fold",
+    "concept": "Folded booklet appearance simulating a physical lookbook page.",
+    "layout_description": "Photo split by a faint centre-fold shadow line into two unequal panels, caption in the smaller panel like a booklet page.",
+    "why_unique": "The fold shadow specifically implies a bound booklet page, distinct from a gutter-spread or hard split."
+  },
+  "portfolio_sheet": {
+    "category": "High Fashion",
+    "name": "Portfolio Sheet",
+    "concept": "Creative portfolio arrangement presenting the work as a case study.",
+    "layout_description": "Photo inset with a small project-index number and one-line descriptor beneath it in a tight, precise sans.",
+    "why_unique": "The index number and descriptor read as a portfolio catalogue entry rather than a caption."
+  },
+  "fashion_frame": {
+    "category": "High Fashion",
+    "name": "Fashion Frame",
+    "concept": "Elegant runway framing with a refined thin border.",
+    "layout_description": "Photo inset within a slim precise border, small tracked-caps tag centred beneath it in the manner of a show program.",
+    "why_unique": "Border proportion and centred show-program-style tag distinguish it from the gallery mat treatments elsewhere."
+  },
+
+  "glassmorphism_elite": {
+    "category": "Modern Tech & Glass",
+    "name": "Glassmorphism Elite",
+    "concept": "Frosted premium UI card floats above the photo.",
+    "layout_description": "Full-bleed photo with one frosted translucent glass-effect card (blurred backdrop, soft border) holding the caption.",
+    "why_unique": "The card simulates true frosted-glass blur/translucency, distinct from a flat solid or scrim panel."
+  },
+  "frosted_ui": {
+    "category": "Modern Tech & Glass",
+    "name": "Frosted UI",
+    "concept": "Blurred translucent cards arranged like a modern app interface.",
+    "layout_description": "Two small frosted translucent panels of different sizes overlap slightly above the photo, one for caption, one left empty as a UI accent.",
+    "why_unique": "Multiple frosted panels overlapping mimics layered app UI cards rather than a single caption card."
+  },
+  "smart_dashboard": {
+    "category": "Modern Tech & Glass",
+    "name": "Smart Dashboard",
+    "concept": "Data-inspired layout presenting the work like a dashboard tile.",
+    "layout_description": "Photo inset in one tile, adjacent small tiles carry minimal stat-style numerals or short labels, thin grid lines separate tiles.",
+    "why_unique": "Multiple small data-tile elements around the photo simulate a dashboard interface, not a single stat card."
+  },
+  "floating_interface": {
+    "category": "Modern Tech & Glass",
+    "name": "Floating Interface",
+    "concept": "Hovering UI elements suggest a spatial interface above the photo.",
+    "layout_description": "Full-bleed photo with two or three small pill-shaped UI chips floating at different depths with soft shadows, one holds the caption.",
+    "why_unique": "Multiple independently floating pill elements at varied depth, not one anchored card."
+  },
+  "premium_widgets": {
+    "category": "Modern Tech & Glass",
+    "name": "Premium Widgets",
+    "concept": "Modular information cards arranged like home-screen widgets.",
+    "layout_description": "Photo in one rounded widget module, one or two smaller rounded modules beside it carrying short label text, consistent corner radius throughout.",
+    "why_unique": "Consistent widget-style corner radius and modularity across multiple tiles, not a single frame."
+  },
+  "digital_layers": {
+    "category": "Modern Tech & Glass",
+    "name": "Digital Layers",
+    "concept": "Stacked interface sections imply a layered digital composition.",
+    "layout_description": "Photo sits beneath two thin semi-transparent horizontal bands at different opacities stacked near the base, caption on the top band.",
+    "why_unique": "Layer stacking uses varied transparency levels to imply digital depth, distinct from a single scrim."
+  },
+  "visionos_style": {
+    "category": "Modern Tech & Glass",
+    "name": "VisionOS Style",
+    "concept": "Spatial computing aesthetic with soft depth and rounded glass panels.",
+    "layout_description": "Full-bleed photo with one large rounded glass-effect panel gently offset from centre, soft ambient shadow beneath it for spatial depth.",
+    "why_unique": "Ambient spatial shadow and rounded glass panel specifically evoke spatial-computing interface design."
+  },
+  "neon_glass": {
+    "category": "Modern Tech & Glass",
+    "name": "Neon Glass",
+    "concept": "Glowing glass accents add a futuristic edge highlight.",
+    "layout_description": "Photo full-bleed, one thin glowing accent line traces an edge or panel outline in a saturated brand-colour glow, caption nearby.",
+    "why_unique": "The glow is a luminous edge-light effect, not a flat coloured line or scrim."
+  },
+  "ai_dashboard": {
+    "category": "Modern Tech & Glass",
+    "name": "AI Dashboard",
+    "concept": "Futuristic panel composition suggesting an intelligent interface.",
+    "layout_description": "Photo inset with a slim side panel carrying two or three minimal iconographic markers and short label text, fine connecting lines between them.",
+    "why_unique": "Iconographic markers with connecting lines simulate an analysis/interface readout, not a caption card."
+  },
+  "interactive_blocks": {
+    "category": "Modern Tech & Glass",
+    "name": "Interactive Blocks",
+    "concept": "App-like modular layout built from discrete tappable-looking blocks.",
+    "layout_description": "Canvas divided into three or four small rounded rectangular blocks of even weight, photo in the largest, others carry short labels.",
+    "why_unique": "Even-weighted rounded blocks specifically resemble tappable app tiles rather than an editorial grid."
+  },
+
+  "double_page_spread": {
+    "category": "Magazine Variants",
+    "name": "Double Page Spread",
+    "concept": "Two-page editorial look simulating an open magazine spread.",
+    "layout_description": "Canvas split by a faint centre-gutter line into two halves, photo spans both with a slight tonal shift across the gutter, caption on one half.",
+    "why_unique": "The gutter line implies two printed pages meeting, not a hard split or fold shadow."
+  },
+  "corner_caption": {
+    "category": "Magazine Variants",
+    "name": "Corner Caption",
+    "concept": "Minimal corner storytelling with a small, quiet caption placement.",
+    "layout_description": "Full-bleed photo, small caption confined entirely to one corner in a compact block, rest of the frame untouched.",
+    "why_unique": "Extreme restraint — caption occupies only one small corner, nothing else added to the frame."
+  },
+  "pull_quote_layout": {
+    "category": "Magazine Variants",
+    "name": "Pull Quote Layout",
+    "concept": "Oversized quote feature dominates the composition.",
+    "layout_description": "Large pull-quote text set oversized across the centre of the frame with the photo visible behind it at reduced opacity.",
+    "why_unique": "The quote is oversized and dominant with the photo demoted to a backdrop, an explicit pull-quote convention."
+  },
+  "editorial_notes": {
+    "category": "Magazine Variants",
+    "name": "Editorial Notes",
+    "concept": "Handwritten annotation style adds a personal editorial layer.",
+    "layout_description": "Photo inset with one small handwritten-style annotation and a thin connecting line pointing to a detail in the photo.",
+    "why_unique": "The annotation is handwritten-style and pointed at a specific detail, like a margin note on a proof."
+  },
+  "magazine_fold": {
+    "category": "Magazine Variants",
+    "name": "Magazine Fold",
+    "concept": "Folded print illusion suggesting a physical folded page.",
+    "layout_description": "A soft diagonal fold-crease shadow crosses one corner of the full-bleed photo as if the page were folded back slightly.",
+    "why_unique": "The fold is a corner-specific diagonal crease, distinct from the centre-gutter fold used elsewhere."
+  },
+  "magazine_cover_story": {
+    "category": "Magazine Variants",
+    "name": "Cover Story",
+    "concept": "Headline-driven hero treatment leading with a bold cover line.",
+    "layout_description": "Full-bleed photo, one dominant headline set large near the top, small supporting deck line beneath it, cover-story hierarchy.",
+    "why_unique": "Headline-first hierarchy with a supporting deck line beneath, rather than a caption at the base."
+  },
+  "feature_spread": {
+    "category": "Magazine Variants",
+    "name": "Feature Spread",
+    "concept": "Feature article structure with a clear lead-in and body caption.",
+    "layout_description": "Photo occupies the upper portion, a short multi-line body caption sits beneath it in column-width text like an article opener.",
+    "why_unique": "Column-width body text beneath the photo specifically simulates an article lead-in, not a short tag."
+  },
+  "side_notes": {
+    "category": "Magazine Variants",
+    "name": "Side Notes",
+    "concept": "Margin note accents run alongside the main image.",
+    "layout_description": "Photo occupies most of the frame, a slim margin strip along one edge carries two or three short annotation-style notes.",
+    "why_unique": "Multiple short margin notes along one edge, rather than a single caption block."
+  },
+  "interview_layout": {
+    "category": "Magazine Variants",
+    "name": "Interview Layout",
+    "concept": "Q&A inspired design presenting a short question-and-answer exchange.",
+    "layout_description": "Photo inset with a short two-line Q&A style text block beneath it, question in bold, answer in regular weight.",
+    "why_unique": "The bold-question/regular-answer pairing specifically mimics a printed interview excerpt."
+  },
+  "column_editorial": {
+    "category": "Magazine Variants",
+    "name": "Column Editorial",
+    "concept": "Newspaper-meets-luxury columns structure the composition.",
+    "layout_description": "Canvas divided into two or three narrow vertical text-column widths, photo occupies one column width, caption text in an adjacent column.",
+    "why_unique": "Column-width discipline (newspaper layout logic) applied to a luxury palette, not a free-form split."
+  },
+
+  "reel_thumbnail": {
+    "category": "Social Native",
+    "name": "Reel Thumbnail",
+    "concept": "Video-cover optimized composition for reel/video thumbnails.",
+    "layout_description": "Tall 9:16 full-bleed photo with a small centred play-button glyph and a short bold title low on the frame.",
+    "why_unique": "The play-button glyph explicitly signals video content, unlike any static-post template."
+  },
+  "swipe_preview": {
+    "category": "Social Native",
+    "name": "Swipe Preview",
+    "concept": "Carousel teaser layout hinting at more slides to come.",
+    "layout_description": "Main photo full-bleed with a slim sliver of a second image peeking from one edge and small dot-indicator markers at the base.",
+    "why_unique": "The peeking sliver and dot indicators explicitly imply additional swipeable slides."
+  },
+  "story_highlights": {
+    "category": "Social Native",
+    "name": "Story Highlights",
+    "concept": "Story-circle inspired framing referencing highlight covers.",
+    "layout_description": "Photo masked into a circle with a thin gradient ring around it, small label centred beneath the circle like a highlight cover.",
+    "why_unique": "The gradient ring specifically references the story-highlight circle convention, not a plain circle mask."
+  },
+  "carousel_hero": {
+    "category": "Social Native",
+    "name": "Carousel Hero",
+    "concept": "Strong first-slide focus designed to stop the scroll.",
+    "layout_description": "Full-bleed photo with one bold short hook phrase set large near the centre, minimal else on the frame, first-slide pacing.",
+    "why_unique": "Deliberately minimal with one oversized hook phrase, optimised as a scroll-stopping opener rather than a full caption."
+  },
+  "grid_harmony": {
+    "category": "Social Native",
+    "name": "Grid Harmony",
+    "concept": "Feed-grid continuity treatment that reads well alongside a 3-column grid.",
+    "layout_description": "Photo lightly tinted toward a consistent brand tone with a thin uniform border matched to a repeating grid module size.",
+    "why_unique": "Designed for visual consistency across a repeating feed grid rather than as a standalone composition."
+  },
+  "story_window": {
+    "category": "Social Native",
+    "name": "Story Window",
+    "concept": "Vertical story framing built for the 9:16 story canvas.",
+    "layout_description": "Tall photo inset within generous top/bottom safe-zone margins for story UI, small caption sits in the lower safe zone.",
+    "why_unique": "Explicitly reserves top/bottom safe zones for platform UI overlap, unlike a standard feed template."
+  },
+  "feed_preview": {
+    "category": "Social Native",
+    "name": "Feed Preview",
+    "concept": "Instagram-feed mockup styling with a subtle interface frame.",
+    "layout_description": "Photo inset within a thin rounded-corner device-style frame, small icon row (heart/comment style glyphs) faintly suggested at the base.",
+    "why_unique": "A faint suggested interface chrome frames the photo, evoking the feed environment itself."
+  },
+  "trending_card": {
+    "category": "Social Native",
+    "name": "Trending Card",
+    "concept": "Viral-style information card with bold, punchy hierarchy.",
+    "layout_description": "Photo inset top, bold short label bar beneath in a saturated brand colour, high-contrast punchy caption text.",
+    "why_unique": "Saturated bold label bar and high-contrast punch is tuned for scroll-stopping virality, not editorial restraint."
+  },
+  "social_snapshot": {
+    "category": "Social Native",
+    "name": "Social Snapshot",
+    "concept": "Quick glance composition designed for instant readability.",
+    "layout_description": "Full-bleed photo, one short caption line set simply at the base with no card or panel, fast and unadorned.",
+    "why_unique": "Deliberately unadorned and instant to read, distinct from any card, scrim, or structural device."
+  },
+  "vertical_storyboard": {
+    "category": "Social Native",
+    "name": "Vertical Storyboard",
+    "concept": "Sequential vertical panels suggest a multi-beat story in one frame.",
+    "layout_description": "Canvas divided into two or three stacked horizontal bands of even height, photo spans the tallest band, small numbered tags mark each band.",
+    "why_unique": "Even horizontal stacking with numbered tags implies a storyboard sequence within a single vertical frame."
+  },
+
+  "ultra_white_space": {
+    "category": "Premium Minimal",
+    "name": "Ultra White Space",
+    "concept": "Extreme breathing room with the photo as a small, deliberate accent.",
+    "layout_description": "Photo occupies a small fraction of the canvas, the vast remainder is a flat pale field, tiny caption set far from the photo.",
+    "why_unique": "The ratio of empty space to photo is deliberately extreme, well beyond a standard mat or margin."
+  },
+  "negative_space_focus": {
+    "category": "Premium Minimal",
+    "name": "Negative Space Focus",
+    "concept": "Subject-led minimalism where composition follows the subject's natural space.",
+    "layout_description": "Photo positioned off-centre following its own natural negative space, caption placed precisely within that existing empty area.",
+    "why_unique": "Caption placement is derived from the photo's own negative space rather than a fixed template zone."
+  },
+  "single_hero": {
+    "category": "Premium Minimal",
+    "name": "Single Hero",
+    "concept": "One dominant image with nothing competing for attention.",
+    "layout_description": "Full-bleed photo with a single small caption line, no decoration, no scrim, no panel — the photo alone carries the post.",
+    "why_unique": "Zero decorative elements of any kind — the purest possible reduction of the template set."
+  },
+  "quiet_luxury": {
+    "category": "Premium Minimal",
+    "name": "Quiet Luxury",
+    "concept": "Understated premium styling that avoids any overt luxury signalling.",
+    "layout_description": "Photo inset with a narrow, precise mat in a neutral tone, one small caption in a restrained thin serif, nothing metallic or bold.",
+    "why_unique": "Deliberately avoids gold, foil, or bold accents — restraint itself is the premium signal."
+  },
+  "minimal_geometry": {
+    "category": "Premium Minimal",
+    "name": "Minimal Geometry",
+    "concept": "Simple geometric balance with one precise structural line.",
+    "layout_description": "Photo inset with exactly one fine straight rule positioned using a precise proportional ratio, caption anchored to that single line.",
+    "why_unique": "Only one geometric element exists on the entire canvas, placed with mathematical precision."
+  },
+  "premium_border": {
+    "category": "Premium Minimal",
+    "name": "Premium Border",
+    "concept": "Thin elegant framing with a hairline-weight border.",
+    "layout_description": "Photo inset within a very fine single hairline border, generous surrounding mat, small caption centred beneath.",
+    "why_unique": "Border weight is a true hairline (finer than the standard mat treatments), the sole structural element."
+  },
+  "signature_frame": {
+    "category": "Premium Minimal",
+    "name": "Signature Frame",
+    "concept": "Branded edge treatment with a small signature mark at one corner.",
+    "layout_description": "Photo inset with a fine border, one tiny brand monogram mark sits precisely at a single corner intersection, otherwise unadorned.",
+    "why_unique": "Brand presence is reduced to one tiny corner mark rather than a watermark, tag, or panel."
+  },
+  "elegant_divider": {
+    "category": "Premium Minimal",
+    "name": "Elegant Divider",
+    "concept": "Refined section separation using a single delicate rule.",
+    "layout_description": "Photo occupies the upper portion, one fine delicate rule separates it from a small caption area below, nothing else added.",
+    "why_unique": "The single dividing rule is the only structural device — no border, mat, or panel elsewhere."
+  },
+  "precision_layout": {
+    "category": "Premium Minimal",
+    "name": "Precision Layout",
+    "concept": "Mathematically aligned composition built on a strict proportional system.",
+    "layout_description": "Photo and caption block are sized and positioned according to a visible golden-ratio-style proportion, no decoration beyond alignment itself.",
+    "why_unique": "Precision of proportion (not decoration) is the entire visual language of this template."
+  },
+  "museum_minimal": {
+    "category": "Premium Minimal",
+    "name": "Museum Minimal",
+    "concept": "Gallery-grade simplicity with the quiet confidence of a museum installation.",
+    "layout_description": "Photo inset within a generous flat pale field, no border at all, one small caption in a restrained serif placed exactly where a museum wall label would sit.",
+    "why_unique": "No border or frame whatsoever — space and placement alone do the work a mat would normally do."
   }
 }

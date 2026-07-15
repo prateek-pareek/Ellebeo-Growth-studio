@@ -134,7 +134,7 @@ function CrmPage() {
             Live
           </span>
         </div>
-        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight max-w-[22ch]">
+        <h1 className="page-title max-w-[22ch]">
           Bookings from your <span className="italic text-taupe">Client CRM</span>.
         </h1>
         <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[52ch]">
@@ -155,13 +155,13 @@ function CrmPage() {
               <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-muted-foreground group-hover:text-taupe transition-colors">
                 Total CRM bookings
               </p>
-              <p className="mt-2 font-serif text-4xl tabular-nums">{total}</p>
+              <p className="mt-2 stat-figure">{total}</p>
             </div>
             <div className="px-6 py-5 group hover:bg-nude/20 transition-colors cursor-default">
               <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-muted-foreground group-hover:text-taupe transition-colors">
                 Available to import
               </p>
-              <p className="mt-2 font-serif text-4xl tabular-nums text-foreground">
+              <p className="mt-2 stat-figure text-foreground">
                 {counts.available}
               </p>
             </div>
@@ -169,7 +169,7 @@ function CrmPage() {
               <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-muted-foreground group-hover:text-taupe transition-colors">
                 Already imported
               </p>
-              <p className="mt-2 font-serif text-4xl tabular-nums text-sage">{counts.imported}</p>
+              <p className="mt-2 stat-figure text-sage">{counts.imported}</p>
             </div>
             <div className="px-6 py-5 flex items-center justify-start sm:justify-end">
               <button
@@ -200,7 +200,7 @@ function CrmPage() {
 
       {/* ── No CRM account linked ────────────────────────────────────────── */}
       {!loading && !technicianFound && (
-        <div className="flex flex-col items-center justify-center border-2 border-dashed border-border bg-card/50 py-14 text-center mb-10">
+        <div className="flex flex-col items-center justify-center border-2 border-dashed border-border bg-card/50 py-10 text-center mb-8">
           <p className="eyebrow mb-3">No CRM account linked</p>
           <p className="font-serif text-2xl mb-3">Account not found in Client CRM.</p>
           <p className="text-sm text-taupe max-w-[48ch] mx-auto leading-relaxed">
@@ -258,7 +258,7 @@ function CrmPage() {
 
           {/* States */}
           {loading ? (
-            <div className="px-5 py-14 text-center text-sm text-taupe italic">
+            <div className="px-5 py-10 text-center text-sm text-taupe italic">
               Loading CRM bookings…
             </div>
           ) : error ? (
@@ -267,7 +267,7 @@ function CrmPage() {
               <p className="text-sm text-taupe">{error}</p>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center border-2 border-dashed border-border m-6 py-12 text-center bg-muted/20">
+            <div className="flex flex-col items-center justify-center border-2 border-dashed border-border m-6 py-10 text-center bg-muted/20">
               <p className="eyebrow mb-2">No bookings</p>
               <p className="text-sm text-taupe">
                 {tab === "imported"

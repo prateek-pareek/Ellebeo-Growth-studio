@@ -201,7 +201,7 @@ function AppointmentsPage() {
             Live
           </span>
         </div>
-        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight max-w-[22ch]">
+        <h1 className="page-title max-w-[22ch]">
           Turn appointments into <span className="italic text-taupe">content</span>.
         </h1>
         <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[52ch]">
@@ -210,14 +210,14 @@ function AppointmentsPage() {
       </header>
 
       {/* ── New appointment form ─────────────────────────────────────────── */}
-      <section className="border border-border bg-card shadow-sm overflow-hidden mb-12">
+      <section className="border border-border bg-card shadow-sm overflow-hidden mb-8">
         {/* Card header */}
         <div className="bg-muted px-5 py-3 border-b border-border flex items-center justify-between">
           <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">New appointment</h2>
           <span className="eyebrow">Capture</span>
         </div>
 
-        <form onSubmit={handleAddAppointment} className="p-6 sm:p-8 grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12 items-start">
+        <form onSubmit={handleAddAppointment} className="p-6 sm:p-8 grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-10 items-start">
           {/* Left — details */}
           <div className="space-y-5">
             <p className="text-sm text-taupe leading-relaxed">
@@ -364,7 +364,7 @@ function AppointmentsPage() {
         </div>
 
         {isEmpty && !loading ? (
-          <div className="flex flex-col items-center justify-center border-2 border-dashed border-border m-6 py-12 text-center bg-muted/20">
+          <div className="flex flex-col items-center justify-center border-2 border-dashed border-border m-6 py-10 text-center bg-muted/20">
             <p className="eyebrow mb-3">No appointments yet</p>
             <p className="text-sm text-taupe leading-relaxed max-w-md">
               Add your first appointment above to start turning sessions into content.

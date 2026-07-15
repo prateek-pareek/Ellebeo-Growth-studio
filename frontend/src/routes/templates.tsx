@@ -90,7 +90,7 @@ function TemplatesPage() {
             {templates.length} ready
           </span>
         </div>
-        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight max-w-[22ch]">
+        <h1 className="page-title max-w-[22ch]">
           Start from a <span className="italic text-taupe">template</span>.
         </h1>
         <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[52ch]">
@@ -169,7 +169,7 @@ function TemplatesPage() {
 
       {/* ── Grid ─────────────────────────────────────────────────────────── */}
       {filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-2xl py-16 text-center">
+        <div className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-2xl py-10 text-center">
           <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">No results</p>
           <p className="text-sm text-taupe">No templates match this filter combination.</p>
         </div>
