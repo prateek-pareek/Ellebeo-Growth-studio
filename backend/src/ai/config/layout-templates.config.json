@@ -166,5 +166,649 @@
     "decoration": "brand_scrim_heavy",
     "showWatermark": false,
     "showFooter": true
+  },
+  "generated_bordered_default_poster_high_contrast": {
+    "base": "bordered_default",
+    "textTemplate": "poster_high_contrast",
+    "decoration": null,
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "generated_full_bleed_giant_word_plus_caption": {
+    "base": "full_bleed",
+    "textTemplate": "giant_word_plus_caption",
+    "decoration": null,
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "generated_arch_mask_left_negative_space": {
+    "base": "arch_mask",
+    "textTemplate": "left_negative_space",
+    "decoration": null,
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "generated_arch_mask_side_panel_label": {
+    "base": "arch_mask",
+    "textTemplate": "side_panel_label",
+    "decoration": null,
+    "showWatermark": false,
+    "showFooter": false
+  },
+  "auto_polaroid_s_rotated_no_masking_ta": {
+    "base": "polaroid_stack",
+    "textTemplate": "rotated_note_card",
+    "decoration": "masking_tape_corners",
+    "showWatermark": false,
+    "showFooter": true
+  },
+  "auto_polaroid_s_passeparto": {
+    "base": "polaroid_stack",
+    "textTemplate": "passepartout_bottom",
+    "decoration": null,
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_polaroid_s_minimalist": {
+    "base": "polaroid_stack",
+    "textTemplate": "minimalist_corner_text",
+    "decoration": null,
+    "showWatermark": false,
+    "showFooter": true
+  },
+  "auto_polaroid_s_editorial_": {
+    "base": "polaroid_stack",
+    "textTemplate": "editorial_magazine_cover",
+    "decoration": null,
+    "showWatermark": false,
+    "showFooter": false
+  },
+  "auto_circle_cro_giant_word": {
+    "base": "circle_crop",
+    "textTemplate": "giant_word_plus_caption",
+    "decoration": null,
+    "showWatermark": false,
+    "showFooter": true
+  },
+  "auto_circle_cro_minimalist_gold_foil_": {
+    "base": "circle_crop",
+    "textTemplate": "minimalist_corner_text",
+    "decoration": "gold_foil_accents",
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_circle_cro_left_negat_monogram_w": {
+    "base": "circle_crop",
+    "textTemplate": "left_negative_space",
+    "decoration": "monogram_watermark",
+    "showWatermark": false,
+    "showFooter": false
+  },
+  "auto_torn_paper_speech_bub": {
+    "base": "torn_paper_edge",
+    "textTemplate": "speech_bubble",
+    "decoration": null,
+    "showWatermark": false,
+    "showFooter": true
+  },
+  "auto_torn_paper_poster_hig": {
+    "base": "torn_paper_edge",
+    "textTemplate": "poster_high_contrast",
+    "decoration": null,
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "auto_torn_paper_testimonia_masking_ta": {
+    "base": "torn_paper_edge",
+    "textTemplate": "testimonial_avatar_card",
+    "decoration": "masking_tape_corners",
+    "showWatermark": false,
+    "showFooter": false
+  },
+  "auto_full_bleed_editorial__gold_foil_": {
+    "base": "full_bleed",
+    "textTemplate": "editorial_magazine_cover",
+    "decoration": "gold_foil_accents",
+    "showWatermark": false,
+    "showFooter": true
+  },
+  "auto_full_bleed_editorial__brand_scri": {
+    "base": "full_bleed",
+    "textTemplate": "editorial_magazine_cover",
+    "decoration": "brand_scrim_heavy",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "auto_bordered_editorial__gallery_ha": {
+    "base": "bordered_default",
+    "textTemplate": "editorial_magazine_cover",
+    "decoration": "gallery_hairline",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "auto_full_bleed_editorial_": {
+    "base": "full_bleed_duotone",
+    "textTemplate": "editorial_magazine_cover",
+    "decoration": null,
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_full_bleed_minimalist": {
+    "base": "full_bleed",
+    "textTemplate": "minimalist_corner_text",
+    "decoration": null,
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_solid_canv_minimalist": {
+    "base": "solid_canvas_full",
+    "textTemplate": "minimalist_corner_text",
+    "decoration": null,
+    "showWatermark": false,
+    "showFooter": true
+  },
+  "auto_arch_mask_minimalist_arch_outli": {
+    "base": "arch_mask",
+    "textTemplate": "minimalist_corner_text",
+    "decoration": "arch_outline",
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_asymmetric_minimalist_monogram_w": {
+    "base": "asymmetric_offset",
+    "textTemplate": "minimalist_corner_text",
+    "decoration": "monogram_watermark",
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_bordered_randomized_brand_scri": {
+    "base": "bordered_default",
+    "textTemplate": "randomized_overlay",
+    "decoration": "brand_scrim_heavy",
+    "showWatermark": false,
+    "showFooter": false
+  },
+  "auto_split_befo_quote_cent_dark_scrim": {
+    "base": "split_before_after",
+    "textTemplate": "quote_centered_middle",
+    "decoration": "dark_scrim_overlay",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "auto_torn_paper_stacked_he_ticket_not": {
+    "base": "torn_paper_edge",
+    "textTemplate": "stacked_headline_tag",
+    "decoration": "ticket_notches_dashed",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "auto_full_bleed_randomized_dark_scrim": {
+    "base": "full_bleed",
+    "textTemplate": "randomized_overlay",
+    "decoration": "dark_scrim_overlay",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "auto_full_bleed_rotated_no_monogram_w": {
+    "base": "full_bleed",
+    "textTemplate": "rotated_note_card",
+    "decoration": "monogram_watermark",
+    "showWatermark": false,
+    "showFooter": true
+  },
+  "auto_solid_canv_left_negat_film_sproc": {
+    "base": "solid_canvas_full",
+    "textTemplate": "left_negative_space",
+    "decoration": "film_sprockets",
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_full_bleed_side_panel_masking_ta": {
+    "base": "full_bleed_duotone",
+    "textTemplate": "side_panel_label",
+    "decoration": "masking_tape_corners",
+    "showWatermark": false,
+    "showFooter": true
+  },
+  "auto_asymmetric_translucen_translucen": {
+    "base": "asymmetric_offset",
+    "textTemplate": "translucent_left_panel",
+    "decoration": "translucent_pane",
+    "showWatermark": false,
+    "showFooter": true
+  },
+  "auto_asymmetric_left_negat": {
+    "base": "asymmetric_offset",
+    "textTemplate": "left_negative_space",
+    "decoration": null,
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_torn_paper_editorial__masking_ta": {
+    "base": "torn_paper_edge",
+    "textTemplate": "editorial_magazine_cover",
+    "decoration": "masking_tape_corners",
+    "showWatermark": false,
+    "showFooter": false
+  },
+  "auto_asymmetric_poster_hig": {
+    "base": "asymmetric_offset",
+    "textTemplate": "poster_high_contrast",
+    "decoration": null,
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_full_bleed_technician_film_sproc": {
+    "base": "full_bleed_duotone",
+    "textTemplate": "technician_signature_card",
+    "decoration": "film_sprockets",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "auto_solid_canv_poster_hig_gallery_ha": {
+    "base": "solid_canvas_full",
+    "textTemplate": "poster_high_contrast",
+    "decoration": "gallery_hairline",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "auto_arch_mask_duotone_hi_ticket_not": {
+    "base": "arch_mask",
+    "textTemplate": "duotone_high_contrast",
+    "decoration": "ticket_notches_dashed",
+    "showWatermark": false,
+    "showFooter": false
+  },
+  "auto_full_bleed_left_negat_side_photo": {
+    "base": "full_bleed_duotone",
+    "textTemplate": "left_negative_space",
+    "decoration": "side_photo_embed",
+    "showWatermark": false,
+    "showFooter": false
+  },
+  "auto_solid_canv_randomized_translucen": {
+    "base": "solid_canvas_full",
+    "textTemplate": "randomized_overlay",
+    "decoration": "translucent_pane",
+    "showWatermark": false,
+    "showFooter": false
+  },
+  "auto_bordered_stacked_he_masking_ta": {
+    "base": "bordered_default",
+    "textTemplate": "stacked_headline_tag",
+    "decoration": "masking_tape_corners",
+    "showWatermark": false,
+    "showFooter": true
+  },
+  "auto_full_bleed_translucen_translucen": {
+    "base": "full_bleed",
+    "textTemplate": "translucent_left_panel",
+    "decoration": "translucent_pane",
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_asymmetric_poster_hig_ticket_not": {
+    "base": "asymmetric_offset",
+    "textTemplate": "poster_high_contrast",
+    "decoration": "ticket_notches_dashed",
+    "showWatermark": false,
+    "showFooter": false
+  },
+  "auto_full_bleed_speech_bub_monogram_w": {
+    "base": "full_bleed",
+    "textTemplate": "speech_bubble",
+    "decoration": "monogram_watermark",
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_polaroid_s_duotone_hi": {
+    "base": "polaroid_stack",
+    "textTemplate": "duotone_high_contrast",
+    "decoration": null,
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "auto_solid_canv_side_panel_dark_scrim": {
+    "base": "solid_canvas_bordered",
+    "textTemplate": "side_panel_label",
+    "decoration": "dark_scrim_overlay",
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_bordered_technician_monogram_w": {
+    "base": "bordered_default",
+    "textTemplate": "technician_signature_card",
+    "decoration": "monogram_watermark",
+    "showWatermark": false,
+    "showFooter": true
+  },
+  "auto_bordered_left_negat_film_sproc": {
+    "base": "bordered_default",
+    "textTemplate": "left_negative_space",
+    "decoration": "film_sprockets",
+    "showWatermark": false,
+    "showFooter": false
+  },
+  "auto_solid_canv_passeparto_ticket_not": {
+    "base": "solid_canvas_full",
+    "textTemplate": "passepartout_bottom",
+    "decoration": "ticket_notches_dashed",
+    "showWatermark": false,
+    "showFooter": false
+  },
+  "auto_asymmetric_testimonia_monogram_w": {
+    "base": "asymmetric_offset",
+    "textTemplate": "testimonial_avatar_card",
+    "decoration": "monogram_watermark",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "auto_split_befo_stacked_he_side_photo": {
+    "base": "split_before_after",
+    "textTemplate": "stacked_headline_tag",
+    "decoration": "side_photo_embed",
+    "showWatermark": false,
+    "showFooter": true
+  },
+  "auto_asymmetric_poster_hig_masking_ta": {
+    "base": "asymmetric_offset",
+    "textTemplate": "poster_high_contrast",
+    "decoration": "masking_tape_corners",
+    "showWatermark": false,
+    "showFooter": true
+  },
+  "auto_asymmetric_side_panel_gold_foil_": {
+    "base": "asymmetric_offset",
+    "textTemplate": "side_panel_label",
+    "decoration": "gold_foil_accents",
+    "showWatermark": false,
+    "showFooter": false
+  },
+  "auto_split_befo_testimonia_ticket_not": {
+    "base": "split_before_after",
+    "textTemplate": "testimonial_avatar_card",
+    "decoration": "ticket_notches_dashed",
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_torn_paper_duotone_hi_monogram_w": {
+    "base": "torn_paper_edge",
+    "textTemplate": "duotone_high_contrast",
+    "decoration": "monogram_watermark",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "auto_asymmetric_randomized_film_sproc": {
+    "base": "asymmetric_offset",
+    "textTemplate": "randomized_overlay",
+    "decoration": "film_sprockets",
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_full_bleed_poster_hig_brand_scri": {
+    "base": "full_bleed_duotone",
+    "textTemplate": "poster_high_contrast",
+    "decoration": "brand_scrim_heavy",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "auto_split_befo_testimonia_side_photo": {
+    "base": "split_before_after",
+    "textTemplate": "testimonial_avatar_card",
+    "decoration": "side_photo_embed",
+    "showWatermark": false,
+    "showFooter": false
+  },
+  "auto_torn_paper_duotone_hi_brand_scri": {
+    "base": "torn_paper_edge",
+    "textTemplate": "duotone_high_contrast",
+    "decoration": "brand_scrim_heavy",
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_arch_mask_giant_word_ticket_not": {
+    "base": "arch_mask",
+    "textTemplate": "giant_word_plus_caption",
+    "decoration": "ticket_notches_dashed",
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_solid_canv_left_negat_side_photo": {
+    "base": "solid_canvas_bordered",
+    "textTemplate": "left_negative_space",
+    "decoration": "side_photo_embed",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "auto_bordered_left_negat": {
+    "base": "bordered_default",
+    "textTemplate": "left_negative_space",
+    "decoration": null,
+    "showWatermark": false,
+    "showFooter": false
+  },
+  "auto_bordered_translucen_side_photo": {
+    "base": "bordered_default",
+    "textTemplate": "translucent_left_panel",
+    "decoration": "side_photo_embed",
+    "showWatermark": false,
+    "showFooter": true
+  },
+  "auto_torn_paper_left_negat_brand_scri": {
+    "base": "torn_paper_edge",
+    "textTemplate": "left_negative_space",
+    "decoration": "brand_scrim_heavy",
+    "showWatermark": false,
+    "showFooter": false
+  },
+  "auto_polaroid_s_poster_hig_arch_outli": {
+    "base": "polaroid_stack",
+    "textTemplate": "poster_high_contrast",
+    "decoration": "arch_outline",
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_full_bleed_rotated_no_film_sproc": {
+    "base": "full_bleed_duotone",
+    "textTemplate": "rotated_note_card",
+    "decoration": "film_sprockets",
+    "showWatermark": false,
+    "showFooter": false
+  },
+  "auto_full_bleed_side_panel_translucen": {
+    "base": "full_bleed_duotone",
+    "textTemplate": "side_panel_label",
+    "decoration": "translucent_pane",
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_split_befo_technician_dark_scrim": {
+    "base": "split_before_after",
+    "textTemplate": "technician_signature_card",
+    "decoration": "dark_scrim_overlay",
+    "showWatermark": false,
+    "showFooter": true
+  },
+  "auto_solid_canv_randomized_ticket_not": {
+    "base": "solid_canvas_full",
+    "textTemplate": "randomized_overlay",
+    "decoration": "ticket_notches_dashed",
+    "showWatermark": false,
+    "showFooter": true
+  },
+  "auto_full_bleed_giant_word_side_photo": {
+    "base": "full_bleed_duotone",
+    "textTemplate": "giant_word_plus_caption",
+    "decoration": "side_photo_embed",
+    "showWatermark": false,
+    "showFooter": true
+  },
+  "auto_asymmetric_giant_word": {
+    "base": "asymmetric_offset",
+    "textTemplate": "giant_word_plus_caption",
+    "decoration": null,
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "auto_circle_cro_rotated_no_arch_outli": {
+    "base": "circle_crop",
+    "textTemplate": "rotated_note_card",
+    "decoration": "arch_outline",
+    "showWatermark": false,
+    "showFooter": false
+  },
+  "auto_split_befo_randomized_gold_foil_": {
+    "base": "split_before_after",
+    "textTemplate": "randomized_overlay",
+    "decoration": "gold_foil_accents",
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_solid_canv_passeparto_gold_foil_": {
+    "base": "solid_canvas_bordered",
+    "textTemplate": "passepartout_bottom",
+    "decoration": "gold_foil_accents",
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_full_bleed_translucen_masking_ta": {
+    "base": "full_bleed_duotone",
+    "textTemplate": "translucent_left_panel",
+    "decoration": "masking_tape_corners",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "auto_polaroid_s_editorial__gold_foil_": {
+    "base": "polaroid_stack",
+    "textTemplate": "editorial_magazine_cover",
+    "decoration": "gold_foil_accents",
+    "showWatermark": false,
+    "showFooter": true
+  },
+  "auto_bordered_duotone_hi_film_sproc": {
+    "base": "bordered_default",
+    "textTemplate": "duotone_high_contrast",
+    "decoration": "film_sprockets",
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_solid_canv_rotated_no_masking_ta": {
+    "base": "solid_canvas_bordered",
+    "textTemplate": "rotated_note_card",
+    "decoration": "masking_tape_corners",
+    "showWatermark": false,
+    "showFooter": true
+  },
+  "auto_circle_cro_giant_word_masking_ta": {
+    "base": "circle_crop",
+    "textTemplate": "giant_word_plus_caption",
+    "decoration": "masking_tape_corners",
+    "showWatermark": false,
+    "showFooter": true
+  },
+  "auto_full_bleed_side_panel_ticket_not": {
+    "base": "full_bleed_duotone",
+    "textTemplate": "side_panel_label",
+    "decoration": "ticket_notches_dashed",
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_solid_canv_randomized_film_sproc": {
+    "base": "solid_canvas_full",
+    "textTemplate": "randomized_overlay",
+    "decoration": "film_sprockets",
+    "showWatermark": false,
+    "showFooter": false
+  },
+  "auto_solid_canv_technician_gold_foil_": {
+    "base": "solid_canvas_full",
+    "textTemplate": "technician_signature_card",
+    "decoration": "gold_foil_accents",
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_asymmetric_poster_hig_dark_scrim": {
+    "base": "asymmetric_offset",
+    "textTemplate": "poster_high_contrast",
+    "decoration": "dark_scrim_overlay",
+    "showWatermark": false,
+    "showFooter": true
+  },
+  "auto_circle_cro_side_panel_monogram_w": {
+    "base": "circle_crop",
+    "textTemplate": "side_panel_label",
+    "decoration": "monogram_watermark",
+    "showWatermark": false,
+    "showFooter": false
+  },
+  "auto_bordered_left_negat_monogram_w": {
+    "base": "bordered_default",
+    "textTemplate": "left_negative_space",
+    "decoration": "monogram_watermark",
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_split_befo_randomized_monogram_w": {
+    "base": "split_before_after",
+    "textTemplate": "randomized_overlay",
+    "decoration": "monogram_watermark",
+    "showWatermark": false,
+    "showFooter": false
+  },
+  "auto_polaroid_s_editorial__masking_ta": {
+    "base": "polaroid_stack",
+    "textTemplate": "editorial_date_stamp",
+    "decoration": "masking_tape_corners",
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_circle_cro_passeparto_masking_ta": {
+    "base": "circle_crop",
+    "textTemplate": "passepartout_bottom",
+    "decoration": "masking_tape_corners",
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_circle_cro_quote_cent_ticket_not": {
+    "base": "circle_crop",
+    "textTemplate": "quote_centered_middle",
+    "decoration": "ticket_notches_dashed",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "auto_asymmetric_rotated_no_dark_scrim": {
+    "base": "asymmetric_offset",
+    "textTemplate": "rotated_note_card",
+    "decoration": "dark_scrim_overlay",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "auto_full_bleed_technician": {
+    "base": "full_bleed",
+    "textTemplate": "technician_signature_card",
+    "decoration": null,
+    "showWatermark": false,
+    "showFooter": false
+  },
+  "auto_full_bleed_passeparto_film_sproc": {
+    "base": "full_bleed",
+    "textTemplate": "passepartout_bottom",
+    "decoration": "film_sprockets",
+    "showWatermark": true,
+    "showFooter": false
+  },
+  "auto_solid_canv_quote_cent_monogram_w": {
+    "base": "solid_canvas_bordered",
+    "textTemplate": "quote_centered_middle",
+    "decoration": "monogram_watermark",
+    "showWatermark": true,
+    "showFooter": true
+  },
+  "auto_torn_paper_minimalist_dark_scrim": {
+    "base": "torn_paper_edge",
+    "textTemplate": "minimalist_corner_text",
+    "decoration": "dark_scrim_overlay",
+    "showWatermark": false,
+    "showFooter": true
   }
 }

@@ -86,6 +86,7 @@ function GeneratePage() {
   const [generating, setGenerating] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<string | null>(null);
+  const [estimatedSeconds, setEstimatedSeconds] = useState<number>(45);
   const [backendVariants, setBackendVariants] = useState<any[] | null>(null);
   const pollRef = useRef<number | null>(null);
   
@@ -241,6 +242,7 @@ function GeneratePage() {
         includeMusic: false
       });
       setJobId(res.data.data.jobId);
+      setEstimatedSeconds(res.data.data.estimatedSeconds || (activeFormat === 'Reel' ? 120 : 45));
     } catch (e: any) {
       setGenerating(false);
       setStep("format");
@@ -471,6 +473,7 @@ function GeneratePage() {
                 <ReviewStep
                   generating={generating}
                   jobStatus={jobStatus}
+                  estimatedSeconds={estimatedSeconds}
                   backendVariants={backendVariants}
                   onChangeStep={(s: Step) => setStep(s)}
                   onRefineComplete={(items: any[]) => setBackendVariants(items)}
@@ -1134,76 +1137,116 @@ const MODEL_LABELS: Record<string, string> = {
   "GPT-4o-Strategist (Empathetic)": "Gemini · Empathetic",
 };
 
-function GeneratingScreen({ jobStatus }: { jobStatus: string }) {
+function GeneratingScreen({ jobStatus, estimatedSeconds = 45 }: { jobStatus: string; estimatedSeconds?: number }) {
   const [tipIndex, setTipIndex] = useState(0);
   const [fade, setFade] = useState(true);
+  const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    const tipInterval = setInterval(() => {
       setFade(false);
       setTimeout(() => {
         setTipIndex(i => (i + 1) % BEAUTY_TIPS.length);
         setFade(true);
       }, 400);
-    }, 4000);
-    return () => clearInterval(interval);
+    }, 5000);
+    
+    const timeInterval = setInterval(() => {
+      setElapsed(e => e + 1);
+    }, 1000);
+
+    return () => {
+      clearInterval(tipInterval);
+      clearInterval(timeInterval);
+    };
   }, []);
 
   const currentStepIndex = STATUS_STEPS.findIndex(s => s.key === jobStatus);
   const activeStep = currentStepIndex === -1 ? 0 : currentStepIndex;
+  
+  const progressPercent = Math.min((elapsed / estimatedSeconds) * 100, 95);
+  const remaining = Math.max(0, estimatedSeconds - elapsed);
 
   return (
-    <div className="artifact p-10 flex flex-col items-center gap-10">
+    <div className="artifact p-12 flex flex-col items-center gap-8 relative overflow-hidden bg-background border border-border/40 shadow-xl rounded-2xl w-full max-w-2xl mx-auto">
+      {/* Subtle Shimmer Background */}
+      <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-card to-transparent opacity-30 animate-pulse pointer-events-none" />
+      
+      {/* Top section */}
+      <div className="text-center z-10 w-full max-w-md mt-4">
+        <h2 className="font-serif text-3xl italic mb-3 bg-gradient-to-r from-foreground to-taupe bg-clip-text text-transparent">
+          Curating Your Content
+        </h2>
+        <p className="text-sm text-taupe mb-8 font-medium">
+          {STATUS_LABELS[jobStatus] ?? "Processing your request..."}
+        </p>
 
-      {/* Top — spinner + current status */}
-      <div className="text-center">
-        <div className="flex justify-center mb-5">
-          <span className="size-8 rounded-full border-2 border-foreground border-t-transparent animate-spin" />
+        {/* Dynamic Progress Bar */}
+        <div className="relative w-full h-2 bg-border/50 rounded-full overflow-hidden mb-3 shadow-inner">
+          <div 
+            className="absolute top-0 left-0 h-full bg-foreground rounded-full transition-all duration-1000 ease-out" 
+            style={{ width: `${progressPercent}%` }}
+          />
+          {/* Shimmer on the progress bar */}
+          <div className="absolute top-0 left-0 h-full w-full bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
         </div>
-        <p className="font-serif text-2xl italic mb-1">AI is crafting your content...</p>
-        <p className="text-sm text-taupe">{STATUS_LABELS[jobStatus] ?? "Processing..."}</p>
+        
+        <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest text-taupe/70">
+          <span>{Math.round(progressPercent)}% Complete</span>
+          <span className="flex items-center gap-1.5">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            ~ {remaining}s remaining
+          </span>
+        </div>
       </div>
 
-      {/* Progress steps */}
-      <div className="w-full max-w-md">
-        <div className="flex items-center justify-between relative">
-          {/* connecting line */}
-          <div className="absolute top-3 left-0 right-0 h-px bg-border z-0" />
+      {/* Progress steps (Vertical Layout) */}
+      <div className="w-full max-w-sm z-10 border border-border/50 rounded-xl bg-card/30 p-6 shadow-sm backdrop-blur-sm my-4">
+        <div className="flex flex-col gap-6 relative">
+          {/* connecting line vertical */}
+          <div className="absolute top-4 bottom-4 left-4 w-px bg-border z-0" />
           <div
-            className="absolute top-3 left-0 h-px bg-foreground z-0 transition-all duration-700"
-            style={{ width: `${(activeStep / (STATUS_STEPS.length - 1)) * 100}%` }}
+            className="absolute top-4 left-4 w-px bg-foreground z-0 transition-all duration-700"
+            style={{ height: `${(activeStep / (STATUS_STEPS.length - 1)) * 100}%` }}
           />
           {STATUS_STEPS.map((step, i) => (
-            <div key={step.key} className="flex flex-col items-center gap-2 z-10">
+            <div key={step.key} className="flex items-center gap-4 z-10">
               <div className={
-                "size-6 rounded-full flex items-center justify-center border-2 transition-all duration-500 " +
-                (i < activeStep ? "bg-foreground border-foreground" :
-                 i === activeStep ? "bg-foreground border-foreground animate-pulse" :
-                 "bg-card border-border")
+                "size-8 shrink-0 rounded-full flex items-center justify-center border-2 transition-all duration-500 shadow-sm " +
+                (i < activeStep ? "bg-foreground border-foreground text-background" :
+                 i === activeStep ? "bg-background border-foreground shadow-[0_0_15px_rgba(0,0,0,0.1)] text-foreground scale-110" :
+                 "bg-card border-border text-border")
               }>
-                {i < activeStep && (
-                  <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                    <path d="M1 4l3 3 5-6" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                {i < activeStep ? (
+                  <svg width="12" height="10" viewBox="0 0 10 8" fill="none">
+                    <path d="M1 4l3 3 5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
+                ) : i === activeStep ? (
+                  <div className="size-2 rounded-full bg-foreground animate-ping" />
+                ) : (
+                  <span className="text-xs font-bold">{i + 1}</span>
                 )}
               </div>
-              <p className={"text-[9px] uppercase tracking-widest text-center max-w-[70px] " +
-                (i <= activeStep ? "text-foreground" : "text-taupe/50")}>
-                {step.label}
-              </p>
+              <div className="flex flex-col">
+                <p className={"text-[10px] uppercase tracking-widest font-bold transition-colors duration-500 " +
+                  (i <= activeStep ? "text-foreground" : "text-taupe/40")}>
+                  {step.label}
+                </p>
+                {i === activeStep && <p className="text-xs text-taupe mt-1 animate-pulse">Working...</p>}
+              </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Divider */}
-      <div className="w-full max-w-md h-px bg-border" />
-
       {/* Beauty tip */}
-      <div className="w-full max-w-md text-center">
-        <p className="text-[10px] uppercase tracking-widest text-taupe mb-3">While you wait · Beauty business tip</p>
+      <div className="w-full max-w-md text-center z-10 bg-card/50 p-6 rounded-xl border border-border/50 shadow-sm mb-4">
+        <div className="flex items-center justify-center gap-2 mb-3">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-taupe"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+          <p className="text-[10px] uppercase tracking-widest text-taupe font-bold">Pro Tip</p>
+        </div>
         <p
-          className="font-serif text-lg leading-relaxed text-foreground transition-opacity duration-400"
+          className="font-serif text-base leading-relaxed text-foreground transition-opacity duration-500 min-h-[3rem] flex items-center justify-center"
           style={{ opacity: fade ? 1 : 0 }}
         >
           "{BEAUTY_TIPS[tipIndex]}"
@@ -1211,7 +1254,7 @@ function GeneratingScreen({ jobStatus }: { jobStatus: string }) {
         {/* Tip dots */}
         <div className="flex justify-center gap-1.5 mt-4">
           {BEAUTY_TIPS.map((_, i) => (
-            <div key={i} className={"size-1 rounded-full transition-all " + (i === tipIndex ? "bg-foreground" : "bg-border")} />
+            <div key={i} className={"size-1.5 rounded-full transition-all duration-300 " + (i === tipIndex ? "bg-foreground w-4" : "bg-border")} />
           ))}
         </div>
       </div>
@@ -1220,7 +1263,7 @@ function GeneratingScreen({ jobStatus }: { jobStatus: string }) {
   );
 }
 
-function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep, onRefineComplete, promptPreview }: any) {
+function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, onChangeStep, onRefineComplete, promptPreview }: any) {
   const [activeVariant, setActiveVariant] = useState(0);
   const [activeSlide, setActiveSlide] = useState(0);
   const [captionCopied, setCaptionCopied] = useState(false);
@@ -1235,7 +1278,7 @@ function ReviewStep({ generating, jobStatus, backendVariants, onChangeStep, onRe
   const [activeTab, setActiveTab] = useState<'visual' | 'copywriting' | 'prompt'>('visual');
 
   if (generating) {
-    return <GeneratingScreen jobStatus={jobStatus} />;
+    return <GeneratingScreen jobStatus={jobStatus} estimatedSeconds={estimatedSeconds} />;
   }
 
   if (!backendVariants || backendVariants.length === 0) {
