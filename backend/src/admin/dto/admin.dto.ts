@@ -28,3 +28,15 @@ export class UpdatePlanSettingsDto {
   @Min(1)
   generationsIncluded?: number;
 }
+
+export class UpdateTierLimitsDto {
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  generationsPerDay?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  reelsPerDay?: number;
+}

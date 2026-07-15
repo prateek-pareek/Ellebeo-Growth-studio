@@ -64,12 +64,15 @@ export class AppointmentService {
       clientIds.length > 0
         ? this.prisma.consentRecord.findMany({
             where: { clientId: { in: clientIds }, tenantId, isCurrent: true },
-            select: { clientId: true, status: true },
+            select: { clientId: true, status: true, updatedAt: true },
+            orderBy: { updatedAt: 'asc' },
           })
         : Promise.resolve([]),
     ]);
 
     const linkedMap = new Map(linkedConsents.map((c) => [c.id, c.status]));
+    // orderBy asc + Map overwrite-on-duplicate-key means the most recently
+    // updated record wins when a client has more than one isCurrent:true row.
     const clientMap = new Map(currentConsents.map((c) => [c.clientId, c.status]));
 
     return rows.map((a) => ({
@@ -115,6 +118,7 @@ export class AppointmentService {
         })
       : await this.prisma.consentRecord.findFirst({
           where: { clientId: apt.clientId, tenantId, isCurrent: true },
+          orderBy: { updatedAt: 'desc' },
           select: {
             status: true,
             allowShowFace: true,
@@ -387,6 +391,7 @@ export class AppointmentService {
     if (!consentStatus && apt.clientId) {
       const current = await this.prisma.consentRecord.findFirst({
         where: { clientId: apt.clientId, tenantId, isCurrent: true },
+        orderBy: { updatedAt: 'desc' },
         select: { status: true },
       });
       consentStatus = current?.status ?? null;
