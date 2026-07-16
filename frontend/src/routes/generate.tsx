@@ -1313,13 +1313,17 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, 
   const getVariantUrl = (slideData: any) => {
     if (!slideData) return null;
     
-    // Check if the current selected option is Gemini
-    const isGeminiText = opt?.generatedBy?.toLowerCase().includes('gemini');
-    
-    // If the slide has variants, prefer the one matching the current text model
+    // Caption options never say "gemini" — both angles come from the same text
+    // model (see brand-strategist.chain.ts). The pairing is by angle: the
+    // Empathetic option is paired with the Gemini-generated image, Technical
+    // with the DALL-E/gpt-image-1 one. Matching on "gemini" here always
+    // evaluated to false, so the Gemini variant was never reachable.
+    const isEmpatheticOption = opt?.generatedBy?.toLowerCase().includes('empathetic');
+
+    // If the slide has variants, prefer the one matching the current option's pairing
     if (slideData.variants) {
-      if (isGeminiText && slideData.variants.gemini) return slideData.variants.gemini;
-      if (!isGeminiText && slideData.variants.dalle) return slideData.variants.dalle;
+      if (isEmpatheticOption && slideData.variants.gemini) return slideData.variants.gemini;
+      if (!isEmpatheticOption && slideData.variants.dalle) return slideData.variants.dalle;
     }
     
     // Fallback if variants are missing or specific model image is missing
