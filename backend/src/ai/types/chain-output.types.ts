@@ -18,6 +18,10 @@ export interface VisionAnalysisResult {
   facesDetected: boolean;
   settingDetected: string;
   framingType: 'macro' | 'portrait' | 'wide' | 'unknown';
+  faceCoordinates?: {
+    eyesYPercent: number;
+    mouthYPercent: number;
+  };
 }
 
 // ---------------------------------------------------------------------------

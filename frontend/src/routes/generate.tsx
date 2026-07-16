@@ -478,6 +478,8 @@ function GeneratePage() {
                   onChangeStep={(s: Step) => setStep(s)}
                   onRefineComplete={(items: any[]) => setBackendVariants(items)}
                   promptPreview={promptPreview}
+                  brandDna={brandDna}
+                  appointment={appointment}
                 />
               )}
             </div>
@@ -1137,133 +1139,147 @@ const MODEL_LABELS: Record<string, string> = {
   "GPT-4o-Strategist (Empathetic)": "Gemini · Empathetic",
 };
 
-function GeneratingScreen({ jobStatus, estimatedSeconds = 45 }: { jobStatus: string; estimatedSeconds?: number }) {
+function GeneratingScreen({ jobStatus, brandDna, appointment, estimatedSeconds = 45 }: { jobStatus: string; brandDna: any; appointment: any; estimatedSeconds?: number }) {
   const [tipIndex, setTipIndex] = useState(0);
   const [fade, setFade] = useState(true);
-  const [elapsed, setElapsed] = useState(0);
+  const [phaseElapsed, setPhaseElapsed] = useState(0);
+
+  // Reset phase timer whenever the backend status advances
+  useEffect(() => {
+    setPhaseElapsed(0);
+  }, [jobStatus]);
+
+  // Map backend status explicitly to deterministic progress percentages
+  const statusToProgress: Record<string, number> = {
+    initializing: 5,
+    processing_image: 20,
+    processing_vision: 30,
+    building_prompt: 45,
+    generating_text: 65, // This is the longest phase
+    completed: 100,
+  };
+
+  const progressPercent = statusToProgress[jobStatus] || 15;
+
+  const dynamicTips = [
+    `Infusing ${brandDna?.businessName || 'your brand'}'s unique DNA into the strategy.`,
+    `Analyzing visual composition for ${brandDna?.aestheticDirection || 'premium'} aesthetics.`,
+    `Curating messaging tailored for ${appointment?.serviceCategory || 'your service'} clients.`,
+    `Selecting dynamic layouts to maximize visual impact.`,
+    `Composing sophisticated editorial copy that converts.`,
+    `Ensuring perfect typography alignment across all assets.`,
+  ];
 
   useEffect(() => {
     const tipInterval = setInterval(() => {
       setFade(false);
       setTimeout(() => {
-        setTipIndex(i => (i + 1) % BEAUTY_TIPS.length);
+        setTipIndex(i => (i + 1) % dynamicTips.length);
         setFade(true);
-      }, 400);
-    }, 5000);
-    
+      }, 500);
+    }, 4500);
+
     const timeInterval = setInterval(() => {
-      setElapsed(e => e + 1);
+      setPhaseElapsed(e => e + 1);
     }, 1000);
 
     return () => {
       clearInterval(tipInterval);
       clearInterval(timeInterval);
     };
-  }, []);
+  }, [dynamicTips.length]);
 
-  const currentStepIndex = STATUS_STEPS.findIndex(s => s.key === jobStatus);
-  const activeStep = currentStepIndex === -1 ? 0 : currentStepIndex;
-  
-  const progressPercent = Math.min((elapsed / estimatedSeconds) * 100, 95);
-  const remaining = Math.max(0, estimatedSeconds - elapsed);
+  // Uber-style dynamic ETA routing
+  const statusToBaseRemaining: Record<string, number> = {
+    initializing: 45,
+    processing_image: 40,
+    processing_vision: 35,
+    building_prompt: 30,
+    generating_text: 20,
+    generating_reel: 30,
+    completed: 0,
+  };
+
+  const timeMultiplier = estimatedSeconds / 45;
+  const baseRemaining = Math.round((statusToBaseRemaining[jobStatus] || 45) * timeMultiplier);
+  const remaining = Math.max(1, baseRemaining - phaseElapsed); // Never show 0s unless completed
 
   return (
-    <div className="artifact p-12 flex flex-col items-center gap-8 relative overflow-hidden bg-background border border-border/40 shadow-xl rounded-2xl w-full max-w-2xl mx-auto">
+    <div className="artifact relative flex flex-col items-center justify-center overflow-hidden bg-background border border-border/40 shadow-xl rounded-2xl w-full max-w-4xl mx-auto min-h-[600px]">
+      <style>{`
+        @keyframes customMarquee {
+          0% { transform: translateX(0%); }
+          100% { transform: translateX(-50%); }
+        }
+        @keyframes customMarqueeReverse {
+          0% { transform: translateX(-50%); }
+          100% { transform: translateX(0%); }
+        }
+        .animate-ticker { animation: customMarquee 25s linear infinite; }
+        .animate-ticker-reverse { animation: customMarqueeReverse 25s linear infinite; }
+      `}</style>
+
+      {/* Premium Infinite Marquee Ticker (Top) */}
+      <div className="absolute top-0 left-0 w-full overflow-hidden bg-foreground text-background py-2.5 z-20 border-b border-border shadow-md">
+        <div className="whitespace-nowrap flex animate-ticker items-center opacity-90 min-w-[200%]">
+          {[...Array(4)].map((_, i) => (
+             <span key={i} className="text-[9px] tracking-[0.3em] uppercase font-bold px-4">
+               CURATING VISUAL ASSETS ✦ COMPOSING EDITORIAL COPY ✦ ALIGNING BRAND DNA ✦ REFINING STUDIO LAYOUTS ✦ 
+             </span>
+          ))}
+        </div>
+      </div>
+
       {/* Subtle Shimmer Background */}
-      <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-card to-transparent opacity-30 animate-pulse pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-card to-transparent opacity-40 animate-pulse pointer-events-none" />
       
-      {/* Top section */}
-      <div className="text-center z-10 w-full max-w-md mt-4">
-        <h2 className="font-serif text-3xl italic mb-3 bg-gradient-to-r from-foreground to-taupe bg-clip-text text-transparent">
-          Curating Your Content
+      {/* Main Content Area */}
+      <div className="z-10 w-full max-w-md text-center flex flex-col items-center mt-12 mb-12">
+        <h2 className="font-serif text-4xl italic mb-4 bg-gradient-to-r from-foreground to-taupe bg-clip-text text-transparent">
+          Composing
         </h2>
-        <p className="text-sm text-taupe mb-8 font-medium">
-          {STATUS_LABELS[jobStatus] ?? "Processing your request..."}
+        <p className="text-[10px] uppercase tracking-[0.2em] text-taupe font-semibold mb-10">
+          {STATUS_LABELS[jobStatus] ?? "Curating your assets..."}
         </p>
 
         {/* Dynamic Progress Bar */}
-        <div className="relative w-full h-2 bg-border/50 rounded-full overflow-hidden mb-3 shadow-inner">
-          <div 
-            className="absolute top-0 left-0 h-full bg-foreground rounded-full transition-all duration-1000 ease-out" 
-            style={{ width: `${progressPercent}%` }}
-          />
-          {/* Shimmer on the progress bar */}
-          <div className="absolute top-0 left-0 h-full w-full bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
+        <div className="w-full max-w-sm mx-auto mb-10">
+          <div className="flex justify-between items-end text-[10px] uppercase tracking-widest text-taupe font-bold mb-2 px-1">
+            <span>{Math.round(progressPercent)}% Complete</span>
+            <span>{jobStatus === 'completed' ? 'Done' : `~${remaining}s remaining`}</span>
+          </div>
+          <div className="relative w-full h-1 bg-border/50 overflow-hidden rounded-full shadow-inner">
+            <div 
+              className="absolute top-0 left-0 h-full bg-foreground transition-all duration-[1500ms] ease-in-out" 
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
         </div>
-        
-        <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest text-taupe/70">
-          <span>{Math.round(progressPercent)}% Complete</span>
-          <span className="flex items-center gap-1.5">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            ~ {remaining}s remaining
-          </span>
+
+        {/* Dynamic Concierge Tip */}
+        <div className="w-full text-center bg-card/60 p-6 rounded-lg border border-border/30 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] backdrop-blur-md">
+          <p className="text-[9px] uppercase tracking-[0.2em] text-taupe font-bold mb-4 flex justify-center items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-foreground animate-pulse" /> Strategy Engine
+          </p>
+          <p
+            className="font-serif text-[15px] leading-relaxed text-foreground transition-opacity duration-500 min-h-[3.5rem] flex items-center justify-center italic px-4"
+            style={{ opacity: fade ? 1 : 0 }}
+          >
+            "{dynamicTips[tipIndex]}"
+          </p>
+          {/* Tip dots */}
+          <div className="flex justify-center gap-2 mt-5">
+            {dynamicTips.map((_, i) => (
+              <div key={i} className={"h-1 rounded-full transition-all duration-300 " + (i === tipIndex ? "bg-foreground w-4" : "bg-border w-1.5")} />
+            ))}
+          </div>
         </div>
       </div>
-
-      {/* Progress steps (Vertical Layout) */}
-      <div className="w-full max-w-sm z-10 border border-border/50 rounded-xl bg-card/30 p-6 shadow-sm backdrop-blur-sm my-4">
-        <div className="flex flex-col gap-6 relative">
-          {/* connecting line vertical */}
-          <div className="absolute top-4 bottom-4 left-4 w-px bg-border z-0" />
-          <div
-            className="absolute top-4 left-4 w-px bg-foreground z-0 transition-all duration-700"
-            style={{ height: `${(activeStep / (STATUS_STEPS.length - 1)) * 100}%` }}
-          />
-          {STATUS_STEPS.map((step, i) => (
-            <div key={step.key} className="flex items-center gap-4 z-10">
-              <div className={
-                "size-8 shrink-0 rounded-full flex items-center justify-center border-2 transition-all duration-500 shadow-sm " +
-                (i < activeStep ? "bg-foreground border-foreground text-background" :
-                 i === activeStep ? "bg-background border-foreground shadow-[0_0_15px_rgba(0,0,0,0.1)] text-foreground scale-110" :
-                 "bg-card border-border text-border")
-              }>
-                {i < activeStep ? (
-                  <svg width="12" height="10" viewBox="0 0 10 8" fill="none">
-                    <path d="M1 4l3 3 5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                ) : i === activeStep ? (
-                  <div className="size-2 rounded-full bg-foreground animate-ping" />
-                ) : (
-                  <span className="text-xs font-bold">{i + 1}</span>
-                )}
-              </div>
-              <div className="flex flex-col">
-                <p className={"text-[10px] uppercase tracking-widest font-bold transition-colors duration-500 " +
-                  (i <= activeStep ? "text-foreground" : "text-taupe/40")}>
-                  {step.label}
-                </p>
-                {i === activeStep && <p className="text-xs text-taupe mt-1 animate-pulse">Working...</p>}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Beauty tip */}
-      <div className="w-full max-w-md text-center z-10 bg-card/50 p-6 rounded-xl border border-border/50 shadow-sm mb-4">
-        <div className="flex items-center justify-center gap-2 mb-3">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-taupe"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
-          <p className="text-[10px] uppercase tracking-widest text-taupe font-bold">Pro Tip</p>
-        </div>
-        <p
-          className="font-serif text-base leading-relaxed text-foreground transition-opacity duration-500 min-h-[3rem] flex items-center justify-center"
-          style={{ opacity: fade ? 1 : 0 }}
-        >
-          "{BEAUTY_TIPS[tipIndex]}"
-        </p>
-        {/* Tip dots */}
-        <div className="flex justify-center gap-1.5 mt-4">
-          {BEAUTY_TIPS.map((_, i) => (
-            <div key={i} className={"size-1.5 rounded-full transition-all duration-300 " + (i === tipIndex ? "bg-foreground w-4" : "bg-border")} />
-          ))}
-        </div>
-      </div>
-
     </div>
   );
 }
 
-function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, onChangeStep, onRefineComplete, promptPreview }: any) {
+function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, onChangeStep, onRefineComplete, promptPreview, brandDna, appointment }: any) {
   const [activeVariant, setActiveVariant] = useState(0);
   const [activeSlide, setActiveSlide] = useState(0);
   const [captionCopied, setCaptionCopied] = useState(false);
@@ -1278,7 +1294,7 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, 
   const [activeTab, setActiveTab] = useState<'visual' | 'copywriting' | 'prompt'>('visual');
 
   if (generating) {
-    return <GeneratingScreen jobStatus={jobStatus} estimatedSeconds={estimatedSeconds} />;
+    return <GeneratingScreen jobStatus={jobStatus} brandDna={brandDna} appointment={appointment} estimatedSeconds={estimatedSeconds} />;
   }
 
   if (!backendVariants || backendVariants.length === 0) {
@@ -1541,26 +1557,6 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, 
               }`}
             >
               Visual Presentation
-            </button>
-            <button
-              onClick={() => setActiveTab('copywriting')}
-              className={`px-3 py-1.5 text-[10px] uppercase tracking-widest font-semibold border-b-2 transition-all ${
-                activeTab === 'copywriting'
-                  ? 'border-foreground text-foreground'
-                  : 'border-transparent text-taupe hover:text-foreground'
-              }`}
-            >
-              Polished Copywriting
-            </button>
-            <button
-              onClick={() => setActiveTab('prompt')}
-              className={`px-3 py-1.5 text-[10px] uppercase tracking-widest font-semibold border-b-2 transition-all ${
-                activeTab === 'prompt'
-                  ? 'border-foreground text-foreground'
-                  : 'border-transparent text-taupe hover:text-foreground'
-              }`}
-            >
-              Live System Prompt
             </button>
           </div>
           <span className="text-[9px] uppercase tracking-widest font-bold text-taupe/40 pr-2 hidden sm:inline">
@@ -2043,88 +2039,7 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, 
           </div>
             )}
           </>
-        ) : activeTab === 'copywriting' ? (
-          /* ── POLISHED COPYWRITING TAB ────────────────────────────────── */
-          <div className="p-6 bg-card text-foreground divide-y divide-border space-y-6">
-            <div className="pb-4">
-              <h4 className="text-[10px] uppercase tracking-[0.2em] text-taupe font-bold mb-2">On-Image Hook Text</h4>
-              <p className="text-lg font-serif italic text-foreground leading-relaxed">
-                {opt.hookSentence ? `"${opt.hookSentence}"` : "No hook sentence generated."}
-              </p>
-            </div>
-            
-            <div className="py-4">
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-[10px] uppercase tracking-[0.2em] text-taupe font-bold">Instagram Caption</h4>
-                <button onClick={copyCaption} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
-                  {captionCopied ? "Copied!" : "Copy Caption"}
-                </button>
-              </div>
-              <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{opt.caption}</p>
-            </div>
-            
-            {opt.callToAction && (
-              <div className="py-4">
-                <h4 className="text-[10px] uppercase tracking-[0.2em] text-taupe font-bold mb-1">Call to Action</h4>
-                <p className="text-sm text-foreground leading-relaxed">{opt.callToAction}</p>
-              </div>
-            )}
-            
-            {opt.hashtags && opt.hashtags.length > 0 && (
-              <div className="py-4">
-                <h4 className="text-[10px] uppercase tracking-[0.2em] text-taupe font-bold mb-3">Suggested Hashtags</h4>
-                <div className="flex flex-wrap gap-1.5">
-                  {opt.hashtags.map((h: string) => (
-                    <span key={h} className="text-[10px] uppercase tracking-widest border border-border px-2.5 py-1 text-taupe bg-muted font-mono">
-                      #{h}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          /* ── LIVE SYSTEM PROMPT TAB ──────────────────────────────────── */
-          <div className="p-6 bg-card text-foreground">
-            <div className="flex flex-wrap items-start justify-between gap-4 mb-5 pb-4 border-b border-border">
-              <div>
-                <h4 className="text-xs font-semibold uppercase tracking-widest text-taupe">
-                  Current Active System Instructions Passed to the Engine
-                </h4>
-                <p className="text-[11px] text-taupe mt-1">
-                  Below is the core system architecture. It enforces absolute work truthfulness, incorporates your Brand DNA, and dynamically implements compliance standards.
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  const fullText = `SYSTEM PROMPT:\n${promptPreview?.systemPrompt ?? ''}\n\nUSER PROMPT:\n${promptPreview?.userPrompt ?? ''}`;
-                  navigator.clipboard.writeText(fullText);
-                  toast.success("Full prompt copied to clipboard");
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-border bg-muted hover:bg-nude/20 text-[10px] uppercase tracking-widest font-semibold transition-all"
-              >
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                Copy Full Prompt
-              </button>
-            </div>
-            
-            <div className="space-y-5">
-              <div>
-                <p className="text-[10px] uppercase tracking-widest font-bold text-taupe mb-1.5">System Prompt & Brand DNA Rules</p>
-                <pre className="w-full bg-[#1e1e1e] text-[#d4d4d4] font-mono text-[11px] p-4 overflow-auto max-h-[300px] border border-border whitespace-pre-wrap leading-relaxed">
-                  {promptPreview?.systemPrompt || 'No system prompt compiled.'}
-                </pre>
-              </div>
-              
-              <div>
-                <p className="text-[10px] uppercase tracking-widest font-bold text-taupe mb-1.5">User Appointment Context Brief</p>
-                <pre className="w-full bg-[#1e1e1e] text-[#d4d4d4] font-mono text-[11px] p-4 overflow-auto max-h-[250px] border border-border whitespace-pre-wrap leading-relaxed">
-                  {promptPreview?.userPrompt || 'No user prompt compiled.'}
-                </pre>
-              </div>
-            </div>
-          </div>
-        )}
+        ) : null}
       </div>
 
       {/* Refine this option */}

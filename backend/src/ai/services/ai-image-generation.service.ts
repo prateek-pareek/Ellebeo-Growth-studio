@@ -16,10 +16,14 @@ import OpenAI from 'openai';
 import { firebaseStorage } from '../../config/firebase.client';
 import * as https from 'https';
 import * as http from 'http';
+import * as fs from 'fs';
 import { GoogleGenAI } from '@google/genai';
 import sharp from 'sharp';
+import { ModelRouter } from '../orchestrator/model-router';
+import type { VisionAnalysisResult } from '../types/chain-output.types';
 import { resolveLayoutTemplate, BASE_TREATMENTS, TEXT_TEMPLATES, DECORATIONS, LAYOUT_TEMPLATES } from '../config/layout-renderers';
 import { TemplateAgentService } from './template-agent.service';
+import templateLibraryData from '../config/template-library.json';
 
 const openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
 
@@ -43,6 +47,14 @@ export interface SlideInput {
 }
 
 export async function downloadImageAsBuffer(url: string): Promise<Buffer> {
+  if (!url.startsWith('http')) {
+    try {
+      return await fs.promises.readFile(url);
+    } catch (err) {
+      throw new Error(`Failed to read local file ${url}: ${err}`);
+    }
+  }
+
   return new Promise((resolve, reject) => {
     const protocol = url.startsWith('https') ? https : http;
     protocol.get(url, (res) => {
@@ -298,6 +310,7 @@ export class AiImageGenerationService {
     accentBrandColor?: string;
     depthBrandColor?: string;
     moodboardVisionSummary?: string;
+    visionResult?: VisionAnalysisResult;
   }): Promise<{ url: string; variants?: { gemini?: string; dalle?: string } }> {
     const {
       photoUrl, beforePhotoUrl, overlayText, index, isFirst, isLast, isBeforePhoto,
@@ -319,6 +332,7 @@ export class AiImageGenerationService {
       accentBrandColor = '#D4A373',
       depthBrandColor = '#1E1E1C',
       moodboardVisionSummary,
+      visionResult,
     } = params;
 
     // Fast-path: Skip AI image generation entirely for text-only editorial layouts
@@ -343,7 +357,9 @@ export class AiImageGenerationService {
         footerBrandToggle,
         backgroundBrandColor,
         accentBrandColor,
-        outputSize
+        outputSize,
+        captionText: overlayText,
+        visionResult,
       });
       const url = await uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
       return { url };
@@ -376,7 +392,9 @@ export class AiImageGenerationService {
         capitalizationRule,
         footerBrandToggle,
         backgroundBrandColor,
-        accentBrandColor
+        accentBrandColor,
+        captionText: overlayText,
+        visionResult,
       });
       const url = await uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
       return { url };
@@ -520,7 +538,9 @@ CRITICAL IMAGE REQUIREMENTS:
       backgroundBrandColor,
       accentBrandColor,
       depthBrandColor,
-      outputSize
+      outputSize,
+      captionText: overlayText,
+      visionResult,
     });
 
     // Upload primary image
@@ -550,7 +570,9 @@ CRITICAL IMAGE REQUIREMENTS:
         footerBrandToggle,
         backgroundBrandColor,
         accentBrandColor,
-        outputSize
+        outputSize,
+        captionText: overlayText,
+        visionResult,
       });
 
       const altUrl = await uploadBase64ToFirebase(brandedAltBase64, tenantId, `slide_${index}_alt`);
@@ -587,12 +609,13 @@ CRITICAL IMAGE REQUIREMENTS:
     accentBrandColor?: string;
     depthBrandColor?: string;
     moodboardVisionSummary?: string;
+    visionResult?: VisionAnalysisResult;
   }): Promise<GeneratedSlide[]> {
-    const { afterPhotoUrl, beforePhotoUrl, concepts, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', depthBrandColor = '#1E1E1C', moodboardVisionSummary, ...rest } = params;
+    const { afterPhotoUrl, beforePhotoUrl, concepts, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', depthBrandColor = '#1E1E1C', moodboardVisionSummary, visionResult, ...rest } = params;
     const total = concepts.length;
 
     // Derive pool dynamically from JSON config — never goes stale when new layouts are added
-    const layoutPool = Object.keys(LAYOUT_TEMPLATES);
+    const layoutPool = Object.keys(templateLibraryData);
 
     // Prepare vision summary mapping
     const isZoomedFace = moodboardVisionSummary ? (moodboardVisionSummary.toLowerCase().includes('macro') || moodboardVisionSummary.toLowerCase().includes('zoomed') || moodboardVisionSummary.toLowerCase().includes('close-up')) : false;
@@ -689,7 +712,8 @@ CRITICAL IMAGE REQUIREMENTS:
             backgroundBrandColor,
             accentBrandColor,
             depthBrandColor,
-            moodboardVisionSummary
+            moodboardVisionSummary,
+            visionResult: visionResult ?? visionResultStub,
           });
           return {
             url: result.url,
@@ -731,8 +755,9 @@ CRITICAL IMAGE REQUIREMENTS:
     accentBrandColor?: string;
     depthBrandColor?: string;
     moodboardVisionSummary?: string;
+    visionResult?: VisionAnalysisResult;
   }): Promise<GeneratedSlide[]> {
-    const { afterPhotoUrl, beforePhotoUrl, frames, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', depthBrandColor = '#1E1E1C', moodboardVisionSummary, ...rest } = params;
+    const { afterPhotoUrl, beforePhotoUrl, frames, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', depthBrandColor = '#1E1E1C', moodboardVisionSummary, visionResult, ...rest } = params;
     const total = frames.length;
 
     // Derive pool dynamically from JSON config — never goes stale when new layouts are added
@@ -829,7 +854,8 @@ CRITICAL IMAGE REQUIREMENTS:
             backgroundBrandColor,
             accentBrandColor,
             depthBrandColor,
-            moodboardVisionSummary
+            moodboardVisionSummary,
+            visionResult: visionResult ?? visionResultStub,
           });
           return {
             url: result.url,
@@ -870,6 +896,8 @@ CRITICAL IMAGE REQUIREMENTS:
     accentBrandColor?: string;
     depthBrandColor?: string;
     outputSize?: string;
+    captionText: string;
+    visionResult?: VisionAnalysisResult;
   }): Promise<string> {
     const {
       base64Image,
@@ -891,7 +919,8 @@ CRITICAL IMAGE REQUIREMENTS:
       backgroundBrandColor = '#F7F4EF',
       accentBrandColor = '#D4A373',
       depthBrandColor = '#1E1E1C',
-      outputSize
+      outputSize,
+      visionResult
     } = params;
 
     const hasText = overlayText && overlayText.trim().length > 0;
@@ -1131,6 +1160,7 @@ CRITICAL IMAGE REQUIREMENTS:
         layoutType, w, h, dynamicFontSize, dyOffset, escapedLines, lines, overlayText: finalOverlayText, maxLength,
         dynamicTextColor, posterTextColor, validBrandColor, validSecondaryColor,
         brandFont, bodyFont, escapedSpacedName, photoDataUri, escapeXml,
+        faceCoordinates: visionResult?.faceCoordinates,
       };
       const textPanelSvg = hasText && template.textTemplate
         ? (TEXT_TEMPLATES[template.textTemplate]?.(textCtx) ?? '')

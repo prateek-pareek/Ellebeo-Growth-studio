@@ -436,9 +436,17 @@ ${CRAFT_RULES}`;
       Array.isArray(dna.visualRanking) && dna.visualRanking.length > 0
         ? buildStyleDirectionBlock(dna.visualRanking)
         : dna.aestheticDirection ? `**Aesthetic direction:** ${str(dna.aestheticDirection)}` : '',
-      Array.isArray(dna.moodboardLabels) && dna.moodboardLabels.length > 0
-        ? `**Visual references (moodboard — use for feel, not to copy):** ${(dna.moodboardLabels as string[]).map((label, i) => `Reference ${i + 1}: ${label}`).join('. ')}.`
-        : '',
+      (function() {
+        const cache = Array.isArray((dna as any).moodboardIntentsCache) ? (dna as any).moodboardIntentsCache : [];
+        const moods = cache.filter((c: any) => ['mood', 'vibe', 'style'].includes(c.intent?.toLowerCase()));
+        if (moods.length > 0) {
+          const selectedMoods = moods.map((m: any) => m.summary).join(' ');
+          return `**Moodboard Tone Directive (CRITICAL):** Adopt a brand voice and aesthetic tone that perfectly matches this moodboard direction: ${selectedMoods}`;
+        }
+        return Array.isArray(dna.moodboardLabels) && dna.moodboardLabels.length > 0
+          ? `**Visual references (moodboard — use for feel, not to copy):** ${(dna.moodboardLabels as string[]).map((label, i) => `Reference ${i + 1}: ${label}`).join('. ')}.`
+          : '';
+      })(),
       dna.depthBrandColor ? `**Depth brand colour (for text/headings only):** ${str(dna.depthBrandColor)}` : '',
       dna.formattingStyle ? `**Caption style notes:** ${str(dna.formattingStyle)}` : '',
       preferred.length ? `**Vocabulary you love (use these):** ${preferred.join(', ')}` : '',

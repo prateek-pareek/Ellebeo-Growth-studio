@@ -225,12 +225,24 @@ export class GenerationOrchestrator {
     })();
 
     const moodboardVisionTask = (async () => {
-      if (moodboardUrls.length === 0) return;
-      try {
-        const summary = await this.moodboardVisionChain.analyse(moodboardUrls, moodboardLabels);
-        if (summary) moodboardVisionSummary = summary;
-      } catch {
-        // Non-fatal â€” generation continues without moodboard vision if it fails
+      const cache: any[] = Array.isArray((brandDNA as any).moodboardIntentsCache)
+        ? (brandDNA as any).moodboardIntentsCache
+        : [];
+      
+      if (cache.length > 0) {
+        // "Roulette" Algorithm: pick 1 lighting, 1 texture, 1 mood to prevent hallucination
+        const lightings = cache.filter(c => c.intent.toLowerCase() === 'lighting');
+        const textures = cache.filter(c => c.intent.toLowerCase() === 'texture');
+        const moods = cache.filter(c => ['mood', 'vibe', 'style'].includes(c.intent.toLowerCase()));
+        
+        const selected = [];
+        if (lightings.length > 0) selected.push(lightings[Math.floor(Math.random() * lightings.length)].summary);
+        if (textures.length > 0) selected.push(textures[Math.floor(Math.random() * textures.length)].summary);
+        if (moods.length > 0) selected.push(moods[Math.floor(Math.random() * moods.length)].summary);
+        
+        if (selected.length > 0) {
+          moodboardVisionSummary = selected.join(' ');
+        }
       }
     })();
 
@@ -700,6 +712,7 @@ ${consentShowFace
             accentBrandColor: brandDNA.accentBrandColor ?? '#D4A373',
             depthBrandColor: brandDNA.depthBrandColor ?? '#1E1E1C',
             moodboardVisionSummary: moodboardVisionSummary ?? undefined,
+            visionResult: visionResult ?? undefined,
           });
           // Apply logo to each carousel slide
           const slidesWithLogo = brandDNA.logoUrl
@@ -769,6 +782,7 @@ ${consentShowFace
             backgroundBrandColor: brandDNA.backgroundBrandColor ?? '#F7F4EF',
             accentBrandColor: brandDNA.accentBrandColor ?? '#D4A373',
             moodboardVisionSummary: moodboardVisionSummary ?? undefined,
+            visionResult: visionResult ?? undefined,
           });
           const framesWithLogo = brandDNA.logoUrl
             ? await Promise.all(aiFrames.map(async f => ({ ...f, url: await this.logoOverlay.applyLogo({ imageUrl: f.url, logoUrl: brandDNA.logoUrl as string, position: brandDNA.logoPosition as any, tenantId }) })))

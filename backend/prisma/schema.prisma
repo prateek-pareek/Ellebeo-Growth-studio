@@ -309,6 +309,7 @@ model BrandDNA {
   // Visual Brand DNA fields
   moodboardUrls            String[]      @map("moodboard_urls")
   moodboardLabels          String[]      @map("moodboard_labels")
+  moodboardIntentsCache    Json?         @map("moodboard_intents_cache")
   lightingPreference       String?       @map("lighting_preference") @db.VarChar(255)
   texturePreference        String?       @map("texture_preference") @db.VarChar(255)
   compositionStyle         String?       @map("composition_style") @db.VarChar(255)

@@ -4,13 +4,16 @@ import { CreateBrandDnaDto, ScanInstagramDto, ScanWebsiteDto } from './dto/brand
 import { PromptCache } from '../ai/orchestrator/prompt-cache';
 import { getRedisClient } from '../config/redis.client';
 import { firebaseStorage } from '../config/firebase.client';
+import { MoodboardVisionChain } from '../ai/chains/moodboard-vision.chain';
 
 @Injectable()
 export class BrandDnaService {
   private readonly promptCache: PromptCache;
+  private readonly moodboardVisionChain: MoodboardVisionChain;
 
   constructor(private prisma: PrismaService) {
     this.promptCache = new PromptCache(getRedisClient());
+    this.moodboardVisionChain = new MoodboardVisionChain();
   }
 
   async getCurrentDna(tenantId: string) {
@@ -23,7 +26,7 @@ export class BrandDnaService {
 
   async createOrUpdateDna(tenantId: string, dto: CreateBrandDnaDto) {
     await this.promptCache.invalidateTenantCache(tenantId);
-    return this.prisma.$transaction(async (tx) => {
+    const newDna = await this.prisma.$transaction(async (tx) => {
       const current = await tx.brandDNA.findUnique({
         where: { unique_current_brand_dna: { tenantId, isCurrent: true } }
       });
@@ -118,6 +121,53 @@ export class BrandDnaService {
         }
       });
     });
+
+    // Fire-and-forget background intent caching
+    this.triggerMoodboardCacheBuild(tenantId, dto.moodboardUrls || [], dto.moodboardLabels || []);
+
+    return newDna;
+  }
+
+  private async triggerMoodboardCacheBuild(tenantId: string, urls: string[], labels: string[]) {
+    if (urls.length === 0) return;
+    
+    // We fetch current cache to only analyze NEW images
+    const currentDna = await this.getCurrentDna(tenantId);
+    if (!currentDna) return;
+
+    let cache: any[] = Array.isArray((currentDna as any).moodboardIntentsCache) ? (currentDna as any).moodboardIntentsCache as any[] : [];
+    
+    // Filter out old urls
+    cache = cache.filter(c => urls.includes(c.url));
+
+    let updated = false;
+
+    // Process new ones
+    for (let i = 0; i < urls.length; i++) {
+      const url = urls[i];
+      const label = labels[i] || 'mood'; // Default intent if not provided
+      
+      const exists = cache.find(c => c.url === url && c.intent === label);
+      if (!exists) {
+        try {
+          const summary = await this.moodboardVisionChain.analyseSingleIntent(url, label);
+          // Remove old entry for this url if intent changed
+          cache = cache.filter(c => c.url !== url);
+          cache.push({ url, intent: label, summary });
+          updated = true;
+        } catch (error) {
+          console.error(`[BrandDnaService] Failed to cache intent for ${url}`, error);
+        }
+      }
+    }
+
+    if (updated) {
+      await this.prisma.brandDNA.update({
+        where: { id: currentDna.id },
+        data: { moodboardIntentsCache: cache } as any
+      });
+      console.log(`[BrandDnaService] Background Intent Cache Updated for Tenant ${tenantId}`);
+    }
   }
 
   async getHistory(tenantId: string) {

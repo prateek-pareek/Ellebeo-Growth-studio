@@ -76,4 +76,44 @@ export class MoodboardVisionChain {
 
     return content.trim();
   }
+
+  /**
+   * Intent-Based Extractor: Analyzes a single image for a specific intent (e.g. 'lighting', 'texture').
+   * Used during the setup-time background job to cache specific traits.
+   */
+  async analyseSingleIntent(url: string, intent: string): Promise<string> {
+    if (!url) return '';
+
+    const systemPrompt =
+      `You are a senior art director interpreting a visual moodboard reference for a beauty brand. ` +
+      `I am providing you with ONE reference image. Your goal is to extract ONLY the visual information related to: ${intent.toUpperCase()}. ` +
+      `Ignore all other elements of the image (subject matter, unrelated aesthetics). ` +
+      `Write in clear, directive language, describing the ${intent} perfectly in 1-2 short sentences. ` +
+      `Return a single plain-text string starting with "${intent.charAt(0).toUpperCase() + intent.slice(1)}:". No JSON, no bullets.`;
+
+    const humanMessage = new HumanMessage({
+      content: [
+        {
+          type: 'text',
+          text: `Analyze this image and describe ONLY its ${intent}.`,
+        },
+        {
+          type: 'image_url' as const,
+          image_url: { url, detail: 'low' as const },
+        },
+      ],
+    });
+
+    const response = await this.getModel().invoke([
+      new SystemMessage(systemPrompt),
+      humanMessage,
+    ]);
+
+    const content =
+      typeof response.content === 'string'
+        ? response.content
+        : String(response.content);
+
+    return content.trim();
+  }
 }
