@@ -19,6 +19,7 @@ export type BrandDnaView = {
   brandTier: string;
   emojiPolicy: string;
   captionLength: string;
+  isMedicalAestheticsPractitioner: boolean;
   pillars: Array<{
     name: string;
     description: string;
@@ -61,6 +62,15 @@ function mapCloudRow(dna: any): BrandDnaView {
   const v2 = typeof dna.brandDnaV2 === "string" ? JSON.parse(dna.brandDnaV2) : dna.brandDnaV2;
   const v2Moodboard: any[] = Array.isArray(v2?.moodboard) ? v2.moodboard : [];
   const v2AssetLibrary: any[] = Array.isArray(v2?.asset_library) ? v2.asset_library : [];
+
+  // Mirrors backend isMedicalAestheticsBrand() (medical-compliance.ts) — same two
+  // brand-level signals: the compliance practitioner flag and service categories.
+  const isMedicalByDnaFlag = v2?.compliance?.medical_aesthetics_practitioner === true;
+  const serviceCategories: string[] = Array.isArray(dna.serviceCategories) ? dna.serviceCategories : [];
+  const isMedicalByServiceCategories = serviceCategories.some(
+    (c) => c === "injectables_cosmetic" || c === "laser_treatments" || c === "medical_aesthetics",
+  );
+  const isMedicalAestheticsPractitioner = isMedicalByDnaFlag || isMedicalByServiceCategories;
 
   const weight = pillars.length > 0 ? Math.floor(100 / pillars.length) : 0;
   const mappedPillars = pillars.map((p: any, i: number) => ({
@@ -124,6 +134,7 @@ function mapCloudRow(dna: any): BrandDnaView {
     brandTier: dna.brandTier || "",
     emojiPolicy: dna.emojiPolicy || "minimal",
     captionLength: dna.captionLengthPreference || "medium",
+    isMedicalAestheticsPractitioner,
     pillars: mappedPillars,
     voice: {
       summary: dna.primaryTone || "",

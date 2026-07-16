@@ -8,6 +8,7 @@ import { ConsentGuard } from '../guards/consent.guard';
 import { ModelRouter } from './model-router';
 import { PromptBuilder } from './prompt-builder';
 import { filterDnaForTier, tierDnaLabel } from '../config/brand-dna-tier-filter';
+import { isMedicalAestheticsBrand } from '../config/medical-compliance';
 import { buildStyleDirectionBlock } from '../config/visual-style-library';
 import { VisionAnalysisChain } from '../chains/vision-analysis.chain';
 import { CaptionGenerationChain } from '../chains/caption-generation.chain';
@@ -490,7 +491,59 @@ export class GenerationOrchestrator {
     let imageResult: ImageProcessingResult | null = null;
     let aiImageCostUSD = 0;
     const consentShowFace = !!(consentCheck.activeRestrictions as any)?.show_face;
-    if (payload.imageAssets.length > 0) {
+
+    // Medical-aesthetics technicians can never post a client's face â€” this is a
+    // technician-level compliance rule (AHPRA), not a client-consent question, so
+    // it overrides consent either way. Rather than blur the client's real photo
+    // (still fundamentally a photo of that client), the client photo is never
+    // sourced into the pipeline at all: every image output falls back to the same
+    // brand-safe, people-free lifestyle generation already used when no photo was
+    // uploaded (see AiImageGenerationService.generateSlide's isRealClientPhoto gate).
+    const isMedicalPractitioner = isMedicalAestheticsBrand(brandDNA);
+
+    if (isMedicalPractitioner) {
+      try {
+        const heroImage = await this.aiImageGen.generateSlide({
+          photoUrl: '',
+          overlayText: '',
+          title: 'Hero image',
+          index: 0,
+          isFirst: true,
+          isLast: true,
+          isBeforePhoto: false,
+          tenantId,
+          businessName: brandDNA.businessName,
+          brandColor: brandDNA.primaryBrandColor ?? '#1a1a1a',
+          secondaryColor: brandDNA.secondaryBrandColor ?? '#f5f0eb',
+          aesthetic: (brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA.visualRanking) : null) ?? brandDNA.aestheticDirection ?? 'minimal editorial premium beauty',
+          serviceType: appointment?.serviceCategory ?? 'beauty treatment',
+          outputSize: '1024x1024',
+          layoutType: determinedGrid.layout,
+          visualRanking: brandDNA.visualRanking ?? [],
+          generatorModel: 'both',
+          backgroundBrandColor: brandDNA.backgroundBrandColor ?? '#F7F4EF',
+          accentBrandColor: brandDNA.accentBrandColor ?? '#D4A373',
+          depthBrandColor: brandDNA.depthBrandColor ?? '#1E1E1C',
+          moodboardVisionSummary: moodboardVisionSummary ?? undefined,
+        });
+        let heroUrl = heroImage.url;
+        if (brandDNA.logoUrl) {
+          heroUrl = await this.logoOverlay.applyLogo({ imageUrl: heroUrl, logoUrl: brandDNA.logoUrl as string, position: brandDNA.logoPosition as any, tenantId });
+        }
+        imageResult = {
+          cloudinaryPublicId: null as any,
+          variants: { feedUrl: heroUrl, storyUrl: heroUrl, thumbnailUrl: heroUrl },
+          faceBlurred: true,
+          facesDetectedCount: 0,
+          brandOverlayApplied: true,
+          originalStoragePath: '',
+        };
+        componentStatus.image = 'completed';
+      } catch (err) {
+        console.error('[Orchestrator Step 5.5 Medical Compliance Hero Image Error]:', err);
+        componentStatus.image = 'failed';
+      }
+    } else if (payload.imageAssets.length > 0) {
       const primaryAsset = payload.imageAssets[0]!;
 
       // Localhost URLs can't be reached by Cloudinary/OpenAI â€” use Sharp instead
@@ -537,8 +590,13 @@ export class GenerationOrchestrator {
     }
 
     // â”€â”€ Step 5.55: AI-designed feed image (gpt-image-1) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    const feedPhotoUrlRaw = payload.imageAssets.find(a => a.isAfterPhoto)?.rawStoragePath
-      ?? payload.imageAssets[0]?.rawStoragePath;
+    // Skipped entirely for medical-aesthetics technicians â€” Step 5.5 already
+    // produced a brand-safe hero image with no client photo involved, and this
+    // step's job is specifically to edit the real photo, which must never happen here.
+    const feedPhotoUrlRaw = isMedicalPractitioner
+      ? undefined
+      : payload.imageAssets.find(a => a.isAfterPhoto)?.rawStoragePath
+        ?? payload.imageAssets[0]?.rawStoragePath;
 
     let feedPhotoUrl: string | undefined = feedPhotoUrlRaw;
     if (feedPhotoUrlRaw && !consentShowFace) {
@@ -613,10 +671,12 @@ ${consentShowFace
     }
 
     // â”€â”€ Step 5.6: Carousel Slides (conditional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // Upload before photo to Cloudinary for before/after alternation
+    // Upload before photo to Cloudinary for before/after alternation.
+    // Skipped for medical-aesthetics technicians â€” no version of the client's
+    // photo (blurred or not) is ever uploaded/used; see isMedicalPractitioner above.
     let beforeCloudinaryId: string | undefined;
     const beforeAsset = payload.imageAssets.find(a => a.isBeforePhoto && a.rawStoragePath);
-    if (beforeAsset && process.env['CLOUDINARY_CLOUD_NAME']) {
+    if (!isMedicalPractitioner && beforeAsset && process.env['CLOUDINARY_CLOUD_NAME']) {
       try {
         // Consent gate: only upload the raw (unblurred) before-photo when face display is allowed
         beforeCloudinaryId = beforeAsset.cloudinaryPublicId
@@ -629,10 +689,13 @@ ${consentShowFace
 
     let carouselSlides: CarouselSlides | null = null;
     const isCarousel = (generationOptions.outputFormats as string[]).includes('carousel');
-    let afterPhotoUrl = payload.imageAssets.find(a => a.isAfterPhoto)?.rawStoragePath
+    // Medical-aesthetics technicians: never source the client's real photo into
+    // carousel/story generation. Leaving these blank makes every slide/frame
+    // take the existing "no photo provided" brand-safe lifestyle-image path.
+    let afterPhotoUrl = isMedicalPractitioner ? '' : (payload.imageAssets.find(a => a.isAfterPhoto)?.rawStoragePath
       ?? payload.imageAssets[0]?.rawStoragePath
-      ?? '';
-    let beforePhotoUrl = payload.imageAssets.find(a => a.isBeforePhoto)?.rawStoragePath;
+      ?? '');
+    let beforePhotoUrl = isMedicalPractitioner ? undefined : payload.imageAssets.find(a => a.isBeforePhoto)?.rawStoragePath;
 
     // Consent gate: blur the raw source photos before any further AI processing
     // (enhancement/carousel/story) touches them â€” never let an unblurred face

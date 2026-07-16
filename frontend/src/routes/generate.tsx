@@ -441,6 +441,7 @@ function GeneratePage() {
               {step === "consent" && appointment && (
                 <ConsentStep
                   appointment={appointment}
+                  isMedicalAestheticsPractitioner={!!brandDna?.isMedicalAestheticsPractitioner}
                   onContinue={() => {
                     // If coming from a template, goal + format are already set — skip both steps
                     if (search.templateGoal && search.templateFormat) {
@@ -776,11 +777,13 @@ function ConsentStep({
   onContinue,
   onBack,
   fromTemplate = false,
+  isMedicalAestheticsPractitioner = false,
 }: {
   appointment: Appointment;
   onContinue: () => void;
   onBack: () => void;
   fromTemplate?: boolean;
+  isMedicalAestheticsPractitioner?: boolean;
 }) {
   const { data: consentData, loading: consentLoading } = useConsentRequest(appointment.id);
   const granted = appointment.consent === "granted";
@@ -864,9 +867,15 @@ function ConsentStep({
             <div className="divide-y divide-border">
               {CONSENT_PERMISSIONS.map(({ key, label }) => {
                 const isGranted = consentData.permissions[key];
+                const medicalOverride = isMedicalAestheticsPractitioner && key === "allowShowFace";
                 return (
                   <div key={key} className="flex items-center justify-between py-3">
-                    <span className="text-sm text-foreground">{label}</span>
+                    <div>
+                      <span className="text-sm text-foreground">{label}</span>
+                      {medicalOverride && isGranted && (
+                        <p className="text-[10px] uppercase tracking-widest text-destructive mt-0.5">Not used — medical compliance</p>
+                      )}
+                    </div>
                     <span className={
                       "text-[10px] uppercase tracking-widest shrink-0 ml-4 " +
                       (isGranted ? "text-taupe" : "text-taupe/40")
@@ -1129,14 +1138,16 @@ function humanizeSlug(value?: string | null): string {
   return value.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 }
 
-// Maps the backend `generatedBy` tag to a friendly label. Unknown models fall
-// back to the raw tag, so labels always reflect what actually produced the option.
+// Maps the backend `generatedBy` tag to a white-labeled, proprietary display
+// name. Never surface the underlying vendor/model name in the UI. Unknown
+// tags fall back to a generic "Option N" label (set by the caller) rather
+// than the raw tag, so a vendor name can never leak through unmapped.
 const MODEL_LABELS: Record<string, string> = {
-  ChatGPT: "ChatGPT · OpenAI",
-  "GPT-4o": "GPT-4o · OpenAI",
-  Gemini: "Gemini · Google",
-  "GPT-4o-Strategist (Technical)": "GPT-4o · Technical",
-  "GPT-4o-Strategist (Empathetic)": "Gemini · Empathetic",
+  ChatGPT: "Signature Draft",
+  "GPT-4o": "Signature Draft",
+  Gemini: "Alternate Draft",
+  "GPT-4o-Strategist (Technical)": "Technical Direction",
+  "GPT-4o-Strategist (Empathetic)": "Empathetic Direction",
 };
 
 function GeneratingScreen({ jobStatus, brandDna, appointment, estimatedSeconds = 45 }: { jobStatus: string; brandDna: any; appointment: any; estimatedSeconds?: number }) {
@@ -1327,13 +1338,17 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, 
   const getVariantUrl = (slideData: any) => {
     if (!slideData) return null;
     
-    // Check if the current selected option is Gemini
-    const isGeminiText = opt?.generatedBy?.toLowerCase().includes('gemini');
-    
-    // If the slide has variants, prefer the one matching the current text model
+    // Caption options never say "gemini" — both angles come from the same text
+    // model (see brand-strategist.chain.ts). The pairing is by angle: the
+    // Empathetic option is paired with the Gemini-generated image, Technical
+    // with the DALL-E/gpt-image-1 one. Matching on "gemini" here always
+    // evaluated to false, so the Gemini variant was never reachable.
+    const isEmpatheticOption = opt?.generatedBy?.toLowerCase().includes('empathetic');
+
+    // If the slide has variants, prefer the one matching the current option's pairing
     if (slideData.variants) {
-      if (isGeminiText && slideData.variants.gemini) return slideData.variants.gemini;
-      if (!isGeminiText && slideData.variants.dalle) return slideData.variants.dalle;
+      if (isEmpatheticOption && slideData.variants.gemini) return slideData.variants.gemini;
+      if (!isEmpatheticOption && slideData.variants.dalle) return slideData.variants.dalle;
     }
     
     // Fallback if variants are missing or specific model image is missing
@@ -1536,7 +1551,7 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, 
               <p className={"text-[9px] uppercase tracking-widest mb-1 " + (i === activeVariant ? "text-nude" : "text-taupe")}>
                 Option {i + 1}
               </p>
-              <p className="text-xs font-medium">{MODEL_LABELS[variants[i]?.generatedBy] ?? variants[i]?.generatedBy ?? `Option ${i + 1}`}</p>
+              <p className="text-xs font-medium">{MODEL_LABELS[variants[i]?.generatedBy] ?? `Option ${i + 1}`}</p>
             </button>
           ))}
         </div>
@@ -1582,7 +1597,7 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, 
                     className={"overflow-hidden border transition-all " +
                       (i === safeFrame ? "border-foreground" : "border-transparent opacity-50 hover:opacity-80")}
                   >
-                    <img src={frame.url} alt={frame.label} className="w-full aspect-[9/16] object-cover" />
+                    <img src={frame.url} alt={frame.title || frame.label} className="w-full aspect-[9/16] object-cover" />
                   </button>
                 ))}
               </div>
@@ -1837,7 +1852,7 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, 
               <div className="relative aspect-square overflow-hidden">
                 <img
                   src={getVariantUrl(carouselSlides[safeSlide])}
-                  alt={carouselSlides[safeSlide]?.label ?? `Slide ${safeSlide + 1}`}
+                  alt={carouselSlides[safeSlide]?.title || carouselSlides[safeSlide]?.label || `Slide ${safeSlide + 1}`}
                   className="absolute inset-0 w-full h-full object-cover"
                 />
 
@@ -1848,10 +1863,10 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, 
                   </p>
                 </div>
 
-                {/* Slide label badge */}
-                <div className="absolute top-3 right-3 bg-foreground/80 px-2 py-1">
-                  <p className="text-[9px] uppercase tracking-widest text-nude">
-                    {carouselSlides[safeSlide]?.label ?? `SLIDE ${safeSlide + 1}`}
+                {/* Slide name badge — AI-generated concept name, not a hardcoded counter */}
+                <div className="absolute top-3 right-3 bg-foreground/80 px-2 py-1 max-w-[65%]">
+                  <p className="text-[9px] uppercase tracking-widest text-nude truncate">
+                    {carouselSlides[safeSlide]?.title || carouselSlides[safeSlide]?.label || `Slide ${safeSlide + 1}`}
                   </p>
                 </div>
 
@@ -1888,7 +1903,7 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, 
                   >
                     <img
                       src={slide.url}
-                      alt={slide.label ?? `Slide ${i + 1}`}
+                      alt={slide.title || slide.label || `Slide ${i + 1}`}
                       className="w-14 h-14 object-cover"
                     />
                     <p className="text-[7px] uppercase tracking-widest text-center py-0.5 bg-card text-taupe">
