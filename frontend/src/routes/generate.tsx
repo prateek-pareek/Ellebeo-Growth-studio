@@ -1127,14 +1127,16 @@ function humanizeSlug(value?: string | null): string {
   return value.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 }
 
-// Maps the backend `generatedBy` tag to a friendly label. Unknown models fall
-// back to the raw tag, so labels always reflect what actually produced the option.
+// Maps the backend `generatedBy` tag to a white-labeled, proprietary display
+// name. Never surface the underlying vendor/model name in the UI. Unknown
+// tags fall back to a generic "Option N" label (set by the caller) rather
+// than the raw tag, so a vendor name can never leak through unmapped.
 const MODEL_LABELS: Record<string, string> = {
-  ChatGPT: "ChatGPT · OpenAI",
-  "GPT-4o": "GPT-4o · OpenAI",
-  Gemini: "Gemini · Google",
-  "GPT-4o-Strategist (Technical)": "GPT-4o · Technical",
-  "GPT-4o-Strategist (Empathetic)": "Gemini · Empathetic",
+  ChatGPT: "Signature Draft",
+  "GPT-4o": "Signature Draft",
+  Gemini: "Alternate Draft",
+  "GPT-4o-Strategist (Technical)": "Technical Direction",
+  "GPT-4o-Strategist (Empathetic)": "Empathetic Direction",
 };
 
 function GeneratingScreen({ jobStatus, estimatedSeconds = 45 }: { jobStatus: string; estimatedSeconds?: number }) {
@@ -1520,7 +1522,7 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, 
               <p className={"text-[9px] uppercase tracking-widest mb-1 " + (i === activeVariant ? "text-nude" : "text-taupe")}>
                 Option {i + 1}
               </p>
-              <p className="text-xs font-medium">{MODEL_LABELS[variants[i]?.generatedBy] ?? variants[i]?.generatedBy ?? `Option ${i + 1}`}</p>
+              <p className="text-xs font-medium">{MODEL_LABELS[variants[i]?.generatedBy] ?? `Option ${i + 1}`}</p>
             </button>
           ))}
         </div>
