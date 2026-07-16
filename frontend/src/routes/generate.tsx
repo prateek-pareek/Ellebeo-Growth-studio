@@ -1592,7 +1592,7 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, 
                     className={"overflow-hidden border transition-all " +
                       (i === safeFrame ? "border-foreground" : "border-transparent opacity-50 hover:opacity-80")}
                   >
-                    <img src={frame.url} alt={frame.label} className="w-full aspect-[9/16] object-cover" />
+                    <img src={frame.url} alt={frame.title || frame.label} className="w-full aspect-[9/16] object-cover" />
                   </button>
                 ))}
               </div>
@@ -1847,7 +1847,7 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, 
               <div className="relative aspect-square overflow-hidden">
                 <img
                   src={getVariantUrl(carouselSlides[safeSlide])}
-                  alt={carouselSlides[safeSlide]?.label ?? `Slide ${safeSlide + 1}`}
+                  alt={carouselSlides[safeSlide]?.title || carouselSlides[safeSlide]?.label || `Slide ${safeSlide + 1}`}
                   className="absolute inset-0 w-full h-full object-cover"
                 />
 
@@ -1858,10 +1858,10 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, 
                   </p>
                 </div>
 
-                {/* Slide label badge */}
-                <div className="absolute top-3 right-3 bg-foreground/80 px-2 py-1">
-                  <p className="text-[9px] uppercase tracking-widest text-nude">
-                    {carouselSlides[safeSlide]?.label ?? `SLIDE ${safeSlide + 1}`}
+                {/* Slide name badge — AI-generated concept name, not a hardcoded counter */}
+                <div className="absolute top-3 right-3 bg-foreground/80 px-2 py-1 max-w-[65%]">
+                  <p className="text-[9px] uppercase tracking-widest text-nude truncate">
+                    {carouselSlides[safeSlide]?.title || carouselSlides[safeSlide]?.label || `Slide ${safeSlide + 1}`}
                   </p>
                 </div>
 
@@ -1898,7 +1898,7 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, 
                   >
                     <img
                       src={slide.url}
-                      alt={slide.label ?? `Slide ${i + 1}`}
+                      alt={slide.title || slide.label || `Slide ${i + 1}`}
                       className="w-14 h-14 object-cover"
                     />
                     <p className="text-[7px] uppercase tracking-widest text-center py-0.5 bg-card text-taupe">
