@@ -12,7 +12,7 @@ import type { VisionAnalysisResult } from '../types/chain-output.types';
 import type { ModelRouter } from '../orchestrator/model-router';
 import { wrapSystemPrompt } from '../config/platform-system-prompt';
 
-const VISION_PROMPT_VERSION = 'v2.0';
+const VISION_PROMPT_VERSION = 'v2.1';
 
 // Zod-validated output schema enforcer (inline for strict mode)
 function parseVisionOutput(raw: string): VisionAnalysisResult {
@@ -38,6 +38,16 @@ function parseVisionOutput(raw: string): VisionAnalysisResult {
     settingDetected: String(obj['settingDetected'] ?? 'salon'),
     framingType: validateFramingType(obj['framingType']),
   };
+
+  if (obj['faceCoordinates']) {
+    const coords = obj['faceCoordinates'] as Record<string, number>;
+    if (typeof coords.eyesYPercent === 'number' && typeof coords.mouthYPercent === 'number') {
+      result.faceCoordinates = {
+        eyesYPercent: coords.eyesYPercent,
+        mouthYPercent: coords.mouthYPercent
+      };
+    }
+  }
 
   if (!result.servicePerformed) {
     throw new VisionParseError('Vision result missing servicePerformed field');
@@ -153,10 +163,15 @@ Return ONLY valid JSON — no markdown, no explanation, no preamble.`;
   "keyVisualDetail": "The single most striking, specific, caption-worthy detail in this image — the one thing that makes this result stand out. One short sentence. E.g. 'The way the colour melts from a deep root shadow into a bright, icy blonde at the ends' or 'The extreme lift on her inner corners makes her eyes look dramatically wider'. This should anchor the hook sentence.",
   "imageQuality": "excellent|good|acceptable|poor",
   "facesDetected": true,
+  "faceCoordinates": {
+    "eyesYPercent": 35,
+    "mouthYPercent": 50
+  },
   "settingDetected": "salon chair|nail table|treatment bed|studio|outdoor|home — be specific",
   "framingType": "macro|portrait|wide|unknown — macro is very close up, portrait is head/shoulders, wide is full body/room"
 }
 
+If facesDetected is true, you MUST include faceCoordinates. Imagine a vertical grid from 0 (top) to 100 (bottom). Estimate the Y position of the client's eyes and mouth to the nearest 5%. If no face is detected, omit faceCoordinates entirely.
 Be specific. Vague answers like 'hair was coloured' or 'skin looks better' are useless. Use the technical vocabulary a professional technician would use.`,
         },
         {

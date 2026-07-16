@@ -301,10 +301,45 @@ export type TextCtx = {
   escapedSpacedName: string;
   photoDataUri: string;
   escapeXml: (str: string) => string;
+  faceCoordinates?: {
+    eyesYPercent: number;
+    mouthYPercent: number;
+  };
 };
 
 const tspans = (ctx: TextCtx, x: string, dyFirst = 0) =>
   ctx.escapedLines.map((line, idx) => `<tspan x="${x}" dy="${idx === 0 ? dyFirst : ctx.dyOffset}">${line}</tspan>`).join('');
+
+function calculateDodgedY(ctx: TextCtx, intendedY: number, textHeight: number): number {
+  if (!ctx.faceCoordinates) return intendedY;
+
+  // Convert percentages to absolute pixels
+  const eyesY = (ctx.faceCoordinates.eyesYPercent / 100) * ctx.h;
+  const mouthY = (ctx.faceCoordinates.mouthYPercent / 100) * ctx.h;
+  
+  // Danger zone: from top of eyes to bottom of mouth, plus a 40px buffer
+  const dangerTop = eyesY - 40;
+  const dangerBottom = mouthY + 40;
+
+  const textTop = intendedY - (textHeight / 2);
+  const textBottom = intendedY + (textHeight / 2);
+
+  // If there's an overlap
+  if (textBottom > dangerTop && textTop < dangerBottom) {
+    const spaceAbove = dangerTop;
+    const spaceBelow = ctx.h - dangerBottom;
+
+    if (spaceAbove > spaceBelow) {
+      // Push above the face
+      return dangerTop - (textHeight / 2) - 20;
+    } else {
+      // Push below the face
+      return dangerBottom + (textHeight / 2) + 20;
+    }
+  }
+
+  return intendedY;
+}
 
 export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
   passepartout_bottom: (ctx) => `
@@ -599,9 +634,16 @@ export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
         </text>`;
     } else {
       // Sleek Centered Editorial MVP
+      const textHeight = ctx.lines.length * ctx.dyOffset;
+      const defaultY = ctx.h / 2;
+      const safeY = calculateDodgedY(ctx, defaultY, textHeight);
+      // tspans uses dy offset relative to the y coordinate of the <text> block. 
+      // safeY is the vertical center of the text block, so we adjust the starting y
+      const startY = safeY - (textHeight / 2);
+      
       return `
         <!-- Dynamic Centered Editorial Block -->
-        <text x="${ctx.w / 2}" y="${ctx.h / 2 - (ctx.lines.length * ctx.dyOffset) / 2}" class="overlay-text text-centered" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.dynamicTextColor}; letter-spacing: 2px;">
+        <text x="${ctx.w / 2}" y="${startY}" class="overlay-text text-centered" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.dynamicTextColor}; letter-spacing: 2px;">
           ${tspans(ctx, `${ctx.w / 2}`)}
         </text>`;
     }
