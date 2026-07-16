@@ -14,6 +14,7 @@ import type {
 import type { VisionAnalysisResult, AssembledPrompt } from '../types/chain-output.types';
 import { PromptCache } from './prompt-cache';
 import { getGuardrailsForService, type ServiceCategory } from '../config/service-guardrails';
+import { isMedicalAestheticsBrand } from '../config/medical-compliance';
 
 // Business goal → prompt framing instruction
 const GOAL_FRAMING: Record<BusinessGoalType, string> = {
@@ -159,21 +160,10 @@ export class PromptBuilder {
 
     const appointmentSection = this.buildAppointmentSection(appointmentContext, consentRestrictions);
 
-    // Medical flag: fires from (1) this appointment's category, (2) brand DNA V2 practitioner flag, (3) brand DNA service categories
+    // Medical flag: fires from (1) this appointment's category, or (2)/(3) the technician's
+    // Brand DNA (practitioner flag / service categories) — see medical-compliance.ts.
     const isMedicalByCategory = serviceCategory === 'injectables_cosmetic' || serviceCategory === 'laser_treatments';
-    const isMedicalByDnaFlag = (() => {
-      try {
-        const v2 = brandDNA.brandDnaV2
-          ? (typeof brandDNA.brandDnaV2 === 'string' ? JSON.parse(brandDNA.brandDnaV2) : brandDNA.brandDnaV2)
-          : null;
-        return v2?.compliance?.medical_aesthetics_practitioner === true;
-      } catch { return false; }
-    })();
-    const isMedicalByServiceCategories = Array.isArray(brandDNA.serviceCategories) &&
-      (brandDNA.serviceCategories as string[]).some(
-        (c) => c === 'injectables_cosmetic' || c === 'laser_treatments' || c === 'medical_aesthetics',
-      );
-    const isMedical = isMedicalByCategory || isMedicalByDnaFlag || isMedicalByServiceCategories;
+    const isMedical = isMedicalByCategory || isMedicalAestheticsBrand(brandDNA);
     const medicalComplianceSection = isMedical
       ? `## AHPRA MEDICAL COMPLIANCE RULES (MANDATORY):
 - This is a regulated medical aesthetics service. You MUST follow AHPRA guidelines.

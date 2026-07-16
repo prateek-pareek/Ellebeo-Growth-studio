@@ -1,8 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useConsentRequest, type ConsentPermissions } from "@/lib/providers/consent-request-provider";
+import { useBrandDna } from "@/lib/providers/brand-dna-provider";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
+
+// This permission can never be honored for medical-aesthetics accounts — AHPRA
+// compliance means client faces are never posted, regardless of what's granted.
+// The pipeline doesn't blur the client's photo in that case, it never uses the
+// client's photo at all (see backend medical-compliance.ts / generation-orchestrator.ts).
+const MEDICAL_LOCKED_KEY: keyof ConsentPermissions = "allowShowFace";
+const MEDICAL_LOCKED_HELP = "Unavailable for medical aesthetics accounts — client photos are never used in generated content, so this can't be granted.";
 
 export const Route = createFileRoute("/consent/$id")({
   head: () => ({
@@ -45,11 +53,14 @@ function GrantedView({ data }: { data: NonNullable<ReturnType<typeof useConsentR
   const [perms, setPerms] = useState<ConsentPermissions>({ ...initial });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const { data: brandDnaData } = useBrandDna();
+  const isMedical = !!brandDnaData?.isMedicalAestheticsPractitioner;
 
   const dirty = (Object.keys(perms) as (keyof ConsentPermissions)[]).some(k => perms[k] !== initial[k]);
   const grantedCount = Object.values(perms).filter(Boolean).length;
 
   const toggle = (key: keyof ConsentPermissions) => {
+    if (isMedical && key === MEDICAL_LOCKED_KEY) return;
     setSaved(false);
     setPerms(p => ({ ...p, [key]: !p[key] }));
   };
@@ -101,14 +112,16 @@ function GrantedView({ data }: { data: NonNullable<ReturnType<typeof useConsentR
             {PERMISSION_ITEMS.map((item) => {
               const granted = perms[item.key];
               const changed = perms[item.key] !== initial[item.key];
+              const locked = isMedical && item.key === MEDICAL_LOCKED_KEY;
               return (
                 <label
                   key={item.key}
-                  className={"group bg-card p-5 flex items-start gap-4 cursor-pointer hover:bg-nude/20 transition-colors " + (!granted ? "opacity-70 hover:opacity-100" : "")}
+                  className={"group bg-card p-5 flex items-start gap-4 transition-colors " + (locked ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-nude/20 " + (!granted ? "opacity-70 hover:opacity-100" : ""))}
                 >
                   <input
                     type="checkbox"
                     checked={granted}
+                    disabled={locked}
                     onChange={() => toggle(item.key)}
                     className="sr-only"
                   />
@@ -132,7 +145,10 @@ function GrantedView({ data }: { data: NonNullable<ReturnType<typeof useConsentR
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-taupe mt-1">{item.help}</p>
+                    <p className="text-xs text-taupe mt-1">{locked ? MEDICAL_LOCKED_HELP : item.help}</p>
+                    {locked && granted && (
+                      <p className="text-[10px] uppercase tracking-widest text-destructive mt-1">Recorded, but not used in generated content</p>
+                    )}
                   </div>
                   <span className={"text-[9px] uppercase tracking-widest shrink-0 " + (granted ? "text-sage" : "text-taupe/50")}>
                     {granted ? "Granted" : "Not granted"}
@@ -240,6 +256,12 @@ function RequestView({ data }: { data: NonNullable<ReturnType<typeof useConsentR
   });
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const { data: brandDnaData } = useBrandDna();
+  const isMedical = !!brandDnaData?.isMedicalAestheticsPractitioner;
+
+  // Never let a proposed/saved request include allowShowFace for a medical
+  // account, even if perms was set before the Brand DNA flag loaded.
+  const effectivePerms: ConsentPermissions = isMedical ? { ...perms, allowShowFace: false } : perms;
 
   const handleGrant = async () => {
     if (!appointment.clientId) {
@@ -249,12 +271,12 @@ function RequestView({ data }: { data: NonNullable<ReturnType<typeof useConsentR
     setSending(true);
     try {
       await api.post(`/clients/${appointment.clientId}/consent`, {
-        allowShowFace: perms.allowShowFace,
-        allowUseName: perms.allowUseName,
-        allowTagSocial: perms.allowTagSocial,
-        allowPlatformPromotion: perms.allowPlatformPromotion,
-        allowInternalUse: perms.allowInternalUse,
-        allowMarketingContent: perms.allowMarketingContent,
+        allowShowFace: effectivePerms.allowShowFace,
+        allowUseName: effectivePerms.allowUseName,
+        allowTagSocial: effectivePerms.allowTagSocial,
+        allowPlatformPromotion: effectivePerms.allowPlatformPromotion,
+        allowInternalUse: effectivePerms.allowInternalUse,
+        allowMarketingContent: effectivePerms.allowMarketingContent,
         consentMethod: "manual",
       });
       setSent(true);
@@ -295,11 +317,12 @@ function RequestView({ data }: { data: NonNullable<ReturnType<typeof useConsentR
           <h2 className="eyebrow mb-4">What you're asking the client to approve</h2>
           <div className="space-y-px bg-border mb-6">
             {PERMISSION_ITEMS.map((item) => {
-              const on = perms[item.key];
+              const locked = isMedical && item.key === MEDICAL_LOCKED_KEY;
+              const on = effectivePerms[item.key];
               return (
                 <label
                   key={item.key}
-                  className="bg-card p-5 flex items-start gap-4 cursor-pointer hover:bg-nude/20 transition-colors"
+                  className={"bg-card p-5 flex items-start gap-4 transition-colors " + (locked ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-nude/20")}
                 >
                   <div className={"flex items-center justify-center size-5 rounded-full border shrink-0 mt-0.5 transition-colors " + (on ? "bg-foreground border-foreground" : "border-border bg-transparent")}>
                     {on && (
@@ -311,12 +334,13 @@ function RequestView({ data }: { data: NonNullable<ReturnType<typeof useConsentR
                   <input
                     type="checkbox"
                     checked={on}
-                    onChange={(e) => setPerms({ ...perms, [item.key]: e.target.checked })}
+                    disabled={locked}
+                    onChange={(e) => !locked && setPerms({ ...perms, [item.key]: e.target.checked })}
                     className="sr-only"
                   />
                   <div className="flex-1">
                     <p className="text-sm font-medium">{item.title}</p>
-                    <p className="text-xs text-taupe mt-1">{item.help}</p>
+                    <p className="text-xs text-taupe mt-1">{locked ? MEDICAL_LOCKED_HELP : item.help}</p>
                   </div>
                 </label>
               );
@@ -356,8 +380,13 @@ function RequestView({ data }: { data: NonNullable<ReturnType<typeof useConsentR
             <p className="text-xs text-taupe mb-4">{appointment.service} · {appointment.date}</p>
 
             {appointment.afterPhotoUrl && (
-              <div className="aspect-[4/5] bg-nude/30 ring-1 ring-border mb-4 overflow-hidden">
-                <img src={appointment.afterPhotoUrl} alt="" className="w-full h-full object-cover" />
+              <div className="mb-4">
+                <div className="aspect-[4/5] bg-nude/30 ring-1 ring-border overflow-hidden">
+                  <img src={appointment.afterPhotoUrl} alt="" className="w-full h-full object-cover" />
+                </div>
+                {isMedical && (
+                  <p className="text-[10px] text-taupe mt-1.5 italic">Session photo shown for reference only — medical aesthetics accounts never post client photos; generated content uses brand-safe imagery instead.</p>
+                )}
               </div>
             )}
 
@@ -365,13 +394,13 @@ function RequestView({ data }: { data: NonNullable<ReturnType<typeof useConsentR
               I'd love to share a few photos from our session. Here's exactly what I'd use:
             </p>
             <ul className="space-y-2">
-              {PERMISSION_ITEMS.filter((p) => perms[p.key]).map((p) => (
+              {PERMISSION_ITEMS.filter((p) => effectivePerms[p.key]).map((p) => (
                 <li key={p.key} className="flex items-start gap-2">
                   <span className="size-1.5 rounded-full bg-sage mt-1.5 shrink-0" />
                   <span className="text-xs">{p.title}</span>
                 </li>
               ))}
-              {PERMISSION_ITEMS.filter((p) => perms[p.key]).length === 0 && (
+              {PERMISSION_ITEMS.filter((p) => effectivePerms[p.key]).length === 0 && (
                 <li className="text-xs italic text-taupe">No permissions selected.</li>
               )}
             </ul>

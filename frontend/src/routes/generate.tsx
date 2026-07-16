@@ -441,6 +441,7 @@ function GeneratePage() {
               {step === "consent" && appointment && (
                 <ConsentStep
                   appointment={appointment}
+                  isMedicalAestheticsPractitioner={!!brandDna?.isMedicalAestheticsPractitioner}
                   onContinue={() => {
                     // If coming from a template, goal + format are already set — skip both steps
                     if (search.templateGoal && search.templateFormat) {
@@ -774,11 +775,13 @@ function ConsentStep({
   onContinue,
   onBack,
   fromTemplate = false,
+  isMedicalAestheticsPractitioner = false,
 }: {
   appointment: Appointment;
   onContinue: () => void;
   onBack: () => void;
   fromTemplate?: boolean;
+  isMedicalAestheticsPractitioner?: boolean;
 }) {
   const { data: consentData, loading: consentLoading } = useConsentRequest(appointment.id);
   const granted = appointment.consent === "granted";
@@ -862,9 +865,15 @@ function ConsentStep({
             <div className="divide-y divide-border">
               {CONSENT_PERMISSIONS.map(({ key, label }) => {
                 const isGranted = consentData.permissions[key];
+                const medicalOverride = isMedicalAestheticsPractitioner && key === "allowShowFace";
                 return (
                   <div key={key} className="flex items-center justify-between py-3">
-                    <span className="text-sm text-foreground">{label}</span>
+                    <div>
+                      <span className="text-sm text-foreground">{label}</span>
+                      {medicalOverride && isGranted && (
+                        <p className="text-[10px] uppercase tracking-widest text-destructive mt-0.5">Not used — medical compliance</p>
+                      )}
+                    </div>
                     <span className={
                       "text-[10px] uppercase tracking-widest shrink-0 ml-4 " +
                       (isGranted ? "text-taupe" : "text-taupe/40")
