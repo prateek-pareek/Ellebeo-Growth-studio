@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';
 import { firebaseAuth, firebaseStorage } from '../config/firebase.client';
+import type { StringValue } from 'ms';
 
 @Injectable()
 export class AuthService {
@@ -28,8 +29,9 @@ export class AuthService {
     let decoded: Awaited<ReturnType<typeof firebaseAuth.verifyIdToken>>;
     try {
       decoded = await firebaseAuth.verifyIdToken(firebaseIdToken);
-    } catch (err: any) {
-      throw new UnauthorizedException(`Invalid Google token: ${err.message}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new UnauthorizedException(`Invalid Google token: ${message}`);
     }
 
     const email = decoded.email;
@@ -128,7 +130,7 @@ export class AuthService {
 
     if (!isPasswordValid) {
       const newAttempts = user.failedLoginAttempts + 1;
-      const updateData: any = { failedLoginAttempts: newAttempts };
+      const updateData: { failedLoginAttempts: number; lockedUntil?: Date } = { failedLoginAttempts: newAttempts };
 
       if (newAttempts >= 10) {
         // Lock for 30 minutes
@@ -432,7 +434,7 @@ export class AuthService {
     const payload = { sub: userId, role, tenantId };
 
     const accessToken = this.jwtService.sign(payload, {
-      expiresIn: (this.configService.get<string>('JWT_ACCESS_EXPIRY') || '1d') as any,
+      expiresIn: (this.configService.get<string>('JWT_ACCESS_EXPIRY') || '1d') as StringValue,
     });
 
     const refreshTokenValue = uuidv4();

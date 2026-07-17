@@ -23,7 +23,7 @@ async function bootstrap() {
   // for every other route.
   const app = await NestFactory.create(AppModule, { bodyParser: false });
 
-  app.use((req: any, res: any, next: any) => {
+  app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (req.originalUrl === '/api/v1/billing/webhook') {
       express.raw({ type: 'application/json' })(req, res, next);
     } else {
@@ -85,8 +85,8 @@ async function bootstrap() {
   const notificationsGateway = app.get(NotificationsGateway);
   const smsService = app.get(SmsService);
   const prismaService = app.get(PrismaService);
-  startNotificationsWorker(prismaService as any, notificationsGateway, smsService);
-  startPublishWorker(prismaService as any);
+  startNotificationsWorker(prismaService, notificationsGateway, smsService);
+  startPublishWorker(prismaService);
   console.log("Server is running on port", port);
   console.log("Environment:", process.env.NODE_ENV);
   console.log("Front end url: ", process.env.FRONTEND_URL);
