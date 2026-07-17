@@ -7,6 +7,11 @@ import { LoginDto } from './dto/login.dto';
 import { Request, Response } from 'express';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
+// Shape JwtStrategy.validate() attaches to req.user once JwtAuthGuard passes.
+interface AuthenticatedRequest extends Request {
+  user: { userId: string; role: string; tenantId?: string };
+}
+
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -108,21 +113,21 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Get('me')
-  async getProfile(@Req() req: any) {
+  async getProfile(@Req() req: AuthenticatedRequest) {
     return this.authService.getProfile(req.user.userId);
   }
 
   @UseGuards(JwtAuthGuard)
   @Post('accept-terms')
   @HttpCode(HttpStatus.OK)
-  async acceptTerms(@Req() req: any) {
+  async acceptTerms(@Req() req: AuthenticatedRequest) {
     return this.authService.acceptTerms(req.user.userId);
   }
 
   @UseGuards(JwtAuthGuard)
   @Post('upload-avatar')
   @UseInterceptors(FileInterceptor('file'))
-  async uploadAvatar(@Req() req: any, @UploadedFile() file: Express.Multer.File) {
+  async uploadAvatar(@Req() req: AuthenticatedRequest, @UploadedFile() file: Express.Multer.File) {
     return this.authService.uploadAvatar(req.user.userId, file);
   }
 

@@ -35,6 +35,14 @@ const DESKTOP_NAV: Array<{ to: string; label: string }> = [
 
 const AUTH_ROUTES = ['/login', '/signup', '/auth', '/landing'];
 
+// Only the app's own custom scheme may be used as a post-OAuth redirect target —
+// `state` round-trips through the URL unauthenticated, so an attacker can set
+// mobileRedirectUri to a `javascript:` URI to run script in this origin unless
+// we reject anything that isn't our deep link scheme before it reaches href/location.
+function isSafeMobileRedirectUri(uri: string): boolean {
+  return /^elleobe:\/\//i.test(uri);
+}
+
 /** Safe base64url decode — works with or without the Node Buffer polyfill. */
 function decodeOAuthState(state: string): Record<string, string> | null {
   try {
@@ -82,7 +90,8 @@ export function AppShell() {
     const { code, state, error } = oauthParams;
     const decoded = decodeOAuthState(state);
     const platform = decoded?.platform === "facebook" ? "facebook" : "instagram";
-    const mobileRedirectUri = decoded?.mobileRedirectUri || "";
+    const rawMobileRedirectUri = decoded?.mobileRedirectUri || "";
+    const mobileRedirectUri = isSafeMobileRedirectUri(rawMobileRedirectUri) ? rawMobileRedirectUri : "";
     const isMobile = !!mobileRedirectUri;
 
     // Handle denied / error
