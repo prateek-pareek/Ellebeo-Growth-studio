@@ -15,6 +15,7 @@ import { SmsService } from './notifications/sms.service';
 import { PrismaService } from './prisma/prisma.service';
 import { startNotificationsWorker } from './notifications/notifications.worker';
 import { startPublishWorker } from './schedule/publish.worker';
+import { getAllowedOrigins, isOriginAllowed } from './config/cors';
 
 async function bootstrap() {
   // Body parser disabled globally so the Stripe webhook route can access the
@@ -33,14 +34,14 @@ async function bootstrap() {
 
   // Security Middleware
   app.use(helmet());
-  const allowedOrigins = [
-    process.env.FRONTEND_URL || 'http://localhost:5173',
-    process.env.ADMIN_PORTAL_URL || 'http://localhost:3000',
-  ].filter(Boolean);
 
   app.enableCors({
     origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-      callback(null, true);
+      if (isOriginAllowed(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Origin ${origin} not allowed by CORS`));
+      }
     },
     credentials: true,
   });
@@ -90,6 +91,7 @@ async function bootstrap() {
   console.log("Environment:", process.env.NODE_ENV);
   console.log("Front end url: ", process.env.FRONTEND_URL);
   console.log("Admin portal url: ", process.env.ADMIN_PORTAL_URL);
+  console.log("CORS allowed origins:", getAllowedOrigins());
 }
 
 bootstrap();

@@ -7,10 +7,12 @@ import {
 import { Server, Socket } from 'socket.io';
 import * as jwt from 'jsonwebtoken';
 import { ConfigService } from '@nestjs/config';
+import { getAllowedOrigins } from '../config/cors';
 
 @WebSocketGateway({
   cors: {
-    origin: (process.env.ALLOWED_ORIGINS || process.env.FRONTEND_URL || '').split(',').map((v) => v.trim()).filter(Boolean),
+    origin: getAllowedOrigins(),
+    credentials: true,
   },
 })
 export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {

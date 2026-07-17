@@ -8,8 +8,9 @@ import { Server, Socket } from 'socket.io';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import * as jwt from 'jsonwebtoken';
+import { getAllowedOrigins } from '../config/cors';
 
-@WebSocketGateway({ namespace: 'notifications', cors: { origin: '*' } })
+@WebSocketGateway({ namespace: 'notifications', cors: { origin: getAllowedOrigins(), credentials: true } })
 export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
