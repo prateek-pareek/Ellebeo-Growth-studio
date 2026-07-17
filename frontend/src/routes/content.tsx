@@ -595,7 +595,22 @@ function EditSidebar({
   onSaved: () => void;
   onApproved?: () => void;
 }) {
-  const [caption,  setCaption]  = useState(item.caption);
+  const [activeVariant, setActiveVariant] = useState(0);
+  
+  // Extract variants from generationOptions if they exist
+  const variants = Array.isArray(item.generationOptions) && item.generationOptions.length > 0 
+    ? item.generationOptions 
+    : [item];
+
+  // Initialize state based on the current active variant
+  useEffect(() => {
+    const current = variants[activeVariant] as any;
+    setCaption(current?.caption || item.caption || "");
+    setCta(current?.callToAction || item.cta || "");
+    setHashtags((current?.hashtags ?? item.hashtags ?? []).join(" "));
+  }, [activeVariant, item, variants]);
+
+  const [caption,  setCaption]  = useState(item.caption || "");
   const [cta,      setCta]      = useState(item.cta ?? "");
   const [hashtags, setHashtags] = useState((item.hashtags ?? []).join(" "));
   const [saving,   setSaving]   = useState(false);
@@ -711,6 +726,27 @@ function EditSidebar({
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {variants.length > 1 && (
+            <div className="flex gap-2">
+              {variants.map((v: any, i: number) => (
+                <button
+                  key={i}
+                  onClick={() => setActiveVariant(i)}
+                  className={`flex-1 border px-3 py-2 text-left transition-all ${
+                    i === activeVariant
+                      ? "border-foreground bg-foreground/5 shadow-sm"
+                      : "border-border bg-card opacity-60 hover:opacity-100"
+                  }`}
+                >
+                  <p className={"text-[9px] uppercase tracking-widest mb-1 " + (i === activeVariant ? "text-foreground" : "text-taupe")}>
+                    Option {i + 1}
+                  </p>
+                  <p className="text-xs font-medium truncate">{v.generatedBy === 'anthropic/claude-3-5-sonnet-20241022' ? 'Claude 3.5 Sonnet' : v.generatedBy === 'openai/gpt-4o' ? 'GPT-4o' : v.generatedBy === 'openai/gpt-4o-mini' ? 'GPT-4o Mini' : `Option ${i + 1}`}</p>
+                </button>
+              ))}
             </div>
           )}
 

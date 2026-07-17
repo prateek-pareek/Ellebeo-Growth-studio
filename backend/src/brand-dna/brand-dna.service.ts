@@ -112,8 +112,8 @@ export class BrandDnaService {
             })) || []
           },
           goals: {
-            create: dto.goals?.map((g) => ({ 
-              label: g.label, 
+            create: dto.goals?.map((g) => ({
+              label: g.label,
               targetMetric: g.target,
               tenantId
             })) || []
@@ -130,13 +130,13 @@ export class BrandDnaService {
 
   private async triggerMoodboardCacheBuild(tenantId: string, urls: string[], labels: string[]) {
     if (urls.length === 0) return;
-    
+
     // We fetch current cache to only analyze NEW images
     const currentDna = await this.getCurrentDna(tenantId);
     if (!currentDna) return;
 
     let cache: any[] = Array.isArray((currentDna as any).moodboardIntentsCache) ? (currentDna as any).moodboardIntentsCache as any[] : [];
-    
+
     // Filter out old urls
     cache = cache.filter(c => urls.includes(c.url));
 
@@ -146,7 +146,7 @@ export class BrandDnaService {
     for (let i = 0; i < urls.length; i++) {
       const url = urls[i];
       const label = labels[i] || 'mood'; // Default intent if not provided
-      
+
       const exists = cache.find(c => c.url === url && c.intent === label);
       if (!exists) {
         try {
