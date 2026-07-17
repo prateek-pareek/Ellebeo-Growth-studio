@@ -55,12 +55,15 @@ function AppointmentsPage() {
   const [beforeAssetPath, setBeforeAssetPath] = useState<string | null>(null);
   const [afterAssetPath, setAfterAssetPath]   = useState<string | null>(null);
   const [assetLibrary, setAssetLibrary]       = useState<AssetLibraryItem[]>([]);
+  const [isMedicalAesthetics, setIsMedicalAesthetics] = useState(false);
+  const [medicalFiles, setMedicalFiles]       = useState<File[]>([]);
 
   useEffect(() => {
     api.get("/brand-dna")
       .then((res) => {
         const dna = res.data?.data;
         const v2 = typeof dna?.brandDnaV2 === "string" ? JSON.parse(dna.brandDnaV2) : dna?.brandDnaV2;
+        setIsMedicalAesthetics(v2?.compliance?.medical_aesthetics_practitioner === true);
         const items: AssetLibraryItem[] = Array.isArray(v2?.asset_library) ? v2.asset_library : [];
         setAssetLibrary(
           items.filter(
@@ -99,21 +102,35 @@ function AppointmentsPage() {
   const handleAddAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsAdding(true);
+    const isMedicalForm = isMedicalAesthetics && category === "injectables_cosmetic";
     try {
-      if (beforeFile) {
-        try {
-          await checkImageSafety(beforeFile);
-        } catch (err: any) {
-          toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Before photo failed safety check");
-          return;
+      if (isMedicalForm) {
+        for (const f of medicalFiles) {
+          try { await checkImageSafety(f); } 
+          catch (err: any) {
+            toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Photo failed safety check");
+            setIsAdding(false);
+            return;
+          }
         }
-      }
-      if (afterFile) {
-        try {
-          await checkImageSafety(afterFile);
-        } catch (err: any) {
-          toast.error(err.response?.data?.error?.message || err.response?.data?.message || "After photo failed safety check");
-          return;
+      } else {
+        if (beforeFile) {
+          try {
+            await checkImageSafety(beforeFile);
+          } catch (err: any) {
+            toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Before photo failed safety check");
+            setIsAdding(false);
+            return;
+          }
+        }
+        if (afterFile) {
+          try {
+            await checkImageSafety(afterFile);
+          } catch (err: any) {
+            toast.error(err.response?.data?.error?.message || err.response?.data?.message || "After photo failed safety check");
+            setIsAdding(false);
+            return;
+          }
         }
       }
 
@@ -136,34 +153,50 @@ function AppointmentsPage() {
       });
       const appt = res.data.data;
 
-      if (beforeFile) {
-        try {
-          await uploadFile(appt.id, beforeFile, true);
-        } catch (uploadErr: any) {
-          toast.error(uploadErr.response?.data?.error?.message || uploadErr.response?.data?.message || "Before photo upload failed");
-          return;
+      if (isMedicalForm) {
+        for (let i = 0; i < medicalFiles.length; i++) {
+          try {
+            await uploadFile(appt.id, medicalFiles[i], false);
+          } catch (uploadErr: any) {
+            toast.error(uploadErr.response?.data?.error?.message || uploadErr.response?.data?.message || "Photo upload failed");
+            setIsAdding(false);
+            return;
+          }
         }
-      } else if (beforeAssetPath) {
-        try {
-          await attachAssetLibraryImage(appt.id, beforeAssetPath, true);
-        } catch (uploadErr: any) {
-          toast.error(uploadErr.response?.data?.error?.message || uploadErr.response?.data?.message || "Before photo (asset library) attach failed");
-          return;
+      } else {
+        if (beforeFile) {
+          try {
+            await uploadFile(appt.id, beforeFile, true);
+          } catch (uploadErr: any) {
+            toast.error(uploadErr.response?.data?.error?.message || uploadErr.response?.data?.message || "Before photo upload failed");
+            setIsAdding(false);
+            return;
+          }
+        } else if (beforeAssetPath) {
+          try {
+            await attachAssetLibraryImage(appt.id, beforeAssetPath, true);
+          } catch (uploadErr: any) {
+            toast.error(uploadErr.response?.data?.error?.message || uploadErr.response?.data?.message || "Before photo (asset library) attach failed");
+            setIsAdding(false);
+            return;
+          }
         }
-      }
-      if (afterFile) {
-        try {
-          await uploadFile(appt.id, afterFile, false);
-        } catch (uploadErr: any) {
-          toast.error(uploadErr.response?.data?.error?.message || uploadErr.response?.data?.message || "After photo upload failed");
-          return;
-        }
-      } else if (afterAssetPath) {
-        try {
-          await attachAssetLibraryImage(appt.id, afterAssetPath, false);
-        } catch (uploadErr: any) {
-          toast.error(uploadErr.response?.data?.error?.message || uploadErr.response?.data?.message || "After photo (asset library) attach failed");
-          return;
+        if (afterFile) {
+          try {
+            await uploadFile(appt.id, afterFile, false);
+          } catch (uploadErr: any) {
+            toast.error(uploadErr.response?.data?.error?.message || uploadErr.response?.data?.message || "After photo upload failed");
+            setIsAdding(false);
+            return;
+          }
+        } else if (afterAssetPath) {
+          try {
+            await attachAssetLibraryImage(appt.id, afterAssetPath, false);
+          } catch (uploadErr: any) {
+            toast.error(uploadErr.response?.data?.error?.message || uploadErr.response?.data?.message || "After photo (asset library) attach failed");
+            setIsAdding(false);
+            return;
+          }
         }
       }
 
@@ -175,6 +208,7 @@ function AppointmentsPage() {
       setAfterFile(null);
       setBeforeAssetPath(null);
       setAfterAssetPath(null);
+      setMedicalFiles([]);
       if (refresh) refresh();
     } catch (e: any) {
       toast.error(e.response?.data?.message || "Failed to create appointment");
@@ -205,7 +239,7 @@ function AppointmentsPage() {
           Turn appointments into <span className="italic text-taupe">content</span>.
         </h1>
         <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[52ch]">
-          Upload before-and-after photos, request client consent, and let AI draft the post.
+          Upload photos, request client consent (if applicable), and let AI draft the post.
         </p>
       </header>
 
@@ -293,24 +327,91 @@ function AppointmentsPage() {
 
           {/* Right — photos + submit */}
           <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
-              <PhotoUpload
-                label="Before photo"
-                file={beforeFile}
-                onChange={(f) => { setBeforeFile(f); if (f) setBeforeAssetPath(null); }}
-                assetLibrary={assetLibrary}
-                selectedAssetPath={beforeAssetPath}
-                onSelectAsset={(path) => { setBeforeAssetPath(path); setBeforeFile(null); }}
-              />
-              <PhotoUpload
-                label="After photo"
-                file={afterFile}
-                onChange={(f) => { setAfterFile(f); if (f) setAfterAssetPath(null); }}
-                assetLibrary={assetLibrary}
-                selectedAssetPath={afterAssetPath}
-                onSelectAsset={(path) => { setAfterAssetPath(path); setAfterFile(null); }}
-              />
-            </div>
+            {isMedicalAesthetics && category === "injectables_cosmetic" ? (
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                  Upload Photos ({medicalFiles.length} selected)
+                </label>
+                <div className="border border-border bg-muted/30 flex items-center justify-center relative overflow-hidden transition-colors min-h-32">
+                  {medicalFiles.length > 0 ? (
+                    <div className="grid grid-cols-3 gap-2 p-2 w-full">
+                      {medicalFiles.map((f, i) => (
+                        <div key={i} className="aspect-square relative overflow-hidden border border-border bg-black/5 group/img">
+                          <img src={URL.createObjectURL(f)} className="w-full h-full object-cover" alt={`Upload ${i+1}`} />
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setMedicalFiles(prev => prev.filter((_, index) => index !== i));
+                            }}
+                            className="absolute top-1 right-1 size-6 flex items-center justify-center bg-black/50 text-white rounded-full opacity-0 group-hover/img:opacity-100 transition-opacity z-20 hover:bg-black/70"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="18" y1="6" x2="6" y2="18" />
+                              <line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                      <label className="aspect-square flex flex-col items-center justify-center border border-dashed border-border hover:border-taupe cursor-pointer text-taupe hover:text-foreground transition-colors bg-muted/50">
+                        <span className="text-[10px] uppercase tracking-widest">+ Add</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={(e) => {
+                            if (e.target.files) {
+                              setMedicalFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+                            }
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  ) : (
+                    <label className="flex flex-col items-center justify-center gap-2 text-taupe hover:text-foreground transition-colors py-8 cursor-pointer w-full h-full">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                        <polyline points="17 8 12 3 7 8" />
+                        <line x1="12" y1="3" x2="12" y2="15" />
+                      </svg>
+                      <span className="text-[9px] uppercase tracking-widest">Select Photos</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={(e) => {
+                          if (e.target.files) {
+                            setMedicalFiles(Array.from(e.target.files));
+                          }
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                <PhotoUpload
+                  label="Before photo"
+                  file={beforeFile}
+                  onChange={(f) => { setBeforeFile(f); if (f) setBeforeAssetPath(null); }}
+                  assetLibrary={assetLibrary}
+                  selectedAssetPath={beforeAssetPath}
+                  onSelectAsset={(path) => { setBeforeAssetPath(path); setBeforeFile(null); }}
+                />
+                <PhotoUpload
+                  label="After photo"
+                  file={afterFile}
+                  onChange={(f) => { setAfterFile(f); if (f) setAfterAssetPath(null); }}
+                  assetLibrary={assetLibrary}
+                  selectedAssetPath={afterAssetPath}
+                  onSelectAsset={(path) => { setAfterAssetPath(path); setAfterFile(null); }}
+                />
+              </div>
+            )}
 
             <button
               type="submit"
@@ -384,7 +485,7 @@ function AppointmentsPage() {
               </thead>
               <tbody className="divide-y divide-border">
                 {filtered.map((a) => (
-                  <AppointmentRow key={a.id} a={a} onReminderSent={refresh} />
+                  <AppointmentRow key={a.id} a={a} onReminderSent={refresh} isMedicalAesthetics={isMedicalAesthetics} />
                 ))}
                 {filtered.length === 0 && (
                   <tr>
@@ -480,11 +581,13 @@ function PhotoUpload({
   );
 }
 
-function AppointmentRow({ a, onReminderSent }: { a: Appointment; onReminderSent?: () => void }) {
+function AppointmentRow({ a, onReminderSent, isMedicalAesthetics }: { a: Appointment; onReminderSent?: () => void; isMedicalAesthetics?: boolean }) {
   const [sending, setSending] = useState(false);
   const [showPhoneInput, setShowPhoneInput] = useState(false);
   const [phone, setPhone] = useState("");
   const [savingPhone, setSavingPhone] = useState(false);
+
+  const isMedicalRow = isMedicalAesthetics && a.category === "Medical Aesthetics";
 
   const handleSendReminder = async () => {
     setSending(true);
@@ -532,20 +635,32 @@ function AppointmentRow({ a, onReminderSent }: { a: Appointment; onReminderSent?
       {/* Photos */}
       <td className="px-5 py-4">
         <div className="flex gap-1.5">
-          <div className="size-12 bg-nude/20 border border-border overflow-hidden shrink-0">
-            {a.beforePhotoUrl ? (
-              <img src={a.beforePhotoUrl} alt="Before" className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-[8px] uppercase tracking-widest text-taupe">B</div>
-            )}
-          </div>
-          <div className="size-12 bg-nude/20 border border-border overflow-hidden shrink-0">
-            {a.afterPhotoUrl ? (
-              <img src={a.afterPhotoUrl} alt="After" className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-[8px] uppercase tracking-widest text-taupe">A</div>
-            )}
-          </div>
+          {isMedicalRow ? (
+            <div className="size-12 bg-nude/20 border border-border overflow-hidden shrink-0">
+              {a.afterPhotoUrl || a.beforePhotoUrl ? (
+                <img src={(a.afterPhotoUrl || a.beforePhotoUrl) as string} alt="Photo" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-[8px] uppercase tracking-widest text-taupe">IMG</div>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="size-12 bg-nude/20 border border-border overflow-hidden shrink-0">
+                {a.beforePhotoUrl ? (
+                  <img src={a.beforePhotoUrl} alt="Before" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-[8px] uppercase tracking-widest text-taupe">B</div>
+                )}
+              </div>
+              <div className="size-12 bg-nude/20 border border-border overflow-hidden shrink-0">
+                {a.afterPhotoUrl ? (
+                  <img src={a.afterPhotoUrl} alt="After" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-[8px] uppercase tracking-widest text-taupe">A</div>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </td>
 
@@ -571,7 +686,11 @@ function AppointmentRow({ a, onReminderSent }: { a: Appointment; onReminderSent?
 
       {/* Consent */}
       <td className="px-5 py-4">
-        <ConsentBadge status={a.consent} />
+        {isMedicalRow ? (
+          <span className="text-[10px] uppercase tracking-widest text-taupe">N/A</span>
+        ) : (
+          <ConsentBadge status={a.consent} />
+        )}
       </td>
 
       {/* Action */}
@@ -594,7 +713,7 @@ function AppointmentRow({ a, onReminderSent }: { a: Appointment; onReminderSent?
             </button>
           </div>
         )}
-        {a.consent === "granted" ? (
+        {isMedicalAesthetics || a.consent === "granted" ? (
           <Link
             to="/generate"
             search={{ appointment: a.id }}

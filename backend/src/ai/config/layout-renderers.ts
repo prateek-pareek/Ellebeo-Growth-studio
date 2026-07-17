@@ -173,11 +173,16 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
   universal_dynamic_base: async (ctx) => {
     // Read the semantic metadata of the AI-selected template
     const metadata = (templateLibraryData as any)[ctx.layoutType] || {};
-    const category = metadata.category || '';
+    
+    // Parse the image_mask from metadata
+    const imageMask = (metadata.image_mask || '').toLowerCase();
     const concept = (metadata.concept || '').toLowerCase();
-    const isSplit = concept.includes('split') || category.includes('Split');
-    const isCircle = concept.includes('circle') || concept.includes('round');
-    const isComposition = category.includes('Composition') || concept.includes('mask') || concept.includes('arch') || concept.includes('shape');
+    const category = (metadata.category || '').toLowerCase();
+    
+    const isSplit = imageMask.includes('split') || concept.includes('split') || category.includes('split');
+    const isCircle = imageMask.includes('circle') || imageMask.includes('round');
+    const isArch = imageMask.includes('arch');
+    const isInset = imageMask.includes('inset');
 
     if (isSplit) {
       // Dynamic Split Screen MVP
@@ -214,8 +219,8 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
       } catch (err) {
         return fullBleedBase(ctx);
       }
-    } else if (isComposition) {
-      // Dynamic Masking Logic MVP (Arch)
+    } else if (isArch) {
+      // Dynamic Arch Mask MVP
       try {
         const archPhoto = await processPortraitFit(ctx.imageBuffer, ctx.innerW, ctx.innerH, ctx.validBackgroundColor);
         const archMask = Buffer.from(
@@ -235,11 +240,11 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
       } catch (err) {
         return fullBleedBase(ctx);
       }
+    } else if (isInset) {
+      return borderedDefault(ctx);
     } else {
-      // Fallback: standard full bleed image (untinted)
-      const base = await fullBleedBase(ctx);
-      // Removed the brandColor tinting to preserve true Before/After treatment colors
-      return base;
+      // Fallback: standard full bleed image
+      return fullBleedBase(ctx);
     }
   },
 
@@ -311,33 +316,10 @@ const tspans = (ctx: TextCtx, x: string, dyFirst = 0) =>
   ctx.escapedLines.map((line, idx) => `<tspan x="${x}" dy="${idx === 0 ? dyFirst : ctx.dyOffset}">${line}</tspan>`).join('');
 
 function calculateDodgedY(ctx: TextCtx, intendedY: number, textHeight: number): number {
-  if (!ctx.faceCoordinates) return intendedY;
-
-  // Convert percentages to absolute pixels
-  const eyesY = (ctx.faceCoordinates.eyesYPercent / 100) * ctx.h;
-  const mouthY = (ctx.faceCoordinates.mouthYPercent / 100) * ctx.h;
-  
-  // Danger zone: from top of eyes to bottom of mouth, plus a 40px buffer
-  const dangerTop = eyesY - 40;
-  const dangerBottom = mouthY + 40;
-
-  const textTop = intendedY - (textHeight / 2);
-  const textBottom = intendedY + (textHeight / 2);
-
-  // If there's an overlap
-  if (textBottom > dangerTop && textTop < dangerBottom) {
-    const spaceAbove = dangerTop;
-    const spaceBelow = ctx.h - dangerBottom;
-
-    if (spaceAbove > spaceBelow) {
-      // Push above the face
-      return dangerTop - (textHeight / 2) - 20;
-    } else {
-      // Push below the face
-      return dangerBottom + (textHeight / 2) + 20;
-    }
-  }
-
+  // ARCHITECTURE DECISION:
+  // The Universal Rendering Engine must NOT dynamically redesign layouts (e.g. dodging faces).
+  // Collision prevention is handled entirely upstream by the Template Engine's HardConstraintEngine.
+  // We simply return the intended layout Y coordinate.
   return intendedY;
 }
 
@@ -596,12 +578,15 @@ export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
 
   universal_dynamic_text: (ctx) => {
     const metadata = (templateLibraryData as any)[ctx.layoutType] || {};
-    const textRegions = (metadata.visual_structure?.text_regions || '').toLowerCase();
+    const textRegionsStr = (metadata.visual_structure?.text_regions || metadata.visual_structure || '').toLowerCase();
     const concept = (metadata.concept || '').toLowerCase();
-    const isScattered = textRegions.includes('scattered') || concept.includes('cloud') || concept.includes('floating');
-
-    const isSide = textRegions.includes('side') || textRegions.includes('vertical');
-    const isBottomLeft = textRegions.includes('bottom') || textRegions.includes('corner');
+    
+    const isScattered = textRegionsStr.includes('scattered') || concept.includes('cloud') || concept.includes('floating');
+    const isSide = textRegionsStr.includes('side') || textRegionsStr.includes('vertical');
+    const isBottomLeft = textRegionsStr.includes('bottom-left') || textRegionsStr.includes('bottom left');
+    const isBottom = textRegionsStr.includes('bottom') || textRegionsStr.includes('beneath');
+    const isTop = textRegionsStr.includes('top');
+    const isMinimalCorner = concept.includes('corner') || concept.includes('minimal');
 
     if (isScattered) {
       // Dynamic Scattered Word Cloud MVP
@@ -632,13 +617,25 @@ export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
         <text x="40" y="${ctx.h - (ctx.lines.length * ctx.dyOffset) - 60}" class="overlay-text text-left" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.dynamicTextColor}; font-weight: bold;">
           ${tspans(ctx, '40')}
         </text>`;
+    } else if (isBottom && !isTop) {
+      return `
+        <!-- Dynamic Bottom Block -->
+        <text x="${ctx.w / 2}" y="${ctx.h - (ctx.lines.length * ctx.dyOffset) - 60}" class="overlay-text text-centered" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.dynamicTextColor}; font-weight: bold;">
+          ${tspans(ctx, `${ctx.w / 2}`)}
+        </text>`;
+    } else if (isTop) {
+      return `
+        <!-- Dynamic Top Block -->
+        <text x="${ctx.w / 2}" y="100" class="overlay-text text-centered" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.dynamicTextColor}; font-weight: bold;">
+          ${tspans(ctx, `${ctx.w / 2}`)}
+        </text>`;
+    } else if (isMinimalCorner) {
+      return TEXT_TEMPLATES.minimalist_corner_text(ctx);
     } else {
       // Sleek Centered Editorial MVP
       const textHeight = ctx.lines.length * ctx.dyOffset;
       const defaultY = ctx.h / 2;
       const safeY = calculateDodgedY(ctx, defaultY, textHeight);
-      // tspans uses dy offset relative to the y coordinate of the <text> block. 
-      // safeY is the vertical center of the text block, so we adjust the starting y
       const startY = safeY - (textHeight / 2);
       
       return `
@@ -747,11 +744,17 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
 
   universal_dynamic_deco: (ctx) => {
     const metadata = (templateLibraryData as any)[ctx.layoutType] || {};
-    const deco = (metadata.visual_structure?.decorative_elements || '').toLowerCase();
-    const isFrame = deco.includes('frame') || deco.includes('border') || deco.includes('mat');
+    
+    // Fix: decorative_elements is an array on the root metadata object
+    const decoArray = Array.isArray(metadata.decorative_elements) ? metadata.decorative_elements : [];
+    const decoStr = decoArray.join(' ').toLowerCase();
+    
+    const isFrame = decoStr.includes('frame') || decoStr.includes('border') || decoStr.includes('mat');
+    const isFilm = decoStr.includes('film') || decoStr.includes('sprocket');
+    const isTicket = decoStr.includes('ticket') || decoStr.includes('notch');
+    const isWaxSeal = decoStr.includes('wax seal') || decoStr.includes('emblem') || decoStr.includes('badge');
 
-    const isFilm = deco.includes('film') || deco.includes('sprocket');
-    const isTicket = deco.includes('ticket') || deco.includes('notch');
+    let svg = '';
 
     if (isFilm) {
       // Dynamic Film Sprockets MVP
@@ -762,7 +765,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
         const cy = ctx.paddingTop + i * holeSpacing;
         holes += `<rect x="${Math.round(ctx.paddingX * 0.3)}" y="${cy - 10}" width="16" height="20" rx="3" fill="${ctx.validBrandColor}" /><rect x="${ctx.w - Math.round(ctx.paddingX * 0.3) - 16}" y="${cy - 10}" width="16" height="20" rx="3" fill="${ctx.validBrandColor}" />`;
       }
-      return `<!-- Dynamic Film Sprocket Perforations -->${holes}`;
+      svg += `<!-- Dynamic Film Sprocket Perforations -->${holes}`;
     } else if (isTicket) {
       // Dynamic Ticket Notches MVP
       const notchY1 = ctx.paddingTop;
@@ -774,27 +777,44 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
         const cx = ctx.paddingX + i * notchSpacing;
         notches += `<circle cx="${cx}" cy="${notchY1}" r="9" fill="${ctx.validBrandColor}" /><circle cx="${cx}" cy="${notchY2}" r="9" fill="${ctx.validBrandColor}" />`;
       }
-      return `
+      svg += `
         <!-- Dynamic Ticket Notches -->
         <rect x="${ctx.paddingX}" y="${ctx.paddingTop}" width="${ctx.innerW}" height="${ctx.innerH}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="3" stroke-dasharray="14 10" />
         ${notches}`;
     } else if (isFrame) {
       // Minimal Gallery Frame MVP
-      return `
+      svg += `
         <!-- Dynamic Minimal Gallery Frame -->
         <rect x="20" y="20" width="${ctx.w - 40}" height="${ctx.h - 40}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="2" stroke-opacity="0.8" />
         <rect x="35" y="35" width="${ctx.w - 70}" height="${ctx.h - 70}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="0.5" stroke-opacity="0.5" />`;
-    } else {
-      // Heavy Gradient Scrim MVP
-      return `
+    }
+    
+    if (isWaxSeal) {
+      const cx = ctx.w - 80;
+      const cy = 80;
+      const r = 45;
+      const initial = ctx.rawName ? ctx.rawName.charAt(0).toUpperCase() : 'E';
+      svg += `
+        <!-- Dynamic Wax Seal / Emblem -->
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="${ctx.validBrandColor}" fill-opacity="0.9" stroke="${ctx.validSecondaryColor}" stroke-width="2" />
+        <circle cx="${cx}" cy="${cy}" r="${r - 5}" fill="none" stroke="${ctx.validSecondaryColor}" stroke-width="1" stroke-dasharray="2 2" />
+        <text x="${cx}" y="${cy + 15}" text-anchor="middle" font-family="'${ctx.brandFont}', Georgia, serif" font-weight="bold" font-size="40px" fill="${ctx.validSecondaryColor}">${initial}</text>
+      `;
+    }
+
+    if (!isFilm && !isTicket && !isFrame && !isWaxSeal) {
+      // Heavy Gradient Scrim MVP (Fallback)
+      svg += `
         <!-- Dynamic Contrast Gradient Scrim -->
         <defs>
-          <linearGradient id="dynamicScrim" x1="0%" y1="0%" x2="0%" y2="100%">
+          <linearGradient id="dynamicScrim_${ctx.layoutType}" x1="0%" y1="0%" x2="0%" y2="100%">
             <stop offset="0%" stop-color="${ctx.validBackgroundColor}" stop-opacity="0.1" />
             <stop offset="100%" stop-color="${ctx.validBackgroundColor}" stop-opacity="0.85" />
           </linearGradient>
         </defs>
-        <rect x="0" y="${ctx.h * 0.4}" width="${ctx.w}" height="${ctx.h * 0.6}" fill="url(#dynamicScrim)" />`;
+        <rect x="0" y="${ctx.h * 0.4}" width="${ctx.w}" height="${ctx.h * 0.6}" fill="url(#dynamicScrim_${ctx.layoutType})" />`;
     }
+    
+    return svg;
   },
 };
