@@ -7,10 +7,17 @@ import {
 import { Server, Socket } from 'socket.io';
 import * as jwt from 'jsonwebtoken';
 import { ConfigService } from '@nestjs/config';
+import { getAllowedOrigins } from '../config/cors';
+
+interface DecodedAccessToken {
+  tenantId?: string;
+  role?: string;
+}
 
 @WebSocketGateway({
   cors: {
-    origin: (process.env.ALLOWED_ORIGINS || process.env.FRONTEND_URL || '').split(',').map((v) => v.trim()).filter(Boolean),
+    origin: getAllowedOrigins(),
+    credentials: true,
   },
 })
 export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -25,7 +32,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       if (!token) throw new Error('No token');
 
       const secret = this.configService.getOrThrow<string>('JWT_ACCESS_SECRET');
-      const decoded: any = jwt.verify(token, secret);
+      const decoded = jwt.verify(token, secret) as DecodedAccessToken;
 
       const tenantId = decoded.tenantId;
       if (tenantId) {
@@ -44,11 +51,11 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleDisconnect(_client: Socket) {
   }
 
-  emitToTenant(tenantId: string, event: string, payload: any) {
+  emitToTenant(tenantId: string, event: string, payload: unknown) {
     this.server.to(`tenant_${tenantId}`).emit(event, payload);
   }
 
-  emitToAdmins(event: string, payload: any) {
+  emitToAdmins(event: string, payload: unknown) {
     this.server.to('admin_room').emit(event, payload);
   }
 }

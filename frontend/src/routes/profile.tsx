@@ -324,7 +324,10 @@ function ConnectedAccounts() {
       const decoded = decodeState(state);
       if (decoded) {
         if (decoded.platform === "facebook") platform = "facebook";
-        if (decoded.mobileRedirectUri) {
+        // Only the app's own deep link scheme is allowed here — `state` round-trips
+        // through the URL unauthenticated, so a `javascript:` URI must be rejected
+        // before it can ever reach window.location.href.
+        if (decoded.mobileRedirectUri && /^elleobe:\/\//i.test(decoded.mobileRedirectUri)) {
           mobileRedirectUri = decoded.mobileRedirectUri;
           isMobile = true;
         }

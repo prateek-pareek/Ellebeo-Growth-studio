@@ -1,6 +1,7 @@
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { TenantModule } from './tenant/tenant.module';
@@ -64,7 +65,12 @@ import { validateEnv } from './config/env.validation';
     // AiModule,
   ],
   controllers: [HealthController],
-  providers: [],
+  providers: [
+    // ThrottlerModule.forRoot() above only registers config/storage — without
+    // this guard nothing actually enforces it, including the @Throttle()
+    // overrides on login/refresh in auth.controller.ts.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
