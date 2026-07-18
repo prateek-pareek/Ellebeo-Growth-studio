@@ -117,7 +117,13 @@ export class SharpImagePipelineService {
       metadata: { contentType: 'image/jpeg' },
     });
 
-    return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(storagePath)}?alt=media`;
+    // Generate a signed URL that lasts for 7 days so Replicate can fetch it without 403 Forbidden errors
+    const [url] = await file.getSignedUrl({
+      action: 'read',
+      expires: Date.now() + 1000 * 60 * 60 * 24 * 7,
+    });
+
+    return url;
   }
 }
 

@@ -625,7 +625,7 @@ CRITICAL IMAGE REQUIREMENTS:
     // Select unique layouts intelligently using Template Agent
     const uniqueLayoutsForSlides: string[] = [];
     let pool = [...layoutPool];
-    
+
     for (let i = 0; i < total; i++) {
       let chosen = '';
       if (i === 0) {
@@ -654,13 +654,13 @@ CRITICAL IMAGE REQUIREMENTS:
           excludeLayouts: uniqueLayoutsForSlides
         });
         chosen = agentDecision.selected_layout_id;
-        
+
         // Prevent dupes locally
         if (uniqueLayoutsForSlides.includes(chosen) && pool.length > 0) {
-           chosen = pool[Math.floor(Math.random() * pool.length)] || chosen;
+          chosen = pool[Math.floor(Math.random() * pool.length)] || chosen;
         }
       }
-      
+
       uniqueLayoutsForSlides.push(chosen);
       pool = pool.filter(l => l !== chosen);
       if (pool.length === 0) pool = [...layoutPool];
@@ -771,7 +771,7 @@ CRITICAL IMAGE REQUIREMENTS:
     // Select unique layouts intelligently using Template Agent
     const uniqueLayoutsForFrames: string[] = [];
     let pool = [...layoutPool];
-    
+
     for (let i = 0; i < total; i++) {
       let chosen = '';
       if (i === 0) {
@@ -798,13 +798,13 @@ CRITICAL IMAGE REQUIREMENTS:
           visionResult: visionResultStub
         });
         chosen = agentDecision.selected_layout_id;
-        
+
         // Prevent dupes locally
         if (uniqueLayoutsForFrames.includes(chosen) && pool.length > 0) {
-           chosen = pool[Math.floor(Math.random() * pool.length)] || chosen;
+          chosen = pool[Math.floor(Math.random() * pool.length)] || chosen;
         }
       }
-      
+
       uniqueLayoutsForFrames.push(chosen);
       pool = pool.filter(l => l !== chosen);
       if (pool.length === 0) pool = [...layoutPool];
@@ -1054,7 +1054,7 @@ CRITICAL IMAGE REQUIREMENTS:
       // Dynamic brand footer spacing based on name length to prevent overlaps/clippings but keep it readable (not micro)
       let footerLetterSpacing = 6;
       let footerFontSize = 18; // Base increased from 13 to 18
-      
+
       if (escapedSpacedName.length < 15) {
         // Short names can be larger and more spaced out
         footerFontSize = 24;
@@ -1118,11 +1118,11 @@ CRITICAL IMAGE REQUIREMENTS:
       // Determine text color using luminance to guarantee WCAG contrast
       // Use the exact background color that the text will sit on depending on the layout type
       const isFullBleed = template.base === 'full_bleed_base' || template.base === 'universal_dynamic_base' || layoutType === 'look_number_plate';
-      
+
       // If it's full bleed, the text sits on the photo. We default to using depthBrandColor unless we calculate photo luminance.
       // If it's bordered/split, the text sits on the validBackgroundColor.
       const textSurfaceColor = isFullBleed ? validBrandColor : validBackgroundColor;
-      
+
       const surfaceLuminance = getLuminance(textSurfaceColor);
       const isLightSurface = surfaceLuminance > 150; // Threshold for legibility
       const dynamicTextColor = isLightSurface ? depthBrandColor : validBackgroundColor; // Dark on Light, Light on Dark
@@ -1169,6 +1169,7 @@ CRITICAL IMAGE REQUIREMENTS:
       const decoCtx = {
         layoutType, w, h, paddingX, paddingTop, paddingBottom, innerW, innerH,
         validBrandColor, validSecondaryColor, validBackgroundColor, brandFont, rawName, photoDataUri,
+        escapedLines, dyOffset, dynamicFontSize, dynamicTextColor, overlayText: finalOverlayText, maxLength,
       };
       const visualAdditions = template.decoration
         ? (DECORATIONS[template.decoration]?.(decoCtx) ?? '')
@@ -1238,27 +1239,27 @@ CRITICAL IMAGE REQUIREMENTS:
           
           <!-- Brand identity mark: randomly placed so the grid stays diverse -->
           ${template.showFooter ? (() => {
-            const footerStyle = ((index ?? 0) + (totalSlides ?? 4)) % 5;
-            if (footerStyle === 0) {
-              // Classic footer bar
-              return `<rect x="0" y="${h - 60}" width="${w}" height="60" class="footer-bg" />
+          const footerStyle = ((index ?? 0) + (totalSlides ?? 4)) % 5;
+          if (footerStyle === 0) {
+            // Classic footer bar
+            return `<rect x="0" y="${h - 60}" width="${w}" height="60" class="footer-bg" />
               <text x="60" y="${h - 25}" class="footer-brand">${escapedSpacedName}</text>
               <text x="${w - 60}" y="${h - 25}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`;
-            } else if (footerStyle === 1) {
-              // Top-left corner floating wordmark
-              return `<text x="50" y="52" font-family="'${bodyFont}', system-ui, sans-serif" font-size="13px" font-weight="600" letter-spacing="4px" fill="${validSecondaryColor}" fill-opacity="0.85" text-transform="uppercase">${escapedSpacedName}</text>
+          } else if (footerStyle === 1) {
+            // Top-left corner floating wordmark
+            return `<text x="50" y="52" font-family="'${bodyFont}', system-ui, sans-serif" font-size="13px" font-weight="600" letter-spacing="4px" fill="${validSecondaryColor}" fill-opacity="0.85" text-transform="uppercase">${escapedSpacedName}</text>
               <line x1="50" y1="62" x2="${Math.min(50 + escapedSpacedName.length * 8, 300)}" y2="62" stroke="${validSecondaryColor}" stroke-width="1" stroke-opacity="0.5" />`;
-            } else if (footerStyle === 2) {
-              // Bottom-right corner slide counter only — super minimal
-              return `<text x="${w - 60}" y="${h - 25}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`;
-            } else if (footerStyle === 3) {
-              // Vertical side tag — editorial magazine style
-              return `<text x="${w - 24}" y="${Math.round(h * 0.62)}" font-family="'${bodyFont}', system-ui, sans-serif" font-size="11px" font-weight="600" letter-spacing="5px" fill="${validBrandColor}" fill-opacity="0.7" transform="rotate(90 ${w - 24} ${Math.round(h * 0.62)})">${escapedSpacedName}</text>`;
-            } else {
-              // Pure transparent — no footer at all for this slide
-              return '';
-            }
-          })() : ''}
+          } else if (footerStyle === 2) {
+            // Bottom-right corner slide counter only — super minimal
+            return `<text x="${w - 60}" y="${h - 25}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`;
+          } else if (footerStyle === 3) {
+            // Vertical side tag — editorial magazine style
+            return `<text x="${w - 24}" y="${Math.round(h * 0.62)}" font-family="'${bodyFont}', system-ui, sans-serif" font-size="11px" font-weight="600" letter-spacing="5px" fill="${validBrandColor}" fill-opacity="0.7" transform="rotate(90 ${w - 24} ${Math.round(h * 0.62)})">${escapedSpacedName}</text>`;
+          } else {
+            // Pure transparent — no footer at all for this slide
+            return '';
+          }
+        })() : ''}
         </svg>
       `;
 

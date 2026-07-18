@@ -721,21 +721,15 @@ ${consentShowFace
 
     // Ticket 5: AI Super Resolution and Inpainting
     const brandColor = brandDNA.primaryBrandColor ?? '#1a1a1a';
-    const enhancementPromises: Promise<void>[] = [];
     
+    // Execute sequentially to avoid Replicate 429 rate limit retries
     if (afterPhotoUrl) {
-      enhancementPromises.push((async () => {
-        afterPhotoUrl = await this.imageEnhancementService.enhanceImage(afterPhotoUrl as string, moodboardVisionSummary ?? '', brandColor);
-      })());
+      afterPhotoUrl = await this.imageEnhancementService.enhanceImage(afterPhotoUrl as string, moodboardVisionSummary ?? '', brandColor);
     }
     
     if (beforePhotoUrl) {
-      enhancementPromises.push((async () => {
-        beforePhotoUrl = await this.imageEnhancementService.enhanceImage(beforePhotoUrl as string, moodboardVisionSummary ?? '', brandColor);
-      })());
+      beforePhotoUrl = await this.imageEnhancementService.enhanceImage(beforePhotoUrl as string, moodboardVisionSummary ?? '', brandColor);
     }
-    
-    await Promise.all(enhancementPromises);
 
     if (isCarousel && captionResult) {
       try {
