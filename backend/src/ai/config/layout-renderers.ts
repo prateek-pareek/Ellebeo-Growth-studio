@@ -11,7 +11,9 @@
 import sharp from 'sharp';
 import layoutTemplatesConfig from './layout-templates.config.json';
 import templateLibraryData from './template-library.json';
+import compiledLayouts from './compiled-layouts.v1.json';
 import { processPortraitFit } from '../services/ai-image-generation.service';
+import { ICompiledLayoutDSL, IDSLSceneLayer, IDSLImageLayer, IDSLDecorationLayer, IDSLTextLayer } from '../services/template-engine/interfaces';
 
 export type LayoutTemplate = {
   base: string;
@@ -43,6 +45,219 @@ export function resolveLayoutTemplate(layoutType: string): LayoutTemplate {
     showFooter: true
   };
 }
+
+// ── Component Registry ───────────────────────────────────────────────────────
+
+const ComponentRegistry: Record<string, (ctx: any, layer: IDSLDecorationLayer) => string> = {
+  wax_seal: (ctx, layer) => {
+    let cx = ctx.w / 2;
+    let cy = 180;
+    if (layer.anchor && layer.anchor.includes('left')) cx = 150;
+    if (layer.anchor && layer.anchor.includes('right')) cx = ctx.w - 150;
+    if (layer.anchor && layer.anchor.includes('bottom')) cy = ctx.h - 150;
+    
+    // Extract first letter of rawName for seal
+    const initial = ctx.rawName ? ctx.rawName.charAt(0).toUpperCase() : 'E';
+
+    return `
+      <!-- Wax Seal Base (Shadow) -->
+      <circle cx="${cx}" cy="${cy + 6}" r="62" fill="#000000" fill-opacity="0.15" filter="blur(4px)" />
+      <!-- Outer Wax Ring (Irregular) -->
+      <path d="M ${cx},${cy - 65} C ${cx + 35},${cy - 60} ${cx + 65},${cy - 30} ${cx + 62},${cy + 10} C ${cx + 58},${cy + 45} ${cx + 25},${cy + 68} ${cx - 10},${cy + 65} C ${cx - 40},${cy + 60} ${cx - 68},${cy + 25} ${cx - 60},${cy - 20} C ${cx - 50},${cy - 55} ${cx - 20},${cy - 68} ${cx},${cy - 65} Z" fill="${ctx.validBrandColor}" />
+      <!-- Inner Embossed Ring -->
+      <circle cx="${cx}" cy="${cy}" r="48" fill="none" stroke="${ctx.validSecondaryColor}" stroke-width="2" stroke-opacity="0.4" />
+      <circle cx="${cx}" cy="${cy}" r="50" fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.2" />
+      <!-- Embossed Initial -->
+      <text x="${cx}" y="${cy + 18}" text-anchor="middle" font-family="${ctx.brandFont}, serif" font-size="52px" fill="${ctx.validSecondaryColor}" font-weight="bold">${initial}</text>
+      <text x="${cx}" y="${cy + 20}" text-anchor="middle" font-family="${ctx.brandFont}, serif" font-size="52px" fill="#000000" fill-opacity="0.2" font-weight="bold">${initial}</text>
+    `;
+  },
+  gold_accents: (ctx, layer) => {
+    // Thin brand-colored or accent-colored lines adding structure
+    return `
+      <rect x="50" y="50" width="${ctx.w - 100}" height="2" fill="${ctx.validBrandColor}" fill-opacity="0.8" />
+      <rect x="50" y="${ctx.h - 52}" width="${ctx.w - 100}" height="2" fill="${ctx.validBrandColor}" fill-opacity="0.8" />
+      <circle cx="50" cy="50" r="4" fill="${ctx.validBrandColor}" />
+      <circle cx="${ctx.w - 50}" cy="50" r="4" fill="${ctx.validBrandColor}" />
+      <circle cx="50" cy="${ctx.h - 50}" r="4" fill="${ctx.validBrandColor}" />
+      <circle cx="${ctx.w - 50}" cy="${ctx.h - 50}" r="4" fill="${ctx.validBrandColor}" />
+    `;
+  },
+  gallery_frame: (ctx, layer) => {
+    return `
+      <!-- Deep inner mat border -->
+      <rect x="40" y="40" width="${ctx.w - 80}" height="${ctx.h - 80}" fill="none" stroke="${ctx.validSecondaryColor}" stroke-width="15" opacity="0.9" />
+      <rect x="55" y="55" width="${ctx.w - 110}" height="${ctx.h - 110}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1" opacity="0.6" />
+    `;
+  },
+  film_sprockets: (ctx, layer) => {
+    // Draws sprocket holes along left and right edges
+    let sprockets = '';
+    for(let i = 0; i < ctx.h; i += 60) {
+      sprockets += `<rect x="15" y="${i}" width="20" height="30" rx="4" fill="${ctx.validBackgroundColor}" />`;
+      sprockets += `<rect x="${ctx.w - 35}" y="${i}" width="20" height="30" rx="4" fill="${ctx.validBackgroundColor}" />`;
+    }
+    return `
+      <rect x="0" y="0" width="50" height="${ctx.h}" fill="${ctx.validBrandColor}" opacity="0.95" />
+      <rect x="${ctx.w - 50}" y="0" width="50" height="${ctx.h}" fill="${ctx.validBrandColor}" opacity="0.95" />
+      ${sprockets}
+    `;
+  },
+  ticket_notches: (ctx, layer) => {
+    return `
+      <!-- Corner Notches and perforation -->
+      <circle cx="0" cy="0" r="45" fill="${ctx.validBackgroundColor}" />
+      <circle cx="${ctx.w}" cy="0" r="45" fill="${ctx.validBackgroundColor}" />
+      <circle cx="0" cy="${ctx.h}" r="45" fill="${ctx.validBackgroundColor}" />
+      <circle cx="${ctx.w}" cy="${ctx.h}" r="45" fill="${ctx.validBackgroundColor}" />
+      <line x1="60" y1="0" x2="${ctx.w - 60}" y2="0" stroke="${ctx.validBackgroundColor}" stroke-dasharray="10 15" stroke-width="4" />
+      <line x1="60" y1="${ctx.h}" x2="${ctx.w - 60}" y2="${ctx.h}" stroke="${ctx.validBackgroundColor}" stroke-dasharray="10 15" stroke-width="4" />
+    `;
+  },
+  masking_tape: (ctx, layer) => {
+    let tx = 80;
+    let ty = 80;
+    if (layer.anchor && layer.anchor.includes('bottom')) ty = ctx.h - 120;
+    if (layer.anchor && layer.anchor.includes('right')) tx = ctx.w - 160;
+    return `
+      <!-- Textured realistic tape strip -->
+      <g transform="translate(${tx}, ${ty}) rotate(-12)">
+        <rect x="0" y="0" width="160" height="40" fill="${ctx.validSecondaryColor}" opacity="0.95" filter="drop-shadow(2px 4px 4px rgba(0,0,0,0.15))" />
+        <!-- Jagged edges -->
+        <path d="M 0,0 L -5,10 L 2,20 L -4,30 L 0,40" fill="${ctx.validSecondaryColor}" opacity="0.95" />
+        <path d="M 160,0 L 165,10 L 158,20 L 164,30 L 160,40" fill="${ctx.validSecondaryColor}" opacity="0.95" />
+      </g>
+    `;
+  },
+  glass_card: (ctx, layer) => {
+    return `
+      <rect x="40" y="${ctx.h - 320}" width="${ctx.w - 80}" height="280" rx="16" fill="${ctx.validSecondaryColor}" fill-opacity="0.85" stroke="${ctx.validBrandColor}" stroke-width="1" filter="drop-shadow(0 15px 25px rgba(0,0,0,0.1))" />
+    `;
+  },
+  '3d_ribbon': (ctx, layer) => {
+    return `
+      <!-- Ribbon wrapping around image -->
+      <path d="M -20,120 L ${ctx.w + 20},120 L ${ctx.w + 10},160 L -10,160 Z" fill="${ctx.validBrandColor}" opacity="0.9" filter="drop-shadow(0 5px 10px rgba(0,0,0,0.2))" />
+      <path d="M -20,120 L -20,140 L 0,120 Z" fill="#000000" opacity="0.3" />
+      <path d="M ${ctx.w + 20},120 L ${ctx.w + 20},140 L ${ctx.w},120 Z" fill="#000000" opacity="0.3" />
+    `;
+  },
+  metric_panel: (ctx, layer) => {
+    // A premium glassmorphic weather/data panel
+    const py = ctx.h - 220;
+    return `
+      <g transform="translate(60, ${py})">
+        <rect x="0" y="0" width="${ctx.w - 120}" height="140" rx="20" fill="${ctx.validSecondaryColor}" fill-opacity="0.85" stroke="${ctx.validBrandColor}" stroke-width="1.5" stroke-opacity="0.4" filter="drop-shadow(0 20px 40px rgba(0,0,0,0.2))" />
+        <rect x="20" y="20" width="80" height="100" rx="10" fill="${ctx.validBrandColor}" fill-opacity="0.1" />
+        <text x="60" y="75" text-anchor="middle" font-family="${ctx.brandFont}, sans-serif" font-size="42px" fill="${ctx.dynamicTextColor}" font-weight="900">72°</text>
+        <line x1="120" y1="20" x2="120" y2="120" stroke="${ctx.validBrandColor}" stroke-opacity="0.3" stroke-width="2" />
+        <text x="140" y="55" font-family="${ctx.brandFont}, sans-serif" font-size="14px" fill="${ctx.dynamicTextColor}" opacity="0.7" font-weight="bold" letter-spacing="0.1em" text-transform="uppercase">UV INDEX</text>
+        <text x="140" y="85" font-family="${ctx.brandFont}, sans-serif" font-size="28px" fill="${ctx.dynamicTextColor}" font-weight="bold">Moderate</text>
+        <circle cx="${ctx.w - 180}" cy="70" r="40" fill="none" stroke="${ctx.validBrandColor}" stroke-width="4" stroke-opacity="0.2" />
+        <circle cx="${ctx.w - 180}" cy="70" r="40" fill="none" stroke="${ctx.validBrandColor}" stroke-width="4" stroke-dasharray="140 100" />
+      </g>
+    `;
+  },
+  editorial_sidebar: (ctx, layer) => {
+    // A luxury magazine sidebar
+    return `
+      <g transform="translate(40, 100)">
+        <rect x="0" y="0" width="4" height="${ctx.h - 200}" fill="${ctx.validBrandColor}" />
+        <text x="25" y="40" font-family="${ctx.brandFont}, serif" font-size="12px" fill="${ctx.validBackgroundColor}" font-weight="bold" letter-spacing="0.3em" text-transform="uppercase" transform="rotate(-90, 25, 40)">VOL. 01</text>
+        <text x="25" y="${ctx.h - 220}" font-family="${ctx.brandFont}, serif" font-size="12px" fill="${ctx.validBackgroundColor}" font-weight="bold" letter-spacing="0.3em" text-transform="uppercase" transform="rotate(-90, 25, ${ctx.h - 220})">EDITORIAL</text>
+      </g>
+    `;
+  },
+  status_chip: (ctx, layer) => {
+    return `
+      <g transform="translate(${ctx.w / 2 - 80}, 60)">
+        <rect x="0" y="0" width="160" height="36" rx="18" fill="${ctx.validBrandColor}" opacity="0.9" filter="drop-shadow(0 4px 12px rgba(0,0,0,0.15))" />
+        <text x="80" y="22" text-anchor="middle" font-family="${ctx.brandFont}, sans-serif" font-size="12px" fill="${ctx.validBackgroundColor}" font-weight="bold" letter-spacing="0.2em" text-transform="uppercase">NEW ARRIVAL</text>
+      </g>
+    `;
+  },
+  divider: (ctx, layer) => {
+    return `
+      <line x1="${ctx.w / 2 - 60}" y1="${ctx.h / 2 + 100}" x2="${ctx.w / 2 + 60}" y2="${ctx.h / 2 + 100}" stroke="${ctx.validBrandColor}" stroke-width="2" opacity="0.5" />
+      <circle cx="${ctx.w / 2}" cy="${ctx.h / 2 + 100}" r="4" fill="${ctx.validBackgroundColor}" stroke="${ctx.validBrandColor}" stroke-width="2" />
+    `;
+  }
+};
+
+const renderTextLayer = (ctx: any, layer: IDSLTextLayer): string => {
+  // Safe margins for text
+  const safeX = 60;
+  const safeY = 140;
+  
+  // Resolve X coordinate
+  let x = ctx.w / 2; // Default center
+  if (layer.anchor.includes('left') || layer.anchor === 'edges') x = safeX;
+  if (layer.anchor.includes('right')) x = ctx.w - safeX;
+  
+  // Resolve Y coordinate
+  let y = ctx.h / 2; // Default center
+  if (layer.anchor.includes('top')) y = safeY;
+  if (layer.anchor.includes('bottom')) y = ctx.h - safeY - 40;
+  if (layer.anchor === 'bottom_edge' || layer.anchor === 'edges') y = ctx.h - 80;
+
+  // Face Collision Detection (Safe Zone Awareness)
+  if (layer.anchor.includes('center') && ctx.faceCoordinates) {
+    const face = ctx.faceCoordinates;
+    const textHeightGuess = (ctx.escapedLines?.length || 1) * 40;
+    // If text Y overlaps with face bounding box
+    if (y >= face.y - textHeightGuess && y <= face.y + face.height + textHeightGuess) {
+       // Push text down below the face to the safe background zone
+       y = face.y + face.height + 80;
+       if (y > ctx.h - safeY) {
+         // If it's pushed off screen, push it to the top instead
+         y = Math.max(safeY, face.y - textHeightGuess - 40);
+       }
+    }
+  }
+
+  // Resolve alignment implicitly if not specified, otherwise use specified
+  let anchor = 'start';
+  if (layer.alignment === 'center' || layer.anchor.includes('center')) anchor = 'middle';
+  if (layer.alignment === 'right' || layer.anchor.includes('right')) anchor = 'end';
+  if (layer.alignment === 'left' || layer.anchor.includes('left')) anchor = 'start';
+
+  // Override if explicit alignment is provided
+  if (layer.alignment === 'center') anchor = 'middle';
+  if (layer.alignment === 'right') anchor = 'end';
+  if (layer.alignment === 'left') anchor = 'start';
+
+  // Luxury Typography Engine (Mixes weights, styles, and sizes based on role)
+  let fontSize = ctx.dynamicFontSize;
+  let fontWeight = 'normal';
+  let fontStyle = 'normal';
+  let fill = ctx.dynamicTextColor;
+  let letterSpacing = 'normal';
+
+  if (layer.role === 'heading') {
+    fontSize = ctx.dynamicFontSize + 16;
+    fontWeight = '900'; // Extra bold hook
+    letterSpacing = '-0.02em';
+  } else if (layer.role === 'tagline' || layer.role === 'footnote') {
+    fontSize = ctx.dynamicFontSize - 4;
+    fontStyle = 'italic'; // Elegant small caps / italic
+    fill = ctx.validSecondaryColor || ctx.dynamicTextColor;
+    letterSpacing = '0.05em';
+  } else if (layer.role === 'body') {
+    fontSize = ctx.dynamicFontSize;
+    fontWeight = '300'; // Light, elegant body
+  }
+
+  // Multiline text handling
+  let content = '';
+  if (layer.role === 'tagline' || layer.role === 'footnote') {
+    content = ctx.escapedLines.map((line: string, idx: number) => `<tspan x="${x}" dy="${idx === 0 ? 0 : 25}">${line}</tspan>`).join('');
+  } else {
+    content = ctx.escapedLines.map((line: string, idx: number) => `<tspan x="${x}" dy="${idx === 0 ? 0 : ctx.dyOffset + 10}">${line}</tspan>`).join('');
+  }
+
+  return `<text x="${x}" y="${y}" text-anchor="${anchor}" class="overlay-text" style="font-family: '${ctx.brandFont}', sans-serif; font-size: ${fontSize}px; fill: ${fill}; font-weight: ${fontWeight}; font-style: ${fontStyle}; letter-spacing: ${letterSpacing}; text-shadow: 0 2px 10px rgba(0,0,0,0.15);">${content}</text>`;
+};
+
 
 // ── Base image treatments (Step 1) ──────────────────────────────────────────
 
@@ -171,81 +386,29 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
   },
 
   universal_dynamic_base: async (ctx) => {
-    // Read the semantic metadata of the AI-selected template
-    const metadata = (templateLibraryData as any)[ctx.layoutType] || {};
+    const dsl = (compiledLayouts as any)[ctx.layoutType] as ICompiledLayoutDSL;
     
-    // Parse the image_mask from metadata
-    const imageMask = (metadata.image_mask || '').toLowerCase();
-    const concept = (metadata.concept || '').toLowerCase();
-    const category = (metadata.category || '').toLowerCase();
-    
-    const isSplit = imageMask.includes('split') || concept.includes('split') || category.includes('split');
-    const isCircle = imageMask.includes('circle') || imageMask.includes('round');
-    const isArch = imageMask.includes('arch');
-    const isInset = imageMask.includes('inset');
-
-    if (isSplit) {
-      // Dynamic Split Screen MVP
-      const halfW = Math.floor(ctx.w / 2);
-      const splitPhoto = await processPortraitFit(ctx.imageBuffer, halfW, ctx.h, ctx.validBackgroundColor);
-      const baseImage = sharp({
-        create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor },
-      }).composite([
-        { input: splitPhoto, top: 0, left: 0 }
-      ]);
-      return { baseImage, compositeTop: ctx.paddingTop, compositeBottom: ctx.paddingBottom, compositeLeft: halfW + ctx.paddingX, compositeRight: ctx.paddingX };
-    } else if (isCircle) {
-      // Dynamic Circle Mask MVP
-      try {
-        const minDim = Math.min(ctx.innerW, ctx.innerH);
-        const r = minDim / 2;
-        const cx = ctx.innerW / 2;
-        const cy = ctx.innerH / 2;
-        const circlePhoto = await processPortraitFit(ctx.imageBuffer, ctx.innerW, ctx.innerH, ctx.validBackgroundColor);
-        const circleMask = Buffer.from(
-          `<svg width="${ctx.innerW}" height="${ctx.innerH}">
-             <circle cx="${cx}" cy="${cy}" r="${r}" fill="white" />
-           </svg>`
-        );
-        const maskedImage = await sharp(circlePhoto)
-          .composite([{ input: circleMask, blend: 'dest-in' }])
-          .png()
-          .toBuffer();
-
-        const baseImage = sharp({
-          create: { width: ctx.innerW, height: ctx.innerH, channels: 3, background: ctx.validSecondaryColor },
-        }).composite([{ input: maskedImage, top: 0, left: 0 }]);
-        return { baseImage, compositeTop: ctx.paddingTop, compositeBottom: ctx.paddingBottom, compositeLeft: ctx.paddingX, compositeRight: ctx.paddingX };
-      } catch (err) {
-        return fullBleedBase(ctx);
+    if (dsl && dsl.layers) {
+      const imageLayer = dsl.layers.find(l => l.type === 'image') as IDSLImageLayer;
+      if (imageLayer) {
+        if (imageLayer.mask === 'split') {
+          const halfW = Math.floor(ctx.w / 2);
+          const splitPhoto = await processPortraitFit(ctx.imageBuffer, halfW, ctx.h, ctx.validBackgroundColor);
+          const baseImage = sharp({
+            create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor },
+          }).composite([{ input: splitPhoto, top: 0, left: 0 }]);
+          return { baseImage, compositeTop: ctx.paddingTop, compositeBottom: ctx.paddingBottom, compositeLeft: halfW + ctx.paddingX, compositeRight: ctx.paddingX };
+        } else if (imageLayer.mask === 'circle') {
+          // Circle mask logic
+          return fullBleedBase(ctx);
+        } else if (imageLayer.mask === 'die_cut' || imageLayer.paddingPercent > 0) {
+          return borderedDefault(ctx);
+        }
       }
-    } else if (isArch) {
-      // Dynamic Arch Mask MVP
-      try {
-        const archPhoto = await processPortraitFit(ctx.imageBuffer, ctx.innerW, ctx.innerH, ctx.validBackgroundColor);
-        const archMask = Buffer.from(
-          `<svg width="${ctx.innerW}" height="${ctx.innerH}">
-             <path d="M0 ${ctx.innerW / 2} A ${ctx.innerW / 2} ${ctx.innerW / 2} 0 0 1 ${ctx.innerW} ${ctx.innerW / 2} V ${ctx.innerH} H 0 Z" fill="white" />
-           </svg>`
-        );
-        const maskedImage = await sharp(archPhoto)
-          .composite([{ input: archMask, blend: 'dest-in' }])
-          .png()
-          .toBuffer();
-
-        const baseImage = sharp({
-          create: { width: ctx.innerW, height: ctx.innerH, channels: 3, background: ctx.validSecondaryColor },
-        }).composite([{ input: maskedImage, top: 0, left: 0 }]);
-        return { baseImage, compositeTop: ctx.paddingTop, compositeBottom: ctx.paddingBottom, compositeLeft: ctx.paddingX, compositeRight: ctx.paddingX };
-      } catch (err) {
-        return fullBleedBase(ctx);
-      }
-    } else if (isInset) {
-      return borderedDefault(ctx);
-    } else {
-      // Fallback: standard full bleed image
-      return fullBleedBase(ctx);
     }
+    
+    // Fallback: standard full bleed image
+    return fullBleedBase(ctx);
   },
 
   polaroid_stack: async (ctx) => {
@@ -572,78 +735,15 @@ export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
         ${ctx.escapedSpacedName}
       </text>
       <text x="${ctx.w - 50}" y="${ctx.h - 50}" class="overlay-text text-right" style="font-size: 20px; fill: ${ctx.dynamicTextColor}; letter-spacing: 2px;">
-        ${ctx.escapedLines.map((line, idx) => `<tspan x="${ctx.w - 50}" dy="${idx === 0 ? 0 : 25}">${line}</tspan>`).join('')}
+        ${ctx.escapedLines.map((line: string, idx: number) => `<tspan x="${ctx.w - 50}" dy="${idx === 0 ? 0 : 25}">${line}</tspan>`).join('')}
       </text>`;
   },
 
   universal_dynamic_text: (ctx) => {
-    const metadata = (templateLibraryData as any)[ctx.layoutType] || {};
-    const textRegionsStr = (metadata.visual_structure?.text_regions || metadata.visual_structure || '').toLowerCase();
-    const concept = (metadata.concept || '').toLowerCase();
-    
-    const isScattered = textRegionsStr.includes('scattered') || concept.includes('cloud') || concept.includes('floating');
-    const isSide = textRegionsStr.includes('side') || textRegionsStr.includes('vertical');
-    const isBottomLeft = textRegionsStr.includes('bottom-left') || textRegionsStr.includes('bottom left');
-    const isBottom = textRegionsStr.includes('bottom') || textRegionsStr.includes('beneath');
-    const isTop = textRegionsStr.includes('top');
-    const isMinimalCorner = concept.includes('corner') || concept.includes('minimal');
-
-    if (isScattered) {
-      // Dynamic Scattered Word Cloud MVP
-      let svg = '';
-      const words = ctx.overlayText.split(/\s+/);
-      let currentY = 150;
-      words.forEach((word, index) => {
-        // Scatter x between 20% and 80% of width
-        const x = (ctx.w * 0.2) + (Math.random() * (ctx.w * 0.6));
-        svg += `
-          <text x="${x}" y="${currentY}" text-anchor="middle" class="overlay-text" style="font-size: ${ctx.dynamicFontSize + (Math.random() * 20)}px; fill: ${ctx.dynamicTextColor}; font-weight: ${index % 2 === 0 ? 'bold' : 'normal'};">
-            ${ctx.escapeXml(word)}
-          </text>`;
-        currentY += ctx.dyOffset + 20;
-      });
-      return svg;
-    } else if (isSide) {
-      // Dynamic Side Rotated MVP
-      return `
-        <!-- Dynamic Side Rotated Text Block -->
-        <text x="${ctx.w - 40}" y="${ctx.h / 2}" text-anchor="middle" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-weight="bold" font-size="18px" fill="${ctx.dynamicTextColor}" fill-opacity="0.8" letter-spacing="4px" transform="rotate(90 ${ctx.w - 40} ${ctx.h / 2})">${ctx.escapedSpacedName}</text>
-        <text x="60" y="120" class="overlay-text text-left" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.dynamicTextColor};">
-          ${tspans(ctx, '60')}
-        </text>`;
-    } else if (isBottomLeft) {
-      return `
-        <!-- Dynamic Bottom Left Poster Block -->
-        <text x="40" y="${ctx.h - (ctx.lines.length * ctx.dyOffset) - 60}" class="overlay-text text-left" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.dynamicTextColor}; font-weight: bold;">
-          ${tspans(ctx, '40')}
-        </text>`;
-    } else if (isBottom && !isTop) {
-      return `
-        <!-- Dynamic Bottom Block -->
-        <text x="${ctx.w / 2}" y="${ctx.h - (ctx.lines.length * ctx.dyOffset) - 60}" class="overlay-text text-centered" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.dynamicTextColor}; font-weight: bold;">
-          ${tspans(ctx, `${ctx.w / 2}`)}
-        </text>`;
-    } else if (isTop) {
-      return `
-        <!-- Dynamic Top Block -->
-        <text x="${ctx.w / 2}" y="100" class="overlay-text text-centered" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.dynamicTextColor}; font-weight: bold;">
-          ${tspans(ctx, `${ctx.w / 2}`)}
-        </text>`;
-    } else if (isMinimalCorner) {
-      return TEXT_TEMPLATES.minimalist_corner_text(ctx);
-    } else {
-      // Sleek Centered Editorial MVP
-      const textHeight = ctx.lines.length * ctx.dyOffset;
-      const defaultY = ctx.h / 2;
-      const safeY = calculateDodgedY(ctx, defaultY, textHeight);
-      const startY = safeY - (textHeight / 2);
-      
-      return `
-        <!-- Dynamic Centered Editorial Block -->
-        <text x="${ctx.w / 2}" y="${startY}" class="overlay-text text-centered" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.dynamicTextColor}; letter-spacing: 2px;">
-          ${tspans(ctx, `${ctx.w / 2}`)}
-        </text>`;
-    }
+    // Under the Tripartite architecture, text rendering is handled in a single Scene Graph loop 
+    // inside universal_dynamic_deco to guarantee strict zIndex ordering. 
+    // This phase returns empty so we don't render duplicate text.
+    return '';
   },
 };
 
@@ -664,6 +764,12 @@ export type DecoCtx = {
   brandFont: string;
   rawName: string;
   photoDataUri: string;
+  escapedLines: string[];
+  dyOffset: number;
+  dynamicFontSize: number;
+  dynamicTextColor: string;
+  overlayText: string;
+  maxLength: number;
 };
 
 export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
@@ -743,78 +849,40 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
   },
 
   universal_dynamic_deco: (ctx) => {
-    const metadata = (templateLibraryData as any)[ctx.layoutType] || {};
-    
-    // Fix: decorative_elements is an array on the root metadata object
-    const decoArray = Array.isArray(metadata.decorative_elements) ? metadata.decorative_elements : [];
-    const decoStr = decoArray.join(' ').toLowerCase();
-    
-    const isFrame = decoStr.includes('frame') || decoStr.includes('border') || decoStr.includes('mat');
-    const isFilm = decoStr.includes('film') || decoStr.includes('sprocket');
-    const isTicket = decoStr.includes('ticket') || decoStr.includes('notch');
-    const isWaxSeal = decoStr.includes('wax seal') || decoStr.includes('emblem') || decoStr.includes('badge');
+    const dsl = (compiledLayouts as any)[ctx.layoutType] as ICompiledLayoutDSL;
+    if (!dsl || !dsl.layers) return '';
 
     let svg = '';
-
-    if (isFilm) {
-      // Dynamic Film Sprockets MVP
-      const holeCount = 8;
-      const holeSpacing = ctx.innerH / holeCount;
-      let holes = '';
-      for (let i = 0; i <= holeCount; i++) {
-        const cy = ctx.paddingTop + i * holeSpacing;
-        holes += `<rect x="${Math.round(ctx.paddingX * 0.3)}" y="${cy - 10}" width="16" height="20" rx="3" fill="${ctx.validBrandColor}" /><rect x="${ctx.w - Math.round(ctx.paddingX * 0.3) - 16}" y="${cy - 10}" width="16" height="20" rx="3" fill="${ctx.validBrandColor}" />`;
-      }
-      svg += `<!-- Dynamic Film Sprocket Perforations -->${holes}`;
-    } else if (isTicket) {
-      // Dynamic Ticket Notches MVP
-      const notchY1 = ctx.paddingTop;
-      const notchY2 = ctx.h - ctx.paddingBottom;
-      const notchCount = 10;
-      const notchSpacing = ctx.innerW / notchCount;
-      let notches = '';
-      for (let i = 0; i <= notchCount; i++) {
-        const cx = ctx.paddingX + i * notchSpacing;
-        notches += `<circle cx="${cx}" cy="${notchY1}" r="9" fill="${ctx.validBrandColor}" /><circle cx="${cx}" cy="${notchY2}" r="9" fill="${ctx.validBrandColor}" />`;
-      }
-      svg += `
-        <!-- Dynamic Ticket Notches -->
-        <rect x="${ctx.paddingX}" y="${ctx.paddingTop}" width="${ctx.innerW}" height="${ctx.innerH}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="3" stroke-dasharray="14 10" />
-        ${notches}`;
-    } else if (isFrame) {
-      // Minimal Gallery Frame MVP
-      svg += `
-        <!-- Dynamic Minimal Gallery Frame -->
-        <rect x="20" y="20" width="${ctx.w - 40}" height="${ctx.h - 40}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="2" stroke-opacity="0.8" />
-        <rect x="35" y="35" width="${ctx.w - 70}" height="${ctx.h - 70}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="0.5" stroke-opacity="0.5" />`;
-    }
     
-    if (isWaxSeal) {
-      const cx = ctx.w - 80;
-      const cy = 80;
-      const r = 45;
-      const initial = ctx.rawName ? ctx.rawName.charAt(0).toUpperCase() : 'E';
-      svg += `
-        <!-- Dynamic Wax Seal / Emblem -->
-        <circle cx="${cx}" cy="${cy}" r="${r}" fill="${ctx.validBrandColor}" fill-opacity="0.9" stroke="${ctx.validSecondaryColor}" stroke-width="2" />
-        <circle cx="${cx}" cy="${cy}" r="${r - 5}" fill="none" stroke="${ctx.validSecondaryColor}" stroke-width="1" stroke-dasharray="2 2" />
-        <text x="${cx}" y="${cy + 15}" text-anchor="middle" font-family="'${ctx.brandFont}', Georgia, serif" font-weight="bold" font-size="40px" fill="${ctx.validSecondaryColor}">${initial}</text>
-      `;
+    // Sort all text and decoration layers by zIndex
+    const overlayLayers = dsl.layers.filter(l => l.type === 'decoration' || l.type === 'text');
+    overlayLayers.sort((a, b) => a.zIndex - b.zIndex);
+
+    // Iteratively render each layer using the Component Registry
+    for (const layer of overlayLayers) {
+      if (layer.type === 'decoration') {
+        const componentName = (layer as IDSLDecorationLayer).component;
+        if (!componentName) continue;
+        
+        const decoFn = ComponentRegistry[componentName];
+        if (decoFn) {
+          svg += decoFn(ctx, layer as IDSLDecorationLayer);
+        } else {
+          // Strict Validation: Unknown components fail loudly
+          console.error(`[Renderer Sprint] CRITICAL ERROR: Component '${componentName}' requested by DSL but not found in ComponentRegistry!`);
+          // Render a visible placeholder block so developers see the missing component immediately
+          svg += `
+            <g transform="translate(40, ${Math.floor(Math.random() * (ctx.h - 100))})">
+              <rect width="300" height="40" fill="red" opacity="0.8" />
+              <text x="10" y="25" fill="white" font-weight="bold" font-family="sans-serif">MISSING COMPONENT: ${componentName}</text>
+            </g>
+          `;
+        }
+      } else if (layer.type === 'text') {
+        svg += renderTextLayer(ctx, layer as IDSLTextLayer);
+      }
     }
 
-    if (!isFilm && !isTicket && !isFrame && !isWaxSeal) {
-      // Heavy Gradient Scrim MVP (Fallback)
-      svg += `
-        <!-- Dynamic Contrast Gradient Scrim -->
-        <defs>
-          <linearGradient id="dynamicScrim_${ctx.layoutType}" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stop-color="${ctx.validBackgroundColor}" stop-opacity="0.1" />
-            <stop offset="100%" stop-color="${ctx.validBackgroundColor}" stop-opacity="0.85" />
-          </linearGradient>
-        </defs>
-        <rect x="0" y="${ctx.h * 0.4}" width="${ctx.w}" height="${ctx.h * 0.6}" fill="url(#dynamicScrim_${ctx.layoutType})" />`;
-    }
-    
     return svg;
   },
 };
