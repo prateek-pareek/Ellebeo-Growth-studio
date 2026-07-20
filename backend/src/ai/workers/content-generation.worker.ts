@@ -31,8 +31,7 @@ const bullMQConnection = {
 
 type NotifyFn = (dto: { tenantId: string; type: string; title: string; body: string; data?: Record<string, unknown> }) => Promise<void>;
 
-export function startContentGenerationWorker(io: SocketServer, notifyFn?: NotifyFn): Worker<GenerationJobPayload> {
-  const prisma = new PrismaClient();
+export function startContentGenerationWorker(prisma: PrismaClient, io: SocketServer, notifyFn?: NotifyFn): Worker<GenerationJobPayload> {
   const redis = getRedisClient();
 
   const progressEmitter = new JobProgressEmitter(io);
@@ -142,8 +141,7 @@ export function startContentGenerationWorker(io: SocketServer, notifyFn?: Notify
 
       await deadLetterQueue.add(`dlq:${job.data.jobId}`, dlqPayload);
 
-      // Save to failed_jobs table
-      const prisma = new PrismaClient();
+      // Save to failed_jobs table using the injected prisma client
       try {
         await prisma.$executeRaw`
           INSERT INTO platform.failed_jobs (
@@ -159,8 +157,8 @@ export function startContentGenerationWorker(io: SocketServer, notifyFn?: Notify
           )
           ON CONFLICT DO NOTHING
         `;
-      } finally {
-        await prisma.$disconnect();
+      } catch (logErr) {
+        console.error('[Worker DLQ] Failed to save to failed_jobs table:', logErr);
       }
     }
   });

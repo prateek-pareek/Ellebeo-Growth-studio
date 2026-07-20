@@ -65,6 +65,7 @@ export interface IDSLTextLayer extends IDSLBaseLayer {
   anchor: LayoutAnchor;
   alignment: 'left' | 'center' | 'right';
   maxWidthPercent: number; // restricts text from hitting edges
+  component?: string; // Optional background decoration component
 }
 
 export type IDSLSceneLayer = IDSLImageLayer | IDSLDecorationLayer | IDSLTextLayer;

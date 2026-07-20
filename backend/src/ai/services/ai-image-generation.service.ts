@@ -1186,7 +1186,9 @@ CRITICAL IMAGE REQUIREMENTS:
         layoutType, w, h, paddingX, paddingTop, paddingBottom, innerW, innerH,
         validBrandColor, validSecondaryColor, validBackgroundColor, validAccentColor, brandFont, rawName, photoDataUri,
         escapedLines, dyOffset, dynamicFontSize, dynamicTextColor, overlayText: finalOverlayText, maxLength,
+        faceCoordinates: visionResult?.faceCoordinates,
       };
+
       const visualAdditions = template.decoration
         ? (DECORATIONS[template.decoration]?.(decoCtx) ?? '')
         : '';

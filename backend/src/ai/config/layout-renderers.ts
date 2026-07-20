@@ -829,6 +829,7 @@ export type DecoCtx = {
   dynamicTextColor: string;
   overlayText: string;
   maxLength: number;
+  faceCoordinates?: any;
 };
 
 export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
@@ -938,7 +939,20 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           `;
         }
       } else if (layer.type === 'text') {
-        svg += renderTextLayer(ctx, layer as IDSLTextLayer);
+        const textLayer = layer as IDSLTextLayer;
+        
+        // If the text layer defines a background component (e.g. editorial_sidebar, metric_panel), render it FIRST
+        if (textLayer.component) {
+          const decoFn = ComponentRegistry[textLayer.component];
+          if (decoFn) {
+            svg += decoFn(ctx, layer as any);
+          } else {
+            console.error(`[Renderer Sprint] CRITICAL ERROR: Text Component '${textLayer.component}' not found in ComponentRegistry!`);
+          }
+        }
+        
+        // Then render the text on top
+        svg += renderTextLayer(ctx, textLayer);
       }
     }
 
