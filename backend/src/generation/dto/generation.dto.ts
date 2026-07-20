@@ -48,6 +48,14 @@ export class GenerateContentDto {
   @IsOptional()
   @MaxLength(500)
   customInstruction?: string;
+
+  // Slug of the structural Template the tenant picked from the gallery (see
+  // Template model / /templates API). Resolved server-side to that template's
+  // rendererKey and passed to the orchestrator as a layout hint — the AI
+  // layout agent is bypassed in favour of the tenant's explicit pick.
+  @IsString()
+  @IsOptional()
+  templateSlug?: string;
 }
 
 export class TweakContentDto {

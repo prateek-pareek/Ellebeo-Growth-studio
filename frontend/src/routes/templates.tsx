@@ -277,7 +277,7 @@ function TemplateCard({ template: t }: { template: Template }) {
         {/* CTA */}
         <Link
           to="/generate"
-          search={{ templateGoal: t.goal, templateFormat: t.type, templateCategories: t.categories.join(',') }}
+          search={{ templateGoal: t.goal, templateFormat: t.type, templateCategories: t.categories.join(','), templateSlug: t.slug }}
           className="inline-flex items-center justify-center gap-2 bg-foreground text-offwhite text-[10px] font-semibold uppercase tracking-widest px-4 py-2.5 rounded-xl hover:bg-taupe active:scale-[0.97] transition-all"
         >
           <Icon className="size-3" />

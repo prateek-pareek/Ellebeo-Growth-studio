@@ -20,6 +20,10 @@ type SeedTemplate = {
   description: string;
   slideCount: number | null;
   zones: Zone[];
+  // Real key from layout-templates.config.json — lets generation honour this
+  // exact structure when the tenant picks this template explicitly. Left null
+  // for reel/tiktok formats, which don't go through the SVG/Sharp image renderer.
+  rendererKey: string | null;
   sortOrder: number;
 };
 
@@ -37,6 +41,7 @@ const TEMPLATES: SeedTemplate[] = [
     description: '3 slides: starting hair, the technique, the reveal. Caption fills from your appointment notes.',
     slideCount: 3,
     zones: zones(['photo', 'Starting hair'], ['photo', 'The technique'], ['photo', 'The reveal']),
+    rendererKey: 'split_before_after',
     sortOrder: 1,
   },
   {
@@ -49,6 +54,7 @@ const TEMPLATES: SeedTemplate[] = [
     description: 'Soft pre/post + a close-up of the eye look. Built around natural light photography.',
     slideCount: 3,
     zones: zones(['photo', 'Before'], ['photo', 'After'], ['photo', 'Eye look close-up']),
+    rendererKey: 'split_before_after',
     sortOrder: 2,
   },
   {
@@ -65,6 +71,7 @@ const TEMPLATES: SeedTemplate[] = [
       ['text', 'What it does for the eye shape'],
       ['text', 'Aftercare basics'],
     ),
+    rendererKey: 'text_only_editorial',
     sortOrder: 3,
   },
   {
@@ -77,6 +84,7 @@ const TEMPLATES: SeedTemplate[] = [
     description: '15-second slow pan over the finished set with hand styling.',
     slideCount: null,
     zones: zones(['video', 'Slow pan over finished set']),
+    rendererKey: null,
     sortOrder: 4,
   },
   {
@@ -94,6 +102,7 @@ const TEMPLATES: SeedTemplate[] = [
       ['text', 'Aftercare'],
       ['cta', 'Booking CTA'],
     ),
+    rendererKey: 'text_only_editorial',
     sortOrder: 5,
   },
   {
@@ -111,6 +120,7 @@ const TEMPLATES: SeedTemplate[] = [
       ['video', 'Beard sculpt'],
       ['video', 'Finish'],
     ),
+    rendererKey: null,
     sortOrder: 6,
   },
   {
@@ -123,6 +133,7 @@ const TEMPLATES: SeedTemplate[] = [
     description: 'Pull a sentence from a review, set on linen background.',
     slideCount: 1,
     zones: zones(['quote', 'Client review quote']),
+    rendererKey: 'testimonial_card',
     sortOrder: 7,
   },
   {
@@ -140,6 +151,7 @@ const TEMPLATES: SeedTemplate[] = [
       ['photo', 'Hands working'],
       ['photo', 'Finished blow-out'],
     ),
+    rendererKey: 'filmstrip_grid',
     sortOrder: 8,
   },
   {
@@ -152,6 +164,7 @@ const TEMPLATES: SeedTemplate[] = [
     description: '20-second reel promoting open slots this week.',
     slideCount: null,
     zones: zones(['video', 'Open slots teaser'], ['cta', 'Booking CTA']),
+    rendererKey: null,
     sortOrder: 9,
   },
   {
@@ -168,6 +181,7 @@ const TEMPLATES: SeedTemplate[] = [
       ['text', 'Treatment breakdown'],
       ['cta', 'Booking CTA'],
     ),
+    rendererKey: 'split_before_after',
     sortOrder: 10,
   },
   {
@@ -186,6 +200,7 @@ const TEMPLATES: SeedTemplate[] = [
       ['text', 'Tip 4'],
       ['text', 'Tip 5'],
     ),
+    rendererKey: 'text_only_editorial',
     sortOrder: 11,
   },
   {
@@ -198,6 +213,7 @@ const TEMPLATES: SeedTemplate[] = [
     description: 'Close-up reel showing the mapping, wax, and final shape with commentary.',
     slideCount: null,
     zones: zones(['video', 'Mapping'], ['video', 'Wax'], ['video', 'Final shape']),
+    rendererKey: null,
     sortOrder: 12,
   },
   {
@@ -215,6 +231,7 @@ const TEMPLATES: SeedTemplate[] = [
       ['photo', 'Close-up detail'],
       ['cta', 'Full reveal with CTA'],
     ),
+    rendererKey: 'split_before_after',
     sortOrder: 13,
   },
   {
@@ -232,6 +249,7 @@ const TEMPLATES: SeedTemplate[] = [
       ['photo', 'In-progress shot'],
       ['photo', 'Finished result'],
     ),
+    rendererKey: 'filmstrip_grid',
     sortOrder: 14,
   },
   {
@@ -249,6 +267,7 @@ const TEMPLATES: SeedTemplate[] = [
       ['text', 'Tip frame 3'],
       ['text', 'Tip frame 4'],
     ),
+    rendererKey: 'text_only_editorial',
     sortOrder: 15,
   },
   {
@@ -266,6 +285,7 @@ const TEMPLATES: SeedTemplate[] = [
       ['text', 'Poll sticker'],
       ['cta', 'DM CTA'],
     ),
+    rendererKey: 'poster_cover',
     sortOrder: 16,
   },
   {
@@ -283,6 +303,7 @@ const TEMPLATES: SeedTemplate[] = [
       ['photo', 'Result'],
       ['quote', "Client's quote"],
     ),
+    rendererKey: 'testimonial_card',
     sortOrder: 17,
   },
   {
@@ -295,6 +316,7 @@ const TEMPLATES: SeedTemplate[] = [
     description: 'One hero photo of the finished set, caption built from client notes and your Brand DNA voice.',
     slideCount: 1,
     zones: zones(['photo', 'Hero photo — finished set']),
+    rendererKey: 'full_bleed_clean',
     sortOrder: 18,
   },
   {
@@ -307,6 +329,7 @@ const TEMPLATES: SeedTemplate[] = [
     description: 'Single image post explaining why you switched a product or technique. Builds authority.',
     slideCount: 1,
     zones: zones(['photo', 'Hero image']),
+    rendererKey: 'text_only_editorial',
     sortOrder: 19,
   },
   {
@@ -319,6 +342,7 @@ const TEMPLATES: SeedTemplate[] = [
     description: 'Quick availability post with a direct booking CTA. Written in your tone with urgency.',
     slideCount: 1,
     zones: zones(['photo', 'Hero image'], ['cta', 'Booking CTA']),
+    rendererKey: 'poster_cover',
     sortOrder: 20,
   },
   {
@@ -331,6 +355,7 @@ const TEMPLATES: SeedTemplate[] = [
     description: 'Pull a line from a client review, pair with a result photo. Caption does the storytelling.',
     slideCount: 1,
     zones: zones(['photo', 'Result photo'], ['quote', 'Client review line']),
+    rendererKey: 'testimonial_card',
     sortOrder: 21,
   },
   {
@@ -343,6 +368,7 @@ const TEMPLATES: SeedTemplate[] = [
     description: 'Single image with a punchy conversion caption. Drives traffic directly to your booking link.',
     slideCount: 1,
     zones: zones(['photo', 'Hero image'], ['cta', 'Booking CTA']),
+    rendererKey: 'bold_editorial_poster',
     sortOrder: 22,
   },
   {
@@ -355,6 +381,7 @@ const TEMPLATES: SeedTemplate[] = [
     description: 'Fast-cut before → process → reveal. Hook in the first 3 seconds, trending audio cue.',
     slideCount: null,
     zones: zones(['video', 'Before'], ['video', 'Process'], ['video', 'Reveal']),
+    rendererKey: null,
     sortOrder: 23,
   },
   {
@@ -367,6 +394,7 @@ const TEMPLATES: SeedTemplate[] = [
     description: 'Break down one technique in 30 seconds. Text overlays + voiceover script from your Brand DNA.',
     slideCount: null,
     zones: zones(['video', 'Technique breakdown']),
+    rendererKey: null,
     sortOrder: 24,
   },
   {
@@ -384,6 +412,7 @@ const TEMPLATES: SeedTemplate[] = [
       ['video', 'Process'],
       ['video', 'Finish'],
     ),
+    rendererKey: null,
     sortOrder: 25,
   },
   {
@@ -396,6 +425,7 @@ const TEMPLATES: SeedTemplate[] = [
     description: 'Short punchy TikTok calling out remaining slots. Drives immediate DM or booking link taps.',
     slideCount: null,
     zones: zones(['video', 'Urgency hook'], ['cta', 'Booking CTA']),
+    rendererKey: null,
     sortOrder: 26,
   },
 ];
@@ -415,6 +445,7 @@ async function main() {
         description: t.description,
         slideCount: t.slideCount,
         zones: t.zones as any,
+        rendererKey: t.rendererKey,
         sortOrder: t.sortOrder,
         isActive: true,
       },
@@ -428,6 +459,7 @@ async function main() {
         description: t.description,
         slideCount: t.slideCount,
         zones: t.zones as any,
+        rendererKey: t.rendererKey,
         sortOrder: t.sortOrder,
       },
     });

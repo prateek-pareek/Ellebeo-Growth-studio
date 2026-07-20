@@ -183,6 +183,9 @@ export interface GenerationJobPayload {
   goldenExamples: GoldenExample[];
   createdAt: string;
   priority: 1 | 5;
+  // Structural Template.rendererKey resolved from GenerateContentDto.templateSlug,
+  // when the job originated from the tenant explicitly picking a gallery template.
+  layoutHint?: string | null;
 }
 
 // ---------------------------------------------------------------------------

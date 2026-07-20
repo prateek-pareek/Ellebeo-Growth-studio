@@ -438,7 +438,14 @@ export class GenerationOrchestrator {
     }
 
     // ── Step 3.5: Template Agent Layout Selection ─────────────────────────────
-    if (captionResult) {
+    // A tenant who explicitly picked a structural Template from the gallery
+    // (payload.layoutHint, resolved from Template.rendererKey) gets exactly
+    // that structure — the AI art director is only consulted when generation
+    // was started freeform, without a specific template chosen.
+    if (payload.layoutHint) {
+      determinedGrid.layout = payload.layoutHint;
+      console.log(`[TEMPLATE AGENT] Bypassed — using tenant's explicit template layout hint: ${determinedGrid.layout}`);
+    } else if (captionResult) {
       try {
         const isCarouselOpt = (generationOptions.outputFormats as string[]).includes('carousel');
         const agentDecision = await this.templateAgent.selectTemplate({

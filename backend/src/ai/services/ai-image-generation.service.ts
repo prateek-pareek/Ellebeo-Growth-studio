@@ -1078,7 +1078,7 @@ CRITICAL IMAGE REQUIREMENTS:
       const innerH = h - (paddingTop + paddingBottom);
 
       // â”€â”€ Step 1: Process Base Image â€” dispatched from layout-templates.config.json â”€â”€
-      const template = resolveLayoutTemplate(layoutType);
+      const template = resolveLayoutTemplate(layoutType, visualRanking);
 
       const baseResult = await BASE_TREATMENTS[template.base]!({
         layoutType,
@@ -1168,7 +1168,7 @@ CRITICAL IMAGE REQUIREMENTS:
 
       const decoCtx = {
         layoutType, w, h, paddingX, paddingTop, paddingBottom, innerW, innerH,
-        validBrandColor, validSecondaryColor, validBackgroundColor, brandFont, rawName, photoDataUri,
+        validBrandColor, validSecondaryColor, validBackgroundColor, validAccentColor, brandFont, rawName, photoDataUri,
         escapedLines, dyOffset, dynamicFontSize, dynamicTextColor, overlayText: finalOverlayText, maxLength,
       };
       const visualAdditions = template.decoration
