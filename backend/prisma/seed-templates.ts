@@ -1,0 +1,446 @@
+import { PrismaClient, TemplateFormat } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+// Structural template library — no colours, fonts, or images here.
+// `zones` is an ordered list of content purposes only (photo/text/quote/cta/video);
+// styling for every zone comes from the active tenant's Brand DNA at render time.
+// Source: the format/pillar/category/goal facts previously hardcoded in
+// frontend/src/lib/providers/template-provider.ts (STATIC_TEMPLATES), with
+// slide/frame structure extracted from each template's description.
+type Zone = { order: number; type: 'photo' | 'text' | 'quote' | 'cta' | 'video'; label: string };
+
+type SeedTemplate = {
+  slug: string;
+  name: string;
+  format: TemplateFormat;
+  pillar: string;
+  categories: string[];
+  goal: string;
+  description: string;
+  slideCount: number | null;
+  zones: Zone[];
+  sortOrder: number;
+};
+
+const zones = (...entries: [Zone['type'], string][]): Zone[] =>
+  entries.map(([type, label], i) => ({ order: i + 1, type, label }));
+
+const TEMPLATES: SeedTemplate[] = [
+  {
+    slug: 'colour-transformation',
+    name: 'Before & after — colour transformation',
+    format: 'carousel',
+    pillar: 'Transformations',
+    categories: ['Hairdresser', 'Colourist'],
+    goal: 'showcase',
+    description: '3 slides: starting hair, the technique, the reveal. Caption fills from your appointment notes.',
+    slideCount: 3,
+    zones: zones(['photo', 'Starting hair'], ['photo', 'The technique'], ['photo', 'The reveal']),
+    sortOrder: 1,
+  },
+  {
+    slug: 'bridal-trial-reveal',
+    name: 'Bridal trial reveal',
+    format: 'carousel',
+    pillar: 'Transformations',
+    categories: ['Bridal Makeup'],
+    goal: 'showcase',
+    description: 'Soft pre/post + a close-up of the eye look. Built around natural light photography.',
+    slideCount: 3,
+    zones: zones(['photo', 'Before'], ['photo', 'After'], ['photo', 'Eye look close-up']),
+    sortOrder: 2,
+  },
+  {
+    slug: 'lash-mapping-explainer',
+    name: 'Lash mapping explainer',
+    format: 'carousel',
+    pillar: 'Education',
+    categories: ['Lash & Brow'],
+    goal: 'educate',
+    description: '3 slides on how you map a set, what it does for the eye shape, and aftercare basics.',
+    slideCount: 3,
+    zones: zones(
+      ['text', 'How you map a set'],
+      ['text', 'What it does for the eye shape'],
+      ['text', 'Aftercare basics'],
+    ),
+    sortOrder: 3,
+  },
+  {
+    slug: 'nail-closeup-reel',
+    name: 'Nail set close-up reel',
+    format: 'reel',
+    pillar: 'Transformations',
+    categories: ['Nail Artist'],
+    goal: 'showcase',
+    description: '15-second slow pan over the finished set with hand styling.',
+    slideCount: null,
+    zones: zones(['video', 'Slow pan over finished set']),
+    sortOrder: 4,
+  },
+  {
+    slug: 'treatment-explainer',
+    name: 'Treatment explainer — what to expect',
+    format: 'carousel',
+    pillar: 'Education',
+    categories: ['Injector', 'Skin Therapist'],
+    goal: 'educate',
+    description: 'Honest, calm walk-through of a service for first-time clients.',
+    slideCount: 4,
+    zones: zones(
+      ['text', 'What to expect — intro'],
+      ['text', 'During the treatment'],
+      ['text', 'Aftercare'],
+      ['cta', 'Booking CTA'],
+    ),
+    sortOrder: 5,
+  },
+  {
+    slug: 'barber-transformation-reel',
+    name: 'Barber transformation reel',
+    format: 'reel',
+    pillar: 'Transformations',
+    categories: ['Barber'],
+    goal: 'showcase',
+    description: 'Cut from before, fade in progress, beard sculpt, and the finish.',
+    slideCount: null,
+    zones: zones(
+      ['video', 'Before'],
+      ['video', 'Fade in progress'],
+      ['video', 'Beard sculpt'],
+      ['video', 'Finish'],
+    ),
+    sortOrder: 6,
+  },
+  {
+    slug: 'client-testimonial-quote',
+    name: 'Client testimonial quote card',
+    format: 'carousel',
+    pillar: 'Client stories',
+    categories: ['Hairdresser', 'Colourist', 'Bridal Makeup'],
+    goal: 'trust',
+    description: 'Pull a sentence from a review, set on linen background.',
+    slideCount: 1,
+    zones: zones(['quote', 'Client review quote']),
+    sortOrder: 7,
+  },
+  {
+    slug: 'studio-morning-story',
+    name: 'Studio morning — story sequence',
+    format: 'story',
+    pillar: 'Behind the chair',
+    categories: ['Hairdresser', 'Colourist', 'Bridal Makeup'],
+    goal: 'trust',
+    description: 'Four vertical stories: space, tools, hands working, the finished blow-out.',
+    slideCount: 4,
+    zones: zones(
+      ['photo', 'Space'],
+      ['photo', 'Tools'],
+      ['photo', 'Hands working'],
+      ['photo', 'Finished blow-out'],
+    ),
+    sortOrder: 8,
+  },
+  {
+    slug: 'fill-the-week-promo',
+    name: 'Fill-the-week promotion',
+    format: 'reel',
+    pillar: 'Behind the chair',
+    categories: ['Hairdresser', 'Colourist', 'Bridal Makeup'],
+    goal: 'availability',
+    description: '20-second reel promoting open slots this week.',
+    slideCount: null,
+    zones: zones(['video', 'Open slots teaser'], ['cta', 'Booking CTA']),
+    sortOrder: 9,
+  },
+  {
+    slug: 'skin-glow-reveal',
+    name: 'Skin glow — before & after',
+    format: 'carousel',
+    pillar: 'Transformations',
+    categories: ['Skin Therapist'],
+    goal: 'showcase',
+    description: 'Side-by-side skin comparison with treatment breakdown. Clean, clinical aesthetic.',
+    slideCount: 3,
+    zones: zones(
+      ['photo', 'Before/after comparison'],
+      ['text', 'Treatment breakdown'],
+      ['cta', 'Booking CTA'],
+    ),
+    sortOrder: 10,
+  },
+  {
+    slug: 'aftercare-tips-carousel',
+    name: 'Aftercare tips — keep the result',
+    format: 'carousel',
+    pillar: 'Education',
+    categories: ['Hairdresser', 'Colourist', 'Skin Therapist'],
+    goal: 'educate',
+    description: '5 quick tips clients can follow at home to extend their results.',
+    slideCount: 5,
+    zones: zones(
+      ['text', 'Tip 1'],
+      ['text', 'Tip 2'],
+      ['text', 'Tip 3'],
+      ['text', 'Tip 4'],
+      ['text', 'Tip 5'],
+    ),
+    sortOrder: 11,
+  },
+  {
+    slug: 'brow-shaping-tutorial',
+    name: 'Brow shaping — behind the process',
+    format: 'reel',
+    pillar: 'Behind the chair',
+    categories: ['Lash & Brow'],
+    goal: 'educate',
+    description: 'Close-up reel showing the mapping, wax, and final shape with commentary.',
+    slideCount: null,
+    zones: zones(['video', 'Mapping'], ['video', 'Wax'], ['video', 'Final shape']),
+    sortOrder: 12,
+  },
+  {
+    slug: 'story-transformation-reveal',
+    name: '4-frame transformation reveal',
+    format: 'story',
+    pillar: 'Transformations',
+    categories: ['Hairdresser', 'Colourist', 'Bridal Makeup'],
+    goal: 'showcase',
+    description: 'Frame 1: before. Frame 2: in progress. Frame 3: close-up detail. Frame 4: full reveal with CTA.',
+    slideCount: 4,
+    zones: zones(
+      ['photo', 'Before'],
+      ['photo', 'In progress'],
+      ['photo', 'Close-up detail'],
+      ['cta', 'Full reveal with CTA'],
+    ),
+    sortOrder: 13,
+  },
+  {
+    slug: 'story-behind-the-scenes',
+    name: 'Behind the scenes — studio day',
+    format: 'story',
+    pillar: 'Behind the chair',
+    categories: ['Hairdresser', 'Colourist', 'Nail Artist', 'Barber'],
+    goal: 'trust',
+    description: 'Candid 4-frame story of your day. Tools, client moment, in-progress shot, finished result.',
+    slideCount: 4,
+    zones: zones(
+      ['photo', 'Tools'],
+      ['photo', 'Client moment'],
+      ['photo', 'In-progress shot'],
+      ['photo', 'Finished result'],
+    ),
+    sortOrder: 14,
+  },
+  {
+    slug: 'story-quick-tip',
+    name: 'Quick tip — 4-slide education',
+    format: 'story',
+    pillar: 'Education',
+    categories: ['Skin Therapist', 'Hairdresser', 'Colourist', 'Lash & Brow'],
+    goal: 'educate',
+    description: 'One tip broken into 4 digestible frames. Text overlay on each, swipe-through format.',
+    slideCount: 4,
+    zones: zones(
+      ['text', 'Tip frame 1'],
+      ['text', 'Tip frame 2'],
+      ['text', 'Tip frame 3'],
+      ['text', 'Tip frame 4'],
+    ),
+    sortOrder: 15,
+  },
+  {
+    slug: 'story-availability-poll',
+    name: 'Slots open — poll story',
+    format: 'story',
+    pillar: 'Behind the chair',
+    categories: ['Hairdresser', 'Colourist', 'Nail Artist', 'Lash & Brow', 'Injector', 'Barber'],
+    goal: 'availability',
+    description: 'Frame 1: tease. Frame 2: available days. Frame 3: poll sticker. Frame 4: DM CTA.',
+    slideCount: 4,
+    zones: zones(
+      ['text', 'Tease'],
+      ['text', 'Available days'],
+      ['text', 'Poll sticker'],
+      ['cta', 'DM CTA'],
+    ),
+    sortOrder: 16,
+  },
+  {
+    slug: 'story-client-feature',
+    name: 'Client feature story',
+    format: 'story',
+    pillar: 'Client stories',
+    categories: ['Hairdresser', 'Colourist', 'Bridal Makeup', 'Skin Therapist', 'Nail Artist'],
+    goal: 'trust',
+    description: 'Spotlight a client result across 4 frames — before, process note, result, and their quote.',
+    slideCount: 4,
+    zones: zones(
+      ['photo', 'Before'],
+      ['text', 'Process note'],
+      ['photo', 'Result'],
+      ['quote', "Client's quote"],
+    ),
+    sortOrder: 17,
+  },
+  {
+    slug: 'caption-nail-reveal',
+    name: 'Single shot reveal — nails',
+    format: 'caption',
+    pillar: 'Transformations',
+    categories: ['Nail Artist'],
+    goal: 'showcase',
+    description: 'One hero photo of the finished set, caption built from client notes and your Brand DNA voice.',
+    slideCount: 1,
+    zones: zones(['photo', 'Hero photo — finished set']),
+    sortOrder: 18,
+  },
+  {
+    slug: 'caption-honest-education',
+    name: 'Honest product switch — what changed',
+    format: 'caption',
+    pillar: 'Education',
+    categories: ['Skin Therapist', 'Hairdresser', 'Colourist'],
+    goal: 'educate',
+    description: 'Single image post explaining why you switched a product or technique. Builds authority.',
+    slideCount: 1,
+    zones: zones(['photo', 'Hero image']),
+    sortOrder: 19,
+  },
+  {
+    slug: 'caption-availability-slots',
+    name: 'Open slots this week',
+    format: 'caption',
+    pillar: 'Behind the chair',
+    categories: ['Hairdresser', 'Colourist', 'Nail Artist', 'Lash & Brow', 'Skin Therapist', 'Barber'],
+    goal: 'availability',
+    description: 'Quick availability post with a direct booking CTA. Written in your tone with urgency.',
+    slideCount: 1,
+    zones: zones(['photo', 'Hero image'], ['cta', 'Booking CTA']),
+    sortOrder: 20,
+  },
+  {
+    slug: 'caption-client-love',
+    name: 'Client love note',
+    format: 'caption',
+    pillar: 'Client stories',
+    categories: ['Hairdresser', 'Colourist', 'Bridal Makeup', 'Skin Therapist'],
+    goal: 'trust',
+    description: 'Pull a line from a client review, pair with a result photo. Caption does the storytelling.',
+    slideCount: 1,
+    zones: zones(['photo', 'Result photo'], ['quote', 'Client review line']),
+    sortOrder: 21,
+  },
+  {
+    slug: 'caption-booking-cta',
+    name: 'Book now — direct CTA post',
+    format: 'caption',
+    pillar: 'Behind the chair',
+    categories: ['Hairdresser', 'Colourist', 'Nail Artist', 'Injector', 'Barber'],
+    goal: 'convert',
+    description: 'Single image with a punchy conversion caption. Drives traffic directly to your booking link.',
+    slideCount: 1,
+    zones: zones(['photo', 'Hero image'], ['cta', 'Booking CTA']),
+    sortOrder: 22,
+  },
+  {
+    slug: 'tiktok-colour-transformation',
+    name: '60-second colour reveal',
+    format: 'tiktok',
+    pillar: 'Transformations',
+    categories: ['Hairdresser', 'Colourist'],
+    goal: 'showcase',
+    description: 'Fast-cut before → process → reveal. Hook in the first 3 seconds, trending audio cue.',
+    slideCount: null,
+    zones: zones(['video', 'Before'], ['video', 'Process'], ['video', 'Reveal']),
+    sortOrder: 23,
+  },
+  {
+    slug: 'tiktok-technique-explainer',
+    name: 'The technique nobody explains',
+    format: 'tiktok',
+    pillar: 'Education',
+    categories: ['Hairdresser', 'Colourist', 'Lash & Brow', 'Nail Artist', 'Skin Therapist'],
+    goal: 'educate',
+    description: 'Break down one technique in 30 seconds. Text overlays + voiceover script from your Brand DNA.',
+    slideCount: null,
+    zones: zones(['video', 'Technique breakdown']),
+    sortOrder: 24,
+  },
+  {
+    slug: 'tiktok-day-in-the-life',
+    name: 'Day in the life — behind the chair',
+    format: 'tiktok',
+    pillar: 'Behind the chair',
+    categories: ['Hairdresser', 'Colourist', 'Nail Artist', 'Barber', 'Bridal Makeup'],
+    goal: 'trust',
+    description: 'Montage of your studio day — setup, clients, process, finish. Casual and authentic.',
+    slideCount: null,
+    zones: zones(
+      ['video', 'Setup'],
+      ['video', 'Clients'],
+      ['video', 'Process'],
+      ['video', 'Finish'],
+    ),
+    sortOrder: 25,
+  },
+  {
+    slug: 'tiktok-slots-urgency',
+    name: 'Last few slots — urgency reel',
+    format: 'tiktok',
+    pillar: 'Behind the chair',
+    categories: ['Hairdresser', 'Colourist', 'Nail Artist', 'Lash & Brow', 'Injector'],
+    goal: 'availability',
+    description: 'Short punchy TikTok calling out remaining slots. Drives immediate DM or booking link taps.',
+    slideCount: null,
+    zones: zones(['video', 'Urgency hook'], ['cta', 'Booking CTA']),
+    sortOrder: 26,
+  },
+];
+
+async function main() {
+  console.log(`Seeding ${TEMPLATES.length} templates...`);
+
+  for (const t of TEMPLATES) {
+    await prisma.template.upsert({
+      where: { slug: t.slug },
+      update: {
+        name: t.name,
+        format: t.format,
+        pillar: t.pillar,
+        categories: t.categories,
+        goal: t.goal,
+        description: t.description,
+        slideCount: t.slideCount,
+        zones: t.zones as any,
+        sortOrder: t.sortOrder,
+        isActive: true,
+      },
+      create: {
+        slug: t.slug,
+        name: t.name,
+        format: t.format,
+        pillar: t.pillar,
+        categories: t.categories,
+        goal: t.goal,
+        description: t.description,
+        slideCount: t.slideCount,
+        zones: t.zones as any,
+        sortOrder: t.sortOrder,
+      },
+    });
+  }
+
+  console.log('Template seeding completed successfully!');
+}
+
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

@@ -187,36 +187,78 @@ function TemplatesPage() {
 function TemplateCard({ template: t }: { template: Template }) {
   const meta = FORMAT_META[t.type] ?? FORMAT_META["Caption"];
   const Icon = meta.icon;
+  const structureLabel = t.zones.length > 0
+    ? `${t.slideCount ?? t.zones.length} ${t.slideCount === 1 ? "slide" : "slides"} · ${t.zones.map((z) => z.label).join(" → ")}`
+    : null;
 
   return (
     <article className="group flex flex-col rounded-2xl border-2 border-border bg-card overflow-hidden hover:border-foreground/25 hover:shadow-md transition-all duration-200">
 
-      {/* Image with format badge overlay */}
-      <div className="relative aspect-[4/5] overflow-hidden bg-nude/30">
-        <img
-          src={t.preview}
-          alt={t.name}
-          loading="lazy"
-          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
-        />
+      {/* Preview — the tenant's own moodboard photo + brand palette, never a generic stock image */}
+      <div
+        className="relative aspect-[4/5] overflow-hidden bg-nude/30"
+        style={t.preview ? undefined : { backgroundColor: t.backgroundColor || undefined }}
+      >
+        {t.preview ? (
+          <img
+            src={t.preview}
+            alt={t.name}
+            loading="lazy"
+            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center p-6">
+            <span
+              className="text-center text-lg leading-snug opacity-70"
+              style={{ fontFamily: t.headingFont || undefined, color: t.accentColor || undefined }}
+            >
+              {t.name}
+            </span>
+          </div>
+        )}
         {/* Format badge — top left */}
         <div className={`absolute top-3 left-3 inline-flex items-center gap-1.5 backdrop-blur-sm border px-2.5 py-1.5 rounded-full ${meta.bg} ${meta.border}`}>
           <Icon className={`size-3 ${meta.color}`} />
           <span className={`text-[9px] font-bold uppercase tracking-widest ${meta.color}`}>{meta.label}</span>
         </div>
         {/* Pillar badge — top right */}
-        <div className="absolute top-3 right-3 bg-foreground/70 backdrop-blur-sm px-2 py-1 rounded-full">
-          <span className="text-[8px] uppercase tracking-widest text-offwhite">{t.pillar}</span>
-        </div>
+        {t.pillar && (
+          <div className="absolute top-3 right-3 bg-foreground/70 backdrop-blur-sm px-2 py-1 rounded-full">
+            <span className="text-[8px] uppercase tracking-widest text-offwhite">{t.pillar}</span>
+          </div>
+        )}
       </div>
 
       {/* Body */}
       <div className="flex flex-col flex-1 p-4">
-        {/* Title */}
-        <h3 className="font-serif text-lg leading-snug mb-1.5">{t.name}</h3>
+        {/* Title — rendered in the tenant's own heading font */}
+        <h3 className="font-serif text-lg leading-snug mb-1.5" style={{ fontFamily: t.headingFont || undefined }}>
+          {t.name}
+        </h3>
 
-        {/* Description */}
-        <p className="text-xs text-taupe leading-relaxed mb-3 flex-1">{t.description}</p>
+        {/* Description — rendered in the tenant's own body font */}
+        <p className="text-xs text-taupe leading-relaxed mb-2 flex-1" style={{ fontFamily: t.bodyFont || undefined }}>
+          {t.description}
+        </p>
+
+        {/* Structure pulled from the template's zone data */}
+        {structureLabel && (
+          <p className="text-[10px] text-taupe/70 leading-snug mb-3">{structureLabel}</p>
+        )}
+
+        {/* Brand palette swatches */}
+        {t.paletteHexes.length > 0 && (
+          <div className="flex items-center gap-1 mb-3">
+            {t.paletteHexes.map((hex, i) => (
+              <span
+                key={`${hex}-${i}`}
+                className="size-3 rounded-full border border-border"
+                style={{ backgroundColor: hex }}
+                title={hex}
+              />
+            ))}
+          </div>
+        )}
 
         {/* Category chips */}
         <div className="flex flex-wrap gap-1.5 mb-4">

@@ -12,6 +12,7 @@ export type BrandDnaView = {
   paletteLabeled: Array<{ role: string; hex: string }>;
   moodboard: string[];
   moodboardLabeled: Array<{ url: string; usage: string }>;
+  typography: { headingFont: string; bodyFont: string };
   assetLibrary: Array<{ id: string; url: string; assetType: string; usageRule: string; consentStatus: string }>;
   logoUrl: string;
   logoPosition: string;
@@ -119,6 +120,11 @@ function mapCloudRow(dna: any): BrandDnaView {
     moodboardLabeled: v2Moodboard.length > 0
       ? v2Moodboard.filter((m) => m.storage_path).map((m) => ({ url: m.storage_path, usage: m.usage || "" }))
       : (dna.moodboardUrls || []).map((url: string) => ({ url, usage: "" })),
+    // v2.typography carries the heading/body split; brandFont is the older single-field fallback.
+    typography: {
+      headingFont: v2?.typography?.heading_font || dna.brandFont || "",
+      bodyFont: v2?.typography?.body_font || dna.brandFont || "",
+    },
     assetLibrary: v2AssetLibrary
       .filter((a) => a.storage_path)
       .map((a) => ({
