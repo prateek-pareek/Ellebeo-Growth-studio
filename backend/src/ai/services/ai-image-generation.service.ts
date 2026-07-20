@@ -549,11 +549,27 @@ CRITICAL IMAGE REQUIREMENTS:
     // If both models generated images, also upload the alternative
     let variants: { gemini?: string; dalle?: string } | undefined;
     if (geminiResult && dalleResult && generatorModel === 'both') {
-      // Apply overlay to alternative image for comparison
+      // Apply overlay to alternative image for comparison using alternative text logic
       const altBase64 = geminiResult === base64 ? dalleResult : geminiResult;
+      
+      // Simple heuristic to create a different text variation for the alt model
+      // so the slides don't look completely identical. 
+      // If it's a cover slide, we might use a slightly different hook format.
+      let altOverlayText = overlayText;
+      if (overlayText.length > 20 && overlayText.includes(' ')) {
+        const words = overlayText.split(' ');
+        if (words.length > 5) {
+            altOverlayText = words.slice(0, Math.ceil(words.length * 0.8)).join(' ') + '...';
+        } else {
+            altOverlayText = overlayText.toUpperCase();
+        }
+      } else {
+        altOverlayText = overlayText.toUpperCase() !== overlayText ? overlayText.toUpperCase() : overlayText.toLowerCase();
+      }
+
       const brandedAltBase64 = await this.overlayBrandingAndText({
         base64Image: altBase64,
-        overlayText,
+        overlayText: altOverlayText,
         isFirst,
         isLast,
         brandColor,
@@ -571,7 +587,7 @@ CRITICAL IMAGE REQUIREMENTS:
         backgroundBrandColor,
         accentBrandColor,
         outputSize,
-        captionText: overlayText,
+        captionText: altOverlayText,
         visionResult,
       });
 

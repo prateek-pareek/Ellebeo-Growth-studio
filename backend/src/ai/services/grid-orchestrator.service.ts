@@ -31,7 +31,14 @@ export class GridOrchestratorService {
     });
 
     const pillars: ContentPillar[] = ['client_results', 'behind_the_scenes', 'education_tips', 'promotion'];
-    const layouts: LayoutType[] = ['passepartout_text', 'passepartout_clean', 'full_bleed_clean', 'split_before_after', 'asymmetric_monogram', 'translucent_split', 'poster_cover', 'postcard_ticket', 'editorial_arch', 'text_only_editorial', 'filmstrip_grid', 'handwritten_note', 'gallery_frame', 'duotone_editorial', 'side_panel_split', 'bold_editorial_poster', 'giant_type_overlay', 'chat_bubble_quote', 'testimonial_card', 'transparent_scrim', 'premium_diptyque', 'art_director_split', 'date_highlight', 'signature_feature'];
+    let layouts: LayoutType[] = [];
+    let newTemplates: any = {};
+    try {
+      newTemplates = require('../config/compiled-layouts.v1.json');
+      layouts = Object.keys(newTemplates) as LayoutType[];
+    } catch (e) {
+      layouts = ['passepartout_text', 'passepartout_clean', 'full_bleed_clean', 'split_before_after', 'asymmetric_monogram', 'translucent_split', 'poster_cover', 'postcard_ticket', 'editorial_arch', 'text_only_editorial', 'filmstrip_grid', 'handwritten_note', 'gallery_frame', 'duotone_editorial', 'side_panel_split', 'bold_editorial_poster', 'giant_type_overlay', 'chat_bubble_quote', 'testimonial_card', 'transparent_scrim', 'premium_diptyque', 'art_director_split', 'date_highlight', 'signature_feature'];
+    }
 
     // 1. Determine Pillar using penalty system
     const pillarScores = { client_results: 0, behind_the_scenes: 0, education_tips: 0, promotion: 0 };
@@ -52,10 +59,9 @@ export class GridOrchestratorService {
     let splitCount = 0;
 
     let legacyTemplates: any = {};
-    let newTemplates: any = {};
     try {
       legacyTemplates = require('../config/layout-templates.config.json');
-      newTemplates = require('../config/template-library.json');
+      newTemplates = require('../config/compiled-layouts.v1.json');
     } catch (e) {}
 
     lastPosts.slice(0, 3).forEach((post) => {
@@ -86,9 +92,11 @@ export class GridOrchestratorService {
       gridConstraints = "AVOID split-screen layouts. PREFER full bleed or asymmetric layouts.";
     }
 
+    const randomLayout = layouts.length > 0 ? layouts[Math.floor(Math.random() * layouts.length)]! : 'single_hero';
+
     return {
       pillar: selectedPillar,
-      layout: 'pending_agent_selection' as any,
+      layout: randomLayout as any,
       gridConstraints
     } as any;
   }

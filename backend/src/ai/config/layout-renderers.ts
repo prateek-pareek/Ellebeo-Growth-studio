@@ -189,43 +189,6 @@ const renderTextLayer = (ctx: any, layer: IDSLTextLayer): string => {
   const safeX = 60;
   const safeY = 140;
   
-  // Resolve X coordinate
-  let x = ctx.w / 2; // Default center
-  if (layer.anchor.includes('left') || layer.anchor === 'edges') x = safeX;
-  if (layer.anchor.includes('right')) x = ctx.w - safeX;
-  
-  // Resolve Y coordinate
-  let y = ctx.h / 2; // Default center
-  if (layer.anchor.includes('top')) y = safeY;
-  if (layer.anchor.includes('bottom')) y = ctx.h - safeY - 40;
-  if (layer.anchor === 'bottom_edge' || layer.anchor === 'edges') y = ctx.h - 80;
-
-  // Face Collision Detection (Safe Zone Awareness)
-  if (layer.anchor.includes('center') && ctx.faceCoordinates) {
-    const face = ctx.faceCoordinates;
-    const textHeightGuess = (ctx.escapedLines?.length || 1) * 40;
-    // If text Y overlaps with face bounding box
-    if (y >= face.y - textHeightGuess && y <= face.y + face.height + textHeightGuess) {
-       // Push text down below the face to the safe background zone
-       y = face.y + face.height + 80;
-       if (y > ctx.h - safeY) {
-         // If it's pushed off screen, push it to the top instead
-         y = Math.max(safeY, face.y - textHeightGuess - 40);
-       }
-    }
-  }
-
-  // Resolve alignment implicitly if not specified, otherwise use specified
-  let anchor = 'start';
-  if (layer.alignment === 'center' || layer.anchor.includes('center')) anchor = 'middle';
-  if (layer.alignment === 'right' || layer.anchor.includes('right')) anchor = 'end';
-  if (layer.alignment === 'left' || layer.anchor.includes('left')) anchor = 'start';
-
-  // Override if explicit alignment is provided
-  if (layer.alignment === 'center') anchor = 'middle';
-  if (layer.alignment === 'right') anchor = 'end';
-  if (layer.alignment === 'left') anchor = 'start';
-
   // Luxury Typography Engine (Mixes weights, styles, and sizes based on role)
   let fontSize = ctx.dynamicFontSize;
   let fontWeight = 'normal';
@@ -247,13 +210,80 @@ const renderTextLayer = (ctx: any, layer: IDSLTextLayer): string => {
     fontWeight = '300'; // Light, elegant body
   }
 
-  // Multiline text handling
-  let content = '';
-  if (layer.role === 'tagline' || layer.role === 'footnote') {
-    content = ctx.escapedLines.map((line: string, idx: number) => `<tspan x="${x}" dy="${idx === 0 ? 0 : 25}">${line}</tspan>`).join('');
-  } else {
-    content = ctx.escapedLines.map((line: string, idx: number) => `<tspan x="${x}" dy="${idx === 0 ? 0 : ctx.dyOffset + 10}">${line}</tspan>`).join('');
+  // Dynamic Line Wrapping based on canvas width and font size
+  const estimatedCharWidth = fontSize * 0.55;
+  const maxAvailableWidth = ctx.w - (safeX * 2);
+  const maxCharsPerLine = Math.floor(maxAvailableWidth / estimatedCharWidth);
+  
+  const words = (ctx.overlayText || '').split(/\s+/);
+  const smartLines: string[] = [];
+  let currentLine = '';
+  for (const word of words) {
+    if ((currentLine + word).length > maxCharsPerLine && currentLine.length > 0) {
+      smartLines.push(currentLine.trim());
+      currentLine = word + ' ';
+    } else {
+      currentLine += word + ' ';
+    }
   }
+  if (currentLine) smartLines.push(currentLine.trim());
+  
+  // Use pre-escaped formatting if available, otherwise just escape XML
+  const escapedLines = smartLines.map(line => {
+    // If the orchestrator already provides an escapeXml helper in ctx, use it.
+    if (ctx.escapeXml) {
+       // Also apply capitalization rule if needed, though usually orchestrator does it
+       return ctx.escapeXml(line.toUpperCase() !== line ? line.toUpperCase() : line);
+    }
+    return line;
+  });
+
+  const lineHeight = layer.role === 'tagline' || layer.role === 'footnote' ? 25 : fontSize * 1.35;
+  const textHeightGuess = escapedLines.length * lineHeight;
+
+  // Resolve X coordinate
+  let x = ctx.w / 2; // Default center
+  if (layer.anchor.includes('left') || layer.anchor === 'edges') x = safeX;
+  if (layer.anchor.includes('right')) x = ctx.w - safeX;
+  
+  // Resolve Y coordinate
+  let y = ctx.h / 2; // Default center
+  if (layer.anchor.includes('top')) y = safeY;
+  if (layer.anchor.includes('bottom')) y = ctx.h - safeY - 40;
+  if (layer.anchor === 'bottom_edge' || layer.anchor === 'edges') y = ctx.h - 80;
+
+  // Face Collision Detection (Safe Zone Awareness)
+  if (layer.anchor.includes('center') && ctx.faceCoordinates) {
+    const face = ctx.faceCoordinates;
+    // If text Y overlaps with face bounding box
+    if (y >= face.y - textHeightGuess && y <= face.y + face.height + textHeightGuess) {
+       // Push text down below the face to the safe background zone
+       y = face.y + face.height + 80;
+       if (y + textHeightGuess > ctx.h - safeY) {
+         // If it's pushed off screen, push it to the top instead
+         y = Math.max(safeY, face.y - textHeightGuess - 40);
+       }
+    }
+  }
+
+  // Bounds checking to prevent text from clipping off the bottom
+  if (y + textHeightGuess > ctx.h - 40) {
+     y = ctx.h - textHeightGuess - 40;
+  }
+
+  // Resolve alignment implicitly if not specified, otherwise use specified
+  let anchor = 'start';
+  if (layer.alignment === 'center' || layer.anchor.includes('center')) anchor = 'middle';
+  if (layer.alignment === 'right' || layer.anchor.includes('right')) anchor = 'end';
+  if (layer.alignment === 'left' || layer.anchor.includes('left')) anchor = 'start';
+
+  // Override if explicit alignment is provided
+  if (layer.alignment === 'center') anchor = 'middle';
+  if (layer.alignment === 'right') anchor = 'end';
+  if (layer.alignment === 'left') anchor = 'start';
+
+  // Multiline text handling
+  const content = escapedLines.map((line: string, idx: number) => `<tspan x="${x}" dy="${idx === 0 ? 0 : lineHeight}">${line}</tspan>`).join('');
 
   return `<text x="${x}" y="${y}" text-anchor="${anchor}" class="overlay-text" style="font-family: '${ctx.brandFont}', sans-serif; font-size: ${fontSize}px; fill: ${fill}; font-weight: ${fontWeight}; font-style: ${fontStyle}; letter-spacing: ${letterSpacing}; text-shadow: 0 2px 10px rgba(0,0,0,0.15);">${content}</text>`;
 };

@@ -12,7 +12,7 @@ import type { VisionAnalysisResult } from '../types/chain-output.types';
 import type { ModelRouter } from '../orchestrator/model-router';
 import { wrapSystemPrompt } from '../config/platform-system-prompt';
 
-const VISION_PROMPT_VERSION = 'v2.1';
+const VISION_PROMPT_VERSION = 'v2.2';
 
 // Zod-validated output schema enforcer (inline for strict mode)
 function parseVisionOutput(raw: string): VisionAnalysisResult {
@@ -37,6 +37,11 @@ function parseVisionOutput(raw: string): VisionAnalysisResult {
     facesDetected: Boolean(obj['facesDetected'] ?? false),
     settingDetected: String(obj['settingDetected'] ?? 'salon'),
     framingType: validateFramingType(obj['framingType']),
+    suitabilityScores: {
+      technicalQuality: Number((obj['suitabilityScores'] as any)?.technicalQuality ?? 80),
+      brandCompatibility: Number((obj['suitabilityScores'] as any)?.brandCompatibility ?? 50),
+      composition: Number((obj['suitabilityScores'] as any)?.composition ?? 50),
+    }
   };
 
   if (obj['faceCoordinates']) {
@@ -168,10 +173,16 @@ Return ONLY valid JSON — no markdown, no explanation, no preamble.`;
     "mouthYPercent": 50
   },
   "settingDetected": "salon chair|nail table|treatment bed|studio|outdoor|home — be specific",
-  "framingType": "macro|portrait|wide|unknown — macro is very close up, portrait is head/shoulders, wide is full body/room"
+  "framingType": "macro|portrait|wide|unknown — macro is very close up, portrait is head/shoulders, wide is full body/room",
+  "suitabilityScores": {
+    "technicalQuality": 95,
+    "brandCompatibility": 20,
+    "composition": 60
+  }
 }
 
 If facesDetected is true, you MUST include faceCoordinates. Imagine a vertical grid from 0 (top) to 100 (bottom). Estimate the Y position of the client's eyes and mouth to the nearest 5%. If no face is detected, omit faceCoordinates entirely.
+CRITICAL: Score technicalQuality (0-100) on sharpness, exposure, and noise. Score brandCompatibility (0-100) purely on the background and setting (is it a messy peeling wall/distracting=20, or a clean luxury salon/aesthetic=95?). Score composition (0-100) on framing and subject placement.
 Be specific. Vague answers like 'hair was coloured' or 'skin looks better' are useless. Use the technical vocabulary a professional technician would use.`,
         },
         {

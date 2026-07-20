@@ -622,6 +622,18 @@ function EditSidebar({
   const slides = isCarousel ? (platformVariants?.slides ?? []) : isStory ? (platformVariants?.frames ?? []) : [];
   const [activeSlide, setActiveSlide] = useState(0);
 
+  const opt = variants[activeVariant] ?? variants[0];
+  
+  const getVariantUrl = (slideData: any) => {
+    if (!slideData) return null;
+    const isEmpatheticOption = opt?.generatedBy?.toLowerCase().includes('empathetic');
+    if (slideData.variants) {
+      if (isEmpatheticOption && slideData.variants.gemini) return slideData.variants.gemini;
+      if (!isEmpatheticOption && slideData.variants.dalle) return slideData.variants.dalle;
+    }
+    return slideData.url;
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -686,7 +698,7 @@ function EditSidebar({
               
               <div className="relative aspect-square w-full overflow-hidden bg-black/5 mb-2 border border-border">
                 <img
-                  src={slides[activeSlide]?.url}
+                  src={getVariantUrl(slides[activeSlide])}
                   alt={slides[activeSlide]?.label ?? `Slide ${activeSlide + 1}`}
                   className="w-full h-full object-cover"
                 />
@@ -722,7 +734,7 @@ function EditSidebar({
                       idx === activeSlide ? "border-foreground scale-95" : "border-transparent opacity-60 hover:opacity-90"
                     }`}
                   >
-                    <img src={s.url} alt="" className="w-full h-full object-cover animate-fade-in" />
+                    <img src={getVariantUrl(s)} alt="" className="w-full h-full object-cover animate-fade-in" />
                   </button>
                 ))}
               </div>

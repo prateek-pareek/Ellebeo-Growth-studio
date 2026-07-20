@@ -724,11 +724,11 @@ ${consentShowFace
     
     // Execute sequentially to avoid Replicate 429 rate limit retries
     if (afterPhotoUrl) {
-      afterPhotoUrl = await this.imageEnhancementService.enhanceImage(afterPhotoUrl as string, moodboardVisionSummary ?? '', brandColor);
+      afterPhotoUrl = await this.imageEnhancementService.enhanceImage(afterPhotoUrl as string, moodboardVisionSummary ?? '', brandColor, visionResult);
     }
     
     if (beforePhotoUrl) {
-      beforePhotoUrl = await this.imageEnhancementService.enhanceImage(beforePhotoUrl as string, moodboardVisionSummary ?? '', brandColor);
+      beforePhotoUrl = await this.imageEnhancementService.enhanceImage(beforePhotoUrl as string, moodboardVisionSummary ?? '', brandColor, visionResult);
     }
 
     if (isCarousel && captionResult) {

@@ -95,6 +95,7 @@ CONTEXT:
 - Slide Position: ${context.slideIndex + 1} of ${context.totalSlides}
 - Overlay Text Length: ${context.textLength} characters
 ${params.gridConstraints ? `- GRID CONSTRAINTS: ${params.gridConstraints}` : ''}
+${context.visionResult?.suitabilityScores ? `- PHOTO SUITABILITY: Technical Quality=${context.visionResult.suitabilityScores.technicalQuality}/100, Brand Compatibility=${context.visionResult.suitabilityScores.brandCompatibility}/100. CRITICAL: If Brand Compatibility is low (<50), you MUST choose a layout with heavy masks, arch cutouts, or thick editorial frames to hide the ugly background. Do NOT use full bleed if Brand Compatibility is low.` : ''}
 
 BRIEF FOR THIS SLIDE:
 ${context.brief || 'Standard beautifully aesthetic post.'}
