@@ -105,6 +105,18 @@ export class GenerationService {
 
     const isReel = (dto.outputFormats as string[]).some(f => f === 'reel');
 
+    // If the job originated from a specific gallery template ("Use template"),
+    // resolve its rendererKey so the orchestrator can honour that exact
+    // structure instead of leaving layout selection entirely to the AI agent.
+    let layoutHint: string | null = null;
+    if (dto.templateSlug) {
+      const template = await this.prisma.template.findUnique({
+        where: { slug: dto.templateSlug },
+        select: { rendererKey: true },
+      });
+      layoutHint = template?.rendererKey ?? null;
+    }
+
     // Create the generation job
     const job = await this.prisma.generationJob.create({
       data: {
@@ -189,6 +201,7 @@ export class GenerationService {
         goldenExamples: [],
         createdAt: new Date().toISOString(),
         priority: 5,
+        layoutHint,
       } as any,
       { jobId: job.id },
     );

@@ -14,6 +14,7 @@ const searchSchema = z.object({
   templateGoal: z.string().optional(),
   templateFormat: z.string().optional(),
   templateCategories: z.string().optional(),
+  templateSlug: z.string().optional(),
 });
 
 export const Route = createFileRoute("/generate")({
@@ -239,7 +240,8 @@ function GeneratePage() {
         outputFormats: [formatMap[activeFormat]],
         platforms: platformMap[activeFormat],
         includeVoiceover: false,
-        includeMusic: false
+        includeMusic: false,
+        ...(search.templateSlug ? { templateSlug: search.templateSlug } : {}),
       });
       setJobId(res.data.data.jobId);
       setEstimatedSeconds(res.data.data.estimatedSeconds || (activeFormat === 'Reel' ? 120 : 45));
