@@ -139,7 +139,7 @@ async function fetchCloudContent(): Promise<
   | { kind: "error"; message: string }
 > {
   try {
-    const res = await api.get('/content');
+    const res = await api.get('/content', { params: { pageSize: 200 } });
     // Backend returns array directly; ResponseInterceptor wraps it as res.data.data
     const raw = res.data.data;
     const data: any[] = Array.isArray(raw) ? raw : (raw?.data ?? []);

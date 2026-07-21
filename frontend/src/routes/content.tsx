@@ -42,6 +42,8 @@ const FORMAT_ICONS: Record<string, string> = {
   TikTok: "♪",
 };
 
+const PAGE_SIZE = 20;
+
 const GOAL_FILTERS: Array<{ id: string; label: string }> = [
   { id: "showcase",     label: "Showcase" },
   { id: "educate",      label: "Educate" },
@@ -56,6 +58,7 @@ function ContentPage() {
   const [goalFilter, setGoalFilter]     = useState<string | null>(null);
   const [query, setQuery]               = useState("");
   const [editItem, setEditItem]         = useState<ContentItem | null>(null);
+  const [page, setPage]                 = useState(1);
 
   const { items, appointmentsById, loading, error, refresh } = useContentItems();
   const { data: appts } = useAppointments();
@@ -87,6 +90,13 @@ function ContentPage() {
       return true;
     });
   }, [items, appointmentsById, stateFilter, formatFilter, goalFilter, query]);
+
+  // Reset to page 1 whenever the result set changes shape
+  useEffect(() => { setPage(1); }, [stateFilter, formatFilter, goalFilter, query]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
+  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const readyAppointments = appts.filter((a) => a.consent === "granted");
 
@@ -361,25 +371,36 @@ function ContentPage() {
           ) : filtered.length === 0 ? (
             <EmptyState onClear={clearFilters} hasFilters={hasActiveFilters} />
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
-              {filtered.map((c) => (
-                <ContentCard
-                  key={c.id}
-                  item={c}
-                  appointment={c.sourceAppointmentId ? appointmentsById.get(c.sourceAppointmentId) : undefined}
-                  onReview={() => setEditItem(c)}
-                  onApprove={async () => {
-                    try {
-                      await api.patch(`/content/${c.id}/approve`);
-                      toast.success("Content approved");
-                      refresh?.();
-                      setStateFilter("all");
-                    } catch { toast.error("Failed to approve"); }
-                  }}
-                  onDeleted={() => refresh?.()}
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
+                {pageItems.map((c) => (
+                  <ContentCard
+                    key={c.id}
+                    item={c}
+                    appointment={c.sourceAppointmentId ? appointmentsById.get(c.sourceAppointmentId) : undefined}
+                    onReview={() => setEditItem(c)}
+                    onApprove={async () => {
+                      try {
+                        await api.patch(`/content/${c.id}/approve`);
+                        toast.success("Content approved");
+                        refresh?.();
+                        setStateFilter("all");
+                      } catch { toast.error("Failed to approve"); }
+                    }}
+                    onDeleted={() => refresh?.()}
+                  />
+                ))}
+              </div>
+              {filtered.length > PAGE_SIZE && (
+                <Pagination
+                  page={page}
+                  totalPages={totalPages}
+                  total={filtered.length}
+                  pageSize={PAGE_SIZE}
+                  onChange={setPage}
                 />
-              ))}
-            </div>
+              )}
+            </>
           )}
         </div>
       </div>}
@@ -829,6 +850,72 @@ function StatePill({ state }: { state: string }) {
     <span className={`backdrop-blur px-2 py-1 text-[9px] uppercase tracking-[0.18em] ${styles[state] || styles.draft}`}>
       {state}
     </span>
+  );
+}
+
+function getPageList(current: number, total: number): (number | "…")[] {
+  const delta = 1;
+  const left = Math.max(2, current - delta);
+  const right = Math.min(total - 1, current + delta);
+  const range: (number | "…")[] = [1];
+  if (left > 2) range.push("…");
+  for (let i = left; i <= right; i++) range.push(i);
+  if (right < total - 1) range.push("…");
+  if (total > 1) range.push(total);
+  return range;
+}
+
+function Pagination({
+  page, totalPages, total, pageSize, onChange,
+}: {
+  page: number; totalPages: number; total: number; pageSize: number; onChange: (page: number) => void;
+}) {
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, total);
+  const pages = getPageList(page, totalPages);
+
+  return (
+    <div className="flex items-center justify-between gap-4 flex-wrap pt-6 mt-6 border-t border-border">
+      <p className="text-[10px] uppercase tracking-widest text-taupe tabular-nums">
+        Showing {start}–{end} of {total}
+      </p>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onChange(page - 1)}
+          disabled={page === 1}
+          className="size-7 flex items-center justify-center border border-border text-taupe text-xs hover:text-foreground hover:border-foreground/50 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+          aria-label="Previous page"
+        >
+          ‹
+        </button>
+        {pages.map((p, i) =>
+          p === "…" ? (
+            <span key={`ellipsis-${i}`} className="w-7 text-center text-[10px] text-taupe/60">…</span>
+          ) : (
+            <button
+              key={p}
+              onClick={() => onChange(p)}
+              className={
+                "size-7 flex items-center justify-center text-[11px] tabular-nums border transition-colors " +
+                (p === page
+                  ? "bg-foreground text-offwhite border-foreground"
+                  : "border-border text-taupe hover:text-foreground hover:border-foreground/50")
+              }
+            >
+              {p}
+            </button>
+          )
+        )}
+        <button
+          onClick={() => onChange(page + 1)}
+          disabled={page === totalPages}
+          className="size-7 flex items-center justify-center border border-border text-taupe text-xs hover:text-foreground hover:border-foreground/50 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+          aria-label="Next page"
+        >
+          ›
+        </button>
+      </div>
+    </div>
   );
 }
 
