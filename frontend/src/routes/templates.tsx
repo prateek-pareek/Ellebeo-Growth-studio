@@ -3,6 +3,7 @@ import { useTemplates, type Template } from "@/lib/providers/template-provider";
 import { useState, useEffect, useRef } from "react";
 import { useAppointments } from "@/lib/providers/appointments-provider";
 import { Layers, Play, Zap, Image, Music } from "lucide-react";
+import { Pagination } from "@/components/Pagination";
 
 export const Route = createFileRoute("/templates")({
   head: () => ({
@@ -55,12 +56,15 @@ const FORMAT_META: Record<string, {
 
 const FORMAT_FILTERS = ["All", "Carousel", "Reel", "Story", "Caption", "TikTok"];
 
+const PAGE_SIZE = 12;
+
 function TemplatesPage() {
   const { templates, categories } = useTemplates();
   const { data: appointments, loading: apptLoading } = useAppointments();
   const [pillar,   setPillar]   = useState("All");
   const [category, setCategory] = useState("All");
   const [format,   setFormat]   = useState("All");
+  const [page,     setPage]     = useState(1);
 
   // Auto-select the tenant's primary service category on first load
   const initialized = useRef(false);
@@ -77,6 +81,13 @@ function TemplatesPage() {
     if (format   !== "All" && t.type !== format)                               return false;
     return true;
   });
+
+  // Reset to page 1 whenever the result set changes shape
+  useEffect(() => { setPage(1); }, [pillar, category, format]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
+  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <div>
@@ -174,11 +185,22 @@ function TemplatesPage() {
           <p className="text-sm text-taupe">No templates match this filter combination.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filtered.map((t) => (
-            <TemplateCard key={t.id} template={t} />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {pageItems.map((t) => (
+              <TemplateCard key={t.id} template={t} />
+            ))}
+          </div>
+          {filtered.length > PAGE_SIZE && (
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              total={filtered.length}
+              pageSize={PAGE_SIZE}
+              onChange={setPage}
+            />
+          )}
+        </>
       )}
     </div>
   );
