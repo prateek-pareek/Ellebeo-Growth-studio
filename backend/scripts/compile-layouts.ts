@@ -37,14 +37,17 @@ const layoutSchema = {
                   zIndex: { type: "number" },
                   mask: { type: ["string", "null"], enum: ["rectangle", "circle", "arch", "die_cut", "split", "polaroid", null] },
                   paddingPercent: { type: ["number", "null"] },
-                  component: { type: ["string", "null"], enum: ["wax_seal", "ticket_notches", "film_sprockets", "gallery_frame", "masking_tape", "gold_accents", "glass_card", "3d_ribbon", "metric_panel", "editorial_sidebar", "status_chip", "divider", "chapter_tabs", null] },
+                  component: { type: ["string", "null"], enum: ["wax_seal", "ticket_notches", "film_sprockets", "gallery_frame", "masking_tape", "gold_accents", "glass_card", "3d_ribbon", "metric_panel", "editorial_sidebar", "status_chip", "divider", "chapter_tabs", "measurement_lines", "blueprint_grid", "museum_border", "thin_divider", "editorial_title", "oversized_index", "metadata_label", null] },
                   anchor: { type: ["string", "null"], enum: ["center", "top_left", "top_right", "top_center", "bottom_left", "bottom_right", "bottom_center", "bottom_edge", "corners", "edges", "middle_left", "middle_right", null] },
                   offsetPercent: { type: ["number", "null"] },
                   role: { type: ["string", "null"], enum: ["heading", "tagline", "watermark", "footnote", "body", null] },
                   alignment: { type: ["string", "null"], enum: ["left", "center", "right", null] },
-                  maxWidthPercent: { type: ["number", "null"] }
+                  maxWidthPercent: { type: ["number", "null"] },
+                  attachTo: { type: ["string", "null"] },
+                  attachPosition: { type: ["string", "null"], enum: ["top", "bottom", "left", "right", "center", "overlap", null] },
+                  attachOffset: { type: ["number", "null"] }
                 },
-                required: ["id", "type", "zIndex", "mask", "paddingPercent", "component", "anchor", "offsetPercent", "role", "alignment", "maxWidthPercent"],
+                required: ["id", "type", "zIndex", "mask", "paddingPercent", "component", "anchor", "offsetPercent", "role", "alignment", "maxWidthPercent", "attachTo", "attachPosition", "attachOffset"],
                 additionalProperties: false
               }
             }
@@ -65,7 +68,7 @@ You will be given a batch of templates. For each template, generate the exact "l
 - Analyze the semantic meaning of the template. If it implies data/stats, use the "metric_panel" component. If editorial, use "editorial_sidebar" or "divider". Use exact 'component' enum values.
 - Always include a text layer (zIndex: 30) for heading and/or tagline, anchoring them where the description says.
 
-Translate the semantic descriptions strictly into our primitive schema. Do NOT hallucinate mask or component types. Think like an architect generating React component props.
+Translate the semantic descriptions strictly into our primitive schema. Do NOT hallucinate mask or component types. Think like an architect generating React component props. Use attachTo to relate text to images or other text if it helps layout precision. Use the new architectural primitives like blueprint_grid and measurement_lines for technical layouts.
 `;
 
 async function main() {

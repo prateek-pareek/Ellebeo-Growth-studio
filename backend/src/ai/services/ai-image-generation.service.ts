@@ -24,6 +24,8 @@ import type { VisionAnalysisResult } from '../types/chain-output.types';
 import { resolveLayoutTemplate, BASE_TREATMENTS, TEXT_TEMPLATES, DECORATIONS, LAYOUT_TEMPLATES } from '../config/layout-renderers';
 import { TemplateAgentService } from './template-agent.service';
 import templateLibraryData from '../config/template-library.json';
+import { ThemeEngine } from './template-engine/engines/theme-engine';
+import { CompositionEngine, TemplateIntent } from './template-engine/engines/composition-engine';
 
 const openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
 
@@ -275,10 +277,14 @@ BODY SLIDE:
 }
 
 export class AiImageGenerationService {
-  private templateAgent: TemplateAgentService;
+  private readonly templateAgent: TemplateAgentService;
+  private readonly themeEngine: ThemeEngine;
+  private readonly compositionEngine: CompositionEngine;
 
   constructor() {
     this.templateAgent = new TemplateAgentService();
+    this.themeEngine = new ThemeEngine();
+    this.compositionEngine = new CompositionEngine();
   }
 
   async generateSlide(params: {
@@ -305,12 +311,13 @@ export class AiImageGenerationService {
     visualRanking?: string[];
     capitalizationRule?: string;
     footerBrandToggle?: boolean;
-    generatorModel?: 'gemini' | 'dalle' | 'both';
+    generatorModel?: 'gemini' | 'dalle' | 'both' | 'none';
     backgroundBrandColor?: string;
     accentBrandColor?: string;
     depthBrandColor?: string;
     moodboardVisionSummary?: string;
     visionResult?: VisionAnalysisResult;
+    templateIntent?: 'educational' | 'promotion' | 'testimonial' | 'before_after' | 'brand_story';
   }): Promise<{ url: string; variants?: { gemini?: string; dalle?: string } }> {
     const {
       photoUrl, beforePhotoUrl, overlayText, index, isFirst, isLast, isBeforePhoto,
@@ -333,6 +340,7 @@ export class AiImageGenerationService {
       depthBrandColor = '#1E1E1C',
       moodboardVisionSummary,
       visionResult,
+      templateIntent = 'educational',
     } = params;
 
     // Fast-path: Skip AI image generation entirely for text-only editorial layouts
@@ -370,7 +378,7 @@ export class AiImageGenerationService {
 
     const isRealClientPhoto = photoUrl && (photoUrl.startsWith('http') || photoUrl.includes('raw_assets') || photoUrl.includes('storage') || photoUrl.includes('temp'));
 
-    if (isRealClientPhoto) {
+    if (isRealClientPhoto || generatorModel === 'none') {
       console.log(`[PASS-THROUGH SHARP COMPOSITOR] Bypassing AI image editor for slide ${index} to guarantee 100% client face preservation.`);
       imageBuffer = await downloadImageAsBuffer(photoUrl);
       const base64Image = imageBuffer.toString('base64');
@@ -620,14 +628,15 @@ CRITICAL IMAGE REQUIREMENTS:
     visualRanking?: string[];
     capitalizationRule?: string;
     footerBrandToggle?: boolean;
-    generatorModel?: 'gemini' | 'dalle' | 'both';
+    generatorModel?: 'gemini' | 'dalle' | 'both' | 'none';
     backgroundBrandColor?: string;
     accentBrandColor?: string;
     depthBrandColor?: string;
     moodboardVisionSummary?: string;
     visionResult?: VisionAnalysisResult;
+    templateIntent?: 'educational' | 'promotion' | 'testimonial' | 'before_after' | 'brand_story';
   }): Promise<GeneratedSlide[]> {
-    const { afterPhotoUrl, beforePhotoUrl, concepts, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', depthBrandColor = '#1E1E1C', moodboardVisionSummary, visionResult, ...rest } = params;
+    const { afterPhotoUrl, beforePhotoUrl, concepts, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', depthBrandColor = '#1E1E1C', moodboardVisionSummary, visionResult, templateIntent = 'educational', ...rest } = params;
     const total = concepts.length;
 
     // Derive pool dynamically from JSON config — never goes stale when new layouts are added
@@ -642,39 +651,27 @@ CRITICAL IMAGE REQUIREMENTS:
     const uniqueLayoutsForSlides: string[] = [];
     let pool = [...layoutPool];
 
-    for (let i = 0; i < total; i++) {
-      let chosen = '';
-      if (i === 0) {
-        // Cover uses agent
-        const agentDecision = await this.templateAgent.selectTemplate({
-          brief: concepts[i]?.overlayText || 'Cover slide',
-          brandName: params.businessName || 'Brand',
-          aesthetic: params.aesthetic || 'minimal editorial',
-          textLength: (concepts[i]?.overlayText || '').length,
-          slideIndex: 0,
-          totalSlides: total,
-          visionResult: visionResultStub,
-          excludeLayouts: uniqueLayoutsForSlides
-        });
-        chosen = agentDecision.selected_layout_id;
-      } else {
-        // Body slides use agent too
-        const agentDecision = await this.templateAgent.selectTemplate({
-          brief: concepts[i]?.overlayText || 'Body slide',
-          brandName: params.businessName || 'Brand',
-          aesthetic: params.aesthetic || 'minimal editorial',
-          textLength: (concepts[i]?.overlayText || '').length,
-          slideIndex: i,
-          totalSlides: total,
-          visionResult: visionResultStub,
-          excludeLayouts: uniqueLayoutsForSlides
-        });
-        chosen = agentDecision.selected_layout_id;
+    // Parallelize Template Agent requests to eliminate 30-40 sec bottleneck
+    const agentPromises = concepts.map((concept, i) => 
+      this.templateAgent.selectTemplate({
+        brief: concept.overlayText || 'Slide',
+        brandName: params.businessName || 'Brand',
+        aesthetic: params.aesthetic || 'minimal editorial',
+        textLength: (concept.overlayText || '').length,
+        slideIndex: i,
+        totalSlides: total,
+        visionResult: visionResultStub
+      }).then(res => res.selected_layout_id)
+    );
 
-        // Prevent dupes locally
-        if (uniqueLayoutsForSlides.includes(chosen) && pool.length > 0) {
-          chosen = pool[Math.floor(Math.random() * pool.length)] || chosen;
-        }
+    const chosenLayouts = await Promise.all(agentPromises);
+
+    for (let i = 0; i < total; i++) {
+      let chosen = chosenLayouts[i];
+
+      // Prevent dupes locally
+      if (i > 0 && uniqueLayoutsForSlides.includes(chosen) && pool.length > 0) {
+        chosen = pool[Math.floor(Math.random() * pool.length)] || chosen;
       }
 
       uniqueLayoutsForSlides.push(chosen);
@@ -730,6 +727,7 @@ CRITICAL IMAGE REQUIREMENTS:
             depthBrandColor,
             moodboardVisionSummary,
             visionResult: visionResult ?? visionResultStub,
+            templateIntent,
           });
           return {
             url: result.url,
@@ -766,14 +764,15 @@ CRITICAL IMAGE REQUIREMENTS:
     capitalizationRule?: string;
     footerBrandToggle?: boolean;
     layoutType?: string;
-    generatorModel?: 'gemini' | 'dalle' | 'both';
+    generatorModel?: 'gemini' | 'dalle' | 'both' | 'none';
     backgroundBrandColor?: string;
     accentBrandColor?: string;
     depthBrandColor?: string;
     moodboardVisionSummary?: string;
     visionResult?: VisionAnalysisResult;
+    templateIntent?: any;
   }): Promise<GeneratedSlide[]> {
-    const { afterPhotoUrl, beforePhotoUrl, frames, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', depthBrandColor = '#1E1E1C', moodboardVisionSummary, visionResult, ...rest } = params;
+    const { afterPhotoUrl, beforePhotoUrl, frames, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', depthBrandColor = '#1E1E1C', moodboardVisionSummary, visionResult, templateIntent, ...rest } = params;
     const total = frames.length;
 
     // Derive pool dynamically from JSON config — never goes stale when new layouts are added
@@ -788,37 +787,27 @@ CRITICAL IMAGE REQUIREMENTS:
     const uniqueLayoutsForFrames: string[] = [];
     let pool = [...layoutPool];
 
-    for (let i = 0; i < total; i++) {
-      let chosen = '';
-      if (i === 0) {
-        // Cover uses agent
-        const agentDecision = await this.templateAgent.selectTemplate({
-          brief: frames[i]?.overlayText || 'Cover frame',
-          brandName: params.businessName || 'Brand',
-          aesthetic: params.aesthetic || 'minimal editorial',
-          textLength: (frames[i]?.overlayText || '').length,
-          slideIndex: 0,
-          totalSlides: total,
-          visionResult: visionResultStub
-        });
-        chosen = agentDecision.selected_layout_id;
-      } else {
-        // Body frames use agent too
-        const agentDecision = await this.templateAgent.selectTemplate({
-          brief: frames[i]?.overlayText || 'Body frame',
-          brandName: params.businessName || 'Brand',
-          aesthetic: params.aesthetic || 'minimal editorial',
-          textLength: (frames[i]?.overlayText || '').length,
-          slideIndex: i,
-          totalSlides: total,
-          visionResult: visionResultStub
-        });
-        chosen = agentDecision.selected_layout_id;
+    // Parallelize Template Agent requests to eliminate 30-40 sec bottleneck
+    const agentPromises = frames.map((frame, i) => 
+      this.templateAgent.selectTemplate({
+        brief: frame.overlayText || (i === 0 ? 'Cover frame' : 'Body frame'),
+        brandName: params.businessName || 'Brand',
+        aesthetic: params.aesthetic || 'minimal editorial',
+        textLength: (frame.overlayText || '').length,
+        slideIndex: i,
+        totalSlides: total,
+        visionResult: visionResultStub
+      }).then(res => res.selected_layout_id)
+    );
+    
+    const chosenLayouts = await Promise.all(agentPromises);
 
-        // Prevent dupes locally
-        if (uniqueLayoutsForFrames.includes(chosen) && pool.length > 0) {
-          chosen = pool[Math.floor(Math.random() * pool.length)] || chosen;
-        }
+    for (let i = 0; i < total; i++) {
+      let chosen = chosenLayouts[i];
+
+      // Prevent dupes locally
+      if (i > 0 && uniqueLayoutsForFrames.includes(chosen) && pool.length > 0) {
+        chosen = pool[Math.floor(Math.random() * pool.length)] || chosen;
       }
 
       uniqueLayoutsForFrames.push(chosen);
@@ -842,9 +831,17 @@ CRITICAL IMAGE REQUIREMENTS:
 
         const brief = artDirectorBrief?.find(b => b.index === frame.index);
         let currentSlideLayout = uniqueLayoutsForFrames[i];
-        if (isLast) {
-          currentSlideLayout = 'transparent_scrim';
-        }
+
+        // Map the legacy layout ID to a semantic template intent for the CompositionEngine
+        const mapIntent = (layout: string) => {
+          if (layout.includes('hero') || layout.includes('carousel')) return 'brand_story';
+          if (layout.includes('die_cut') || layout.includes('split') || layout.includes('before_after')) return 'before_after';
+          if (layout.includes('catalog') || layout.includes('elevation') || layout.includes('diagram') || layout.includes('editorial')) return 'educational';
+          if (layout.includes('promo') || layout.includes('sale')) return 'promotion';
+          if (layout.includes('testimonial') || layout.includes('quote')) return 'testimonial';
+          return 'brand_story';
+        };
+        const templateIntent = mapIntent(currentSlideLayout);
 
         try {
           const result = await this.generateSlide({
@@ -872,6 +869,7 @@ CRITICAL IMAGE REQUIREMENTS:
             depthBrandColor,
             moodboardVisionSummary,
             visionResult: visionResult ?? visionResultStub,
+            templateIntent,
           });
           return {
             url: result.url,
@@ -914,6 +912,7 @@ CRITICAL IMAGE REQUIREMENTS:
     outputSize?: string;
     captionText: string;
     visionResult?: VisionAnalysisResult;
+    templateIntent?: any;
   }): Promise<string> {
     const {
       base64Image,
@@ -936,7 +935,8 @@ CRITICAL IMAGE REQUIREMENTS:
       accentBrandColor = '#D4A373',
       depthBrandColor = '#1E1E1C',
       outputSize,
-      visionResult
+      visionResult,
+      templateIntent
     } = params;
 
     const hasText = overlayText && overlayText.trim().length > 0;
@@ -1093,8 +1093,28 @@ CRITICAL IMAGE REQUIREMENTS:
       const innerW = w - (paddingX * 2);
       const innerH = h - (paddingTop + paddingBottom);
 
+      // â”€â”€ Step 0: Resolve Design Tokens & Composition Metadata â”€â”€
+      const designTokens = this.themeEngine.resolveDesignTokens(visualRanking);
+      const composition = this.compositionEngine.calculateComposition(designTokens, templateIntent as any, isFirst);
+
+      // We can use composition.maskPreference to override layout if we want.
+      let computedLayoutType = layoutType;
+      
+      // Only apply generic shape overrides to the universal random templates, 
+      // NOT to our specifically contracted templates in compiled-layouts.v1.json
+      if (['random_diverse', 'universal_dynamic_base', 'passepartout_text'].includes(layoutType)) {
+        if (composition.maskPreference === 'circle') computedLayoutType = 'circle_crop';
+        else if (composition.maskPreference === 'polaroid') computedLayoutType = 'polaroid_stack';
+        else if (composition.maskPreference === 'arch') computedLayoutType = 'arch_mask';
+        else if (composition.maskPreference === 'organic') computedLayoutType = 'floating_cutout';
+        else if (composition.maskPreference === 'torn') computedLayoutType = 'torn_paper_edge';
+      }
+      
       // â”€â”€ Step 1: Process Base Image â€” dispatched from layout-templates.config.json â”€â”€
-      const template = resolveLayoutTemplate(layoutType, visualRanking);
+      const template = resolveLayoutTemplate(computedLayoutType, visualRanking);
+      if (['circle_crop', 'polaroid_stack', 'arch_mask', 'floating_cutout', 'torn_paper_edge'].includes(computedLayoutType)) {
+        template.base = computedLayoutType as any;
+      }
 
       const baseResult = await BASE_TREATMENTS[template.base]!({
         layoutType,
@@ -1187,6 +1207,8 @@ CRITICAL IMAGE REQUIREMENTS:
         validBrandColor, validSecondaryColor, validBackgroundColor, validAccentColor, brandFont, rawName, photoDataUri,
         escapedLines, dyOffset, dynamicFontSize, dynamicTextColor, overlayText: finalOverlayText, maxLength,
         faceCoordinates: visionResult?.faceCoordinates,
+        injectedFeatures: composition.injectedFeatures,
+        designTokens,
       };
 
       const visualAdditions = template.decoration
@@ -1232,6 +1254,16 @@ CRITICAL IMAGE REQUIREMENTS:
       const svgString = `
         <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
           <defs>
+            <!-- Premium Text Shadows and Glassmorphism Filters -->
+            <filter id="premium_shadow" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="8" stdDeviation="15" flood-color="#000000" flood-opacity="0.25"/>
+            </filter>
+            <filter id="premium_glass" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="blur" />
+              <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 15 -5" result="glow" />
+              <feComposite in="SourceGraphic" in2="glow" operator="over" />
+            </filter>
+
             <style>
               ${brandFontFace}
               ${bodyFontFace}

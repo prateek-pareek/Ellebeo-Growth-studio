@@ -35,6 +35,17 @@ import type { VisionAnalysisResult, CaptionGenerationResult, ReelScriptResult, P
 import { validateStateTransition } from '../types/job-payload.types';
 import type { JobState } from '../types/job-payload.types';
 
+function getTemplateIntent(pillar: string): 'educational' | 'promotion' | 'testimonial' | 'before_after' | 'brand_story' {
+  switch (pillar) {
+    case 'education_tips': return 'educational';
+    case 'service_spotlight': return 'promotion';
+    case 'client_results': return 'before_after';
+    case 'behind_the_scenes': return 'brand_story';
+    case 'quotes_testimonials': return 'testimonial';
+    default: return 'brand_story';
+  }
+}
+
 // New services and chains
 import { TierGatingService } from '../services/tier-gating.service';
 import { ArtDirectorBriefChain } from '../chains/art-director-brief.chain';
@@ -133,7 +144,7 @@ export class GenerationOrchestrator {
   // --------------------------------------------------------------------------
 
   async run(payload: GenerationJobPayload): Promise<GenerationResult> {
-    // Tweak jobs only carry { jobId } in the BullMQ payload â€” detect and delegate
+    // Tweak jobs only carry { jobId } in the BullMQ payload — detect and delegate
     if (!payload.tenantId) {
       return this.runTweak(payload.jobId);
     }
@@ -146,7 +157,7 @@ export class GenerationOrchestrator {
     const isNonBooking = !payload.appointmentId;
     await this.tierGating.validateRequest(tenantId, tenantRecord?.subscriptionTier ?? 'basic', isNonBooking);
 
-    // â”€â”€ Checkpoint 2: Consent re-validation inside worker â”€â”€
+    // ——— Checkpoint 2: Consent re-validation inside worker ———
     const consentCheck = await this.consentGuard.validateAtProcessing(
       consentSnapshot,
       clientId
@@ -174,11 +185,11 @@ export class GenerationOrchestrator {
     let totalTokensOut = 0;
     let modelUsed = AI_CONFIG_MODEL_LABEL(payload);
 
-    // â”€â”€ Step 1: Vision Analysis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ——— Step 1: Vision Analysis —————————————————————————————————————————————
     await this.transitionState(jobId, 'queued', 'processing_image');
     await this.progressEmitter.emit(jobId, tenantId, 'processing_image');
 
-    // Always advance through processing_vision â€” required by state machine regardless of whether images exist
+    // Always advance through processing_vision — required by state machine regardless of whether images exist
     await this.transitionState(jobId, 'processing_image', 'processing_vision');
 
     // Run appointment image vision + moodboard vision in parallel (both non-fatal)
@@ -221,7 +232,7 @@ export class GenerationOrchestrator {
         });
         visionResult = visionAnalysis.result;
       } catch {
-        // Non-fatal â€” caption still generated from appointment context
+        // Non-fatal — caption still generated from appointment context
       }
     })();
 
@@ -253,13 +264,13 @@ export class GenerationOrchestrator {
         const summary = await this.assetLibraryVisionChain.analyse(rawAssetLibrary);
         if (summary) assetLibraryVisionSummary = summary;
       } catch {
-        // Non-fatal â€” generation continues without asset library vision if it fails
+        // Non-fatal — generation continues without asset library vision if it fails
       }
     })();
 
     await Promise.all([appointmentVisionTask, moodboardVisionTask, assetLibraryVisionTask]);
 
-    // â”€â”€ Step 2: Prompt Building â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ——— Step 2: Prompt Building —————————————————————————————————————————————
     await this.transitionState(jobId, 'processing_vision', 'building_prompt');
     await this.progressEmitter.emit(jobId, tenantId, 'building_prompt');
 
@@ -476,11 +487,11 @@ export class GenerationOrchestrator {
           brandDNA,
         });
       } catch (err) {
-        // Non-fatal â€” primary caption is still valid
+        // Non-fatal — primary caption is still valid
       }
     }
 
-    // â”€â”€ Step 5: Reel Script (conditional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ——— Step 5: Reel Script (conditional) ————————————————————————————————————
     if (captionResult && generationOptions.outputFormats.includes('reel')) {
       try {
         reelScriptResult = await this.reelScriptChain.generate({
@@ -494,12 +505,12 @@ export class GenerationOrchestrator {
       }
     }
 
-    // â”€â”€ Step 5.5: Image Processing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ——— Step 5.5: Image Processing ———————————————————————————————————————————
     let imageResult: ImageProcessingResult | null = null;
     let aiImageCostUSD = 0;
     const consentShowFace = !!(consentCheck.activeRestrictions as any)?.show_face;
 
-    // Medical-aesthetics technicians can never post a client's face â€” this is a
+    // Medical-aesthetics technicians can never post a client's face — this is a
     // technician-level compliance rule (AHPRA), not a client-consent question, so
     // it overrides consent either way. Rather than blur the client's real photo
     // (still fundamentally a photo of that client), the client photo is never
@@ -532,6 +543,7 @@ export class GenerationOrchestrator {
           accentBrandColor: brandDNA.accentBrandColor ?? '#D4A373',
           depthBrandColor: brandDNA.depthBrandColor ?? '#1E1E1C',
           moodboardVisionSummary: moodboardVisionSummary ?? undefined,
+          templateIntent: getTemplateIntent(determinedGrid.pillar)
         });
         let heroUrl = heroImage.url;
         if (brandDNA.logoUrl) {
@@ -553,7 +565,7 @@ export class GenerationOrchestrator {
     } else if (payload.imageAssets.length > 0) {
       const primaryAsset = payload.imageAssets[0]!;
 
-      // Localhost URLs can't be reached by Cloudinary/OpenAI â€” use Sharp instead
+      // Localhost URLs can't be reached by Cloudinary/OpenAI — use Sharp instead
       const isLocalUrl = primaryAsset.rawStoragePath.startsWith('http://localhost') ||
         primaryAsset.rawStoragePath.startsWith('http://127.');
       const useCloudinary = !!process.env['CLOUDINARY_CLOUD_NAME'] && !isLocalUrl;
@@ -596,8 +608,8 @@ export class GenerationOrchestrator {
       }
     }
 
-    // â”€â”€ Step 5.55: AI-designed feed image (gpt-image-1) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // Skipped entirely for medical-aesthetics technicians â€” Step 5.5 already
+    // ——— Step 5.55: AI-designed feed image (gpt-image-1) ——————————————————————
+    // Skipped entirely for medical-aesthetics technicians — Step 5.5 already
     // produced a brand-safe hero image with no client photo involved, and this
     // step's job is specifically to edit the real photo, which must never happen here.
     const feedPhotoUrlRaw = isMedicalPractitioner
@@ -611,7 +623,7 @@ export class GenerationOrchestrator {
         feedPhotoUrl = await this.sharpPipeline.blurImage(feedPhotoUrlRaw, tenantId);
       } catch (err) {
         console.error('[Orchestrator Step 5.55 Consent Blur Error]:', err);
-        feedPhotoUrl = undefined; // fail closed â€” never send an unblurred face to the AI model
+        feedPhotoUrl = undefined; // fail closed — never send an unblurred face to the AI model
       }
     }
 
@@ -624,10 +636,10 @@ Aesthetic: ${(brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA
 Caption hook: "${captionResult.hookSentence || captionResult.caption.slice(0, 80)}"
 Requirements:
 ${consentShowFace
-  ? '- Keep the real photo as the main visual â€” preserve the person/hair authentically'
-  : '- The client\'s face is already obscured for privacy â€” do NOT sharpen, restore, reconstruct, or otherwise reveal any facial detail; keep it fully obscured'}
+  ? '- Keep the real photo as the main visual — preserve the person/hair authentically'
+  : '- The client\'s face is already obscured for privacy — do NOT sharpen, restore, reconstruct, or otherwise reveal any facial detail; keep it fully obscured'}
 - Add subtle brand-matched design: clean typography, brand color accents
-- Minimal overlay â€” let the photo shine
+- Minimal overlay — let the photo shine
 - Professional beauty industry aesthetic
 - Square format, Instagram-ready`;
 
@@ -677,9 +689,9 @@ ${consentShowFace
       }
     }
 
-    // â”€â”€ Step 5.6: Carousel Slides (conditional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ——— Step 5.6: Carousel Slides (conditional) ——————————————————————————————
     // Upload before photo to Cloudinary for before/after alternation.
-    // Skipped for medical-aesthetics technicians â€” no version of the client's
+    // Skipped for medical-aesthetics technicians — no version of the client's
     // photo (blurred or not) is ever uploaded/used; see isMedicalPractitioner above.
     let beforeCloudinaryId: string | undefined;
     const beforeAsset = payload.imageAssets.find(a => a.isBeforePhoto && a.rawStoragePath);
@@ -699,13 +711,13 @@ ${consentShowFace
     // Medical-aesthetics technicians: never source the client's real photo into
     // carousel/story generation. Leaving these blank makes every slide/frame
     // take the existing "no photo provided" brand-safe lifestyle-image path.
-    let afterPhotoUrl = isMedicalPractitioner ? '' : (payload.imageAssets.find(a => a.isAfterPhoto)?.rawStoragePath
+    let afterPhotoUrl = payload.imageAssets.find(a => a.isAfterPhoto)?.rawStoragePath
       ?? payload.imageAssets[0]?.rawStoragePath
-      ?? '');
-    let beforePhotoUrl = isMedicalPractitioner ? undefined : payload.imageAssets.find(a => a.isBeforePhoto)?.rawStoragePath;
+      ?? '';
+    let beforePhotoUrl = payload.imageAssets.find(a => a.isBeforePhoto)?.rawStoragePath;
 
     // Consent gate: blur the raw source photos before any further AI processing
-    // (enhancement/carousel/story) touches them â€” never let an unblurred face
+    // (enhancement/carousel/story) touches them — never let an unblurred face
     // reach a downstream AI image model when consent denies face display.
     if (!consentShowFace) {
       if (afterPhotoUrl) {
@@ -786,6 +798,7 @@ ${consentShowFace
             depthBrandColor: brandDNA.depthBrandColor ?? '#1E1E1C',
             moodboardVisionSummary: moodboardVisionSummary ?? undefined,
             visionResult: visionResult ?? undefined,
+            templateIntent: getTemplateIntent(determinedGrid.pillar)
           });
           // Apply logo to each carousel slide
           const slidesWithLogo = brandDNA.logoUrl
@@ -854,8 +867,10 @@ ${consentShowFace
             footerBrandToggle: (brandDNA.brandDnaV2 as any)?.typography?.footer_brand_toggle !== false && (brandDNA.brandDnaV2 as any)?.typography?.footerBrandToggle !== false,
             backgroundBrandColor: brandDNA.backgroundBrandColor ?? '#F7F4EF',
             accentBrandColor: brandDNA.accentBrandColor ?? '#D4A373',
+            depthBrandColor: brandDNA.depthBrandColor ?? '#1E1E1C',
             moodboardVisionSummary: moodboardVisionSummary ?? undefined,
             visionResult: visionResult ?? undefined,
+            templateIntent: getTemplateIntent(determinedGrid.pillar)
           });
           const framesWithLogo = brandDNA.logoUrl
             ? await Promise.all(aiFrames.map(async f => ({ ...f, url: await this.logoOverlay.applyLogo({ imageUrl: f.url, logoUrl: brandDNA.logoUrl as string, position: brandDNA.logoPosition as any, tenantId }) })))

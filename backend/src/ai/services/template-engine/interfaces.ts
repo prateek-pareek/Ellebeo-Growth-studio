@@ -44,17 +44,21 @@ export type LayoutAnchor = 'center' | 'top_left' | 'top_right' | 'top_center' | 
 export interface IDSLBaseLayer {
   id: string; // e.g., "hero-image", "main-heading"
   zIndex: number; // explicit render order (e.g., 10, 20, 30)
+  attachTo?: string; // ID of another layer to relatively position against
+  attachPosition?: 'top' | 'bottom' | 'left' | 'right' | 'center' | 'overlap';
+  attachOffset?: number; // pixel offset from the attached position
 }
 
 export interface IDSLImageLayer extends IDSLBaseLayer {
   type: 'image';
   mask: 'rectangle' | 'circle' | 'arch' | 'die_cut' | 'split' | 'polaroid';
   paddingPercent: number; // e.g., 0 for full-bleed, 10 for inset
+  anchor?: LayoutAnchor; // Used for corner positioning
 }
 
 export interface IDSLDecorationLayer extends IDSLBaseLayer {
   type: 'decoration';
-  component: 'wax_seal' | 'ticket_notches' | 'film_sprockets' | 'gallery_frame' | 'masking_tape' | 'gold_accents' | 'glass_card' | '3d_ribbon' | 'metric_panel' | 'editorial_sidebar' | 'status_chip' | 'divider' | 'chapter_tabs';
+  component: 'wax_seal' | 'ticket_notches' | 'film_sprockets' | 'gallery_frame' | 'masking_tape' | 'gold_accents' | 'glass_card' | '3d_ribbon' | 'metric_panel' | 'editorial_sidebar' | 'status_chip' | 'divider' | 'chapter_tabs' | 'measurement_lines' | 'blueprint_grid' | 'museum_border' | 'thin_divider';
   anchor: LayoutAnchor;
   offsetPercent: number; // distance from the anchor
 }
@@ -65,7 +69,7 @@ export interface IDSLTextLayer extends IDSLBaseLayer {
   anchor: LayoutAnchor;
   alignment: 'left' | 'center' | 'right';
   maxWidthPercent: number; // restricts text from hitting edges
-  component?: string; // Optional background decoration component
+  component?: string; // Optional background decoration component (e.g. editorial_title, oversized_index, metadata_label)
 }
 
 export type IDSLSceneLayer = IDSLImageLayer | IDSLDecorationLayer | IDSLTextLayer;

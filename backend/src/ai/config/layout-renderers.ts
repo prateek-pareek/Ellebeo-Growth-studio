@@ -14,7 +14,15 @@ import templateLibraryData from './template-library.json';
 import compiledLayouts from './compiled-layouts.v1.json';
 import { processPortraitFit } from '../services/ai-image-generation.service';
 import { ICompiledLayoutDSL, IDSLSceneLayer, IDSLImageLayer, IDSLDecorationLayer, IDSLTextLayer } from '../services/template-engine/interfaces';
-import type { VisualStyleId } from './visual-style-library';
+import { LayoutEngine, LayoutFamily, NegativeSpace, BoundingBox, LayoutConstraints } from '../services/template-engine/engines/layout-engine';
+import { PrimitiveEngine, PrimitiveContext } from '../services/template-engine/engines/primitive-engine';
+import { TypographyEngine, TypographyContext, TypographySystem } from '../services/template-engine/engines/typography-engine';
+import { ThemeEngine } from '../services/template-engine/engines/theme-engine';
+
+const primitiveEngine = new PrimitiveEngine();
+const typographyEngine = new TypographyEngine();
+const themeEngine = new ThemeEngine();
+
 
 export type LayoutTemplate = {
   base: string;
@@ -31,26 +39,6 @@ const { _proposed_template_agent_library, ...activeLayoutTemplates } = layoutTem
 
 export const LAYOUT_TEMPLATES: Record<string, LayoutTemplate> = activeLayoutTemplates as Record<string, LayoutTemplate>;
 
-// Every one of the 10 Brand DNA visual styles (visual-style-library.ts) maps
-// to one real decoration from the Component Registry below — chosen to match
-// that style's defined material/composition language (e.g. Quiet Luxury's
-// "brushed brass as the only metallic" -> gold_foil_accents; Bold Campaign's
-// "flat colour fields" -> brand_scrim_heavy). Only applied when a layout's
-// own config leaves `decoration: null` — a layout with a curated decoration
-// already assigned keeps it untouched regardless of style ranking.
-const STYLE_DECORATION_MAP: Record<VisualStyleId, string> = {
-  quiet_luxury: 'gold_foil_accents',
-  editorial_beauty: 'gallery_hairline',
-  clinical_minimalist: 'gallery_hairline',
-  warm_wellness: 'masking_tape_corners',
-  high_fashion: 'dark_scrim_overlay',
-  polished_commercial: 'side_photo_embed',
-  soft_feminine: 'translucent_pane',
-  bold_campaign: 'brand_scrim_heavy',
-  natural_organic: 'ticket_notches_dashed',
-  contemporary_cool: 'film_sprockets',
-};
-
 export function resolveLayoutTemplate(layoutType: string, visualRanking?: string[]): LayoutTemplate {
   // If it's a hardcoded legacy layout, use it natively
   const resolved = LAYOUT_TEMPLATES[layoutType]
@@ -66,255 +54,18 @@ export function resolveLayoutTemplate(layoutType: string, visualRanking?: string
 
   // Style Mapping: an undecorated layout gets a decoration matching the
   // brand's top-ranked visual style, instead of always rendering plain.
-  const primaryStyle = visualRanking?.[0] as VisualStyleId | undefined;
-  if (resolved.decoration === null && primaryStyle && STYLE_DECORATION_MAP[primaryStyle]) {
-    return { ...resolved, decoration: STYLE_DECORATION_MAP[primaryStyle] };
+  if (resolved.decoration === null) {
+    const themeDeco = themeEngine.resolveStyleDecoration(visualRanking);
+    if (themeDeco) {
+      return { ...resolved, decoration: themeDeco };
+    }
   }
 
   return resolved;
 }
 
-// ── Component Registry ───────────────────────────────────────────────────────
 
-const ComponentRegistry: Record<string, (ctx: any, layer: IDSLDecorationLayer) => string> = {
-  wax_seal: (ctx, layer) => {
-    let cx = ctx.w / 2;
-    let cy = 180;
-    if (layer.anchor && layer.anchor.includes('left')) cx = 150;
-    if (layer.anchor && layer.anchor.includes('right')) cx = ctx.w - 150;
-    if (layer.anchor && layer.anchor.includes('bottom')) cy = ctx.h - 150;
-    
-    // Extract first letter of rawName for seal
-    const initial = ctx.rawName ? ctx.rawName.charAt(0).toUpperCase() : 'E';
-
-    return `
-      <!-- Wax Seal Base (Shadow) -->
-      <circle cx="${cx}" cy="${cy + 6}" r="62" fill="#000000" fill-opacity="0.15" filter="blur(4px)" />
-      <!-- Outer Wax Ring (Irregular) -->
-      <path d="M ${cx},${cy - 65} C ${cx + 35},${cy - 60} ${cx + 65},${cy - 30} ${cx + 62},${cy + 10} C ${cx + 58},${cy + 45} ${cx + 25},${cy + 68} ${cx - 10},${cy + 65} C ${cx - 40},${cy + 60} ${cx - 68},${cy + 25} ${cx - 60},${cy - 20} C ${cx - 50},${cy - 55} ${cx - 20},${cy - 68} ${cx},${cy - 65} Z" fill="${ctx.validBrandColor}" />
-      <!-- Inner Embossed Ring -->
-      <circle cx="${cx}" cy="${cy}" r="48" fill="none" stroke="${ctx.validSecondaryColor}" stroke-width="2" stroke-opacity="0.4" />
-      <circle cx="${cx}" cy="${cy}" r="50" fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.2" />
-      <!-- Embossed Initial -->
-      <text x="${cx}" y="${cy + 18}" text-anchor="middle" font-family="${ctx.brandFont}, serif" font-size="52px" fill="${ctx.validSecondaryColor}" font-weight="bold">${initial}</text>
-      <text x="${cx}" y="${cy + 20}" text-anchor="middle" font-family="${ctx.brandFont}, serif" font-size="52px" fill="#000000" fill-opacity="0.2" font-weight="bold">${initial}</text>
-    `;
-  },
-  gold_accents: (ctx, layer) => {
-    // Thin brand-colored or accent-colored lines adding structure
-    return `
-      <rect x="50" y="50" width="${ctx.w - 100}" height="2" fill="${ctx.validBrandColor}" fill-opacity="0.8" />
-      <rect x="50" y="${ctx.h - 52}" width="${ctx.w - 100}" height="2" fill="${ctx.validBrandColor}" fill-opacity="0.8" />
-      <circle cx="50" cy="50" r="4" fill="${ctx.validBrandColor}" />
-      <circle cx="${ctx.w - 50}" cy="50" r="4" fill="${ctx.validBrandColor}" />
-      <circle cx="50" cy="${ctx.h - 50}" r="4" fill="${ctx.validBrandColor}" />
-      <circle cx="${ctx.w - 50}" cy="${ctx.h - 50}" r="4" fill="${ctx.validBrandColor}" />
-    `;
-  },
-  gallery_frame: (ctx, layer) => {
-    return `
-      <!-- Deep inner mat border -->
-      <rect x="40" y="40" width="${ctx.w - 80}" height="${ctx.h - 80}" fill="none" stroke="${ctx.validSecondaryColor}" stroke-width="15" opacity="0.9" />
-      <rect x="55" y="55" width="${ctx.w - 110}" height="${ctx.h - 110}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1" opacity="0.6" />
-    `;
-  },
-  film_sprockets: (ctx, layer) => {
-    // Draws sprocket holes along left and right edges
-    let sprockets = '';
-    for(let i = 0; i < ctx.h; i += 60) {
-      sprockets += `<rect x="15" y="${i}" width="20" height="30" rx="4" fill="${ctx.validBackgroundColor}" />`;
-      sprockets += `<rect x="${ctx.w - 35}" y="${i}" width="20" height="30" rx="4" fill="${ctx.validBackgroundColor}" />`;
-    }
-    return `
-      <rect x="0" y="0" width="50" height="${ctx.h}" fill="${ctx.validBrandColor}" opacity="0.95" />
-      <rect x="${ctx.w - 50}" y="0" width="50" height="${ctx.h}" fill="${ctx.validBrandColor}" opacity="0.95" />
-      ${sprockets}
-    `;
-  },
-  ticket_notches: (ctx, layer) => {
-    return `
-      <!-- Corner Notches and perforation -->
-      <circle cx="0" cy="0" r="45" fill="${ctx.validBackgroundColor}" />
-      <circle cx="${ctx.w}" cy="0" r="45" fill="${ctx.validBackgroundColor}" />
-      <circle cx="0" cy="${ctx.h}" r="45" fill="${ctx.validBackgroundColor}" />
-      <circle cx="${ctx.w}" cy="${ctx.h}" r="45" fill="${ctx.validBackgroundColor}" />
-      <line x1="60" y1="0" x2="${ctx.w - 60}" y2="0" stroke="${ctx.validBackgroundColor}" stroke-dasharray="10 15" stroke-width="4" />
-      <line x1="60" y1="${ctx.h}" x2="${ctx.w - 60}" y2="${ctx.h}" stroke="${ctx.validBackgroundColor}" stroke-dasharray="10 15" stroke-width="4" />
-    `;
-  },
-  masking_tape: (ctx, layer) => {
-    let tx = 80;
-    let ty = 80;
-    if (layer.anchor && layer.anchor.includes('bottom')) ty = ctx.h - 120;
-    if (layer.anchor && layer.anchor.includes('right')) tx = ctx.w - 160;
-    return `
-      <!-- Textured realistic tape strip -->
-      <g transform="translate(${tx}, ${ty}) rotate(-12)">
-        <rect x="0" y="0" width="160" height="40" fill="${ctx.validSecondaryColor}" opacity="0.95" filter="drop-shadow(2px 4px 4px rgba(0,0,0,0.15))" />
-        <!-- Jagged edges -->
-        <path d="M 0,0 L -5,10 L 2,20 L -4,30 L 0,40" fill="${ctx.validSecondaryColor}" opacity="0.95" />
-        <path d="M 160,0 L 165,10 L 158,20 L 164,30 L 160,40" fill="${ctx.validSecondaryColor}" opacity="0.95" />
-      </g>
-    `;
-  },
-  glass_card: (ctx, layer) => {
-    return `
-      <rect x="40" y="${ctx.h - 320}" width="${ctx.w - 80}" height="280" rx="16" fill="${ctx.validSecondaryColor}" fill-opacity="0.85" stroke="${ctx.validBrandColor}" stroke-width="1" filter="drop-shadow(0 15px 25px rgba(0,0,0,0.1))" />
-    `;
-  },
-  '3d_ribbon': (ctx, layer) => {
-    return `
-      <!-- Ribbon wrapping around image -->
-      <path d="M -20,120 L ${ctx.w + 20},120 L ${ctx.w + 10},160 L -10,160 Z" fill="${ctx.validBrandColor}" opacity="0.9" filter="drop-shadow(0 5px 10px rgba(0,0,0,0.2))" />
-      <path d="M -20,120 L -20,140 L 0,120 Z" fill="#000000" opacity="0.3" />
-      <path d="M ${ctx.w + 20},120 L ${ctx.w + 20},140 L ${ctx.w},120 Z" fill="#000000" opacity="0.3" />
-    `;
-  },
-  metric_panel: (ctx, layer) => {
-    // A premium glassmorphic weather/data panel
-    const py = ctx.h - 220;
-    return `
-      <g transform="translate(60, ${py})">
-        <rect x="0" y="0" width="${ctx.w - 120}" height="140" rx="20" fill="${ctx.validSecondaryColor}" fill-opacity="0.85" stroke="${ctx.validBrandColor}" stroke-width="1.5" stroke-opacity="0.4" filter="drop-shadow(0 20px 40px rgba(0,0,0,0.2))" />
-        <rect x="20" y="20" width="80" height="100" rx="10" fill="${ctx.validBrandColor}" fill-opacity="0.1" />
-        <text x="60" y="75" text-anchor="middle" font-family="${ctx.brandFont}, sans-serif" font-size="42px" fill="${ctx.dynamicTextColor}" font-weight="900">72°</text>
-        <line x1="120" y1="20" x2="120" y2="120" stroke="${ctx.validBrandColor}" stroke-opacity="0.3" stroke-width="2" />
-        <text x="140" y="55" font-family="${ctx.brandFont}, sans-serif" font-size="14px" fill="${ctx.dynamicTextColor}" opacity="0.7" font-weight="bold" letter-spacing="0.1em" text-transform="uppercase">UV INDEX</text>
-        <text x="140" y="85" font-family="${ctx.brandFont}, sans-serif" font-size="28px" fill="${ctx.dynamicTextColor}" font-weight="bold">Moderate</text>
-        <circle cx="${ctx.w - 180}" cy="70" r="40" fill="none" stroke="${ctx.validBrandColor}" stroke-width="4" stroke-opacity="0.2" />
-        <circle cx="${ctx.w - 180}" cy="70" r="40" fill="none" stroke="${ctx.validBrandColor}" stroke-width="4" stroke-dasharray="140 100" />
-      </g>
-    `;
-  },
-  editorial_sidebar: (ctx, layer) => {
-    // A luxury magazine sidebar
-    return `
-      <g transform="translate(40, 100)">
-        <rect x="0" y="0" width="4" height="${ctx.h - 200}" fill="${ctx.validBrandColor}" />
-        <text x="25" y="40" font-family="${ctx.brandFont}, serif" font-size="12px" fill="${ctx.validBackgroundColor}" font-weight="bold" letter-spacing="0.3em" text-transform="uppercase" transform="rotate(-90, 25, 40)">VOL. 01</text>
-        <text x="25" y="${ctx.h - 220}" font-family="${ctx.brandFont}, serif" font-size="12px" fill="${ctx.validBackgroundColor}" font-weight="bold" letter-spacing="0.3em" text-transform="uppercase" transform="rotate(-90, 25, ${ctx.h - 220})">EDITORIAL</text>
-      </g>
-    `;
-  },
-  status_chip: (ctx, layer) => {
-    return `
-      <g transform="translate(${ctx.w / 2 - 80}, 60)">
-        <rect x="0" y="0" width="160" height="36" rx="18" fill="${ctx.validBrandColor}" opacity="0.9" filter="drop-shadow(0 4px 12px rgba(0,0,0,0.15))" />
-        <text x="80" y="22" text-anchor="middle" font-family="${ctx.brandFont}, sans-serif" font-size="12px" fill="${ctx.validBackgroundColor}" font-weight="bold" letter-spacing="0.2em" text-transform="uppercase">NEW ARRIVAL</text>
-      </g>
-    `;
-  },
-  divider: (ctx, layer) => {
-    return `
-      <line x1="${ctx.w / 2 - 60}" y1="${ctx.h / 2 + 100}" x2="${ctx.w / 2 + 60}" y2="${ctx.h / 2 + 100}" stroke="${ctx.validBrandColor}" stroke-width="2" opacity="0.5" />
-      <circle cx="${ctx.w / 2}" cy="${ctx.h / 2 + 100}" r="4" fill="${ctx.validBackgroundColor}" stroke="${ctx.validBrandColor}" stroke-width="2" />
-    `;
-  }
-};
-
-const renderTextLayer = (ctx: any, layer: IDSLTextLayer): string => {
-  // Safe margins for text
-  const safeX = 60;
-  const safeY = 140;
-  
-  // Luxury Typography Engine (Mixes weights, styles, and sizes based on role)
-  let fontSize = ctx.dynamicFontSize;
-  let fontWeight = 'normal';
-  let fontStyle = 'normal';
-  let fill = ctx.dynamicTextColor;
-  let letterSpacing = 'normal';
-
-  if (layer.role === 'heading') {
-    fontSize = ctx.dynamicFontSize + 16;
-    fontWeight = '900'; // Extra bold hook
-    letterSpacing = '-0.02em';
-  } else if (layer.role === 'tagline' || layer.role === 'footnote') {
-    fontSize = ctx.dynamicFontSize - 4;
-    fontStyle = 'italic'; // Elegant small caps / italic
-    fill = ctx.validSecondaryColor || ctx.dynamicTextColor;
-    letterSpacing = '0.05em';
-  } else if (layer.role === 'body') {
-    fontSize = ctx.dynamicFontSize;
-    fontWeight = '300'; // Light, elegant body
-  }
-
-  // Dynamic Line Wrapping based on canvas width and font size
-  const estimatedCharWidth = fontSize * 0.55;
-  const maxAvailableWidth = ctx.w - (safeX * 2);
-  const maxCharsPerLine = Math.floor(maxAvailableWidth / estimatedCharWidth);
-  
-  const words = (ctx.overlayText || '').split(/\s+/);
-  const smartLines: string[] = [];
-  let currentLine = '';
-  for (const word of words) {
-    if ((currentLine + word).length > maxCharsPerLine && currentLine.length > 0) {
-      smartLines.push(currentLine.trim());
-      currentLine = word + ' ';
-    } else {
-      currentLine += word + ' ';
-    }
-  }
-  if (currentLine) smartLines.push(currentLine.trim());
-  
-  // Use pre-escaped formatting if available, otherwise just escape XML
-  const escapedLines = smartLines.map(line => {
-    // If the orchestrator already provides an escapeXml helper in ctx, use it.
-    if (ctx.escapeXml) {
-       // Also apply capitalization rule if needed, though usually orchestrator does it
-       return ctx.escapeXml(line.toUpperCase() !== line ? line.toUpperCase() : line);
-    }
-    return line;
-  });
-
-  const lineHeight = layer.role === 'tagline' || layer.role === 'footnote' ? 25 : fontSize * 1.35;
-  const textHeightGuess = escapedLines.length * lineHeight;
-
-  // Resolve X coordinate
-  let x = ctx.w / 2; // Default center
-  if (layer.anchor.includes('left') || layer.anchor === 'edges') x = safeX;
-  if (layer.anchor.includes('right')) x = ctx.w - safeX;
-  
-  // Resolve Y coordinate
-  let y = ctx.h / 2; // Default center
-  if (layer.anchor.includes('top')) y = safeY;
-  if (layer.anchor.includes('bottom')) y = ctx.h - safeY - 40;
-  if (layer.anchor === 'bottom_edge' || layer.anchor === 'edges') y = ctx.h - 80;
-
-  // Face Collision Detection (Safe Zone Awareness)
-  if (layer.anchor.includes('center') && ctx.faceCoordinates) {
-    const face = ctx.faceCoordinates;
-    // If text Y overlaps with face bounding box
-    if (y >= face.y - textHeightGuess && y <= face.y + face.height + textHeightGuess) {
-       // Push text down below the face to the safe background zone
-       y = face.y + face.height + 80;
-       if (y + textHeightGuess > ctx.h - safeY) {
-         // If it's pushed off screen, push it to the top instead
-         y = Math.max(safeY, face.y - textHeightGuess - 40);
-       }
-    }
-  }
-
-  // Bounds checking to prevent text from clipping off the bottom
-  if (y + textHeightGuess > ctx.h - 40) {
-     y = ctx.h - textHeightGuess - 40;
-  }
-
-  // Resolve alignment implicitly if not specified, otherwise use specified
-  let anchor = 'start';
-  if (layer.alignment === 'center' || layer.anchor.includes('center')) anchor = 'middle';
-  if (layer.alignment === 'right' || layer.anchor.includes('right')) anchor = 'end';
-  if (layer.alignment === 'left' || layer.anchor.includes('left')) anchor = 'start';
-
-  // Override if explicit alignment is provided
-  if (layer.alignment === 'center') anchor = 'middle';
-  if (layer.alignment === 'right') anchor = 'end';
-  if (layer.alignment === 'left') anchor = 'start';
-
-  // Multiline text handling
-  const content = escapedLines.map((line: string, idx: number) => `<tspan x="${x}" dy="${idx === 0 ? 0 : lineHeight}">${line}</tspan>`).join('');
-
-  return `<text x="${x}" y="${y}" text-anchor="${anchor}" class="overlay-text" style="font-family: '${ctx.brandFont}', sans-serif; font-size: ${fontSize}px; fill: ${fill}; font-weight: ${fontWeight}; font-style: ${fontStyle}; letter-spacing: ${letterSpacing}; text-shadow: 0 2px 10px rgba(0,0,0,0.15);">${content}</text>`;
-};
+// Text Layer Rendering is now handled by TypographyEngine
 
 
 // ── Base image treatments (Step 1) ──────────────────────────────────────────
@@ -459,7 +210,33 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
         } else if (imageLayer.mask === 'circle') {
           // Circle mask logic
           return fullBleedBase(ctx);
-        } else if (imageLayer.mask === 'die_cut' || imageLayer.paddingPercent > 0) {
+        } else if (imageLayer.paddingPercent > 0) {
+          // Phase 3: Dynamic Canva-style scaling based on JSON contract
+          const paddingRatio = imageLayer.paddingPercent / 100;
+          const targetW = Math.round(ctx.w * (1 - paddingRatio * 2));
+          const targetH = Math.round(ctx.h * (1 - paddingRatio * 2));
+          
+          const scaledPhoto = await processPortraitFit(ctx.imageBuffer, targetW, targetH, ctx.validBackgroundColor);
+          
+          let top = Math.round((ctx.h - targetH) / 2);
+          let left = Math.round((ctx.w - targetW) / 2);
+          
+          if (imageLayer.anchor === 'top_left') {
+            top = ctx.paddingTop; left = ctx.paddingX;
+          } else if (imageLayer.anchor === 'top_right') {
+            top = ctx.paddingTop; left = ctx.w - targetW - ctx.paddingX;
+          } else if (imageLayer.anchor === 'bottom_left') {
+            top = ctx.h - targetH - ctx.paddingBottom; left = ctx.paddingX;
+          } else if (imageLayer.anchor === 'bottom_right') {
+            top = ctx.h - targetH - ctx.paddingBottom; left = ctx.w - targetW - ctx.paddingX;
+          }
+
+          const baseImage = sharp({
+            create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validBackgroundColor },
+          }).composite([{ input: scaledPhoto, top, left }]);
+
+          return { baseImage, compositeTop: ctx.paddingTop, compositeBottom: ctx.paddingBottom, compositeLeft: ctx.paddingX, compositeRight: ctx.paddingX };
+        } else if (imageLayer.mask === 'die_cut') {
           return borderedDefault(ctx);
         }
       }
@@ -492,6 +269,7 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
       .composite([{ input: masked, top: Math.floor((ctx.h - minDim)/2), left: Math.floor((ctx.w - minDim)/2) }]);
     return { baseImage, compositeTop: Math.floor((ctx.h - minDim)/2) + minDim + 40, compositeBottom: ctx.paddingBottom, compositeLeft: ctx.paddingX, compositeRight: ctx.paddingX };
   },
+
 
   torn_paper_edge: async (ctx) => {
     const photo = await processPortraitFit(ctx.imageBuffer, ctx.w, ctx.h, ctx.validBackgroundColor);
@@ -830,6 +608,8 @@ export type DecoCtx = {
   overlayText: string;
   maxLength: number;
   faceCoordinates?: any;
+  injectedFeatures?: string[];
+  designTokens?: any;
 };
 
 export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
@@ -912,24 +692,82 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     const dsl = (compiledLayouts as any)[ctx.layoutType] as ICompiledLayoutDSL;
     if (!dsl || !dsl.layers) return '';
 
-    let svg = '';
+    let svg = themeEngine.generateGlobalDefs(ctx.validBrandColor, ctx.validSecondaryColor);
+
+    // === DSL VALIDATION: Template Signature Contract ===
+    const contract = (dsl as any).contract;
+    if (contract && Array.isArray(contract.required)) {
+      for (const req of contract.required) {
+        const hasPrimitive = dsl.layers.some(l => ('component' in l && l.component === req)) || 
+                             (ctx.injectedFeatures || []).includes(req);
+        if (!hasPrimitive) {
+          console.warn(`\n[Renderer] ⚠️ TEMPLATE SIGNATURE BROKEN ⚠️\nTemplate '${dsl.id}' is missing required primitive: '${req}'.\n`);
+          // Render a visible warning so incomplete templates are never silently skipped
+          svg += `<g transform="translate(10, 10)">
+                    <rect width="320" height="40" fill="#FF0080" opacity="0.9" rx="4" />
+                    <text x="15" y="25" fill="#FFFFFF" font-family="monospace" font-size="14" font-weight="bold">MISSING PRIMITIVE: ${req}</text>
+                  </g>`;
+        }
+      }
+    }
     
-    // Sort all text and decoration layers by zIndex
+    // Check if we need to apply a global overlay (like noise) based on brand DNA
+    // For now, we inject the definitions. Later, we can apply the overlay at the end.
     const overlayLayers = dsl.layers.filter(l => l.type === 'decoration' || l.type === 'text');
+    
+    // Inject dynamic features from CompositionEngine
+    if (ctx.injectedFeatures && ctx.injectedFeatures.length > 0) {
+      ctx.injectedFeatures.forEach((feature, idx) => {
+        overlayLayers.push({
+          id: `injected_${feature}_${idx}`,
+          type: 'decoration',
+          component: feature,
+          zIndex: 100 + idx, // Ensure it stays on top of base layers
+          constraints: {}
+        } as unknown as IDSLDecorationLayer);
+      });
+    }
+    
     overlayLayers.sort((a, b) => a.zIndex - b.zIndex);
 
-    // Iteratively render each layer using the Component Registry
+    // Initialize LayoutEngine to calculate constraints for PrimitiveCtx
+    let family: LayoutFamily = 'minimal';
+    if (ctx.layoutType?.includes('editorial') || ctx.layoutType?.includes('magazine')) family = 'editorial';
+    if (ctx.layoutType?.includes('architectural') || ctx.layoutType?.includes('diagram') || ctx.layoutType?.includes('grid')) family = 'architectural';
+    
+    // We pass undefined for faceBox since visionResult currently yields { eyesYPercent } not BoundingBox
+    const layoutEngine = new LayoutEngine(ctx.w, ctx.h, undefined);
+    const constraints = layoutEngine.calculateConstraints(family, 'balanced');
+
+    const primitiveCtx: PrimitiveContext = {
+      w: ctx.w,
+      h: ctx.h,
+      validBrandColor: ctx.validBrandColor,
+      validSecondaryColor: ctx.validSecondaryColor,
+      validBackgroundColor: ctx.validBackgroundColor,
+      constraints
+    };
+
+    const resolvedBounds = new Map<string, {x: number, y: number, w: number, h: number}>();
+    resolvedBounds.set('hero-image', { 
+      x: ctx.paddingX, 
+      y: ctx.paddingTop, 
+      w: ctx.innerW, 
+      h: ctx.innerH 
+    });
+
+    // Iteratively render each layer using the Primitive Engine
     for (const layer of overlayLayers) {
       if (layer.type === 'decoration') {
         const componentName = (layer as IDSLDecorationLayer).component;
         if (!componentName) continue;
         
-        const decoFn = ComponentRegistry[componentName];
-        if (decoFn) {
-          svg += decoFn(ctx, layer as IDSLDecorationLayer);
+        const renderedPrimitive = primitiveEngine.renderPrimitive(componentName, primitiveCtx, layer as IDSLDecorationLayer);
+        if (renderedPrimitive) {
+          svg += renderedPrimitive;
         } else {
           // Strict Validation: Unknown components fail loudly
-          console.error(`[Renderer Sprint] CRITICAL ERROR: Component '${componentName}' requested by DSL but not found in ComponentRegistry!`);
+          console.error(`[Renderer Sprint] CRITICAL ERROR: Component '${componentName}' requested by DSL but not found in PrimitiveEngine!`);
           // Render a visible placeholder block so developers see the missing component immediately
           svg += `
             <g transform="translate(40, ${Math.floor(Math.random() * (ctx.h - 100))})">
@@ -943,17 +781,35 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
         
         // If the text layer defines a background component (e.g. editorial_sidebar, metric_panel), render it FIRST
         if (textLayer.component) {
-          const decoFn = ComponentRegistry[textLayer.component];
-          if (decoFn) {
-            svg += decoFn(ctx, layer as any);
+          const renderedPrimitive = primitiveEngine.renderPrimitive(textLayer.component, primitiveCtx, textLayer);
+          if (renderedPrimitive) {
+            svg += renderedPrimitive;
           } else {
-            console.error(`[Renderer Sprint] CRITICAL ERROR: Text Component '${textLayer.component}' not found in ComponentRegistry!`);
+            console.error(`[Renderer Sprint] CRITICAL ERROR: Text Component '${textLayer.component}' not found in PrimitiveEngine!`);
           }
         }
         
         // Then render the text on top
-        svg += renderTextLayer(ctx, textLayer);
+        const typoCtx: TypographyContext = {
+          ...ctx,
+          constraints,
+          layoutEngine,
+          designTokens: ctx.designTokens
+        };
+        let typoSystem: TypographySystem = 'minimal';
+        if (family === 'editorial') typoSystem = 'editorial';
+        if (family === 'architectural') typoSystem = 'technical';
+        
+        svg += typographyEngine.renderTextLayer(typoCtx, textLayer, typoSystem);
+        
+        // Very rough bounds approximation for text
+        resolvedBounds.set(layer.id, { x: 0, y: 0, w: ctx.w, h: 50 });
       }
+    }
+
+    // Apply global theme overlay (e.g., noise grain) if applicable based on layout family
+    if (family === 'editorial') {
+      svg += themeEngine.generateGlobalOverlay(ctx.w, ctx.h);
     }
 
     return svg;
