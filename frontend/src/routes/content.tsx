@@ -5,6 +5,8 @@ import { useAppointments } from "@/lib/providers/appointments-provider";
 import { useTemplates } from "@/lib/providers/template-provider";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
+import { ImageOff } from "lucide-react";
+import { Pagination } from "@/components/Pagination";
 
 export const Route = createFileRoute("/content")({
   head: () => ({
@@ -41,6 +43,8 @@ const FORMAT_ICONS: Record<string, string> = {
   TikTok: "♪",
 };
 
+const PAGE_SIZE = 10;
+
 const GOAL_FILTERS: Array<{ id: string; label: string }> = [
   { id: "showcase",     label: "Showcase" },
   { id: "educate",      label: "Educate" },
@@ -55,6 +59,7 @@ function ContentPage() {
   const [goalFilter, setGoalFilter]     = useState<string | null>(null);
   const [query, setQuery]               = useState("");
   const [editItem, setEditItem]         = useState<ContentItem | null>(null);
+  const [page, setPage]                 = useState(1);
 
   const { items, appointmentsById, loading, error, refresh } = useContentItems();
   const { data: appts } = useAppointments();
@@ -86,6 +91,13 @@ function ContentPage() {
       return true;
     });
   }, [items, appointmentsById, stateFilter, formatFilter, goalFilter, query]);
+
+  // Reset to page 1 whenever the result set changes shape
+  useEffect(() => { setPage(1); }, [stateFilter, formatFilter, goalFilter, query]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
+  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const readyAppointments = appts.filter((a) => a.consent === "granted");
 
@@ -360,25 +372,36 @@ function ContentPage() {
           ) : filtered.length === 0 ? (
             <EmptyState onClear={clearFilters} hasFilters={hasActiveFilters} />
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
-              {filtered.map((c) => (
-                <ContentCard
-                  key={c.id}
-                  item={c}
-                  appointment={c.sourceAppointmentId ? appointmentsById.get(c.sourceAppointmentId) : undefined}
-                  onReview={() => setEditItem(c)}
-                  onApprove={async () => {
-                    try {
-                      await api.patch(`/content/${c.id}/approve`);
-                      toast.success("Content approved");
-                      refresh?.();
-                      setStateFilter("all");
-                    } catch { toast.error("Failed to approve"); }
-                  }}
-                  onDeleted={() => refresh?.()}
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
+                {pageItems.map((c) => (
+                  <ContentCard
+                    key={c.id}
+                    item={c}
+                    appointment={c.sourceAppointmentId ? appointmentsById.get(c.sourceAppointmentId) : undefined}
+                    onReview={() => setEditItem(c)}
+                    onApprove={async () => {
+                      try {
+                        await api.patch(`/content/${c.id}/approve`);
+                        toast.success("Content approved");
+                        refresh?.();
+                        setStateFilter("all");
+                      } catch { toast.error("Failed to approve"); }
+                    }}
+                    onDeleted={() => refresh?.()}
+                  />
+                ))}
+              </div>
+              {filtered.length > PAGE_SIZE && (
+                <Pagination
+                  page={page}
+                  totalPages={totalPages}
+                  total={filtered.length}
+                  pageSize={PAGE_SIZE}
+                  onChange={setPage}
                 />
-              ))}
-            </div>
+              )}
+            </>
           )}
         </div>
       </div>}
@@ -466,28 +489,32 @@ function ContentCard({
     <article className="group flex flex-col border border-border bg-card shadow-sm hover:shadow-md transition-shadow overflow-hidden">
       {/* Image */}
       <div className="aspect-[4/5] overflow-hidden bg-nude/30 relative border-b border-border hover:cursor-pointer" onClick={onReview}>
-        <img
-          src={slides.length > 0 ? slides[cardSlideIndex]?.url : item.image}
-          alt={item.title}
-          loading="lazy"
-          className={
-            "w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.01] " +
-            (blocked ? "opacity-40 grayscale" : "")
+        {(() => {
+          const imageUrl = slides.length > 0 ? slides[cardSlideIndex]?.url : item.image;
+          if (!imageUrl) {
+            return (
+              <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-taupe/60">
+                <ImageOff className="size-6" strokeWidth={1.5} />
+                <span className="text-[9px] uppercase tracking-widest">No preview yet</span>
+              </div>
+            );
           }
-        />
-        
-        {/* Navigation arrows directly on the grid card removed as requested */}
+          return (
+            <img
+              src={imageUrl}
+              alt={item.title}
+              loading="lazy"
+              className={
+                "w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.01] " +
+                (blocked ? "opacity-60 grayscale" : "")
+              }
+            />
+          );
+        })()}
 
         <div className="absolute top-3 left-3 z-10">
           <StatePill state={state} />
         </div>
-        {blocked && (
-          <div className="absolute inset-0 flex items-center justify-center z-10">
-            <div className="bg-foreground/90 text-offwhite px-3 py-2 text-[10px] uppercase tracking-widest backdrop-blur">
-              Locked · consent declined
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Body */}
@@ -513,7 +540,7 @@ function ContentCard({
           <p className="text-xs text-taupe leading-relaxed line-clamp-3 mb-3">{item.caption}</p>
         ) : (
           <p className="text-xs text-taupe leading-relaxed mb-3">
-            The client declined consent. We won't preview, schedule or publish this draft.
+            {item.blockedReason || "This draft didn't meet brand quality standards and needs another pass before it can be scheduled."}
           </p>
         )}
       </div>

@@ -18,7 +18,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:push": "prisma db push",
     "db:push": "prisma db push",
-    "db:seed": "npx ts-node prisma/seed.ts"
+    "db:seed": "npx ts-node prisma/seed.ts",
+    "db:seed:templates": "npx ts-node prisma/seed-templates.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.20.0",

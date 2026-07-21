@@ -26,7 +26,7 @@ export class AppointmentService {
 
   async getAppointments(tenantId: string, page = 1, pageSize = 20) {
     const safePage = Number.isFinite(page) ? Math.max(1, Number(page)) : 1;
-    const safePageSize = Number.isFinite(pageSize) ? Math.min(100, Math.max(1, Number(pageSize))) : 20;
+    const safePageSize = Number.isFinite(pageSize) ? Math.min(200, Math.max(1, Number(pageSize))) : 20;
     const rows = await this.prisma.appointment.findMany({
       where: {
         tenantId,

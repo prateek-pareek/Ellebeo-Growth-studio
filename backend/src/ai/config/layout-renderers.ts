@@ -14,6 +14,7 @@ import templateLibraryData from './template-library.json';
 import compiledLayouts from './compiled-layouts.v1.json';
 import { processPortraitFit } from '../services/ai-image-generation.service';
 import { ICompiledLayoutDSL, IDSLSceneLayer, IDSLImageLayer, IDSLDecorationLayer, IDSLTextLayer } from '../services/template-engine/interfaces';
+import type { VisualStyleId } from './visual-style-library';
 
 export type LayoutTemplate = {
   base: string;
@@ -30,20 +31,47 @@ const { _proposed_template_agent_library, ...activeLayoutTemplates } = layoutTem
 
 export const LAYOUT_TEMPLATES: Record<string, LayoutTemplate> = activeLayoutTemplates as Record<string, LayoutTemplate>;
 
-export function resolveLayoutTemplate(layoutType: string): LayoutTemplate {
+// Every one of the 10 Brand DNA visual styles (visual-style-library.ts) maps
+// to one real decoration from the Component Registry below — chosen to match
+// that style's defined material/composition language (e.g. Quiet Luxury's
+// "brushed brass as the only metallic" -> gold_foil_accents; Bold Campaign's
+// "flat colour fields" -> brand_scrim_heavy). Only applied when a layout's
+// own config leaves `decoration: null` — a layout with a curated decoration
+// already assigned keeps it untouched regardless of style ranking.
+const STYLE_DECORATION_MAP: Record<VisualStyleId, string> = {
+  quiet_luxury: 'gold_foil_accents',
+  editorial_beauty: 'gallery_hairline',
+  clinical_minimalist: 'gallery_hairline',
+  warm_wellness: 'masking_tape_corners',
+  high_fashion: 'dark_scrim_overlay',
+  polished_commercial: 'side_photo_embed',
+  soft_feminine: 'translucent_pane',
+  bold_campaign: 'brand_scrim_heavy',
+  natural_organic: 'ticket_notches_dashed',
+  contemporary_cool: 'film_sprockets',
+};
+
+export function resolveLayoutTemplate(layoutType: string, visualRanking?: string[]): LayoutTemplate {
   // If it's a hardcoded legacy layout, use it natively
-  if (LAYOUT_TEMPLATES[layoutType]) {
-    return LAYOUT_TEMPLATES[layoutType]!;
+  const resolved = LAYOUT_TEMPLATES[layoutType]
+    ? LAYOUT_TEMPLATES[layoutType]!
+    // Otherwise, route to the Universal Dynamic Renderer engines
+    : {
+      base: 'universal_dynamic_base',
+      textTemplate: 'universal_dynamic_text',
+      decoration: 'universal_dynamic_deco',
+      showWatermark: true,
+      showFooter: true
+    };
+
+  // Style Mapping: an undecorated layout gets a decoration matching the
+  // brand's top-ranked visual style, instead of always rendering plain.
+  const primaryStyle = visualRanking?.[0] as VisualStyleId | undefined;
+  if (resolved.decoration === null && primaryStyle && STYLE_DECORATION_MAP[primaryStyle]) {
+    return { ...resolved, decoration: STYLE_DECORATION_MAP[primaryStyle] };
   }
-  
-  // Otherwise, route to the Universal Dynamic Renderer engines
-  return {
-    base: 'universal_dynamic_base',
-    textTemplate: 'universal_dynamic_text',
-    decoration: 'universal_dynamic_deco',
-    showWatermark: true,
-    showFooter: true
-  };
+
+  return resolved;
 }
 
 // ── Component Registry ───────────────────────────────────────────────────────
@@ -761,6 +789,7 @@ export type DecoCtx = {
   validBrandColor: string;
   validSecondaryColor: string;
   validBackgroundColor: string;
+  validAccentColor: string;
   brandFont: string;
   rawName: string;
   photoDataUri: string;
@@ -823,17 +852,17 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
   },
 
   masking_tape_corners: (ctx) => `
-      <!-- Masking tape overlays at top-left and bottom-right corners -->
-      <polygon points="20,80 100,50 110,80 30,110" fill="#E8E5DF" fill-opacity="0.8" transform="rotate(-15 65 80)" />
-      <polygon points="${ctx.w - 100},${ctx.h - 80} ${ctx.w - 20},${ctx.h - 50} ${ctx.w - 30},${ctx.h - 20} ${ctx.w - 110},${ctx.h - 50}" fill="#E8E5DF" fill-opacity="0.8" transform="rotate(15 ${ctx.w - 65} ${ctx.h - 50})" />`,
+      <!-- Masking tape overlays at top-left and bottom-right corners — tinted with the brand's background colour, not a fixed kraft/beige -->
+      <polygon points="20,80 100,50 110,80 30,110" fill="${ctx.validBackgroundColor}" fill-opacity="0.8" transform="rotate(-15 65 80)" />
+      <polygon points="${ctx.w - 100},${ctx.h - 80} ${ctx.w - 20},${ctx.h - 50} ${ctx.w - 30},${ctx.h - 20} ${ctx.w - 110},${ctx.h - 50}" fill="${ctx.validBackgroundColor}" fill-opacity="0.8" transform="rotate(15 ${ctx.w - 65} ${ctx.h - 50})" />`,
 
   gold_foil_accents: (ctx) => `
-      <!-- Elegant thin gold foil lines decorating the edges -->
-      <rect x="30" y="30" width="${ctx.w - 60}" height="${ctx.h - 60}" fill="none" stroke="#D4AF37" stroke-width="2" />
-      <circle cx="30" cy="30" r="4" fill="#D4AF37" />
-      <circle cx="${ctx.w - 30}" cy="30" r="4" fill="#D4AF37" />
-      <circle cx="30" cy="${ctx.h - 30}" r="4" fill="#D4AF37" />
-      <circle cx="${ctx.w - 30}" cy="${ctx.h - 30}" r="4" fill="#D4AF37" />`,
+      <!-- Thin foil-style accent lines decorating the edges — colour comes from the brand's accent colour, not a fixed gold -->
+      <rect x="30" y="30" width="${ctx.w - 60}" height="${ctx.h - 60}" fill="none" stroke="${ctx.validAccentColor}" stroke-width="2" />
+      <circle cx="30" cy="30" r="4" fill="${ctx.validAccentColor}" />
+      <circle cx="${ctx.w - 30}" cy="30" r="4" fill="${ctx.validAccentColor}" />
+      <circle cx="30" cy="${ctx.h - 30}" r="4" fill="${ctx.validAccentColor}" />
+      <circle cx="${ctx.w - 30}" cy="${ctx.h - 30}" r="4" fill="${ctx.validAccentColor}" />`,
 
   arch_outline: (ctx) => `
       <!-- Fine vector outline retracing the dome mask edge -->

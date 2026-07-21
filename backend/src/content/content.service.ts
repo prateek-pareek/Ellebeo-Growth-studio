@@ -8,7 +8,7 @@ export class ContentService {
 
   async getContent(tenantId: string, query: GetContentQueryDto) {
     const page = parseInt(query.page || '1', 10);
-    const pageSize = Math.min(parseInt(query.pageSize || '20', 10), 50);
+    const pageSize = Math.min(parseInt(query.pageSize || '20', 10), 200);
     const skip = (page - 1) * pageSize;
 
     const whereClause: any = { tenantId, deletedAt: null };

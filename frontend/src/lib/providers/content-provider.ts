@@ -13,6 +13,7 @@ export type ContentItem = {
   state: string;
   goal: string;
   image: string;
+  blockedReason?: string | null;
   caption: string;
   cta?: string;
   hashtags?: string[];
@@ -47,9 +48,6 @@ export type UseContentItemsResult = {
   error: boolean;
   refresh?: () => void;
 };
-
-const CLOUD_PLACEHOLDER_IMAGE =
-  "https://images.unsplash.com/photo-1522335789203-aaa1f9436cae?w=800&h=1000&fit=crop";
 
 function mapStatus(status: string): string {
   if (status === 'draft') return 'Needs review';
@@ -101,7 +99,8 @@ function mapRow(row: any): { item: ContentItem; appointment: Appointment | null 
     status: mapStatus(row.status),
     state: row.status || 'draft',
     goal: (row.goal ? (GOAL_REVERSE_MAP[row.goal] ?? row.goal) : 'showcase'),
-    image: row.processedImageUrlFeed || CLOUD_PLACEHOLDER_IMAGE,
+    image: row.processedImageUrlFeed || '',
+    blockedReason: row.blockedReason || null,
     caption: row.caption || '',
     cta: row.callToAction || '',
     hashtags: row.hashtags || [],
@@ -140,7 +139,7 @@ async function fetchCloudContent(): Promise<
   | { kind: "error"; message: string }
 > {
   try {
-    const res = await api.get('/content');
+    const res = await api.get('/content', { params: { pageSize: 200 } });
     // Backend returns array directly; ResponseInterceptor wraps it as res.data.data
     const raw = res.data.data;
     const data: any[] = Array.isArray(raw) ? raw : (raw?.data ?? []);
