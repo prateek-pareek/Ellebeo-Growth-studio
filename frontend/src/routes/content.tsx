@@ -43,7 +43,7 @@ const FORMAT_ICONS: Record<string, string> = {
   TikTok: "♪",
 };
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 10;
 
 const GOAL_FILTERS: Array<{ id: string; label: string }> = [
   { id: "showcase",     label: "Showcase" },

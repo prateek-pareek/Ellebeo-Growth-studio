@@ -27,7 +27,7 @@ type AssetLibraryItem = {
 const EXCLUDED_USAGE = new Set(["do_not_generate", "do_not_use_publicly", "private_ref"]);
 const EXCLUDED_CONSENT = new Set(["no_consent", "pending"]);
 
-const PAGE_SIZE = 15;
+const PAGE_SIZE = 10;
 
 const CATEGORIES = [
   { value: "hair_colour",            label: "Colour" },
