@@ -77,7 +77,7 @@ async function fetchCloudAppointments(): Promise<
   | { kind: "error"; message: string }
 > {
   try {
-    const res = await api.get('/appointments');
+    const res = await api.get('/appointments', { params: { pageSize: 200 } });
     const data = res.data.data;
     
     if (!data || data.length === 0) return { kind: "empty" };

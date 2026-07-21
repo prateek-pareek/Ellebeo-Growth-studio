@@ -4,6 +4,7 @@ import { useAppointments, type Appointment } from "@/lib/providers/appointments-
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { Send } from "lucide-react";
+import { Pagination } from "@/components/Pagination";
 
 export const Route = createFileRoute("/appointments")({
   head: () => ({
@@ -26,6 +27,8 @@ type AssetLibraryItem = {
 const EXCLUDED_USAGE = new Set(["do_not_generate", "do_not_use_publicly", "private_ref"]);
 const EXCLUDED_CONSENT = new Set(["no_consent", "pending"]);
 
+const PAGE_SIZE = 15;
+
 const CATEGORIES = [
   { value: "hair_colour",            label: "Colour" },
   { value: "hair_cut_style",         label: "Cut & Style" },
@@ -42,6 +45,7 @@ const CATEGORIES = [
 
 function AppointmentsPage() {
   const [filter, setFilter] = useState<"all" | "consent" | "ready">("all");
+  const [page, setPage] = useState(1);
   const { data: appointments, isEmpty, error, loading, refresh } = useAppointments();
 
   // Form state
@@ -222,6 +226,13 @@ function AppointmentsPage() {
     if (filter === "ready")   return a.consent === "granted";
     return true;
   });
+
+  // Reset to page 1 whenever the result set changes shape
+  useEffect(() => { setPage(1); }, [filter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
+  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <div>
@@ -484,7 +495,7 @@ function AppointmentsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {filtered.map((a) => (
+                {pageItems.map((a) => (
                   <AppointmentRow key={a.id} a={a} onReminderSent={refresh} isMedicalAesthetics={isMedicalAesthetics} />
                 ))}
                 {filtered.length === 0 && (
@@ -496,6 +507,17 @@ function AppointmentsPage() {
                 )}
               </tbody>
             </table>
+          </div>
+        )}
+        {filtered.length > PAGE_SIZE && (
+          <div className="px-5 pb-5">
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              total={filtered.length}
+              pageSize={PAGE_SIZE}
+              onChange={setPage}
+            />
           </div>
         )}
       </div>
