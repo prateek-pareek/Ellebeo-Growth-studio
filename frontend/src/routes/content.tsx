@@ -581,8 +581,8 @@ function ContentCard({
         </div>
 
         {!blocked && (
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={onReview}
                 className="inline-flex items-center gap-1.5 border border-border bg-card text-xs font-medium text-foreground px-3 py-1.5 shadow-sm hover:bg-muted hover:shadow-md active:scale-[0.97] transition-all"
@@ -603,7 +603,7 @@ function ContentCard({
                 </button>
               )}
               {(state === "approved" || state === "scheduled") && (
-                <span className="text-[10px] uppercase tracking-widest text-sage bg-sage/10 px-2 py-0.5">
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-offwhite bg-sage px-2 py-0.5">
                   {state}
                 </span>
               )}
@@ -616,10 +616,10 @@ function ContentCard({
                 disabled={discarding}
                 onBlur={() => setConfirm(false)}
                 className={
-                  "text-[10px] uppercase tracking-widest px-2.5 py-1.5 transition-all disabled:opacity-40 " +
+                  "shrink-0 text-[10px] uppercase tracking-widest px-2.5 py-1.5 transition-all disabled:opacity-40 " +
                   (confirm
                     ? "bg-destructive/10 text-destructive border border-destructive/30 rounded"
-                    : "text-taupe/50 hover:text-destructive opacity-0 group-hover:opacity-100")
+                    : "text-taupe hover:text-destructive opacity-0 group-hover:opacity-100")
                 }
               >
                 {discarding ? "…" : confirm ? "Confirm?" : "Discard"}
