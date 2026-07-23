@@ -244,9 +244,9 @@ export function AppShell() {
             {user ? (
               <>
                 <NotificationBell />
-                <div className="hidden sm:flex flex-col items-end leading-tight">
-                  <span className="text-xs font-medium text-foreground">{user?.tenant?.businessName || user?.email}</span>
-                  <span className="text-[10px] text-taupe">{user?.email}</span>
+                <div className="hidden sm:flex flex-col items-end leading-tight gap-0.5">
+                  <span className="text-sm font-semibold text-foreground">{user?.tenant?.businessName || user?.email}</span>
+                  <span className="text-xs text-taupe">{user?.email}</span>
                 </div>
                 <Link to="/profile">
                   <InitialsAvatar
