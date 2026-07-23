@@ -699,136 +699,140 @@ function EditSidebar({
       <div className="fixed inset-0 bg-foreground/20 z-40" onClick={onClose} />
 
       <div className="fixed top-0 right-0 h-full w-full max-w-md bg-card border-l border-border z-50 flex flex-col shadow-2xl">
-        {/* Header */}
-        <div className="bg-muted flex items-center justify-between px-6 py-4 border-b border-border">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground mb-0.5">
+        {/* Header — same surface as the body, separated only by a hairline so it reads as one panel */}
+        <div className="bg-card flex items-start justify-between gap-4 px-6 py-5 border-b border-border">
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground mb-1.5">
               Edit draft
             </p>
-            <p className="font-serif text-lg leading-tight">{item.title}</p>
+            <p className="font-serif text-lg leading-tight mb-2.5">{item.title}</p>
+            <StatePill state={item.state.toLowerCase()} />
           </div>
-          <button onClick={onClose} className="text-taupe hover:text-foreground text-xl leading-none">
+          <button onClick={onClose} className="shrink-0 text-taupe hover:text-foreground text-xl leading-none">
             ×
           </button>
         </div>
 
-        {/* Status */}
-        <div className="px-6 py-3 border-b border-border flex items-center gap-3">
-          <span className="text-[10px] uppercase tracking-widest text-taupe">Status</span>
-          <StatePill state={item.state.toLowerCase()} />
-        </div>
-
         {/* Form */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+        <div className="flex-1 overflow-y-auto px-6 py-6 space-y-8">
           {/* Visual Preview Slider */}
           {slides.length > 0 && (
-            <div className="border border-border bg-muted/20 p-3 mb-2 rounded">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[9px] uppercase tracking-widest text-taupe">
-                  Visual Preview ({activeSlide + 1}/{slides.length})
-                </span>
-                <span className="text-[8px] uppercase tracking-widest bg-foreground/10 text-foreground px-2 py-0.5 font-semibold">
-                  {isCarousel ? "Carousel" : "Story"}
-                </span>
-              </div>
-              
-              <div className="relative aspect-square w-full overflow-hidden bg-black/5 mb-2 border border-border">
-                <img
-                  src={slides[activeSlide]?.url}
-                  alt={slides[activeSlide]?.label ?? `Slide ${activeSlide + 1}`}
-                  className="w-full h-full object-cover"
-                />
-                
-                {activeSlide > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setActiveSlide(activeSlide - 1)}
-                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-foreground/70 hover:bg-foreground text-white size-6 flex items-center justify-center rounded-full text-xs font-bold transition-all shadow-md"
-                  >
-                    ←
-                  </button>
-                )}
-                {activeSlide < slides.length - 1 && (
-                  <button
-                    type="button"
-                    onClick={() => setActiveSlide(activeSlide + 1)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-foreground/70 hover:bg-foreground text-white size-6 flex items-center justify-center rounded-full text-xs font-bold transition-all shadow-md"
-                  >
-                    →
-                  </button>
-                )}
-              </div>
+            <section>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground mb-3">Preview</p>
+              <div className="border border-border bg-muted/20 p-3 rounded">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[9px] uppercase tracking-widest text-taupe">
+                    {activeSlide + 1}/{slides.length}
+                  </span>
+                  <span className="text-[8px] uppercase tracking-widest bg-foreground/10 text-foreground px-2 py-0.5 font-semibold">
+                    {isCarousel ? "Carousel" : "Story"}
+                  </span>
+                </div>
 
-              {/* Thumbnails strip */}
-              <div className="flex gap-1.5 overflow-x-auto py-1 scrollbar-none">
-                {slides.map((s: any, idx: number) => (
-                  <button
-                    type="button"
-                    key={idx}
-                    onClick={() => setActiveSlide(idx)}
-                    className={`shrink-0 size-11 overflow-hidden border-2 transition-all ${
-                      idx === activeSlide ? "border-foreground scale-95" : "border-transparent opacity-60 hover:opacity-90"
-                    }`}
-                  >
-                    <img src={s.url} alt="" className="w-full h-full object-cover animate-fade-in" />
-                  </button>
-                ))}
+                <div className="relative aspect-square w-full overflow-hidden bg-black/5 mb-2 border border-border">
+                  <img
+                    src={slides[activeSlide]?.url}
+                    alt={slides[activeSlide]?.label ?? `Slide ${activeSlide + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+
+                  {activeSlide > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveSlide(activeSlide - 1)}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 bg-foreground/70 hover:bg-foreground text-white size-6 flex items-center justify-center rounded-full text-xs font-bold transition-all shadow-md"
+                    >
+                      ←
+                    </button>
+                  )}
+                  {activeSlide < slides.length - 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveSlide(activeSlide + 1)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 bg-foreground/70 hover:bg-foreground text-white size-6 flex items-center justify-center rounded-full text-xs font-bold transition-all shadow-md"
+                    >
+                      →
+                    </button>
+                  )}
+                </div>
+
+                {/* Thumbnails strip */}
+                <div className="flex gap-1.5 overflow-x-auto py-1 scrollbar-none">
+                  {slides.map((s: any, idx: number) => (
+                    <button
+                      type="button"
+                      key={idx}
+                      onClick={() => setActiveSlide(idx)}
+                      className={`shrink-0 size-11 overflow-hidden border-2 transition-all ${
+                        idx === activeSlide ? "border-foreground scale-95" : "border-transparent opacity-60 hover:opacity-90"
+                      }`}
+                    >
+                      <img src={s.url} alt="" className="w-full h-full object-cover animate-fade-in" />
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            </section>
           )}
 
           {variants.length > 1 && (
-            <div className="flex gap-2">
-              {variants.map((v: any, i: number) => (
-                <button
-                  key={i}
-                  onClick={() => setActiveVariant(i)}
-                  className={`flex-1 border px-3 py-2 text-left transition-all ${
-                    i === activeVariant
-                      ? "border-foreground bg-foreground/5 shadow-sm"
-                      : "border-border bg-card opacity-60 hover:opacity-100"
-                  }`}
-                >
-                  <p className={"text-[9px] uppercase tracking-widest mb-1 " + (i === activeVariant ? "text-foreground" : "text-taupe")}>
-                    Option {i + 1}
-                  </p>
-                  <p className="text-xs font-medium truncate">{v.generatedBy === 'anthropic/claude-3-5-sonnet-20241022' ? 'Claude 3.5 Sonnet' : v.generatedBy === 'openai/gpt-4o' ? 'GPT-4o' : v.generatedBy === 'openai/gpt-4o-mini' ? 'GPT-4o Mini' : `Option ${i + 1}`}</p>
-                </button>
-              ))}
-            </div>
+            <section>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground mb-3">Caption options</p>
+              <div className="flex gap-2">
+                {variants.map((v: any, i: number) => (
+                  <button
+                    key={i}
+                    onClick={() => setActiveVariant(i)}
+                    className={`flex-1 border px-3 py-2 text-left transition-all ${
+                      i === activeVariant
+                        ? "border-foreground bg-foreground/5 shadow-sm"
+                        : "border-border bg-card opacity-60 hover:opacity-100"
+                    }`}
+                  >
+                    <p className={"text-[9px] uppercase tracking-widest mb-1 " + (i === activeVariant ? "text-foreground" : "text-taupe")}>
+                      Option {i + 1}
+                    </p>
+                    <p className="text-xs font-medium truncate">{v.generatedBy === 'anthropic/claude-3-5-sonnet-20241022' ? 'Claude 3.5 Sonnet' : v.generatedBy === 'openai/gpt-4o' ? 'GPT-4o' : v.generatedBy === 'openai/gpt-4o-mini' ? 'GPT-4o Mini' : `Option ${i + 1}`}</p>
+                  </button>
+                ))}
+              </div>
+            </section>
           )}
 
-          <div>
-            <label className="text-[10px] uppercase tracking-widest text-taupe block mb-2">Caption</label>
-            <textarea
-              value={caption}
-              onChange={(e) => setCaption(e.target.value)}
-              rows={6}
-              className="w-full bg-muted/30 border border-border p-3 text-sm outline-none focus:border-foreground resize-none leading-relaxed"
-            />
-          </div>
-          <div>
-            <label className="text-[10px] uppercase tracking-widest text-taupe block mb-2">Call to action</label>
-            <input
-              value={cta}
-              onChange={(e) => setCta(e.target.value)}
-              className="w-full bg-muted/30 border border-border px-3 py-2.5 text-sm outline-none focus:border-foreground"
-            />
-          </div>
-          <div>
-            <label className="text-[10px] uppercase tracking-widest text-taupe block mb-1">Hashtags</label>
-            <p className="text-[9px] text-taupe mb-2">Space-separated. # is optional.</p>
-            <input
-              value={hashtags}
-              onChange={(e) => setHashtags(e.target.value)}
-              className="w-full bg-muted/30 border border-border px-3 py-2.5 text-sm outline-none focus:border-foreground"
-              placeholder="#haircolour #sydney"
-            />
-          </div>
+          <section className="space-y-5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Content</p>
+            <div>
+              <label className="text-[10px] uppercase tracking-widest text-taupe block mb-2">Caption</label>
+              <textarea
+                value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+                rows={6}
+                className="w-full bg-muted/30 border border-border p-3 text-sm outline-none focus:border-foreground resize-none leading-relaxed"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-widest text-taupe block mb-2">Call to action</label>
+              <input
+                value={cta}
+                onChange={(e) => setCta(e.target.value)}
+                className="w-full bg-muted/30 border border-border px-3 py-2.5 text-sm outline-none focus:border-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-widest text-taupe block mb-1">Hashtags</label>
+              <p className="text-[9px] text-taupe mb-2">Space-separated. # is optional.</p>
+              <input
+                value={hashtags}
+                onChange={(e) => setHashtags(e.target.value)}
+                className="w-full bg-muted/30 border border-border px-3 py-2.5 text-sm outline-none focus:border-foreground"
+                placeholder="#haircolour #sydney"
+              />
+            </div>
+          </section>
         </div>
 
-        {/* Footer actions */}
-        <div className="bg-muted px-6 py-4 border-t border-border flex items-center justify-between gap-3">
+        {/* Footer actions — same surface as header/body, hairline border only */}
+        <div className="bg-card px-6 py-4 border-t border-border flex items-center justify-between gap-3">
           <button
             onClick={onClose}
             className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors"
