@@ -82,6 +82,25 @@ export class PrimitiveEngine {
       `
     };
 
+    this.registry['editorial_badge'] = {
+      category: 'geometry',
+      render: (ctx, layer) => {
+        // Place badge near top-right corner if possible, overlapping slightly
+        const attachX = layer && layer.anchor === 'top_right' ? ctx.w - 180 : ctx.w - 140;
+        const attachY = 120;
+        return `
+        <!-- Circular Editorial Badge / Sticker -->
+        <g transform="translate(${attachX}, ${attachY})">
+          <circle cx="0" cy="0" r="55" fill="${ctx.validSecondaryColor}" stroke="${ctx.validBrandColor}" stroke-width="1.5" stroke-dasharray="2 4" />
+          <path id="badge-curve" d="M -40,0 A 40,40 0 1,1 40,0 A 40,40 0 1,1 -40,0" fill="none" />
+          <!-- SVG <textPath> can be added in typography-engine, but we draw a small icon or text here -->
+          <circle cx="0" cy="0" r="40" fill="${ctx.validBackgroundColor}" fill-opacity="0.9" />
+          <text x="0" y="5" font-family="serif" font-style="italic" font-size="14" fill="${ctx.validBrandColor}" text-anchor="middle">NEW</text>
+        </g>
+        `;
+      }
+    };
+
     // ==========================================
     // LAYOUT PRIMITIVES (Background Panels)
     // ==========================================
@@ -115,9 +134,9 @@ export class PrimitiveEngine {
     this.registry['editorial_title'] = {
       category: 'layout',
       render: (ctx) => `
+        <!-- Minimal accent rule for editorial title (no opaque background box) -->
         <g transform="translate(${ctx.constraints.safeX}, ${ctx.h - 280})">
-          <rect x="0" y="0" width="${ctx.w - (ctx.constraints.safeX * 2)}" height="220" fill="${ctx.validBackgroundColor}" fill-opacity="0.95" />
-          <line x1="40" y1="20" x2="${ctx.w - (ctx.constraints.safeX * 2) - 40}" y2="20" stroke="${ctx.validBrandColor}" stroke-width="1" opacity="0.3" />
+          <line x1="0" y1="0" x2="${ctx.w - (ctx.constraints.safeX * 2)}" y2="0" stroke="${ctx.validBrandColor}" stroke-width="1" opacity="0.3" />
         </g>
       `
     };
@@ -236,9 +255,10 @@ export class PrimitiveEngine {
       `
     };
     
-    this.registry['masking_tape'] = {
+    this.registry['paper_attachment'] = {
       category: 'effects',
       render: (ctx) => `
+        <!-- Generic paper attachment (e.g., masking tape, folded corner) -->
         <g transform="translate(${ctx.w / 2 - 80}, ${ctx.constraints.safeY - 40}) rotate(-4)">
           <rect x="0" y="0" width="160" height="35" fill="${ctx.validSecondaryColor}" opacity="0.9" filter="drop-shadow(1px 2px 3px rgba(0,0,0,0.1))" />
           <path d="M 0,0 L -3,8 L 1,17 L -2,25 L 0,35" fill="${ctx.validSecondaryColor}" />
@@ -247,7 +267,79 @@ export class PrimitiveEngine {
       `
     };
 
+    this.registry['editorial_badge'] = {
+      category: 'layout',
+      render: (ctx) => `
+        <g transform="translate(${ctx.w - 150}, ${ctx.constraints.safeY + 20})">
+          <!-- Generic editorial badge / starburst -->
+          <circle cx="60" cy="60" r="50" fill="${ctx.validBrandColor}" filter="drop-shadow(0 4px 6px rgba(0,0,0,0.15))" />
+          <path d="M 60 5 L 68 25 L 88 22 L 80 40 L 100 52 L 85 68 L 98 85 L 78 80 L 70 100 L 55 85 L 35 98 L 38 78 L 18 70 L 35 55 L 20 38 L 40 40 L 45 20 Z" fill="${ctx.validBrandColor}" opacity="0.9" />
+          <circle cx="60" cy="60" r="42" fill="none" stroke="${ctx.validSecondaryColor}" stroke-dasharray="2 4" stroke-width="1.5" />
+        </g>
+      `
+    };
 
+    // ==========================================
+    // INSTAGRAM COURSE & CLINIC CANVA TEMPLATES
+    // ==========================================
+    this.registry['desktop_monitor_mockup'] = {
+      category: 'layout',
+      render: (ctx) => `
+        <!-- iMac Desktop Monitor Frame (bezel-only: screen area is transparent so client photo shows through) -->
+        <g transform="translate(40, ${ctx.h * 0.28})">
+          <!-- Outer monitor border ring only — fill none so the photo underneath is visible through the screen -->
+          <rect x="0" y="0" width="480" height="320" rx="14" fill="none" stroke="#CBD5E1" stroke-width="12" />
+          <!-- Inner screen border accent -->
+          <rect x="10" y="10" width="460" height="276" rx="4" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="1" />
+          <!-- Bottom chin of the monitor (below the screen) -->
+          <rect x="0" y="296" width="480" height="24" rx="0" fill="#D1D9E6" />
+          <rect x="0" y="308" width="480" height="12" rx="0" fill="#CBD5E1" />
+          <!-- Stand -->
+          <path d="M 200 320 L 280 320 L 295 375 L 185 375 Z" fill="#CBD5E1" />
+          <rect x="170" y="372" width="140" height="6" rx="3" fill="#94A3B8" />
+        </g>
+      `
+    };
+
+    this.registry['tablet_device_mockup'] = {
+      category: 'layout',
+      render: (ctx) => `
+        <!-- iPad / Tablet Device Frame (bezel-only: screen area transparent so client photo shows through) -->
+        <g transform="translate(${ctx.w / 2 - 190}, ${ctx.h * 0.25})">
+          <!-- Outer tablet border ring only — fill none so the photo underneath is visible -->
+          <rect x="0" y="0" width="380" height="520" rx="26" fill="none" stroke="#334155" stroke-width="18" />
+          <!-- Inner screen accent border -->
+          <rect x="14" y="14" width="352" height="492" rx="14" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1" />
+          <!-- Camera dot -->
+          <circle cx="190" cy="8" r="4" fill="#475569" />
+          <!-- Home bar -->
+          <rect x="140" y="512" width="100" height="4" rx="2" fill="#64748B" />
+        </g>
+      `
+    };
+
+    this.registry['swipe_button_arrow'] = {
+      category: 'geometry',
+      render: (ctx) => `
+        <!-- Circular SWIPE -> Button -->
+        <g transform="translate(${ctx.w - 180}, ${ctx.h - 95})">
+          <text x="0" y="22" font-family="sans-serif" font-size="11" font-weight="600" letter-spacing="3px" fill="${ctx.validBrandColor}" opacity="0.75">SWIPE</text>
+          <circle cx="75" cy="16" r="22" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1.5" />
+          <path d="M 67 16 L 83 16 M 77 10 L 83 16 L 77 22" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+        </g>
+      `
+    };
+
+    this.registry['floating_frame'] = {
+      category: 'layout',
+      render: (ctx) => `
+        <!-- Generic floating frame (polaroid, glass card, etc) -->
+        <g transform="translate(${ctx.constraints.safeX + 20}, ${ctx.constraints.safeY + 20})">
+          <rect x="0" y="0" width="${ctx.w / 2}" height="${ctx.h / 1.5}" fill="${ctx.validBackgroundColor}" filter="drop-shadow(0 15px 30px rgba(0,0,0,0.2))" />
+          <rect x="20" y="20" width="${ctx.w / 2 - 40}" height="${ctx.h / 1.5 - 100}" fill="rgba(0,0,0,0.05)" />
+        </g>
+      `
+    };
     // ==========================================
     // SIGNATURE CONTRACT PRIMITIVES
     // ==========================================
@@ -305,24 +397,29 @@ export class PrimitiveEngine {
     this.registry['dominant_headline'] = {
       category: 'layout',
       render: (ctx) => `
-        <!-- Placeholder for dominant headline text block, usually handled by TypographyEngine -->
-        <g opacity="0"></g>
+        <!-- High Contrast Dominant Headline Accent Line -->
+        <g transform="translate(${ctx.constraints.safeX}, ${ctx.constraints.safeY + 80})">
+          <line x1="0" y1="0" x2="60" y2="0" stroke="${ctx.validBrandColor}" stroke-width="3" opacity="0.8" />
+        </g>
       `
     };
 
     this.registry['off_center_crop'] = {
       category: 'layout',
       render: (ctx) => `
-        <!-- Semantic tag for off-center crop, usually handled by CompositionEngine mask logic -->
-        <g opacity="0"></g>
+        <!-- Framing Corner Registration Ticks -->
+        <g stroke="${ctx.validBrandColor}" stroke-width="1" opacity="0.35" fill="none">
+          <path d="M ${ctx.constraints.safeX},${ctx.constraints.safeY + 20} L ${ctx.constraints.safeX},${ctx.constraints.safeY} L ${ctx.constraints.safeX + 20},${ctx.constraints.safeY}" />
+          <path d="M ${ctx.w - ctx.constraints.safeX - 20},${ctx.constraints.safeY} L ${ctx.w - ctx.constraints.safeX},${ctx.constraints.safeY} L ${ctx.w - ctx.constraints.safeX},${ctx.constraints.safeY + 20}" />
+        </g>
       `
     };
 
     this.registry['die_cut_mask'] = {
       category: 'layout',
       render: (ctx) => `
-        <!-- Semantic tag for die-cut mask, usually handled by CompositionEngine mask logic -->
-        <g opacity="0"></g>
+        <!-- Soft Die-Cut Window Frame Outline -->
+        <rect x="${ctx.constraints.safeX + 10}" y="${ctx.constraints.safeY + 10}" width="${ctx.w - (ctx.constraints.safeX + 10) * 2}" height="${ctx.h - (ctx.constraints.safeY + 10) * 2}" rx="12" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1.5" stroke-dasharray="6 6" opacity="0.4" />
       `
     };
   }

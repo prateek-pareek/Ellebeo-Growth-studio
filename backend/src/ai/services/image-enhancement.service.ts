@@ -12,7 +12,7 @@ export class ImageEnhancementService {
   constructor() {
     const replicateKey = process.env.REPLICATE_API_TOKEN;
     this.isEnabled = !!replicateKey;
-    
+
     if (this.isEnabled) {
       this.replicate = new Replicate({ auth: replicateKey as string });
     } else {
@@ -53,11 +53,11 @@ export class ImageEnhancementService {
       // 1. Local Image Correction (sharp)
       const originalRes = await fetch(imageUrl);
       const originalBuffer = Buffer.from(await originalRes.arrayBuffer());
-      
+
       const metadata = await sharp(originalBuffer).metadata();
       const width = metadata.width || 1024;
       const height = metadata.height || 1024;
-      
+
       let pipeline = sharp(originalBuffer);
       let needsESRGAN = false;
 
@@ -77,30 +77,30 @@ export class ImageEnhancementService {
       // 2. Conditional Super Resolution (Phase B - Replicate ESRGAN)
       if (needsESRGAN && this.isEnabled) {
         this.logger.log('Applying AI Super Resolution via Replicate (ESRGAN)...');
-        
+
         const output = await runWithRetry(
           'nightmareai/real-esrgan:42fed1c4974146d4d2414e2be2c5277c7fcf05fcc3a73abf41610695738c1d7b',
           {
             input: {
               image: finalDataUri,
-              scale: 2,
-              face_enhance: true
+              scale: 4,
+              face_enhance: false
             }
           }
         );
-        
+
         if (!output) throw new Error('Failed to run Replicate super resolution');
         finalDataUri = typeof output === 'string' ? output : (output as string[])[0];
       } else {
         this.logger.log('Skipping Replicate ESRGAN. Image is sufficient quality or Replicate is disabled.');
       }
-      
+
       this.logger.log('Photo Intelligence Pipeline complete!');
       return finalDataUri;
 
     } catch (error) {
       this.logger.error('Failed to enhance image, falling back to raw photo.', error);
-      return imageUrl; 
+      return imageUrl;
     }
   }
 }

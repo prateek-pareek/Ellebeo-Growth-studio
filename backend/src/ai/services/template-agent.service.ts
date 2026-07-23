@@ -5,6 +5,8 @@ import { HardConstraintEngine } from './template-engine/hard-constraint.engine';
 import { RankingEngine } from './template-engine/ranking.engine';
 import { DiversityEngine } from './template-engine/diversity.engine';
 import { ITemplateContext } from './template-engine/interfaces';
+import { LayoutAssemblerService } from './template-engine/layout-assembler.service';
+import { registerDynamicLayout } from '../config/layout-renderers';
 
 @Injectable()
 export class TemplateAgentService {
@@ -15,6 +17,7 @@ export class TemplateAgentService {
   private hardConstraintEngine: HardConstraintEngine;
   private rankingEngine: RankingEngine;
   private diversityEngine: DiversityEngine;
+  private layoutAssembler: LayoutAssemblerService;
 
   constructor() {
     this.openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
@@ -24,6 +27,7 @@ export class TemplateAgentService {
     this.hardConstraintEngine = new HardConstraintEngine();
     this.rankingEngine = new RankingEngine();
     this.diversityEngine = new DiversityEngine();
+    this.layoutAssembler = new LayoutAssemblerService();
   }
 
   /**
@@ -39,7 +43,7 @@ export class TemplateAgentService {
     gridConstraints?: string;
     visionResult?: import('../types/chain-output.types').VisionAnalysisResult | null;
     excludeLayouts?: string[];
-  }): Promise<{ selected_layout_id: string; reasoning: string }> {
+  }): Promise<{ selected_layout_id: string; reasoning: string; designSpec?: import('./template-engine/interfaces').ISemanticDesignSpec }> {
     
     const context: ITemplateContext = {
       brief: params.brief,
@@ -87,15 +91,17 @@ export class TemplateAgentService {
 
       const systemPrompt = `
 You are an elite Visual Art Director.
-We have mathematically narrowed down our template library of 390+ layouts to the absolute Top ${topCandidates.length} candidates for this specific slide.
-Your ONLY job is to select the single best layout from this shortlist based on visual storytelling.
+We have mathematically narrowed down our layout library to the absolute Top ${topCandidates.length} candidates. These candidates may be either specific rigid layout templates (e.g. device mockups) or procedural Design Families (e.g. editorial_magazine) which dynamically generate a layout.
+Your ONLY job is to select the single best layout or family from this shortlist based strictly on the provided Brand Aesthetic and visual storytelling for the given brief.
+
+Do NOT default to "minimal" or "high-end fashion" unless it perfectly matches the Brand Aesthetic. Adapt dynamically.
 
 CONTEXT:
 - Brand Aesthetic: ${context.aesthetic}
 - Slide Position: ${context.slideIndex + 1} of ${context.totalSlides}
 - Overlay Text Length: ${context.textLength} characters
 ${params.gridConstraints ? `- GRID CONSTRAINTS: ${params.gridConstraints}` : ''}
-${context.visionResult?.suitabilityScores ? `- PHOTO SUITABILITY: Technical Quality=${context.visionResult.suitabilityScores.technicalQuality}/100, Brand Compatibility=${context.visionResult.suitabilityScores.brandCompatibility}/100. CRITICAL: If Brand Compatibility is low (<50), you MUST choose a layout with heavy masks, arch cutouts, or thick editorial frames to hide the ugly background. Do NOT use full bleed if Brand Compatibility is low.` : ''}
+${context.visionResult?.suitabilityScores ? `- PHOTO SUITABILITY: Technical Quality=${context.visionResult.suitabilityScores.technicalQuality}/100, Brand Compatibility=${context.visionResult.suitabilityScores.brandCompatibility}/100. CRITICAL: If Brand Compatibility is low (<50), choose a layout with heavy masks to hide the background.` : ''}
 
 BRIEF FOR THIS SLIDE:
 ${context.brief || 'Standard beautifully aesthetic post.'}
@@ -104,13 +110,13 @@ TOP CANDIDATES SHORTLIST:
 ${candidateSummary}
 
 INSTRUCTIONS:
-1. Select ONE layout ID from the shortlist above.
+1. Select ONE layout ID from the shortlist above that flawlessly matches the Brand Aesthetic and Brief.
 2. Return strictly in valid JSON format.
 
 JSON SCHEMA:
 {
   "selected_layout_id": "<exact_template_id>",
-  "reasoning": "A 1-sentence aesthetic reason for selecting this layout."
+  "reasoning": "A 1-sentence explanation of why this perfectly matches the Brand DNA."
 }
 `;
 
@@ -126,17 +132,27 @@ JSON SCHEMA:
       const decision = JSON.parse(responseContent);
 
       // Ensure the LLM didn't hallucinate an ID outside the shortlist
-      const finalId = topCandidates.find(c => c.id === decision.selected_layout_id) 
-        ? decision.selected_layout_id 
-        : topCandidates[0].id; // Fallback to the mathematically highest ranked if LLM hallucinates
+      const chosenCandidate = topCandidates.find(c => c.id === decision.selected_layout_id) 
+        ? topCandidates.find(c => c.id === decision.selected_layout_id)!
+        : topCandidates[0]; // Fallback to the mathematically highest ranked if LLM hallucinates
+        
+      const finalId = chosenCandidate.id;
+      let returnedLayoutId = finalId;
 
       this.logger.log(`[Stage 5] AI Art Director finalized: ${finalId} - Reason: ${decision.reasoning}`);
+
+      if (chosenCandidate.type === 'procedural') {
+         const dsl = this.layoutAssembler.compileFamilyToDSL(finalId, params.slideIndex, params.brandName);
+         registerDynamicLayout(dsl);
+         returnedLayoutId = dsl.id;
+         this.logger.log(`[Stage 5] Compiled procedural family ${finalId} into variant ${returnedLayoutId}`);
+      }
       
       // Tell the Diversity Engine to penalize this layout for future runs
       this.diversityEngine.recordUsage(finalId);
 
       return {
-        selected_layout_id: finalId,
+        selected_layout_id: returnedLayoutId,
         reasoning: decision.reasoning || 'Selected via Pipeline'
       };
 

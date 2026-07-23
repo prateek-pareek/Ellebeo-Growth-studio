@@ -458,14 +458,20 @@ function ContentCard({
   const slides = isCarousel ? (platformVariants?.slides ?? []) : isStory ? (platformVariants?.frames ?? []) : [];
   const [cardSlideIndex, setCardSlideIndex] = useState(0);
 
+  // Auto-scroll removed to allow users to inspect each slide manually.
+  useEffect(() => {
+    // Keeps hook structure without the setInterval logic.
+    return () => {};
+  }, [slides]);
+
   const state   = item.state.toLowerCase();
   const blocked = state === "blocked";
   const isDraft = state === "draft" || state === "needs review";
 
   return (
     <article className="group flex flex-col border border-border bg-card shadow-sm hover:shadow-md transition-shadow overflow-hidden">
-      {/* Image */}
-      <div className="aspect-[4/5] overflow-hidden bg-nude/30 relative border-b border-border hover:cursor-pointer" onClick={onReview}>
+      {/* Image Container — aspect-square for Carousel/Feed vs aspect-[9/16] for Story */}
+      <div className={`overflow-hidden bg-nude/30 relative border-b border-border hover:cursor-pointer transition-all duration-300 ${isStory ? 'aspect-[9/16]' : 'aspect-square'}`} onClick={onReview}>
         <img
           src={slides.length > 0 ? slides[cardSlideIndex]?.url : item.image}
           alt={item.title}
@@ -622,6 +628,12 @@ function EditSidebar({
   const slides = isCarousel ? (platformVariants?.slides ?? []) : isStory ? (platformVariants?.frames ?? []) : [];
   const [activeSlide, setActiveSlide] = useState(0);
 
+  // Auto-scroll removed to allow users to inspect each slide manually.
+  useEffect(() => {
+    // Keeps hook structure without the setInterval logic.
+    return () => {};
+  }, [slides]);
+
   const opt = variants[activeVariant] ?? variants[0];
   
   const getVariantUrl = (slideData: any) => {
@@ -692,11 +704,11 @@ function EditSidebar({
                   Visual Preview ({activeSlide + 1}/{slides.length})
                 </span>
                 <span className="text-[8px] uppercase tracking-widest bg-foreground/10 text-foreground px-2 py-0.5 font-semibold">
-                  {isCarousel ? "Carousel" : "Story"}
+                  {isCarousel ? "Carousel (1:1 Square)" : "Story (9:16 Vertical)"}
                 </span>
               </div>
               
-              <div className="relative aspect-square w-full overflow-hidden bg-black/5 mb-2 border border-border">
+              <div className={`relative w-full overflow-hidden bg-black/5 mb-2 border border-border transition-all duration-300 ${isStory ? 'aspect-[9/16] max-h-[460px] mx-auto' : 'aspect-square'}`}>
                 <img
                   src={getVariantUrl(slides[activeSlide])}
                   alt={slides[activeSlide]?.label ?? `Slide ${activeSlide + 1}`}

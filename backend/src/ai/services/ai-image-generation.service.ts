@@ -21,8 +21,9 @@ import { GoogleGenAI } from '@google/genai';
 import sharp from 'sharp';
 import { ModelRouter } from '../orchestrator/model-router';
 import type { VisionAnalysisResult } from '../types/chain-output.types';
-import { resolveLayoutTemplate, BASE_TREATMENTS, TEXT_TEMPLATES, DECORATIONS, LAYOUT_TEMPLATES } from '../config/layout-renderers';
+import { resolveLayoutTemplate, BASE_TREATMENTS, TEXT_TEMPLATES, DECORATIONS, LAYOUT_TEMPLATES, registerDynamicLayout } from '../config/layout-renderers';
 import { TemplateAgentService } from './template-agent.service';
+import { LayoutAssemblerService } from './template-engine/layout-assembler.service';
 import templateLibraryData from '../config/template-library.json';
 import { ThemeEngine } from './template-engine/engines/theme-engine';
 import { CompositionEngine, TemplateIntent } from './template-engine/engines/composition-engine';
@@ -49,23 +50,31 @@ export interface SlideInput {
 }
 
 export async function downloadImageAsBuffer(url: string): Promise<Buffer> {
+  if (!url) throw new Error('Empty URL provided to downloadImageAsBuffer');
+  if (url.startsWith('data:image/')) {
+    const base64Data = url.split(',')[1];
+    return Buffer.from(base64Data, 'base64');
+  }
+
   if (!url.startsWith('http')) {
     try {
-      return await fs.promises.readFile(url);
+      const cleanPath = url.replace(/^file:\/\/\/?/, '');
+      return await fs.promises.readFile(cleanPath);
     } catch (err) {
       throw new Error(`Failed to read local file ${url}: ${err}`);
     }
   }
 
-  return new Promise((resolve, reject) => {
-    const protocol = url.startsWith('https') ? https : http;
-    protocol.get(url, (res) => {
-      const chunks: Buffer[] = [];
-      res.on('data', (chunk) => chunks.push(chunk));
-      res.on('end', () => resolve(Buffer.concat(chunks)));
-      res.on('error', reject);
-    }).on('error', reject);
-  });
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  } catch (err) {
+    throw new Error(`Failed to download image from ${url}: ${err}`);
+  }
 }
 
 export async function processPortraitFit(imageBuffer: Buffer, targetW: number, targetH: number, backgroundColor: string = '#F7F4EF'): Promise<Buffer> {
@@ -134,43 +143,58 @@ export async function processPortraitFit(imageBuffer: Buffer, targetW: number, t
 const fontCache: Record<string, string> = {};
 
 async function fetchGoogleFontBase64(fontFamily: string): Promise<string> {
-  if (fontCache[fontFamily]) {
+  if (!fontFamily || ['sans-serif', 'serif', 'system-ui', 'monospace', 'arial', 'helvetica'].includes(fontFamily.toLowerCase())) {
+    return '';
+  }
+
+  if (fontCache[fontFamily] !== undefined) {
     return fontCache[fontFamily];
   }
 
   try {
     const escapedFamily = encodeURIComponent(fontFamily);
-    const googleFontsCssUrl = `https://fonts.googleapis.com/css2?family=${escapedFamily}:wght@400;700&display=swap`;
+    const googleFontsCssUrl = `https://fonts.googleapis.com/css2?family=${escapedFamily}&display=swap`;
 
     const cssText = await new Promise<string>((resolve, reject) => {
-      // Send a modern User-Agent to force Google Fonts to return the raw TTF/WOFF2 links
-      const options = {
+      const req = https.get(googleFontsCssUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-      };
-      https.get(googleFontsCssUrl, options, (res) => {
+        },
+        timeout: 3000
+      }, (res) => {
         let body = '';
         res.on('data', (chunk) => { body += chunk; });
         res.on('end', () => resolve(body));
         res.on('error', reject);
-      }).on('error', reject);
+      });
+      req.on('timeout', () => { req.destroy(); reject(new Error('Font CSS fetch timeout')); });
+      req.on('error', reject);
     });
 
-    // Extract the URL pointing to the font file (.ttf or .woff2)
     const urlMatch = cssText.match(/url\((https:\/\/fonts\.gstatic\.com\/[^)]+)\)/);
     if (!urlMatch || !urlMatch[1]) {
-      throw new Error(`Failed to extract font URL for: ${fontFamily}`);
+      fontCache[fontFamily] = '';
+      return '';
     }
 
     const fontUrl = urlMatch[1];
-    const fontBuffer = await downloadImageAsBuffer(fontUrl);
-    const base64 = fontBuffer.toString('base64');
+    const fontBuffer = await new Promise<Buffer>((resolve, reject) => {
+      const req = https.get(fontUrl, { timeout: 3000 }, (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk) => chunks.push(chunk));
+        res.on('end', () => resolve(Buffer.concat(chunks)));
+        res.on('error', reject);
+      });
+      req.on('timeout', () => { req.destroy(); reject(new Error('Font binary download timeout')); });
+      req.on('error', reject);
+    });
 
+    const base64 = fontBuffer.toString('base64');
     fontCache[fontFamily] = base64;
     return base64;
   } catch (err: any) {
-    console.error(`[FONT DOWNLOADER ERROR] Failed to fetch font: ${fontFamily}. Fallback active.`, err.message);
+    console.warn(`[FONT ENGINE] Could not fetch Google Font '${fontFamily}' dynamically (${err.message}). Using SVG font-family fallback.`);
+    fontCache[fontFamily] = '';
     return '';
   }
 }
@@ -291,6 +315,9 @@ export class AiImageGenerationService {
     photoUrl: string;
     beforePhotoUrl?: string;
     overlayText: string;
+    headline?: string;
+    subheadline?: string;
+    cta?: string;
     title: string;
     index: number;
     isFirst: boolean;
@@ -318,9 +345,10 @@ export class AiImageGenerationService {
     moodboardVisionSummary?: string;
     visionResult?: VisionAnalysisResult;
     templateIntent?: 'educational' | 'promotion' | 'testimonial' | 'before_after' | 'brand_story';
+    designSpec?: import('./template-engine/interfaces').ISemanticDesignSpec;
   }): Promise<{ url: string; variants?: { gemini?: string; dalle?: string } }> {
     const {
-      photoUrl, beforePhotoUrl, overlayText, index, isFirst, isLast, isBeforePhoto,
+      photoUrl, beforePhotoUrl, overlayText, headline, subheadline, cta, index, isFirst, isLast, isBeforePhoto,
       tenantId, businessName, brandColor,
       secondaryColor = '#f5f0eb',
       aesthetic = 'minimal editorial premium beauty',
@@ -341,6 +369,7 @@ export class AiImageGenerationService {
       moodboardVisionSummary,
       visionResult,
       templateIntent = 'educational',
+      designSpec
     } = params;
 
     // Fast-path: Skip AI image generation entirely for text-only editorial layouts
@@ -376,7 +405,7 @@ export class AiImageGenerationService {
     let cleanPrompt = '';
     let imageBuffer: Buffer | null = null;
 
-    const isRealClientPhoto = photoUrl && (photoUrl.startsWith('http') || photoUrl.includes('raw_assets') || photoUrl.includes('storage') || photoUrl.includes('temp'));
+    const isRealClientPhoto = photoUrl && (photoUrl.startsWith('http') || photoUrl.startsWith('data:image/') || photoUrl.includes('raw_assets') || photoUrl.includes('storage') || photoUrl.includes('temp'));
 
     if (isRealClientPhoto || generatorModel === 'none') {
       console.log(`[PASS-THROUGH SHARP COMPOSITOR] Bypassing AI image editor for slide ${index} to guarantee 100% client face preservation.`);
@@ -403,9 +432,43 @@ export class AiImageGenerationService {
         accentBrandColor,
         captionText: overlayText,
         visionResult,
+        designSpec,
       });
       const url = await uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
       return { url };
+    }
+
+    // Bypass AI image generation entirely for procedural text-only families
+    if (layoutType === 'text_palette_minimal' || !photoUrl && layoutType?.includes('text_')) {
+       // Create a minimal 1x1 transparent pixel base64. The renderer will cover it with SVG backgrounds.
+       const transparent1x1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+       const brandedBase64 = await this.overlayBrandingAndText({
+         base64Image: transparent1x1,
+         overlayText,
+         isFirst,
+         isLast,
+         brandColor,
+         secondaryColor,
+         businessName,
+         index,
+         totalSlides,
+         brandFont,
+         bodyFont,
+         layoutType,
+         beforePhotoUrl,
+         visualRanking,
+         capitalizationRule,
+         footerBrandToggle,
+         backgroundBrandColor,
+         accentBrandColor,
+         depthBrandColor,
+         outputSize,
+         captionText: overlayText,
+         visionResult,
+         designSpec,
+       });
+       const url = await uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
+       return { url, variants: { gemini: url, dalle: url } };
     }
 
     // Compile dynamic lifestyle/studio assets for non-booking educational/moodboard posts
@@ -529,6 +592,9 @@ CRITICAL IMAGE REQUIREMENTS:
     const brandedBase64 = await this.overlayBrandingAndText({
       base64Image: base64,
       overlayText,
+      headline,
+      subheadline,
+      cta,
       isFirst,
       isLast,
       brandColor,
@@ -549,6 +615,7 @@ CRITICAL IMAGE REQUIREMENTS:
       outputSize,
       captionText: overlayText,
       visionResult,
+      designSpec,
     });
 
     // Upload primary image
@@ -597,6 +664,7 @@ CRITICAL IMAGE REQUIREMENTS:
         outputSize,
         captionText: altOverlayText,
         visionResult,
+        designSpec,
       });
 
       const altUrl = await uploadBase64ToFirebase(brandedAltBase64, tenantId, `slide_${index}_alt`);
@@ -614,7 +682,7 @@ CRITICAL IMAGE REQUIREMENTS:
   async generateCarousel(params: {
     afterPhotoUrl: string;
     beforePhotoUrl?: string;
-    concepts: Array<{ index: number; title: string; overlayText: string }>;
+    concepts: Array<{ index: number; title: string; overlayText: string; headline?: string; subheadline?: string; cta?: string; }>;
     tenantId: string;
     businessName: string;
     brandColor: string;
@@ -651,32 +719,46 @@ CRITICAL IMAGE REQUIREMENTS:
     const uniqueLayoutsForSlides: string[] = [];
     let pool = [...layoutPool];
 
-    // Parallelize Template Agent requests to eliminate 30-40 sec bottleneck
-    const agentPromises = concepts.map((concept, i) => 
-      this.templateAgent.selectTemplate({
+    // Select unique layouts intelligently using Template Agent sequentially to ensure diversity and history tracking works
+    const agentDecisions: Array<{ selected_layout_id: string; reasoning: string; designSpec?: any }> = [];
+    
+    for (let i = 0; i < total; i++) {
+      const concept = concepts[i];
+      const decision = await this.templateAgent.selectTemplate({
         brief: concept.overlayText || 'Slide',
         brandName: params.businessName || 'Brand',
-        aesthetic: params.aesthetic || 'minimal editorial',
+        aesthetic: (params.visualRanking && params.visualRanking.length > 0) ? params.visualRanking[0] : 'clean and modern',
         textLength: (concept.overlayText || '').length,
         slideIndex: i,
         totalSlides: total,
-        visionResult: visionResultStub
-      }).then(res => res.selected_layout_id)
-    );
+        visionResult: visionResultStub,
+        excludeLayouts: uniqueLayoutsForSlides
+      });
+      agentDecisions.push(decision);
+      uniqueLayoutsForSlides.push(decision.selected_layout_id);
+    }
 
-    const chosenLayouts = await Promise.all(agentPromises);
+    // Instantiate the layout assembler to handle forced procedural layouts
+    const layoutAssembler = new LayoutAssemblerService();
+    
+    // Inject a "breather" slide (text-only, aesthetic background) into the middle of the carousel
+    // This provides visual relief and answers the user request for a "random color palette text slide"
+    let breatherIndex = -1;
+    if (total >= 4) {
+      // Pick slide index 1 or 2 (2nd or 3rd slide) randomly
+      breatherIndex = Math.floor(Math.random() * (total - 2)) + 1;
+    }
 
     for (let i = 0; i < total; i++) {
-      let chosen = chosenLayouts[i];
-
-      // Prevent dupes locally
-      if (i > 0 && uniqueLayoutsForSlides.includes(chosen) && pool.length > 0) {
-        chosen = pool[Math.floor(Math.random() * pool.length)] || chosen;
+      let chosen = agentDecisions[i].selected_layout_id;
+      
+      if (i === breatherIndex) {
+        chosen = 'text_palette_minimal';
+        agentDecisions[i].reasoning = 'Forced text breather slide for visual pacing';
       }
-
-      uniqueLayoutsForSlides.push(chosen);
-      pool = pool.filter(l => l !== chosen);
-      if (pool.length === 0) pool = [...layoutPool];
+      
+      // Let the AI Art Director's choice pass through (or breather override)
+      uniqueLayoutsForSlides[i] = chosen; // Override since it was already pushed in the loop above
     }
 
     const slides = await Promise.all(
@@ -697,15 +779,17 @@ CRITICAL IMAGE REQUIREMENTS:
 
         const brief = artDirectorBrief?.find(b => b.index === concept.index);
         let currentSlideLayout = uniqueLayoutsForSlides[i];
-        if (isLast) {
-          currentSlideLayout = 'transparent_scrim';
-        }
-
+        
+        // Let the AI Art Director's choice apply to the last slide too
+        
         try {
           const result = await this.generateSlide({
             photoUrl: photoUrl || '',
             beforePhotoUrl,
             overlayText: concept.overlayText,
+            headline: concept.headline,
+            subheadline: concept.subheadline,
+            cta: concept.cta,
             title: concept.title,
             index: concept.index,
             isFirst,
@@ -728,6 +812,7 @@ CRITICAL IMAGE REQUIREMENTS:
             moodboardVisionSummary,
             visionResult: visionResult ?? visionResultStub,
             templateIntent,
+            designSpec: agentDecisions[i].designSpec,
           });
           return {
             url: result.url,
@@ -750,7 +835,7 @@ CRITICAL IMAGE REQUIREMENTS:
   async generateStory(params: {
     afterPhotoUrl: string;
     beforePhotoUrl?: string;
-    frames: Array<{ index: number; title: string; overlayText: string }>;
+    frames: Array<{ index: number; title: string; overlayText: string; headline?: string; subheadline?: string; cta?: string; }>;
     tenantId: string;
     businessName: string;
     brandColor: string;
@@ -771,8 +856,9 @@ CRITICAL IMAGE REQUIREMENTS:
     moodboardVisionSummary?: string;
     visionResult?: VisionAnalysisResult;
     templateIntent?: any;
+    designSpec?: import('./template-engine/interfaces').ISemanticDesignSpec;
   }): Promise<GeneratedSlide[]> {
-    const { afterPhotoUrl, beforePhotoUrl, frames, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', depthBrandColor = '#1E1E1C', moodboardVisionSummary, visionResult, templateIntent, ...rest } = params;
+    const { afterPhotoUrl, beforePhotoUrl, frames, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', depthBrandColor = '#1E1E1C', moodboardVisionSummary, visionResult, templateIntent, designSpec, ...rest } = params;
     const total = frames.length;
 
     // Derive pool dynamically from JSON config — never goes stale when new layouts are added
@@ -783,36 +869,36 @@ CRITICAL IMAGE REQUIREMENTS:
 
     const visionResultStub = isZoomedFace ? { framingType: 'macro', facesDetected: true } as any : undefined;
 
-    // Select unique layouts intelligently using Template Agent
+    // Select unique layouts intelligently using Template Agent sequentially
     const uniqueLayoutsForFrames: string[] = [];
-    let pool = [...layoutPool];
-
-    // Parallelize Template Agent requests to eliminate 30-40 sec bottleneck
-    const agentPromises = frames.map((frame, i) => 
-      this.templateAgent.selectTemplate({
+    const agentDecisions: Array<{ selected_layout_id: string; reasoning: string; designSpec?: any }> = [];
+    
+    for (let i = 0; i < total; i++) {
+      const frame = frames[i];
+      const decision = await this.templateAgent.selectTemplate({
         brief: frame.overlayText || (i === 0 ? 'Cover frame' : 'Body frame'),
         brandName: params.businessName || 'Brand',
         aesthetic: params.aesthetic || 'minimal editorial',
         textLength: (frame.overlayText || '').length,
         slideIndex: i,
         totalSlides: total,
-        visionResult: visionResultStub
-      }).then(res => res.selected_layout_id)
-    );
-    
-    const chosenLayouts = await Promise.all(agentPromises);
+        visionResult: visionResultStub,
+        excludeLayouts: uniqueLayoutsForFrames
+      });
+      agentDecisions.push(decision);
+      uniqueLayoutsForFrames.push(decision.selected_layout_id);
+    }
+
+    const clientApprovedStoryTemplates = [
+      'desktop_course_hero',
+      'course_learnings_split',
+      'banner_card_editorial',
+      'tablet_workbook_cover'
+    ];
 
     for (let i = 0; i < total; i++) {
-      let chosen = chosenLayouts[i];
-
-      // Prevent dupes locally
-      if (i > 0 && uniqueLayoutsForFrames.includes(chosen) && pool.length > 0) {
-        chosen = pool[Math.floor(Math.random() * pool.length)] || chosen;
-      }
-
+      const chosen = clientApprovedStoryTemplates[i % clientApprovedStoryTemplates.length];
       uniqueLayoutsForFrames.push(chosen);
-      pool = pool.filter(l => l !== chosen);
-      if (pool.length === 0) pool = [...layoutPool];
     }
 
     const results = await Promise.all(
@@ -848,6 +934,9 @@ CRITICAL IMAGE REQUIREMENTS:
             photoUrl: photoUrl || '',
             beforePhotoUrl,
             overlayText: frame.overlayText,
+            headline: frame.headline,
+            subheadline: frame.subheadline,
+            cta: frame.cta,
             title: frame.title,
             index: frame.index,
             isFirst,
@@ -870,6 +959,7 @@ CRITICAL IMAGE REQUIREMENTS:
             moodboardVisionSummary,
             visionResult: visionResult ?? visionResultStub,
             templateIntent,
+            designSpec: agentDecisions[i].designSpec,
           });
           return {
             url: result.url,
@@ -892,6 +982,9 @@ CRITICAL IMAGE REQUIREMENTS:
   private async overlayBrandingAndText(params: {
     base64Image: string;
     overlayText: string;
+    headline?: string;
+    subheadline?: string;
+    cta?: string;
     isFirst: boolean;
     isLast: boolean;
     brandColor: string;
@@ -913,10 +1006,14 @@ CRITICAL IMAGE REQUIREMENTS:
     captionText: string;
     visionResult?: VisionAnalysisResult;
     templateIntent?: any;
+    designSpec?: import('./template-engine/interfaces').ISemanticDesignSpec;
   }): Promise<string> {
     const {
       base64Image,
       overlayText,
+      headline,
+      subheadline,
+      cta,
       isFirst,
       isLast,
       brandColor,
@@ -936,10 +1033,11 @@ CRITICAL IMAGE REQUIREMENTS:
       depthBrandColor = '#1E1E1C',
       outputSize,
       visionResult,
-      templateIntent
+      templateIntent,
+      designSpec
     } = params;
 
-    const hasText = overlayText && overlayText.trim().length > 0;
+    const hasText = (overlayText && overlayText.trim().length > 0) || !!headline || !!subheadline || !!cta;
 
     try {
       const escapeXml = (str: string) => {
@@ -1127,6 +1225,7 @@ CRITICAL IMAGE REQUIREMENTS:
         validSecondaryColor,
         validBackgroundColor,
         downloadImageAsBuffer,
+        designSpec,
       });
       let baseImage = baseResult.baseImage;
       let compositeTop = baseResult.compositeTop;
@@ -1206,9 +1305,11 @@ CRITICAL IMAGE REQUIREMENTS:
         layoutType, w, h, paddingX, paddingTop, paddingBottom, innerW, innerH,
         validBrandColor, validSecondaryColor, validBackgroundColor, validAccentColor, brandFont, rawName, photoDataUri,
         escapedLines, dyOffset, dynamicFontSize, dynamicTextColor, overlayText: finalOverlayText, maxLength,
+        visionResult: visionResult,
         faceCoordinates: visionResult?.faceCoordinates,
         injectedFeatures: composition.injectedFeatures,
         designTokens,
+        designSpec,
       };
 
       const visualAdditions = template.decoration
@@ -1227,7 +1328,7 @@ CRITICAL IMAGE REQUIREMENTS:
             font-weight: bold;
             font-style: normal;
           }`
-        : `@import url('https://fonts.googleapis.com/css2?family=${encodeURIComponent(brandFont)}:wght@700&amp;display=swap');`;
+        : '';
 
       const bodyFontFace = bodyFontBase64
         ? `@font-face {
@@ -1236,7 +1337,7 @@ CRITICAL IMAGE REQUIREMENTS:
             font-weight: normal;
             font-style: normal;
           }`
-        : `@import url('https://fonts.googleapis.com/css2?family=${encodeURIComponent(bodyFont)}:wght@400&amp;display=swap');`;
+        : '';
 
       // Pre-compile conditional SVG components
       const watermarkText = (layoutType !== 'full_bleed_clean' && layoutType !== 'poster_cover')
@@ -1268,7 +1369,7 @@ CRITICAL IMAGE REQUIREMENTS:
               ${brandFontFace}
               ${bodyFontFace}
               
-              .overlay-text { font-family: '${brandFont}', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 26px; font-weight: bold; fill: ${dynamicTextColor}; letter-spacing: ${headingLetterSpacing}; }
+              .overlay-text { font-family: '${brandFont}', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 38px; font-weight: 800; fill: ${dynamicTextColor}; letter-spacing: ${headingLetterSpacing}; line-height: 1.3; }
               .text-centered { text-anchor: middle; }
               .text-left { text-anchor: start; }
               .footer-bg { fill: ${validSecondaryColor}; }
@@ -1319,16 +1420,23 @@ CRITICAL IMAGE REQUIREMENTS:
         .png()
         .toBuffer();
 
-      // â”€â”€ Step 4: Composite image scaling and margins â€” grouped by the base treatment â”€â”€
+      // ── Step 4: Composite image scaling and margins ──
+      // CRITICAL: We MUST materialize the baseImage (Sharp lazy chain) to a Buffer first,
+      // then create a NEW Sharp instance to composite the SVG overlay on top.
+      // Chaining .composite().composite() on a lazy Sharp instance causes the second
+      // composite to lose the first composite's pixels — always toBuffer() in between.
       let compositeBuffer: Buffer;
-      if (template.base === 'solid_canvas_full') {
-        // baseImage is already a fully-built w x h canvas (solid panel + photo embedded via SVG)
-        compositeBuffer = await baseImage
+      if (template.base === 'solid_canvas_full' || template.base === 'universal_dynamic_base') {
+        // baseImage is a fully-built w x h canvas (background + client photo embedded at correct position)
+        // Materialize it first, then composite the SVG overlay on top as a separate Sharp operation
+        const baseBuffer = await baseImage.png().toBuffer();
+        compositeBuffer = await sharp(baseBuffer)
           .composite([{ input: highResSvgBuffer, blend: 'over' }])
           .png()
           .toBuffer();
       } else {
-        compositeBuffer = await baseImage
+        // For bordered/split/other base treatments: extend the canvas with padding, then composite SVG
+        const extendedBaseBuffer = await baseImage
           .extend({
             top: compositeTop,
             bottom: compositeBottom,
@@ -1336,6 +1444,9 @@ CRITICAL IMAGE REQUIREMENTS:
             right: compositeRight,
             background: validBackgroundColor
           })
+          .png()
+          .toBuffer();
+        compositeBuffer = await sharp(extendedBaseBuffer)
           .composite([{ input: highResSvgBuffer, blend: 'over' }])
           .png()
           .toBuffer();

@@ -16,7 +16,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   constructor() {
     super();
     this.$use(async (params, next) => {
-      const timeoutMs = 10_000;
+      const timeoutMs = 30_000;
       const queryPromise = next(params);
       
       // Prevent unhandled promise rejection crashing the server if the query fails AFTER the timeout

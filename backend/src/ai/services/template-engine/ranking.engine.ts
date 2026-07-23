@@ -36,6 +36,11 @@ export class RankingEngine {
       } else if (context.textLength > 100 && template.textDensity === 'medium') {
         score += 10;
       }
+      
+      // 4. Random Jitter (Weight: +0 to +8)
+      // This ensures that when 50 templates match perfectly, we get a rotating organic mix of top candidates instead of the exact same 8 every time.
+      const jitter = Math.floor(Math.random() * 8);
+      score += jitter;
 
       return { ...template, score };
     });

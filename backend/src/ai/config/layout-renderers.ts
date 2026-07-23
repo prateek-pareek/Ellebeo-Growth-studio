@@ -13,15 +13,25 @@ import layoutTemplatesConfig from './layout-templates.config.json';
 import templateLibraryData from './template-library.json';
 import compiledLayouts from './compiled-layouts.v1.json';
 import { processPortraitFit } from '../services/ai-image-generation.service';
-import { ICompiledLayoutDSL, IDSLSceneLayer, IDSLImageLayer, IDSLDecorationLayer, IDSLTextLayer } from '../services/template-engine/interfaces';
+import { ICompiledLayoutDSL, IDSLSceneLayer, IDSLImageLayer, IDSLDecorationLayer, IDSLTextLayer, ISemanticDesignSpec } from '../services/template-engine/interfaces';
 import { LayoutEngine, LayoutFamily, NegativeSpace, BoundingBox, LayoutConstraints } from '../services/template-engine/engines/layout-engine';
 import { PrimitiveEngine, PrimitiveContext } from '../services/template-engine/engines/primitive-engine';
 import { TypographyEngine, TypographyContext, TypographySystem } from '../services/template-engine/engines/typography-engine';
 import { ThemeEngine } from '../services/template-engine/engines/theme-engine';
+import { DesignCompiler } from '../services/template-engine/engines/design-compiler';
+import { VisualResourceEngine } from './visual-resource-library';
 
 const primitiveEngine = new PrimitiveEngine();
 const typographyEngine = new TypographyEngine();
+
+export const COMPILED_LAYOUTS: Record<string, ICompiledLayoutDSL> = { ...compiledLayouts } as any;
+
+export function registerDynamicLayout(layout: ICompiledLayoutDSL) {
+  COMPILED_LAYOUTS[layout.id] = layout;
+}
 const themeEngine = new ThemeEngine();
+const designCompiler = new DesignCompiler();
+const visualEngine = new VisualResourceEngine();
 
 
 export type LayoutTemplate = {
@@ -40,17 +50,15 @@ const { _proposed_template_agent_library, ...activeLayoutTemplates } = layoutTem
 export const LAYOUT_TEMPLATES: Record<string, LayoutTemplate> = activeLayoutTemplates as Record<string, LayoutTemplate>;
 
 export function resolveLayoutTemplate(layoutType: string, visualRanking?: string[]): LayoutTemplate {
-  // If it's a hardcoded legacy layout, use it natively
-  const resolved = LAYOUT_TEMPLATES[layoutType]
-    ? LAYOUT_TEMPLATES[layoutType]!
-    // Otherwise, route to the Universal Dynamic Renderer engines
-    : {
-      base: 'universal_dynamic_base',
-      textTemplate: 'universal_dynamic_text',
-      decoration: 'universal_dynamic_deco',
-      showWatermark: true,
-      showFooter: true
-    };
+  const item = LAYOUT_TEMPLATES[layoutType];
+
+  const resolved: LayoutTemplate = {
+    base: item?.base || 'universal_dynamic_base',
+    textTemplate: item?.textTemplate || 'universal_dynamic_text',
+    decoration: item?.decoration || 'universal_dynamic_deco',
+    showWatermark: item?.showWatermark ?? true,
+    showFooter: item?.showFooter ?? true
+  };
 
   // Style Mapping: an undecorated layout gets a decoration matching the
   // brand's top-ranked visual style, instead of always rendering plain.
@@ -85,6 +93,7 @@ export type BaseCtx = {
   validSecondaryColor: string;
   validBackgroundColor: string;
   downloadImageAsBuffer: (url: string) => Promise<Buffer>;
+  designSpec?: ISemanticDesignSpec;
 };
 
 export type BaseResult = {
@@ -195,8 +204,13 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
   },
 
   universal_dynamic_base: async (ctx) => {
-    const dsl = (compiledLayouts as any)[ctx.layoutType] as ICompiledLayoutDSL;
+    let dsl = (compiledLayouts as any)[ctx.layoutType] as ICompiledLayoutDSL;
     
+    // Phase 2.5: Design Compiler takes semantic intent and mutates the DSL mathematically
+    if (ctx.designSpec && dsl) {
+      dsl = designCompiler.compile(dsl, ctx.designSpec);
+    }
+
     if (dsl && dsl.layers) {
       const imageLayer = dsl.layers.find(l => l.type === 'image') as IDSLImageLayer;
       if (imageLayer) {
@@ -208,36 +222,68 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
           }).composite([{ input: splitPhoto, top: 0, left: 0 }]);
           return { baseImage, compositeTop: ctx.paddingTop, compositeBottom: ctx.paddingBottom, compositeLeft: halfW + ctx.paddingX, compositeRight: ctx.paddingX };
         } else if (imageLayer.mask === 'circle') {
-          // Circle mask logic
           return fullBleedBase(ctx);
-        } else if (imageLayer.paddingPercent > 0) {
-          // Phase 3: Dynamic Canva-style scaling based on JSON contract
-          const paddingRatio = imageLayer.paddingPercent / 100;
-          const targetW = Math.round(ctx.w * (1 - paddingRatio * 2));
-          const targetH = Math.round(ctx.h * (1 - paddingRatio * 2));
-          
-          const scaledPhoto = await processPortraitFit(ctx.imageBuffer, targetW, targetH, ctx.validBackgroundColor);
-          
-          let top = Math.round((ctx.h - targetH) / 2);
-          let left = Math.round((ctx.w - targetW) / 2);
-          
-          if (imageLayer.anchor === 'top_left') {
-            top = ctx.paddingTop; left = ctx.paddingX;
-          } else if (imageLayer.anchor === 'top_right') {
-            top = ctx.paddingTop; left = ctx.w - targetW - ctx.paddingX;
-          } else if (imageLayer.anchor === 'bottom_left') {
-            top = ctx.h - targetH - ctx.paddingBottom; left = ctx.paddingX;
-          } else if (imageLayer.anchor === 'bottom_right') {
-            top = ctx.h - targetH - ctx.paddingBottom; left = ctx.w - targetW - ctx.paddingX;
+        } else {
+          let targetW: number;
+          let targetH: number;
+          let top: number;
+          let left: number;
+
+          // Device mockup screen viewport mapping
+          if (imageLayer.component === 'desktop_monitor_mockup') {
+            targetW = 460;
+            targetH = 276;
+            top = Math.round(ctx.h * 0.28) + 10;
+            const isRight = imageLayer.anchor && imageLayer.anchor.includes('right');
+            left = isRight ? (ctx.w - 480 - 40 + 10) : (40 + 10);
+          } else if (imageLayer.component === 'tablet_device_mockup') {
+            targetW = 352;
+            targetH = 492;
+            top = Math.round(ctx.h * 0.25) + 14;
+            left = Math.round(ctx.w / 2 - 190) + 14;
+          } else {
+            // Outer margin calculation: paddingPercent represents outer margin (e.g. 5% to 12%)
+            const rawPadding = Math.min(imageLayer.paddingPercent || 0, 15); // Cap outer margin to max 15%
+            const marginX = Math.round(ctx.w * (rawPadding / 100));
+            const marginY = Math.round(ctx.h * (rawPadding / 100));
+
+            targetW = ctx.w - (marginX * 2);
+            targetH = ctx.h - (marginY * 2);
+
+            // Anchor Positioning Math (All 9 Anchors)
+            const anchor = imageLayer.anchor || 'center';
+            if (anchor === 'top_left') {
+              top = marginY; left = marginX;
+            } else if (anchor === 'top_right') {
+              top = marginY; left = ctx.w - targetW - marginX;
+            } else if (anchor === 'top_center') {
+              top = marginY; left = Math.round((ctx.w - targetW) / 2);
+            } else if (anchor === 'bottom_left') {
+              top = ctx.h - targetH - marginY; left = marginX;
+            } else if (anchor === 'bottom_right') {
+              top = ctx.h - targetH - marginY; left = ctx.w - targetW - marginX;
+            } else if (anchor === 'bottom_center') {
+              top = ctx.h - targetH - marginY; left = Math.round((ctx.w - targetW) / 2);
+            } else if (anchor === 'center_left') {
+              top = Math.round((ctx.h - targetH) / 2); left = marginX;
+            } else if (anchor === 'center_right') {
+              top = Math.round((ctx.h - targetH) / 2); left = ctx.w - targetW - marginX;
+            } else {
+              // Exact center
+              top = Math.round((ctx.h - targetH) / 2);
+              left = Math.round((ctx.w - targetW) / 2);
+            }
           }
 
-          const baseImage = sharp({
+          const scaledPhoto = await processPortraitFit(ctx.imageBuffer, targetW, targetH, ctx.validBackgroundColor);
+
+          const backgroundCanvas = sharp({
             create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validBackgroundColor },
-          }).composite([{ input: scaledPhoto, top, left }]);
+          });
+
+          const baseImage = backgroundCanvas.composite([{ input: scaledPhoto, top, left }]);
 
           return { baseImage, compositeTop: ctx.paddingTop, compositeBottom: ctx.paddingBottom, compositeLeft: ctx.paddingX, compositeRight: ctx.paddingX };
-        } else if (imageLayer.mask === 'die_cut') {
-          return borderedDefault(ctx);
         }
       }
     }
@@ -309,6 +355,7 @@ export type TextCtx = {
     eyesYPercent: number;
     mouthYPercent: number;
   };
+  structuredText?: { headline?: string; subheadline?: string; cta?: string; };
 };
 
 const tspans = (ctx: TextCtx, x: string, dyFirst = 0) =>
@@ -607,9 +654,12 @@ export type DecoCtx = {
   dynamicTextColor: string;
   overlayText: string;
   maxLength: number;
+  visionResult?: any;
   faceCoordinates?: any;
   injectedFeatures?: string[];
   designTokens?: any;
+  designSpec?: ISemanticDesignSpec;
+  structuredText?: { headline?: string; subheadline?: string; cta?: string; };
 };
 
 export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
@@ -689,7 +739,13 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
   },
 
   universal_dynamic_deco: (ctx) => {
-    const dsl = (compiledLayouts as any)[ctx.layoutType] as ICompiledLayoutDSL;
+    let dsl = (compiledLayouts as any)[ctx.layoutType] as ICompiledLayoutDSL;
+    
+    // Phase 2.5: Design Compiler mutates text widths and alignments based on semantic intent
+    if (ctx.designSpec && dsl) {
+      dsl = designCompiler.compile(dsl, ctx.designSpec);
+    }
+
     if (!dsl || !dsl.layers) return '';
 
     let svg = themeEngine.generateGlobalDefs(ctx.validBrandColor, ctx.validSecondaryColor);
@@ -701,19 +757,14 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
         const hasPrimitive = dsl.layers.some(l => ('component' in l && l.component === req)) || 
                              (ctx.injectedFeatures || []).includes(req);
         if (!hasPrimitive) {
-          console.warn(`\n[Renderer] ⚠️ TEMPLATE SIGNATURE BROKEN ⚠️\nTemplate '${dsl.id}' is missing required primitive: '${req}'.\n`);
-          // Render a visible warning so incomplete templates are never silently skipped
-          svg += `<g transform="translate(10, 10)">
-                    <rect width="320" height="40" fill="#FF0080" opacity="0.9" rx="4" />
-                    <text x="15" y="25" fill="#FFFFFF" font-family="monospace" font-size="14" font-weight="bold">MISSING PRIMITIVE: ${req}</text>
-                  </g>`;
+          console.warn(`[Renderer] Template '${dsl.id}' is missing required primitive: '${req}'.`);
         }
       }
     }
     
     // Check if we need to apply a global overlay (like noise) based on brand DNA
     // For now, we inject the definitions. Later, we can apply the overlay at the end.
-    const overlayLayers = dsl.layers.filter(l => l.type === 'decoration' || l.type === 'text');
+    const overlayLayers = dsl.layers.filter(l => l.type === 'decoration' || l.type === 'text' || (l.type === 'image' && l.component));
     
     // Inject dynamic features from CompositionEngine
     if (ctx.injectedFeatures && ctx.injectedFeatures.length > 0) {
@@ -776,6 +827,18 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
             </g>
           `;
         }
+      } else if (layer.type === 'image') {
+        // Many layout families (like desktop_course_hero, tablet_workbook_cover) define device mockups
+        // or masks (die_cut, arch) inside the 'image' layer definition. We must render these components.
+        const imageLayer = layer as any;
+        if (imageLayer.component) {
+          const renderedPrimitive = primitiveEngine.renderPrimitive(imageLayer.component, primitiveCtx, imageLayer);
+          if (renderedPrimitive) {
+            svg += renderedPrimitive;
+          } else {
+            console.error(`[Renderer Sprint] CRITICAL ERROR: Image Component '${imageLayer.component}' not found in PrimitiveEngine!`);
+          }
+        }
       } else if (layer.type === 'text') {
         const textLayer = layer as IDSLTextLayer;
         
@@ -789,12 +852,39 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           }
         }
         
+        // CONDITIONAL SCRIM: Contrast-aware text protection
+        // Only apply to full bleed or hero photos that have a high brightness/lighting score
+        if (ctx.layoutType.includes('full_bleed') || ctx.layoutType.includes('hero') || ctx.layoutType.includes('poster')) {
+          let scrimOpacity = 0;
+          const lighting = ctx.visionResult?.suitabilityScores?.lightingQuality || 60; // default to slightly bright
+          
+          if (lighting >= 75) {
+            scrimOpacity = 0.4; // Very bright spa image
+          } else if (lighting >= 50) {
+            scrimOpacity = 0.15; // Outdoor sunlight
+          } // Dark images (lighting < 50) get NO scrim!
+          
+          if (scrimOpacity > 0) {
+            svg += `
+              <defs>
+                <linearGradient id="scrim_${layer.id}" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stop-color="#000000" stop-opacity="0" />
+                  <stop offset="50%" stop-color="#000000" stop-opacity="${scrimOpacity * 0.5}" />
+                  <stop offset="100%" stop-color="#000000" stop-opacity="${scrimOpacity}" />
+                </linearGradient>
+              </defs>
+              <rect x="0" y="${Math.floor(ctx.h * 0.4)}" width="${ctx.w}" height="${Math.floor(ctx.h * 0.6)}" fill="url(#scrim_${layer.id})" style="mix-blend-mode: multiply;" />
+            `;
+          }
+        }
+
         // Then render the text on top
         const typoCtx: TypographyContext = {
           ...ctx,
           constraints,
           layoutEngine,
-          designTokens: ctx.designTokens
+          designTokens: ctx.designTokens,
+          escapeXml: (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
         };
         let typoSystem: TypographySystem = 'minimal';
         if (family === 'editorial') typoSystem = 'editorial';
@@ -807,11 +897,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       }
     }
 
-    // Apply global theme overlay (e.g., noise grain) if applicable based on layout family
-    if (family === 'editorial') {
-      svg += themeEngine.generateGlobalOverlay(ctx.w, ctx.h);
-    }
-
+    // Global theme overlay removed to prevent librsvg feTurbulence canvas blanketing
     return svg;
   },
 };

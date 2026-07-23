@@ -34,12 +34,12 @@ export class LayoutEngine {
     let baseMarginX = 60;
     let baseMarginY = 100;
 
-    // Apply Negative Space Multipliers
+    // Apply Negative Space Multipliers (Visual Weight Scale)
     const spaceMultipliers: Record<NegativeSpace, number> = {
-      dense: 0.6,
-      balanced: 1.0,
-      generous: 1.5,
-      extreme: 2.2
+      dense: 0.6,    // Image: 80%, Whitespace: 5%
+      balanced: 1.0, // Image: 70%, Whitespace: 10%
+      generous: 1.15,// Image: 60%, Whitespace: 15%
+      extreme: 1.25  // Image: 50%, Whitespace: 20%
     };
     const multiplier = spaceMultipliers[negativeSpace] || 1.0;
 

@@ -154,9 +154,6 @@ export class ThemeEngine {
    * Generates a full-canvas overlay for global film grain or lighting if needed.
    */
   public generateGlobalOverlay(w: number, h: number): string {
-    return `
-      <!-- Global Noise Overlay -->
-      <rect x="0" y="0" width="${w}" height="${h}" filter="url(#noise-grain)" pointer-events="none" />
-    `;
+    return '';
   }
 }

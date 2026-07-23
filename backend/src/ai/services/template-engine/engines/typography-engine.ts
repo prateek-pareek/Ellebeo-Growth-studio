@@ -11,6 +11,7 @@ export interface TypographyContext {
   validSecondaryColor: string;
   validBackgroundColor: string;
   overlayText?: string;
+  structuredText?: { headline?: string; subheadline?: string; cta?: string; };
   faceCoordinates?: any;
   escapeXml?: (str: string) => string;
   constraints: LayoutConstraints;
@@ -27,11 +28,24 @@ export class TypographyEngine {
    */
   public renderTextLayer(ctx: TypographyContext, layer: IDSLTextLayer, system: TypographySystem = 'minimal'): string {
     // 1. Resolve Style Based on System & Role
-    const style = this.resolveStyle(layer.role, system, ctx);
+    const style = this.resolveStyle(layer, system, ctx);
+
+    // Map text layer ID to structured text fields if available
+    let rawText = ctx.overlayText || '';
+    if (ctx.structuredText) {
+      if (layer.id === 'headline' && ctx.structuredText.headline) rawText = ctx.structuredText.headline;
+      else if (layer.id === 'subheadline' && ctx.structuredText.subheadline) rawText = ctx.structuredText.subheadline;
+      else if (layer.id === 'cta' && ctx.structuredText.cta) rawText = ctx.structuredText.cta;
+      else if (layer.role === 'heading' && ctx.structuredText.headline) rawText = ctx.structuredText.headline;
+      else if (layer.role === 'tagline' && ctx.structuredText.subheadline) rawText = ctx.structuredText.subheadline;
+      else if (layer.role === 'footnote' && ctx.structuredText.cta) rawText = ctx.structuredText.cta;
+    }
+
+    if (!rawText) return ''; // Skip rendering if text is empty for this layer
 
     // 2. Line Wrapping
-    const escapedLines = this.wrapText(ctx.overlayText || '', style.fontSize, ctx);
-    const lineHeight = layer.role === 'tagline' || layer.role === 'footnote' ? 25 : style.fontSize * 1.35;
+    const escapedLines = this.wrapText(rawText, style.fontSize, layer, ctx, system);
+    const lineHeight = layer.role === 'heading' ? Math.round(style.fontSize * 1.18) : layer.role === 'tagline' || layer.role === 'footnote' ? 26 : Math.round(style.fontSize * 1.35);
     const textHeightGuess = escapedLines.length * lineHeight;
 
     // 3. Resolve Coordinates via Layout Engine
@@ -58,73 +72,80 @@ export class TypographyEngine {
     if (layer.alignment === 'center') anchor = 'middle';
     if (layer.alignment === 'right') anchor = 'end';
     if (layer.alignment === 'left') anchor = 'start';
+    
+    // OPTICAL BALANCE: Mathematical centering looks too low to the human eye. 
+    // Shift slightly upwards (-12px) when text is centered to make it feel premium.
+    if (anchor === 'middle') {
+      y -= 12;
+    }
 
     // 5. Generate SVG
-    const content = escapedLines.map((line: string, idx: number) => `<tspan x="${x}" dy="${idx === 0 ? 0 : lineHeight}">${line}</tspan>`).join('');
+    const mixFonts = system === 'editorial' && layer.role === 'heading' && escapedLines.length > 1;
+
+    const content = escapedLines.map((line: string, idx: number) => {
+      let tspanStyle = '';
+      if (mixFonts && idx === 0) {
+         tspanStyle = `font-family: 'Playfair Display', Georgia, serif; font-style: italic; font-weight: 300; font-size: ${style.fontSize * 1.1}px; text-transform: lowercase;`;
+      }
+      // CRITICAL FIX: Only apply `x` if we are absolutely anchored left/right, else inherit safely. Actually, applying `x` to tspan with text-anchor='middle' forces the center of EVERY line to align at X, which pushes long lines off canvas if X is small!
+      // By using x="${x}", we explicitly force every line to start/center at X. If X is safeX (60), and text is middle, it pushes left.
+      // We will keep x="${x}" but ensure text-anchor is CORRECT.
+      return `<tspan x="${x}" dy="${idx === 0 ? 0 : lineHeight}" style="${tspanStyle}">${line}</tspan>`;
+    }).join('');
 
     return `<text x="${x}" y="${y}" text-anchor="${anchor}" class="overlay-text" style="font-family: '${ctx.brandFont}', sans-serif; font-size: ${style.fontSize}px; fill: ${style.fill}; font-weight: ${style.fontWeight}; font-style: ${style.fontStyle}; letter-spacing: ${style.letterSpacing};" filter="url(#premium_shadow)">${content}</text>`;
   }
 
   /**
-   * Resolves the font properties depending on the typographical system and layer role.
+   * Resolves the font properties depending on the typographical system, layer role, and DSL properties.
    */
-  private resolveStyle(role: string, system: TypographySystem, ctx: TypographyContext) {
+  private resolveStyle(layer: IDSLTextLayer, system: TypographySystem, ctx: TypographyContext) {
+    const role = layer.role;
     let fontSize = ctx.dynamicFontSize;
     let fontWeight = 'normal';
     let fontStyle = 'normal';
     let fill = ctx.dynamicTextColor;
     let letterSpacing = 'normal';
 
-    if (system === 'editorial') {
-      if (role === 'heading') {
-        fontSize = ctx.dynamicFontSize + 16;
-        fontWeight = '900';
-        letterSpacing = '-0.02em';
-      } else if (role === 'tagline' || role === 'footnote') {
-        fontSize = ctx.dynamicFontSize - 4;
-        fontStyle = 'italic';
-        fill = ctx.validSecondaryColor || ctx.dynamicTextColor;
-        letterSpacing = '0.05em';
-      } else if (role === 'body') {
-        fontWeight = '300';
-      }
+    // 1. DSL Layer Direct Property Overrides (if defined)
+    const layerObj = layer as any;
+    if (layerObj.fontSize) {
+      fontSize = layerObj.fontSize;
+    } else if (layerObj.scale) {
+      fontSize = Math.round(ctx.w * layerObj.scale);
+    } else if (role === 'heading') {
+      fontSize = Math.max(72, Math.round(ctx.dynamicFontSize * 1.25));
+      fontWeight = '800';
+      letterSpacing = '-0.02em';
+    } else if (role === 'tagline' || role === 'footnote') {
+      fontSize = Math.max(16, Math.round(ctx.dynamicFontSize * 0.7));
+      letterSpacing = '0.15em'; // Upgraded from 0.08em for premium feel
+      fill = ctx.validSecondaryColor || ctx.dynamicTextColor;
+    } else if (role === 'body') {
+      fontSize = Math.max(18, Math.round(ctx.dynamicFontSize * 0.8));
+      fontWeight = '400';
+    }
+
+    if (system === 'editorial' && role === 'heading') {
+      fontWeight = '900';
+      letterSpacing = '-0.03em';
     } else if (system === 'technical') {
       if (role === 'heading') {
-        fontSize = ctx.dynamicFontSize + 8;
-        fontWeight = '700';
-        letterSpacing = '0.05em'; // Technical monospace feel
+        fontWeight = '800';
+        letterSpacing = '0.04em';
       } else if (role === 'tagline' || role === 'footnote') {
-        fontSize = ctx.dynamicFontSize - 6;
-        fontWeight = 'bold';
         letterSpacing = '0.2em';
-        fill = ctx.validSecondaryColor || ctx.dynamicTextColor;
-      } else if (role === 'body') {
-        fontWeight = '400';
-      }
-    } else {
-      // minimal / default
-      if (role === 'heading') {
-        fontSize = ctx.dynamicFontSize + 10;
-        fontWeight = '700';
-      } else if (role === 'tagline' || role === 'footnote') {
-        fontSize = ctx.dynamicFontSize - 4;
-        letterSpacing = '0.05em';
-        fill = ctx.validSecondaryColor || ctx.dynamicTextColor;
-      } else if (role === 'body') {
-        fontWeight = '400';
       }
     }
 
-    // Phase E: Apply Design Tokens (Typography Assertiveness)
-    if (ctx.designTokens) {
-      if (role === 'heading') {
-        if (ctx.designTokens.headlinePresence === 'hero') {
-          fontSize = ctx.dynamicFontSize * 1.6; // Massive assertion
-          fontWeight = '900';
-        } else if (ctx.designTokens.headlinePresence === 'subtle') {
-          fontSize = ctx.dynamicFontSize * 0.9;
-          fontWeight = '300';
-        }
+    // Design Tokens (Typography Assertiveness)
+    if (ctx.designTokens && role === 'heading') {
+      if (ctx.designTokens.headlinePresence === 'hero') {
+        fontSize = Math.max(72, Math.round(fontSize * 1.25));
+        fontWeight = '900';
+      } else if (ctx.designTokens.headlinePresence === 'subtle') {
+        fontSize = Math.round(fontSize * 0.85);
+        fontWeight = '400';
       }
     }
 
@@ -132,12 +153,19 @@ export class TypographyEngine {
   }
 
   /**
-   * Handles text wrapping based on layout constraints.
+   * Handles text wrapping based on layout constraints and DSL layer bounds.
    */
-  private wrapText(text: string, fontSize: number, ctx: TypographyContext): string[] {
-    const estimatedCharWidth = fontSize * 0.55;
-    const maxAvailableWidth = ctx.constraints.contentMaxWidth;
-    const maxCharsPerLine = Math.floor(maxAvailableWidth / estimatedCharWidth);
+  private wrapText(text: string, fontSize: number, layer: IDSLTextLayer, ctx: TypographyContext, system: TypographySystem): string[] {
+    const estimatedCharWidth = fontSize * 0.52;
+    
+    let layerMaxWidth = ctx.constraints.contentMaxWidth;
+    const layerObj = layer as any;
+    if (layerObj.maxWidthPercent) {
+      layerMaxWidth = Math.round(ctx.w * (layerObj.maxWidthPercent / 100));
+    }
+
+    const maxAvailableWidth = Math.min(layerMaxWidth, ctx.constraints.contentMaxWidth);
+    const maxCharsPerLine = Math.max(10, Math.floor(maxAvailableWidth / estimatedCharWidth));
     
     const words = text.split(/\s+/);
     const smartLines: string[] = [];
@@ -152,12 +180,19 @@ export class TypographyEngine {
       }
     }
     if (currentLine) smartLines.push(currentLine.trim());
+
+    const defaultEscape = (str: string) => str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+
+    const esc = ctx.escapeXml || defaultEscape;
     
     return smartLines.map(line => {
-      if (ctx.escapeXml) {
-         return ctx.escapeXml(line.toUpperCase() !== line ? line.toUpperCase() : line);
-      }
-      return line;
+      if (system === 'editorial') return esc(line);
+      return esc(line.toUpperCase() !== line ? line.toUpperCase() : line);
     });
   }
 

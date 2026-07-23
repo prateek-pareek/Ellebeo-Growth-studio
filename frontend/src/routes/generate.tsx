@@ -1075,6 +1075,17 @@ function FormatStep({
         })}
       </div>
 
+      {/* Pro Studio Tip Banner */}
+      <div className="mb-6 p-4 bg-muted/40 border border-border rounded-xl flex items-start gap-3">
+        <span className="text-amber-500 font-bold text-base leading-none">✦</span>
+        <div>
+          <p className="text-[9px] uppercase tracking-widest font-bold text-taupe mb-1">PRO STUDIO INSIGHT · CAROUSEL VS STORY</p>
+          <p className="text-xs text-foreground/80 leading-relaxed font-serif italic">
+            "Carousels are saved and re-read for education, while Stories build immediate same-day appointment bookings. Combine both for maximum growth."
+          </p>
+        </div>
+      </div>
+
       {/* Navigation */}
       <div className="flex items-center justify-between pt-2">
         <button
@@ -1102,17 +1113,32 @@ const PREMIUM_MESSAGES = [
   "Preparing your final result...",
 ];
 
-const BEAUTY_TIPS = [
-  "Posts with before & after photos get 3× more saves on Instagram.",
-  "Replying to comments within the first hour boosts your reach by up to 30%.",
-  "Reels under 15 seconds have the highest completion rate for beauty content.",
-  "A consistent brand colour palette makes your grid 40% more recognisable.",
-  "Posting behind-the-chair content builds trust faster than any promotion.",
-  "Clients who follow you on Instagram are 2× more likely to rebook.",
-  "Educational posts — 'why I use this technique' — outperform promotional posts every time.",
-  "Your bio is your best SEO tool. Include your suburb and specialty.",
-  "Stories with polls get 20% more profile visits than standard stories.",
-  "Tagging your location on every post puts you in local discovery search.",
+const PRO_STUDIO_TIPS = [
+  {
+    category: "SAVERATES & REACH",
+    stat: "+3.1× SAVES",
+    tip: "Educational carousels with clear step-by-step key takeaways generate 3.1× more Instagram saves than single image posts."
+  },
+  {
+    category: "CLIENT CONVERSION",
+    stat: "+40% DMs",
+    tip: "Preserving real client before & after face transformations increases direct booking inquiries by up to 40%."
+  },
+  {
+    category: "TYPOGRAPHY HIERARCHY",
+    stat: "BOLD TITLES",
+    tip: "Headline text at 38px bold on slide 1 stops the Instagram scroll and increases profile visit conversion by 50%."
+  },
+  {
+    category: "ENGAGEMENT STRATEGY",
+    stat: "+45% REPLIES",
+    tip: "Ending slide 4 with a clear call-to-action prompt drives 45% higher comment section interaction."
+  },
+  {
+    category: "BRAND CONSISTENCY",
+    stat: "RECOGNIZABLE",
+    tip: "Using a consistent 3-color palette makes your studio's grid instantly recognizable in client home feeds."
+  }
 ];
 
 const REFINE_OPTIONS = [
@@ -1251,8 +1277,21 @@ function GeneratingScreen({ jobStatus, brandDna, appointment }: { jobStatus: str
           </div>
         </div>
 
-        {/* Empty space to keep layout height stable, removed technical tips */}
-        <div className="h-[120px]" />
+        {/* Luxury Pro Studio Tip Card */}
+        <div className="w-full max-w-md bg-card/80 border border-border/80 p-4 rounded-xl shadow-sm backdrop-blur-sm transition-all duration-500 text-left relative overflow-hidden group">
+          <div className="flex items-center justify-between mb-2">
+            <span className="inline-flex items-center gap-1.5 text-[9px] uppercase tracking-[0.2em] font-bold text-taupe">
+              <span className="size-1.5 rounded-full bg-amber-400 animate-pulse" />
+              Pro Studio Tip · {PRO_STUDIO_TIPS[msgIndex % PRO_STUDIO_TIPS.length].category}
+            </span>
+            <span className="text-[9px] font-bold text-foreground bg-muted border border-border px-2 py-0.5 rounded">
+              {PRO_STUDIO_TIPS[msgIndex % PRO_STUDIO_TIPS.length].stat}
+            </span>
+          </div>
+          <p className="text-xs text-foreground/90 leading-relaxed font-serif italic">
+            "{PRO_STUDIO_TIPS[msgIndex % PRO_STUDIO_TIPS.length].tip}"
+          </p>
+        </div>
       </div>
     </div>
   );
