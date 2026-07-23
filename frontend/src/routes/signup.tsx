@@ -51,7 +51,7 @@ function SignupPage() {
     try {
       const result = await signInWithPopup(auth, appleProvider);
       const firebaseIdToken = await result.user.getIdToken();
-      const res = await api.post('/auth/apple', { firebaseIdToken });
+      const res = await api.post('/auth/apple/signup', { firebaseIdToken });
       const { accessToken } = res.data.data ?? res.data;
       login(accessToken);
       toast.success("Account created. Welcome to Elle.Be.O.");
@@ -70,7 +70,7 @@ function SignupPage() {
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const firebaseIdToken = await result.user.getIdToken();
-      const res = await api.post('/auth/google', { firebaseIdToken });
+      const res = await api.post('/auth/google/signup', { firebaseIdToken });
       const { accessToken } = res.data.data ?? res.data;
       login(accessToken);
       toast.success("Account created. Welcome to Elle.Be.O.");

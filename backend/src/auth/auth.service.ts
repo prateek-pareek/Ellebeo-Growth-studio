@@ -23,7 +23,28 @@ export class AuthService {
     this.refreshTokenPepper = this.configService.getOrThrow<string>('JWT_REFRESH_SECRET');
   }
 
+  /**
+   * Sign in with an existing technician account only. Does NOT provision a new
+   * account for an unrecognised Google/Apple email — that would let any
+   * outside user (e.g. a client of the wider Elle.Be.O app) land on the login
+   * page and silently get a brand-new technician + Growth Studio tenant.
+   * Account creation only happens through firebaseSignup().
+   */
   async firebaseLogin(firebaseIdToken: string, ipAddress?: string, userAgent?: string) {
+    return this.firebaseAuthenticate(firebaseIdToken, ipAddress, userAgent, false);
+  }
+
+  /** Sign in, provisioning a new technician + tenant if this email has never signed in before. */
+  async firebaseSignup(firebaseIdToken: string, ipAddress?: string, userAgent?: string) {
+    return this.firebaseAuthenticate(firebaseIdToken, ipAddress, userAgent, true);
+  }
+
+  private async firebaseAuthenticate(
+    firebaseIdToken: string,
+    ipAddress: string | undefined,
+    userAgent: string | undefined,
+    allowAccountCreation: boolean,
+  ) {
     if (!firebaseAuth) throw new UnauthorizedException('Firebase auth not configured');
 
     let decoded: Awaited<ReturnType<typeof firebaseAuth.verifyIdToken>>;
@@ -40,6 +61,12 @@ export class AuthService {
     let user = await this.prisma.user.findUnique({ where: { email }, include: { tenant: true } });
 
     if (!user) {
+      if (!allowAccountCreation) {
+        throw new UnauthorizedException(
+          'No technician account found for this Google account. Please sign up first.',
+        );
+      }
+
       const randomHash = await bcrypt.hash(uuidv4(), this.saltRounds);
       const displayName = (decoded.name as string | undefined) || email.split('@')[0];
 
