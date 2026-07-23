@@ -248,7 +248,7 @@ function ContentPage() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search…"
-                className="text-[12px] bg-card border border-border focus:border-foreground/60 outline-none pl-7 pr-3 py-1.5 w-32 placeholder:text-taupe/60 transition-all focus:w-44"
+                className="h-8 text-[12px] bg-card border border-border focus:border-foreground/60 outline-none pl-7 pr-3 w-32 placeholder:text-taupe/60 transition-all focus:w-44"
               />
             </div>
 
@@ -257,10 +257,10 @@ function ContentPage() {
               <button
                 onClick={() => setFilterOpen((o) => !o)}
                 className={
-                  "flex items-center gap-2 text-[10px] uppercase tracking-widest px-3 py-1.5 border transition-all duration-150 " +
+                  "h-8 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-widest px-3 border-2 transition-all duration-150 " +
                   (filterOpen || activeChipCount > 0
                     ? "bg-foreground text-offwhite border-foreground"
-                    : "border-border text-taupe hover:text-foreground hover:border-foreground/50")
+                    : "bg-card border-border text-taupe hover:text-foreground hover:border-foreground/50")
                 }
               >
                 <svg width="13" height="10" viewBox="0 0 13 10" fill="none" className="flex-shrink-0">
@@ -287,13 +287,13 @@ function ContentPage() {
                         key={f}
                         onClick={() => setFormatFilter(formatFilter === f ? null : f)}
                         className={
-                          "flex items-center gap-1.5 text-[10px] uppercase tracking-widest px-2.5 py-1 border transition-all duration-150 " +
+                          "flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest px-2.5 py-1 border-2 transition-all duration-150 " +
                           (formatFilter === f
                             ? "bg-foreground text-offwhite border-foreground"
-                            : "text-taupe border-border hover:text-foreground hover:border-foreground/50")
+                            : "text-foreground/70 border-taupe/40 hover:text-foreground hover:border-foreground/50")
                         }
                       >
-                        <span className="leading-none opacity-70">{FORMAT_ICONS[f]}</span>
+                        <span className="leading-none opacity-80">{FORMAT_ICONS[f]}</span>
                         {f}
                       </button>
                     ))}
@@ -309,10 +309,10 @@ function ContentPage() {
                         key={g.id}
                         onClick={() => setGoalFilter(goalFilter === g.id ? null : g.id)}
                         className={
-                          "text-[10px] uppercase tracking-widest px-2.5 py-1 border transition-all duration-150 " +
+                          "text-[10px] font-semibold uppercase tracking-widest px-2.5 py-1 border-2 transition-all duration-150 " +
                           (goalFilter === g.id
                             ? "bg-foreground text-offwhite border-foreground"
-                            : "text-taupe border-border hover:text-foreground hover:border-foreground/50")
+                            : "text-foreground/70 border-taupe/40 hover:text-foreground hover:border-foreground/50")
                         }
                       >
                         {g.label}
