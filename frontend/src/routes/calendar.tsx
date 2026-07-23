@@ -483,7 +483,10 @@ function EntryDetailModal({ entry, dayEntries, contentItems, onClose, onMutated 
         )}
 
         {/* ── Active entry detail ── */}
-        <DialogHeader className="px-6 pt-5 pb-0 shrink-0">
+        {/* pr-12 (not pr-6) — the Dialog's own close button is absolutely
+            positioned at top-4/right-4, so the header needs extra right
+            clearance or the status badge sits directly under it. */}
+        <DialogHeader className="pl-6 pr-12 pt-5 pb-0 shrink-0">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">
