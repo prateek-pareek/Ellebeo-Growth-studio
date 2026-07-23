@@ -147,7 +147,18 @@ export function useAppointments(): UseAppointmentsResult {
     fetch(id);
   }, []);
 
-  return { 
+  // Poll every 30s so widgets like "Bookings This Week" on Home stay in sync
+  // with bookings created elsewhere (CRM import, another open tab, etc.)
+  // without requiring a manual page reload.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const id = ++reqId.current;
+      fetch(id);
+    }, 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return {
     ...state, 
     refresh: () => {
       const id = ++reqId.current;
