@@ -522,19 +522,40 @@ function ContentCard({
         <p className="eyebrow mb-1">{item.type} · {item.pillar}</p>
         <h3 className="font-serif text-base mb-1.5 leading-snug">{item.title}</h3>
         
-        {item.designDetails && !blocked && (
-          <div className="flex flex-wrap gap-1.5 mb-2.5 mt-1">
-            <span className="inline-flex items-center gap-1 bg-nude/40 text-foreground/70 text-[8px] uppercase tracking-widest px-1.5 py-0.5 rounded border border-border">
-              <span className="opacity-50">Base:</span> {item.designDetails.base?.replace(/_/g, ' ') || 'Standard'}
-            </span>
-            <span className="inline-flex items-center gap-1 bg-nude/40 text-foreground/70 text-[8px] uppercase tracking-widest px-1.5 py-0.5 rounded border border-border">
-              <span className="opacity-50">Text:</span> {item.designDetails.text?.replace(/_/g, ' ') || 'Standard'}
-            </span>
-            <span className="inline-flex items-center gap-1 bg-nude/40 text-foreground/70 text-[8px] uppercase tracking-widest px-1.5 py-0.5 rounded border border-border">
-              <span className="opacity-50">Deco:</span> {item.designDetails.deco?.replace(/_/g, ' ') || 'None'}
-            </span>
-          </div>
-        )}
+        {item.designDetails && !blocked && (() => {
+          const base = item.designDetails.base?.replace(/_/g, ' ') || 'Standard';
+          const text = item.designDetails.text?.replace(/_/g, ' ') || 'Standard';
+          const deco = item.designDetails.deco?.replace(/_/g, ' ') || 'None';
+          // Legacy templates give short slugs ("full_bleed_photo") that fit a
+          // chip; newer templates give a full sentence via `concept` — that
+          // needs its own readable block instead of being crammed into the
+          // same tiny pill, which is what caused the overlapping text.
+          const baseIsLong = base.length > 40;
+
+          return (
+            <div className="mb-2.5 mt-1 space-y-1.5">
+              {baseIsLong && (
+                <p className="bg-nude/40 text-foreground/70 text-[10px] leading-relaxed px-2 py-1.5 rounded border border-border line-clamp-3">
+                  <span className="opacity-50 uppercase tracking-widest text-[8px] mr-1 align-middle">Base</span>
+                  {base}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-1.5">
+                {!baseIsLong && (
+                  <span className="inline-flex items-center gap-1 bg-nude/40 text-foreground/70 text-[8px] uppercase tracking-widest px-1.5 py-0.5 rounded border border-border">
+                    <span className="opacity-50">Base:</span> {base}
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1 bg-nude/40 text-foreground/70 text-[8px] uppercase tracking-widest px-1.5 py-0.5 rounded border border-border">
+                  <span className="opacity-50">Text:</span> {text}
+                </span>
+                <span className="inline-flex items-center gap-1 bg-nude/40 text-foreground/70 text-[8px] uppercase tracking-widest px-1.5 py-0.5 rounded border border-border">
+                  <span className="opacity-50">Deco:</span> {deco}
+                </span>
+              </div>
+            </div>
+          );
+        })()}
 
         {!blocked ? (
           <p className="text-xs text-taupe leading-relaxed line-clamp-3 mb-3">{item.caption}</p>
