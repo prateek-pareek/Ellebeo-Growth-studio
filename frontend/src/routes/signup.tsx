@@ -11,6 +11,7 @@ import { signInWithPopup } from "firebase/auth";
 import { auth, googleProvider, appleProvider } from "@/lib/firebase";
 import { GoogleIcon } from "@/components/GoogleIcon";
 import { AppleIcon } from "@/components/AppleIcon";
+import { Eye, EyeOff } from "lucide-react";
 
 export const Route = createFileRoute("/signup")({
   head: () => ({
@@ -31,6 +32,7 @@ function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [errors, setErrors] = useState<{ businessName?: string; email?: string; password?: string }>({});
+  const [showPassword, setShowPassword] = useState(false);
 
   function validate() {
     const e: { businessName?: string; email?: string; password?: string } = {};
@@ -49,7 +51,7 @@ function SignupPage() {
     try {
       const result = await signInWithPopup(auth, appleProvider);
       const firebaseIdToken = await result.user.getIdToken();
-      const res = await api.post('/auth/apple', { firebaseIdToken });
+      const res = await api.post('/auth/apple/signup', { firebaseIdToken });
       const { accessToken } = res.data.data ?? res.data;
       login(accessToken);
       toast.success("Account created. Welcome to Elle.Be.O.");
@@ -68,7 +70,7 @@ function SignupPage() {
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const firebaseIdToken = await result.user.getIdToken();
-      const res = await api.post('/auth/google', { firebaseIdToken });
+      const res = await api.post('/auth/google/signup', { firebaseIdToken });
       const { accessToken } = res.data.data ?? res.data;
       login(accessToken);
       toast.success("Account created. Welcome to Elle.Be.O.");
@@ -187,17 +189,28 @@ function SignupPage() {
 
             <div className="space-y-2">
               <Label htmlFor="password" className="text-[10px] uppercase tracking-widest text-taupe">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="new-password"
-                placeholder="••••••••"
-                className="bg-transparent border-t-0 border-x-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-foreground transition-all"
-                value={password}
-                onChange={(e) => { setPassword(e.target.value); if (errors.password) setErrors(p => ({ ...p, password: undefined })); }}
-                required
-                minLength={8}
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  placeholder="••••••••"
+                  className="bg-transparent border-t-0 border-x-0 border-b rounded-none px-0 pr-7 focus-visible:ring-0 focus-visible:border-foreground transition-all"
+                  value={password}
+                  onChange={(e) => { setPassword(e.target.value); if (errors.password) setErrors(p => ({ ...p, password: undefined })); }}
+                  required
+                  minLength={8}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-0 top-1/2 -translate-y-1/2 text-taupe hover:text-foreground transition-colors"
+                  tabIndex={-1}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
               {errors.password && <p className="text-[11px] text-destructive mt-1">{errors.password}</p>}
             </div>
 

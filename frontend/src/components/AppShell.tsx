@@ -62,7 +62,13 @@ export function AppShell() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const oauthHandled = useRef(false);
-  const [oauthProcessing, setOauthProcessing] = useState(false);
+  // Computed synchronously so the processing screen is up from the very first
+  // render — this (not `oauthParams`, which is memoized once and never goes
+  // falsy again) is what gates the screen, so clearing it below actually lets
+  // the app render again instead of staying stuck forever.
+  const [oauthProcessing, setOauthProcessing] = useState(
+    () => pathname === "/profile" && new URLSearchParams(window.location.search).has("state"),
+  );
   const [oauthStatus, setOauthStatus] = useState<"processing" | "success" | "error">("processing");
   const [oauthMessage, setOauthMessage] = useState("Connecting your account…");
   const [mobileUrl, setMobileUrl] = useState("");
@@ -105,6 +111,7 @@ export function AppShell() {
       } else {
         setOauthStatus("error");
         setOauthMessage("Permission was denied. Please try again.");
+        setTimeout(() => setOauthProcessing(false), 3000);
       }
       return;
     }
@@ -137,12 +144,13 @@ export function AppShell() {
         } else {
           setOauthStatus("error");
           setOauthMessage("Connection failed. Please try again.");
+          setTimeout(() => setOauthProcessing(false), 3000);
         }
       });
   }, [oauthParams]);
 
   // ── Show OAuth processing UI (bypasses auth loading + auth guard) ──
-  if (oauthParams || oauthProcessing) {
+  if (oauthProcessing) {
     return (
       <div className="min-h-dvh bg-background flex flex-col items-center justify-center gap-4 px-4 text-center">
         {oauthStatus === "processing" && (
@@ -244,9 +252,9 @@ export function AppShell() {
             {user ? (
               <>
                 <NotificationBell />
-                <div className="hidden sm:flex flex-col items-end leading-tight">
-                  <span className="text-xs font-medium text-foreground">{user?.tenant?.businessName || user?.email}</span>
-                  <span className="text-[10px] text-taupe">{user?.email}</span>
+                <div className="hidden sm:flex flex-col items-end leading-tight gap-0.5">
+                  <span className="text-sm font-semibold text-foreground">{user?.tenant?.businessName || user?.email}</span>
+                  <span className="text-xs text-taupe">{user?.email}</span>
                 </div>
                 <Link to="/profile">
                   <InitialsAvatar

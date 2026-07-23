@@ -62,6 +62,9 @@ export class AuthController {
     return { message: 'Logged out successfully' };
   }
 
+  // Login-only: rejects unrecognised emails rather than silently provisioning
+  // a new technician account for anyone (e.g. an Elle.Be.O client) who
+  // happens to click "Continue with Google" on the login page.
   @Post('google')
   @HttpCode(HttpStatus.OK)
   async googleLogin(
@@ -76,6 +79,22 @@ export class AuthController {
     return { accessToken, refreshToken };
   }
 
+  // Signup: provisions a new technician + tenant on first sign-in. Only the
+  // /signup page should call this.
+  @Post('google/signup')
+  @HttpCode(HttpStatus.OK)
+  async googleSignup(
+    @Body('firebaseIdToken') firebaseIdToken: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { accessToken, refreshToken } = await this.authService.firebaseSignup(
+      firebaseIdToken, req.ip, req.headers['user-agent'],
+    );
+    this.setRefreshTokenCookie(res, refreshToken);
+    return { accessToken, refreshToken };
+  }
+
   @Post('apple')
   @HttpCode(HttpStatus.OK)
   async appleLogin(
@@ -84,6 +103,20 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const { accessToken, refreshToken } = await this.authService.firebaseLogin(
+      firebaseIdToken, req.ip, req.headers['user-agent'],
+    );
+    this.setRefreshTokenCookie(res, refreshToken);
+    return { accessToken, refreshToken };
+  }
+
+  @Post('apple/signup')
+  @HttpCode(HttpStatus.OK)
+  async appleSignup(
+    @Body('firebaseIdToken') firebaseIdToken: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { accessToken, refreshToken } = await this.authService.firebaseSignup(
       firebaseIdToken, req.ip, req.headers['user-agent'],
     );
     this.setRefreshTokenCookie(res, refreshToken);

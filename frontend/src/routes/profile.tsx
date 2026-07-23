@@ -83,7 +83,7 @@ function ProfilePage() {
         </div>
 
         {/* Technician identity + logout */}
-        <div className="flex items-end gap-4">
+        <div className="flex items-end gap-4 max-w-full sm:max-w-[320px]">
           <div className="relative group shrink-0">
             <div className="size-14 rounded-full overflow-hidden ring-1 ring-border bg-nude">
               <InitialsAvatar
@@ -112,9 +112,12 @@ function ProfilePage() {
               onChange={handleAvatarUpload}
             />
           </div>
-          <div>
-            <p className="font-serif text-lg leading-tight">{technician.name}</p>
-            <p className="text-xs text-taupe">
+          <div className="min-w-0">
+            <p className="font-serif text-lg leading-tight truncate">{technician.name}</p>
+            <p
+              className="text-xs text-taupe truncate"
+              title={[technician.handle, technician.city].filter(Boolean).join(" · ")}
+            >
               {technician.handle}
               {technician.handle && technician.city && " · "}
               {technician.city}

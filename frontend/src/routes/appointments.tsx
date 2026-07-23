@@ -29,6 +29,12 @@ const EXCLUDED_CONSENT = new Set(["no_consent", "pending"]);
 
 const PAGE_SIZE = 10;
 
+// E.164-ish: a leading "+", a non-zero country code digit, then 7-14 more digits.
+const PHONE_REGEX = /^\+[1-9]\d{7,14}$/;
+function isValidPhone(value: string): boolean {
+  return PHONE_REGEX.test(value.trim());
+}
+
 const CATEGORIES = [
   { value: "hair_colour",            label: "Colour" },
   { value: "hair_cut_style",         label: "Cut & Style" },
@@ -51,6 +57,7 @@ function AppointmentsPage() {
   // Form state
   const [clientName, setClientName]   = useState("");
   const [clientPhone, setClientPhone] = useState("");
+  const [phoneError, setPhoneError]   = useState("");
   const [serviceName, setServiceName] = useState("");
   const [category, setCategory]       = useState("hair_cut_style");
   const [isAdding, setIsAdding]       = useState(false);
@@ -105,6 +112,14 @@ function AppointmentsPage() {
 
   const handleAddAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (clientPhone.trim() && !isValidPhone(clientPhone)) {
+      setPhoneError("Include the country code, e.g. +919876543210 — no spaces or dashes.");
+      toast.error("Enter the client phone number with its country code.");
+      return;
+    }
+    setPhoneError("");
+
     setIsAdding(true);
     const isMedicalForm = isMedicalAesthetics && category === "injectables_cosmetic";
     try {
@@ -290,11 +305,18 @@ function AppointmentsPage() {
               </label>
               <input
                 value={clientPhone}
-                onChange={(e) => setClientPhone(e.target.value)}
+                onChange={(e) => { setClientPhone(e.target.value); if (phoneError) setPhoneError(""); }}
                 placeholder="e.g. +919876543210"
                 type="tel"
-                className="block w-full border border-border bg-muted/30 px-3 py-2.5 text-sm text-foreground placeholder:text-taupe/60 outline-none focus:border-taupe focus:ring-2 focus:ring-taupe/10 transition-all"
+                className={`block w-full border bg-muted/30 px-3 py-2.5 text-sm text-foreground placeholder:text-taupe/60 outline-none focus:ring-2 transition-all ${
+                  phoneError ? "border-destructive focus:border-destructive focus:ring-destructive/10" : "border-border focus:border-taupe focus:ring-taupe/10"
+                }`}
               />
+              {phoneError ? (
+                <p className="text-[11px] text-destructive">{phoneError}</p>
+              ) : (
+                <p className="text-[11px] text-taupe/60">Please add the country code first (e.g. +91, +61), then the number.</p>
+              )}
             </div>
 
             {/* Service */}

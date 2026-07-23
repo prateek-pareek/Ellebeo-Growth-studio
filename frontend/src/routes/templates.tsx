@@ -137,18 +137,18 @@ function TemplatesPage() {
       </div>
 
       {/* ── Category filter ──────────────────────────────────────────────── */}
-      <div className="mb-5">
+      <div className="mb-6">
         <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-taupe mb-3">Category</p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2.5">
           {["All", ...categories].map((c) => (
             <button
               key={c}
               onClick={() => setCategory(c)}
               className={
-                "text-[10px] uppercase tracking-widest px-3 py-1.5 rounded-full border transition-colors " +
+                "text-[10px] font-semibold uppercase tracking-widest px-3 py-1.5 rounded-full border-2 transition-all " +
                 (category === c
                   ? "bg-foreground text-offwhite border-foreground"
-                  : "border-border text-taupe hover:text-foreground hover:border-foreground/30")
+                  : "bg-card text-taupe border-border hover:border-foreground/30 hover:bg-nude/20 hover:text-foreground")
               }
             >
               {c}
