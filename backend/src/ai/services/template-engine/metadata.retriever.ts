@@ -67,15 +67,21 @@ export class MetadataRetriever implements ITemplateRetriever {
 
     // 2. Load Procedural Design Families
     for (const [id, family] of Object.entries(DESIGN_FAMILIES)) {
+      let richConcept = `Dynamic Layout Family: ${id.replace(/_/g, ' ')}`;
+      if (id === 'editorial_magazine') richConcept = 'Editorial Magazine Layout - Adaptive high-end layout for portraits, education, and quotes with robust typography.';
+      if (id === 'text_palette_minimal') richConcept = 'Text Palette Minimal - Solid brand color background with massive premium typography, perfect for quotes and statements.';
+      if (id === 'modern_architectural') richConcept = 'Modern Architectural - Clean, grid-based aesthetic perfect for clinical before/afters and structural content.';
+      if (id === 'soft_organic') richConcept = 'Soft Organic - Fluid, curved borders with natural aesthetic, perfect for luxury spas and wellness.';
+      
       candidates.push({
         id,
         category: 'Procedural Family',
-        concept: `Dynamic Layout Family: ${id.replace(/_/g, ' ')}`,
+        concept: richConcept,
         best_use_cases: ['Carousel', 'Instagram Post', 'Story'],
         macroFaceSafe: true, // Procedural can adapt
         requiresText: id.includes('text_palette'),
         supportsNoText: !id.includes('text_palette'),
-        textDensity: 'medium',
+        textDensity: 'high',
         isCarouselOnly: false,
         premiumStyleScore: 10, // Families are inherently premium
         occupiedTextZones: [],

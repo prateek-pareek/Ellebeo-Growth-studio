@@ -9,6 +9,7 @@ export interface PrimitiveContext {
   validBrandColor: string;
   validSecondaryColor: string;
   validBackgroundColor: string;
+  validAccentColor?: string;
   constraints: LayoutConstraints;
 }
 
@@ -45,6 +46,8 @@ export class PrimitiveEngine {
     this.registry['blueprint_grid'] = {
       category: 'geometry',
       render: (ctx) => {
+
+
         // Create an SVG pattern for a technical grid
         return `
           <defs>
@@ -288,15 +291,15 @@ export class PrimitiveEngine {
         <!-- iMac Desktop Monitor Frame (bezel-only: screen area is transparent so client photo shows through) -->
         <g transform="translate(40, ${ctx.h * 0.28})">
           <!-- Outer monitor border ring only — fill none so the photo underneath is visible through the screen -->
-          <rect x="0" y="0" width="480" height="320" rx="14" fill="none" stroke="#CBD5E1" stroke-width="12" />
+          <rect x="0" y="0" width="480" height="320" rx="14" fill="none" stroke="${ctx.validBrandColor}" stroke-width="12" />
           <!-- Inner screen border accent -->
           <rect x="10" y="10" width="460" height="276" rx="4" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="1" />
           <!-- Bottom chin of the monitor (below the screen) -->
-          <rect x="0" y="296" width="480" height="24" rx="0" fill="#D1D9E6" />
-          <rect x="0" y="308" width="480" height="12" rx="0" fill="#CBD5E1" />
+          <rect x="0" y="296" width="480" height="24" rx="0" fill="${ctx.validSecondaryColor}" />
+          <rect x="0" y="308" width="480" height="12" rx="0" fill="${ctx.validBrandColor}" />
           <!-- Stand -->
-          <path d="M 200 320 L 280 320 L 295 375 L 185 375 Z" fill="#CBD5E1" />
-          <rect x="170" y="372" width="140" height="6" rx="3" fill="#94A3B8" />
+          <path d="M 200 320 L 280 320 L 295 375 L 185 375 Z" fill="${ctx.validSecondaryColor}" />
+          <rect x="170" y="372" width="140" height="6" rx="3" fill="${ctx.validBrandColor}" />
         </g>
       `
     };
@@ -307,13 +310,42 @@ export class PrimitiveEngine {
         <!-- iPad / Tablet Device Frame (bezel-only: screen area transparent so client photo shows through) -->
         <g transform="translate(${ctx.w / 2 - 190}, ${ctx.h * 0.25})">
           <!-- Outer tablet border ring only — fill none so the photo underneath is visible -->
-          <rect x="0" y="0" width="380" height="520" rx="26" fill="none" stroke="#334155" stroke-width="18" />
+          <rect x="0" y="0" width="380" height="520" rx="26" fill="none" stroke="${ctx.validBrandColor}" stroke-width="18" />
           <!-- Inner screen accent border -->
           <rect x="14" y="14" width="352" height="492" rx="14" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1" />
           <!-- Camera dot -->
-          <circle cx="190" cy="8" r="4" fill="#475569" />
+          <circle cx="190" cy="8" r="4" fill="${ctx.validSecondaryColor}" />
           <!-- Home bar -->
-          <rect x="140" y="512" width="100" height="4" rx="2" fill="#64748B" />
+          <rect x="140" y="512" width="100" height="4" rx="2" fill="${ctx.validSecondaryColor}" />
+        </g>
+      `
+    };
+
+    this.registry['number_plate'] = {
+      category: 'layout',
+      render: (ctx) => `
+        <!-- Minimal Number Plate for Fashion Lookbook -->
+        <g transform="translate(40, 40)">
+          <rect x="0" y="0" width="100" height="30" fill="${ctx.validBrandColor}" />
+          <text x="10" y="20" font-family="monospace" font-size="12" fill="${ctx.validSecondaryColor}" font-weight="bold">LOOK 01</text>
+        </g>
+      `
+    };
+
+    this.registry['glass_card'] = {
+      category: 'layout',
+      render: (ctx) => `
+        <g transform="translate(60, ${ctx.h - 260})">
+          <rect x="0" y="0" width="${ctx.w - 120}" height="200" rx="24" fill="${ctx.validSecondaryColor}" fill-opacity="0.8" stroke="${ctx.validBrandColor}" stroke-width="1.5" style="backdrop-filter: blur(10px);" filter="drop-shadow(0 20px 40px rgba(0,0,0,0.15))" />
+        </g>
+      `
+    };
+
+    this.registry['organic_blob'] = {
+      category: 'effects',
+      render: (ctx) => `
+        <g transform="translate(${ctx.w - 150}, ${ctx.h - 150}) scale(1.5)">
+          <path d="M45.7,-76.1C58.9,-69.3,69.1,-55.4,75.4,-40.4C81.7,-25.4,84.1,-9.3,81.1,5.6C78.1,20.5,69.7,34.2,59.3,45.4C48.9,56.6,36.5,65.3,22.4,70.9C8.3,76.5,-7.5,79,-22.1,75.2C-36.7,71.4,-50.1,61.3,-60.7,49.2C-71.3,37.1,-79.1,23,-81.4,8.1C-83.7,-6.8,-80.5,-22.5,-72.7,-35.3C-64.9,-48.1,-52.5,-58,-39.3,-64.5C-26.1,-71,-13,-74.1,1.4,-76.3C15.8,-78.5,31.6,-79.8,45.7,-76.1Z" fill="${ctx.validBrandColor}" opacity="0.85" />
         </g>
       `
     };
@@ -421,6 +453,75 @@ export class PrimitiveEngine {
         <!-- Soft Die-Cut Window Frame Outline -->
         <rect x="${ctx.constraints.safeX + 10}" y="${ctx.constraints.safeY + 10}" width="${ctx.w - (ctx.constraints.safeX + 10) * 2}" height="${ctx.h - (ctx.constraints.safeY + 10) * 2}" rx="12" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1.5" stroke-dasharray="6 6" opacity="0.4" />
       `
+    };
+
+    // ==========================================
+    // PHASE 2: DYNAMIC DECORATOR PRIMITIVES
+    // ==========================================
+    this.registry['flower'] = { category: 'effects', render: (ctx) => `
+      <!-- Minimal Botanical Line Art (Brand Accent) -->
+      <g transform="translate(${ctx.constraints.safeX + 20}, ${ctx.constraints.safeY + 20}) scale(0.6)" stroke="${ctx.validAccentColor || ctx.validBrandColor}" stroke-width="2" fill="none" opacity="0.8">
+        <path d="M50 50 C 30 10, 10 30, 50 50 C 90 30, 70 10, 50 50 C 70 90, 90 70, 50 50 C 10 70, 30 90, 50 50 Z" />
+        <circle cx="50" cy="50" r="5" fill="${ctx.validBrandColor}" />
+      </g>`
+    };
+
+    this.registry['tape'] = { category: 'layout', render: (ctx) => `
+      <!-- Masking Tape Overlay -->
+      <g transform="translate(${ctx.w / 2}, 30) rotate(-2)">
+        <rect x="-80" y="0" width="160" height="35" fill="${ctx.validBackgroundColor}" opacity="0.85" filter="drop-shadow(0 2px 4px rgba(0,0,0,0.1))" />
+        <path d="M-80 0 Q-75 17 -80 35 M80 0 Q75 17 80 35" stroke="${ctx.validSecondaryColor}" stroke-width="1.5" fill="none" opacity="0.3" />
+      </g>`
+    };
+
+    this.registry['doodle'] = { category: 'effects', render: (ctx) => `
+      <!-- Hand-drawn abstract swoosh -->
+      <path d="M ${ctx.constraints.safeX + 40} ${ctx.h - ctx.constraints.safeY - 60} Q ${ctx.w / 2} ${ctx.h - ctx.constraints.safeY - 20}, ${ctx.w - ctx.constraints.safeX - 40} ${ctx.h - ctx.constraints.safeY - 80}" fill="none" stroke="${ctx.validAccentColor || ctx.validBrandColor}" stroke-width="3" stroke-linecap="round" opacity="0.7" />`
+    };
+
+    this.registry['sparkle'] = { category: 'effects', render: (ctx) => `
+      <!-- Premium Sparkle/Star Accent -->
+      <g transform="translate(${ctx.w - ctx.constraints.safeX - 60}, ${ctx.constraints.safeY + 40}) scale(0.8)" fill="${ctx.validAccentColor || ctx.validBrandColor}" opacity="0.9">
+        <path d="M20 0 Q20 20 40 20 Q20 20 20 40 Q20 20 0 20 Q20 20 20 0 Z" />
+        <path d="M50 30 Q50 40 60 40 Q50 40 50 50 Q50 40 40 40 Q50 40 50 30 Z" transform="scale(0.6) translate(20, -30)" />
+      </g>`
+    };
+
+    this.registry['thin_border'] = { category: 'geometry', render: (ctx) => `
+      <!-- Museum Matte Thin Border -->
+      <rect x="${ctx.constraints.safeX + 10}" y="${ctx.constraints.safeY + 10}" width="${ctx.w - (ctx.constraints.safeX + 10) * 2}" height="${ctx.h - (ctx.constraints.safeY + 10) * 2}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1" opacity="0.6" />`
+    };
+
+    this.registry['editorial_badge'] = { category: 'geometry', render: (ctx) => `
+      <!-- Editorial Circle Badge -->
+      <g transform="translate(${ctx.w - ctx.constraints.safeX - 80}, ${ctx.h - ctx.constraints.safeY - 80})">
+        <circle cx="0" cy="0" r="45" fill="${ctx.validSecondaryColor}" opacity="0.9" />
+        <circle cx="0" cy="0" r="38" fill="none" stroke="${ctx.validBrandColor}" stroke-width="0.5" stroke-dasharray="2 4" />
+        <text x="0" y="5" font-family="sans-serif" font-size="10" font-weight="bold" fill="${ctx.validBrandColor}" text-anchor="middle" letter-spacing="2px">EST. 2026</text>
+      </g>`
+    };
+
+    this.registry['metadata_label'] = { category: 'geometry', render: (ctx) => `
+      <!-- Minimal Metadata Label (Top Right) -->
+      <g transform="translate(${ctx.w - ctx.constraints.safeX - 120}, ${ctx.constraints.safeY + 20})">
+        <rect x="0" y="0" width="120" height="24" fill="${ctx.validBrandColor}" opacity="0.1" />
+        <text x="60" y="16" font-family="monospace" font-size="10" fill="${ctx.validBrandColor}" text-anchor="middle" letter-spacing="1px">FIG. 01 // VSN</text>
+      </g>`
+    };
+
+    this.registry['quote_marks'] = { category: 'effects', render: (ctx) => `
+      <!-- Oversized Editorial Quote Marks -->
+      <text x="${ctx.constraints.safeX + 20}" y="${ctx.constraints.safeY + 80}" font-family="Georgia, serif" font-size="120" fill="${ctx.validAccentColor || ctx.validBrandColor}" opacity="0.2">"</text>`
+    };
+
+    this.registry['minimal_grid'] = { category: 'geometry', render: (ctx) => `
+      <!-- Architectural Minimal Grid Overlay -->
+      <g opacity="0.1" stroke="${ctx.validBrandColor}" stroke-width="1">
+        <line x1="${ctx.w * 0.33}" y1="0" x2="${ctx.w * 0.33}" y2="${ctx.h}" />
+        <line x1="${ctx.w * 0.66}" y1="0" x2="${ctx.w * 0.66}" y2="${ctx.h}" />
+        <line x1="0" y1="${ctx.h * 0.33}" x2="${ctx.w}" y2="${ctx.h * 0.33}" />
+        <line x1="0" y1="${ctx.h * 0.66}" x2="${ctx.w}" y2="${ctx.h * 0.66}" />
+      </g>`
     };
   }
 

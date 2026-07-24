@@ -116,6 +116,11 @@ export class ThemeEngine {
           <feDropShadow dx="0" dy="15" stdDeviation="25" flood-color="#000000" flood-opacity="0.15" />
         </filter>
 
+        <!-- Premium Shadow (used by typography and UI components) -->
+        <filter id="premium_shadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="15" stdDeviation="25" flood-color="#000000" flood-opacity="0.15" />
+        </filter>
+
         <!-- Foil Stamp / Metallic Reflection -->
         <linearGradient id="foil-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stop-color="${validSecondaryColor}" stop-opacity="0.8" />

@@ -204,7 +204,7 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
   },
 
   universal_dynamic_base: async (ctx) => {
-    let dsl = (compiledLayouts as any)[ctx.layoutType] as ICompiledLayoutDSL;
+    let dsl = COMPILED_LAYOUTS[ctx.layoutType];
     
     // Phase 2.5: Design Compiler takes semantic intent and mutates the DSL mathematically
     if (ctx.designSpec && dsl) {
@@ -288,8 +288,29 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
       }
     }
     
-    // Fallback: standard full bleed image
-    return fullBleedBase(ctx);
+    // Fallback: If no image layer exists (e.g. text-only layout), return a textured procedural canvas
+    const gradientSvg = `
+      <svg width="${ctx.w}" height="${ctx.h}" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="bgGrad" cx="50%" cy="0%" r="100%">
+            <stop offset="0%" stop-color="${ctx.validSecondaryColor}" stop-opacity="0.15" />
+            <stop offset="100%" stop-color="${ctx.validBackgroundColor}" stop-opacity="0" />
+          </radialGradient>
+          <filter id="noise">
+            <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/>
+            <feColorMatrix type="matrix" values="1 0 0 0 0, 0 1 0 0 0, 0 0 1 0 0, 0 0 0 0.05 0" />
+          </filter>
+        </defs>
+        <rect width="${ctx.w}" height="${ctx.h}" fill="url(#bgGrad)" />
+        <rect width="${ctx.w}" height="${ctx.h}" filter="url(#noise)" opacity="0.4" />
+      </svg>
+    `;
+
+    const solidCanvas = sharp({
+      create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validBackgroundColor },
+    }).composite([{ input: Buffer.from(gradientSvg), top: 0, left: 0 }]);
+
+    return { baseImage: solidCanvas, compositeTop: ctx.paddingTop, compositeBottom: ctx.paddingBottom, compositeLeft: ctx.paddingX, compositeRight: ctx.paddingX };
   },
 
   polaroid_stack: async (ctx) => {
@@ -739,7 +760,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
   },
 
   universal_dynamic_deco: (ctx) => {
-    let dsl = (compiledLayouts as any)[ctx.layoutType] as ICompiledLayoutDSL;
+    let dsl = COMPILED_LAYOUTS[ctx.layoutType];
     
     // Phase 2.5: Design Compiler mutates text widths and alignments based on semantic intent
     if (ctx.designSpec && dsl) {

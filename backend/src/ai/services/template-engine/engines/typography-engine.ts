@@ -39,6 +39,7 @@ export class TypographyEngine {
       else if (layer.role === 'heading' && ctx.structuredText.headline) rawText = ctx.structuredText.headline;
       else if (layer.role === 'tagline' && ctx.structuredText.subheadline) rawText = ctx.structuredText.subheadline;
       else if (layer.role === 'footnote' && ctx.structuredText.cta) rawText = ctx.structuredText.cta;
+      else if (layer.role === 'body' && !ctx.overlayText && ctx.structuredText.headline) rawText = ctx.structuredText.headline;
     }
 
     if (!rawText) return ''; // Skip rendering if text is empty for this layer

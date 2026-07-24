@@ -26,6 +26,7 @@ export class ScoringGateService {
           outputValidationPassed: false,
           outputHardFailures: [`${type}_FAIL: ${tag} (Slide index ${index})`],
           outputAutoCorrections: [],
+          flag_reasons: [],
           requiredRegeneration: type === 'CONTENT',
         }
       });

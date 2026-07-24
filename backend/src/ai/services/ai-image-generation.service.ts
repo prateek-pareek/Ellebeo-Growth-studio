@@ -1251,16 +1251,16 @@ CRITICAL IMAGE REQUIREMENTS:
       };
 
       // Determine text color using luminance to guarantee WCAG contrast
-      // Use the exact background color that the text will sit on depending on the layout type
+      // Explicitly enforce the Brand DNA semantic roles: Depth color is for Typography!
       const isFullBleed = template.base === 'full_bleed_base' || template.base === 'universal_dynamic_base' || layoutType === 'look_number_plate';
-
-      // If it's full bleed, the text sits on the photo. We default to using depthBrandColor unless we calculate photo luminance.
-      // If it's bordered/split, the text sits on the validBackgroundColor.
       const textSurfaceColor = isFullBleed ? validBrandColor : validBackgroundColor;
 
       const surfaceLuminance = getLuminance(textSurfaceColor);
-      const isLightSurface = surfaceLuminance > 150; // Threshold for legibility
-      const dynamicTextColor = isLightSurface ? depthBrandColor : validBackgroundColor; // Dark on Light, Light on Dark
+      const isLightSurface = surfaceLuminance > 150; 
+      
+      // If the surface is light, always use the Depth color (e.g. charcoal black #393939) for text.
+      // Only fall back to Background Color (light) if the surface is dark.
+      const dynamicTextColor = isLightSurface ? depthBrandColor : validBackgroundColor;
 
       const footerLuminance = getLuminance(validSecondaryColor);
       const isLightFooter = footerLuminance > 150;
@@ -1277,22 +1277,26 @@ CRITICAL IMAGE REQUIREMENTS:
         }
       }
 
-      // Calculate dynamic font size and letter spacing to prevent clipping
-      let dynamicFontSize = 26;
+      // Calculate dynamic font size and letter spacing to prevent clipping (Scaled for high-end aesthetic)
+      const scaleFactor = w / 1080;
+      let dynamicFontSize = Math.round(72 * scaleFactor);
       let maxLength = 0;
       for (const line of lines) {
         if (line.length > maxLength) maxLength = line.length;
       }
-      if (maxLength > 32) {
-        dynamicFontSize = 18;
+      if (maxLength > 40) {
+        dynamicFontSize = Math.round(42 * scaleFactor);
+      } else if (maxLength > 32) {
+        dynamicFontSize = Math.round(48 * scaleFactor);
       } else if (maxLength > 26) {
-        dynamicFontSize = 21;
+        dynamicFontSize = Math.round(56 * scaleFactor);
       }
       const dyOffset = Math.round(dynamicFontSize * 1.35);
 
       // ── Step 3: Assemble SVG overlays — dispatched from layout-templates.config.json ──
       const textCtx = {
         layoutType, w, h, dynamicFontSize, dyOffset, escapedLines, lines, overlayText: finalOverlayText, maxLength,
+        structuredText: { headline, subheadline, cta },
         dynamicTextColor, posterTextColor, validBrandColor, validSecondaryColor,
         brandFont, bodyFont, escapedSpacedName, photoDataUri, escapeXml,
         faceCoordinates: visionResult?.faceCoordinates,
@@ -1305,6 +1309,7 @@ CRITICAL IMAGE REQUIREMENTS:
         layoutType, w, h, paddingX, paddingTop, paddingBottom, innerW, innerH,
         validBrandColor, validSecondaryColor, validBackgroundColor, validAccentColor, brandFont, rawName, photoDataUri,
         escapedLines, dyOffset, dynamicFontSize, dynamicTextColor, overlayText: finalOverlayText, maxLength,
+        structuredText: { headline, subheadline, cta },
         visionResult: visionResult,
         faceCoordinates: visionResult?.faceCoordinates,
         injectedFeatures: composition.injectedFeatures,
@@ -1393,19 +1398,19 @@ CRITICAL IMAGE REQUIREMENTS:
           const footerStyle = ((index ?? 0) + (totalSlides ?? 4)) % 5;
           if (footerStyle === 0) {
             // Classic footer bar
-            return `<rect x="0" y="${h - 60}" width="${w}" height="60" class="footer-bg" />
-              <text x="60" y="${h - 25}" class="footer-brand">${escapedSpacedName}</text>
-              <text x="${w - 60}" y="${h - 25}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`;
+            return `<rect x="${paddingX}" y="${h - paddingBottom - 60}" width="${innerW}" height="60" class="footer-bg" />
+              <text x="${paddingX + 60}" y="${h - paddingBottom - 25}" class="footer-brand">${escapedSpacedName}</text>
+              <text x="${w - paddingX - 60}" y="${h - paddingBottom - 25}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`;
           } else if (footerStyle === 1) {
             // Top-left corner floating wordmark
-            return `<text x="50" y="52" font-family="'${bodyFont}', system-ui, sans-serif" font-size="13px" font-weight="600" letter-spacing="4px" fill="${validSecondaryColor}" fill-opacity="0.85" text-transform="uppercase">${escapedSpacedName}</text>
-              <line x1="50" y1="62" x2="${Math.min(50 + escapedSpacedName.length * 8, 300)}" y2="62" stroke="${validSecondaryColor}" stroke-width="1" stroke-opacity="0.5" />`;
+            return `<text x="${paddingX + 50}" y="${paddingTop + 52}" font-family="'${bodyFont}', system-ui, sans-serif" font-size="13px" font-weight="600" letter-spacing="4px" fill="${validSecondaryColor}" fill-opacity="0.85" text-transform="uppercase">${escapedSpacedName}</text>
+              <line x1="${paddingX + 50}" y1="${paddingTop + 62}" x2="${Math.min(paddingX + 50 + escapedSpacedName.length * 8, w - paddingX - 50)}" y2="${paddingTop + 62}" stroke="${validSecondaryColor}" stroke-width="1" stroke-opacity="0.5" />`;
           } else if (footerStyle === 2) {
             // Bottom-right corner slide counter only — super minimal
-            return `<text x="${w - 60}" y="${h - 25}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`;
+            return `<text x="${w - paddingX - 60}" y="${h - paddingBottom - 25}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`;
           } else if (footerStyle === 3) {
             // Vertical side tag — editorial magazine style
-            return `<text x="${w - 24}" y="${Math.round(h * 0.62)}" font-family="'${bodyFont}', system-ui, sans-serif" font-size="11px" font-weight="600" letter-spacing="5px" fill="${validBrandColor}" fill-opacity="0.7" transform="rotate(90 ${w - 24} ${Math.round(h * 0.62)})">${escapedSpacedName}</text>`;
+            return `<text x="${w - paddingX - 24}" y="${Math.round(h * 0.62)}" font-family="'${bodyFont}', system-ui, sans-serif" font-size="11px" font-weight="600" letter-spacing="5px" fill="${validBrandColor}" fill-opacity="0.7" transform="rotate(90 ${w - paddingX - 24} ${Math.round(h * 0.62)})">${escapedSpacedName}</text>`;
           } else {
             // Pure transparent — no footer at all for this slide
             return '';

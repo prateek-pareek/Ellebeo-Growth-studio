@@ -22,7 +22,8 @@ export class DiversityEngine {
 
       // 2. Exact Match Carousel Penalty (Hard Exclusion)
       // If it was already used in THIS carousel, completely destroy its score.
-      if (carouselHistory.includes(template.id)) {
+      const wasUsedInCarousel = carouselHistory.some(historyId => historyId.startsWith(template.id));
+      if (wasUsedInCarousel) {
         penalty += 1000;
       }
 
@@ -35,8 +36,14 @@ export class DiversityEngine {
       };
     });
 
+    // Strictly filter out any layout that was banned (penalty >= 1000), unless it leaves us with 0 options.
+    let finalCandidates = diversified.filter(t => (t.finalRank || 0) > -500);
+    if (finalCandidates.length === 0) {
+      finalCandidates = diversified; // Safety fallback
+    }
+
     // Sort by final rank
-    return diversified.sort((a, b) => (b.finalRank || 0) - (a.finalRank || 0));
+    return finalCandidates.sort((a, b) => (b.finalRank || 0) - (a.finalRank || 0));
   }
 
   /**
