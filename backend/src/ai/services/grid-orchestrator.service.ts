@@ -34,7 +34,7 @@ export class GridOrchestratorService {
     let layouts: LayoutType[] = [];
     let newTemplates: any = {};
     try {
-      newTemplates = require('../config/compiled-layouts.v1.json');
+      newTemplates = require('../config/compiled-layouts.v2.json');
       layouts = Object.keys(newTemplates) as LayoutType[];
     } catch (e) {
       layouts = ['passepartout_text', 'passepartout_clean', 'full_bleed_clean', 'split_before_after', 'asymmetric_monogram', 'translucent_split', 'poster_cover', 'postcard_ticket', 'editorial_arch', 'text_only_editorial', 'filmstrip_grid', 'handwritten_note', 'gallery_frame', 'duotone_editorial', 'side_panel_split', 'bold_editorial_poster', 'giant_type_overlay', 'chat_bubble_quote', 'testimonial_card', 'transparent_scrim', 'premium_diptyque', 'art_director_split', 'date_highlight', 'signature_feature'];
@@ -61,7 +61,7 @@ export class GridOrchestratorService {
     let legacyTemplates: any = {};
     try {
       legacyTemplates = require('../config/layout-templates.config.json');
-      newTemplates = require('../config/compiled-layouts.v1.json');
+      newTemplates = require('../config/compiled-layouts.v2.json');
     } catch (e) {}
 
     lastPosts.slice(0, 3).forEach((post) => {

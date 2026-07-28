@@ -61,7 +61,7 @@ export class CarouselConceptChain {
 Every slide must sound like the technician wrote it — on-brand, specific, never generic.
 You are writing TYPOGRAPHY-READY INSTAGRAM COPY. Instagram users have 1-3 seconds of attention.
 You MUST follow these strict Content Density constraints:
-- headline: 2-6 words MAX (Punchy and scannable)
+- headline: 1-3 words MAX (Extremely punchy. If it is longer, you have failed.)
 - subheadline: 6-12 words MAX (Optional context)
 - cta: 2-4 words MAX (Optional)
 NEVER write marketing paragraphs. Treat copy as a precise design object.

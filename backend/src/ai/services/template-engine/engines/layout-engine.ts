@@ -14,6 +14,12 @@ export interface LayoutConstraints {
   maxWidth: number;
   contentMaxWidth: number; // for text blocks
   margins: { top: number; bottom: number; left: number; right: number };
+  grid?: {
+    columns: number;
+    columnWidth: number;
+    gutter: number;
+    tracks: number[];
+  };
 }
 
 export class LayoutEngine {
@@ -27,43 +33,66 @@ export class LayoutEngine {
     this.faceBox = faceBox;
   }
 
-  /**
-   * Calculates structural constraints based on layout family and desired negative space.
-   */
-  public calculateConstraints(family: LayoutFamily, negativeSpace: NegativeSpace): LayoutConstraints {
+  public calculateConstraints(family: LayoutFamily, negativeSpace: NegativeSpace, tension: boolean = false, behavior?: any): LayoutConstraints {
     let baseMarginX = 60;
     let baseMarginY = 100;
 
-    // Apply Negative Space Multipliers (Visual Weight Scale)
-    const spaceMultipliers: Record<NegativeSpace, number> = {
-      dense: 0.6,    // Image: 80%, Whitespace: 5%
-      balanced: 1.0, // Image: 70%, Whitespace: 10%
-      generous: 1.15,// Image: 60%, Whitespace: 15%
-      extreme: 1.25  // Image: 50%, Whitespace: 20%
-    };
-    const multiplier = spaceMultipliers[negativeSpace] || 1.0;
+    let multiplier = 1.0;
+    if (behavior && behavior.negativeSpaceMultiplier) {
+      multiplier = behavior.negativeSpaceMultiplier;
+    } else {
+      const spaceMultipliers: Record<NegativeSpace, number> = {
+        dense: 0.6,    
+        balanced: 1.0, 
+        generous: 1.15,
+        extreme: 1.25  
+      };
+      multiplier = spaceMultipliers[negativeSpace] || 1.0;
+    }
 
-    // Apply Family Rules
     if (family === 'editorial') {
-      baseMarginY = 140; // Editorial loves massive vertical breathing room
+      baseMarginY = 140; 
     } else if (family === 'architectural') {
-      baseMarginX = 40; // Architectural uses tight structural grids
+      baseMarginX = 40; 
       baseMarginY = 80;
     }
 
-    const safeX = Math.round(baseMarginX * multiplier);
-    const safeY = Math.round(baseMarginY * multiplier);
+    let safeX = tension ? Math.round(baseMarginX * 0.3) : Math.round(baseMarginX * multiplier);
+    let safeY = tension ? Math.round(baseMarginY * 0.3) : Math.round(baseMarginY * multiplier);
+    
+    if (behavior && behavior.marginHugging) {
+      safeX = 10;
+      safeY = 10;
+    }
+
+    const contentMaxWidth = this.canvasWidth - (safeX * 2);
+
+    // Calculate grid for anchoring
+    const columns = 12;
+    const padding = Math.round(30 * multiplier);
+    const gutter = padding;
+    const columnWidth = (contentMaxWidth - (gutter * (columns - 1))) / columns;
+    const tracks = [];
+    for (let i = 0; i < columns; i++) {
+      tracks.push(safeX + (i * (columnWidth + gutter)));
+    }
 
     return {
       safeX,
       safeY,
-      maxWidth: this.canvasWidth - (safeX * 2),
-      contentMaxWidth: this.canvasWidth - (safeX * 2),
+      maxWidth: contentMaxWidth,
+      contentMaxWidth,
       margins: {
         top: safeY,
         bottom: safeY,
         left: safeX,
         right: safeX
+      },
+      grid: {
+        columns,
+        columnWidth,
+        gutter,
+        tracks
       }
     };
   }
@@ -98,14 +127,25 @@ export class LayoutEngine {
 
   /**
    * Resolves absolute X, Y coordinates from semantic layout anchors.
+   * Forces alignment strictly onto the Editorial Grid tracks to prevent floating text.
    */
   public resolveAnchor(anchor: string, boxWidth: number, boxHeight: number, constraints: LayoutConstraints): { x: number; y: number } {
     let x = this.canvasWidth / 2;
     let y = this.canvasHeight / 2;
 
-    const { safeX, safeY } = constraints;
+    const { safeX, safeY, grid } = constraints;
 
     if (anchor.includes('left') || anchor === 'edges') x = safeX;
+    
+    // Grid alignment for left heavy layout (asymmetrical splits)
+    if (anchor === 'split_left' && grid) {
+        x = grid.tracks[0];
+    }
+    if (anchor === 'split_right' && grid) {
+        // Start right text at column 7
+        x = grid.tracks[6];
+    }
+
     if (anchor.includes('right')) x = this.canvasWidth - safeX;
     
     if (anchor.includes('top')) y = safeY;

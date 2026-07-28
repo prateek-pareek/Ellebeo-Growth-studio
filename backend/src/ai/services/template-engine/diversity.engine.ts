@@ -1,4 +1,14 @@
 import { ITemplateCandidate, ITemplateContext } from './interfaces';
+import * as fs from 'fs';
+import * as path from 'path';
+
+const layoutConfigPath = path.join(__dirname, '../../config/layout-templates.config.json');
+let layoutConfig: any = {};
+try {
+  layoutConfig = JSON.parse(fs.readFileSync(layoutConfigPath, 'utf8'));
+} catch (e) {
+  console.warn('[DiversityEngine] Failed to load layout-templates.config.json');
+}
 
 // In-memory LRU tracking global usage across the instance to prevent mode collapse.
 // For production, this could be backed by Redis `hincrby tenantId templateId 1`
@@ -25,6 +35,21 @@ export class DiversityEngine {
       const wasUsedInCarousel = carouselHistory.some(historyId => historyId.startsWith(template.id));
       if (wasUsedInCarousel) {
         penalty += 1000;
+      }
+      
+      // 3. Structural Diversity Penalty
+      // Prevent the engine from picking consecutive templates with the same base geometry (e.g., full-bleed -> full-bleed)
+      if (carouselHistory.length > 0) {
+        const lastTemplateId = carouselHistory[carouselHistory.length - 1];
+        // Remove variants (e.g., _variant_12) to get the true ID if it's procedural
+        const lastFamilyId = lastTemplateId.split('_variant')[0];
+        
+        const lastBase = layoutConfig[lastFamilyId]?.base;
+        const currentBase = layoutConfig[template.id]?.base;
+        
+        if (lastBase && currentBase && lastBase === currentBase) {
+           penalty += 40; // Soft exclusion: it can still be picked if nothing else is good, but highly unlikely
+        }
       }
 
       const finalRank = (template.score || 0) - penalty;

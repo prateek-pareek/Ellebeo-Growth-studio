@@ -1,26 +1,74 @@
 import { ICompiledLayoutDSL, ISemanticDesignSpec, IDSLImageLayer, IDSLTextLayer } from '../interfaces';
+import { IDesignLanguage } from './art-direction-engine';
 
 export class DesignCompiler {
   /**
-   * Translates the AI's Semantic DesignSpec into hard mathematical execution rules 
-   * for the Renderer by mutating the DSL layer properties.
+   * Translates the AI's Semantic DesignSpec or Art Direction Language into hard 
+   * mathematical execution rules for the Renderer by mutating the DSL layer properties.
    */
-  compile(dsl: ICompiledLayoutDSL, spec: ISemanticDesignSpec): ICompiledLayoutDSL {
+  compile(dsl: ICompiledLayoutDSL, config: ISemanticDesignSpec | IDesignLanguage): ICompiledLayoutDSL {
     // Deep clone the DSL so we don't mutate the global registry
     const compiledDsl: ICompiledLayoutDSL = JSON.parse(JSON.stringify(dsl));
 
     const imageLayer = compiledDsl.layers.find(l => l.type === 'image') as IDSLImageLayer | undefined;
     const textLayers = compiledDsl.layers.filter(l => l.type === 'text') as IDSLTextLayer[];
     
+    // Check if we are using the new Art Direction Engine
+    if ('behavior' in config) {
+      const lang = config as IDesignLanguage;
+      const behavior = lang.behavior;
+      
+      // We pass the behavior profile globally to the DSL so engines can read it
+      (compiledDsl as any).behavior = behavior;
+      
+      if (imageLayer) {
+        if (behavior.imageBleedExtent === 'full') {
+          imageLayer.paddingPercent = 0;
+        } else if (behavior.imageBleedExtent === 'contained_70') {
+          imageLayer.paddingPercent = 15; // approximate containment padding
+        } else if (behavior.imageBleedExtent === 'asymmetrical_65') {
+          imageLayer.paddingPercent = 0; // The layout engine will handle the crop
+        }
+      }
+
+      if (textLayers.length > 0) {
+        const heading = textLayers.find(t => t.role === 'heading');
+        const tagline = textLayers.find(t => t.role === 'tagline');
+        const body = textLayers.find(t => t.role === 'body');
+        
+        if (heading) {
+          (heading as any).scale = behavior.heroScaleRatio * 0.12; // Base scalar
+          (heading as any).tracking = behavior.trackingHero;
+          (heading as any).lineHeight = behavior.lineHeightMultiplier;
+          (heading as any).capitalizationRule = behavior.capitalizationRule;
+        }
+        if (tagline) {
+          (tagline as any).scale = behavior.metadataScaleRatio * 0.12;
+          (tagline as any).tracking = behavior.trackingMetadata;
+          (tagline as any).capitalizationRule = behavior.capitalizationRule;
+          (tagline as any).opacity = behavior.secondaryTextOpacity;
+        }
+        if (body) {
+          (body as any).scale = behavior.metadataScaleRatio * 1.5 * 0.12;
+          (body as any).lineHeight = behavior.lineHeightMultiplier;
+          (body as any).opacity = behavior.secondaryTextOpacity;
+        }
+      }
+      return compiledDsl;
+    }
+    
+    const spec = config as ISemanticDesignSpec;
+    
     // 1. Photo Strategy Compiler — gentle relative adjustments that respect template defaults
     if (imageLayer && spec.photo) {
       const currentPadding = imageLayer.paddingPercent || 8;
 
       if (spec.photo.role === 'supporting') {
-        imageLayer.paddingPercent = Math.min(12, currentPadding + 2);
+        imageLayer.paddingPercent = Math.min(18, currentPadding + 6); // Dramatic zoom-out for supporting elements
         imageLayer.anchor = spec.composition?.balance === 'asymmetrical' ? 'bottom_right' : imageLayer.anchor || 'center';
       } else if (spec.photo.role === 'hero') {
-        imageLayer.paddingPercent = Math.min(8, currentPadding);
+        // Tension zoom-out logic removed to respect template defaults and variety
+        imageLayer.paddingPercent = currentPadding;
       } else if (spec.photo.role === 'background' || spec.photo.role === 'texture') {
         imageLayer.paddingPercent = 0; // Full bleed
       }
@@ -41,13 +89,33 @@ export class DesignCompiler {
       }
     }
 
-    // 3. Typography Strategy Compiler
+    // 3. Typography Strategy Compiler (Behavioral Contrast & Dominance)
     if (spec.typography && textLayers.length > 0) {
       const heading = textLayers.find(t => t.role === 'heading');
+      const tagline = textLayers.find(t => t.role === 'tagline');
+      const body = textLayers.find(t => t.role === 'body');
+      
       if (heading) {
         if (spec.typography.hierarchy === 'editorial') {
           heading.alignment = spec.composition?.balance === 'asymmetrical' ? 'left' : heading.alignment || 'center';
+          // BEHAVIORAL DOMINANCE: Inject massive font scaling overrides (12-16% of canvas width)
+          (heading as any).scale = 0.14; 
+          
+          if (spec.typography.headlineTreatment === 'experimental') {
+            heading.rotation = -90; // Rotate vertically
+            heading.anchor = 'middle_left'; // Push to the side
+            heading.alignment = 'center';
+          }
         }
+      }
+      
+      if (tagline && spec.typography.hierarchy === 'editorial') {
+        // BEHAVIORAL CONTRAST: Tiny subheadline (approx 1.5% of canvas width) against the massive headline
+        (tagline as any).scale = 0.018;
+      }
+      
+      if (body && spec.typography.hierarchy === 'editorial') {
+        (body as any).scale = 0.022;
       }
     }
 

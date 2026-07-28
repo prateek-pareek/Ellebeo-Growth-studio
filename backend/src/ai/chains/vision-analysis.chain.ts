@@ -12,7 +12,7 @@ import type { VisionAnalysisResult } from '../types/chain-output.types';
 import type { ModelRouter } from '../orchestrator/model-router';
 import { wrapSystemPrompt } from '../config/platform-system-prompt';
 
-const VISION_PROMPT_VERSION = 'v2.2';
+const VISION_PROMPT_VERSION = 'v2.3';
 
 // Zod-validated output schema enforcer (inline for strict mode)
 function parseVisionOutput(raw: string): VisionAnalysisResult {

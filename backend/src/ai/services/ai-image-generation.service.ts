@@ -21,12 +21,14 @@ import { GoogleGenAI } from '@google/genai';
 import sharp from 'sharp';
 import { ModelRouter } from '../orchestrator/model-router';
 import type { VisionAnalysisResult } from '../types/chain-output.types';
-import { resolveLayoutTemplate, BASE_TREATMENTS, TEXT_TEMPLATES, DECORATIONS, LAYOUT_TEMPLATES, registerDynamicLayout } from '../config/layout-renderers';
+import { resolveLayoutTemplate, BASE_TREATMENTS, TEXT_TEMPLATES, DECORATIONS, LAYOUT_TEMPLATES, registerDynamicLayout, COMPILED_LAYOUTS } from '../config/layout-renderers';
 import { TemplateAgentService } from './template-agent.service';
 import { LayoutAssemblerService } from './template-engine/layout-assembler.service';
 import templateLibraryData from '../config/template-library.json';
 import { ThemeEngine } from './template-engine/engines/theme-engine';
 import { CompositionEngine, TemplateIntent } from './template-engine/engines/composition-engine';
+import { ArtDirectionEngine } from './template-engine/engines/art-direction-engine';
+import { GeometryCompiler } from './template-engine/engines/geometry-compiler';
 
 const openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
 
@@ -304,11 +306,15 @@ export class AiImageGenerationService {
   private readonly templateAgent: TemplateAgentService;
   private readonly themeEngine: ThemeEngine;
   private readonly compositionEngine: CompositionEngine;
+  private readonly artDirectionEngine: ArtDirectionEngine;
+  private readonly geometryCompiler: GeometryCompiler;
 
   constructor() {
     this.templateAgent = new TemplateAgentService();
     this.themeEngine = new ThemeEngine();
     this.compositionEngine = new CompositionEngine();
+    this.artDirectionEngine = new ArtDirectionEngine();
+    this.geometryCompiler = new GeometryCompiler();
   }
 
   async generateSlide(params: {
@@ -345,6 +351,7 @@ export class AiImageGenerationService {
     moodboardVisionSummary?: string;
     visionResult?: VisionAnalysisResult;
     templateIntent?: 'educational' | 'promotion' | 'testimonial' | 'before_after' | 'brand_story';
+    logoUrl?: string;
     designSpec?: import('./template-engine/interfaces').ISemanticDesignSpec;
   }): Promise<{ url: string; variants?: { gemini?: string; dalle?: string } }> {
     const {
@@ -369,6 +376,7 @@ export class AiImageGenerationService {
       moodboardVisionSummary,
       visionResult,
       templateIntent = 'educational',
+      logoUrl,
       designSpec
     } = params;
 
@@ -397,6 +405,7 @@ export class AiImageGenerationService {
         outputSize,
         captionText: overlayText,
         visionResult,
+        logoUrl,
       });
       const url = await uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
       return { url };
@@ -433,6 +442,7 @@ export class AiImageGenerationService {
         captionText: overlayText,
         visionResult,
         designSpec,
+        logoUrl,
       });
       const url = await uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
       return { url };
@@ -474,14 +484,17 @@ export class AiImageGenerationService {
     // Compile dynamic lifestyle/studio assets for non-booking educational/moodboard posts
     // Subjects use Brand DNA aesthetic direction instead of hardcoded beige/travertine
     const brandAestheticHint = aesthetic || 'minimal, premium beauty editorial';
+    
+    // Canva-Style Aesthetic Multiplexer: Force the AI into distinct aesthetic categories 
+    // rather than repeating "lifestyle interior" every time.
     const lifestyleSubjects = [
-      `a luxury minimalist ${serviceType} treatment room in ${brandAestheticHint} style, using brand color palette: primary ${brandColor}, secondary ${secondaryColor}, background ${backgroundBrandColor}, accent ${accentBrandColor}`,
-      `close-up macro shot of elegant, organic botanical ingredients and natural elements used in ${serviceType}, styled in ${brandAestheticHint} aesthetic, color-matched to palette: ${brandColor}, ${secondaryColor}, ${accentBrandColor}`,
-      `clean architectural details of a premium ${serviceType} space with beautiful natural lighting and shadows, color palette matching: primary ${brandColor}, secondary ${secondaryColor}, background ${backgroundBrandColor}`,
-      `macro photography of smooth textures, glass serum bottles, or high-end products related to ${serviceType}, styled in ${brandAestheticHint} aesthetic, brand colors: ${brandColor}, ${secondaryColor}, ${accentBrandColor}`,
-      `an abstract, flowing composition of soft silk, water ripples, or natural textures evoking the feeling of a premium ${serviceType}, in exact brand colors: ${brandColor}, ${secondaryColor}, ${accentBrandColor}`,
+      `A high-end studio beauty editorial shot, highly polished, premium skin glow, minimal props, in ${brandAestheticHint} style, using brand colors: primary ${brandColor}, secondary ${secondaryColor}, background ${backgroundBrandColor}`,
+      `Clean architectural interior of a luxury clinical ${serviceType} space, emphasizing premium materials, soft natural light, shadows, matching palette: ${brandColor}, ${secondaryColor}`,
+      `Extreme macro photography of smooth premium textures (like silk, thick cream, or polished stone) related to ${serviceType}, styled in ${brandAestheticHint} aesthetic, using exact brand accent: ${accentBrandColor}`,
+      `An abstract, flowing composition of soft lighting and shadow geometries evoking the feeling of premium ${serviceType}, in exact brand colors: ${brandColor}, ${secondaryColor}, ${backgroundBrandColor}`
     ];
-    const chosenSubject = lifestyleSubjects[index % lifestyleSubjects.length];
+    // Use modulo so a 4-slide carousel cycles perfectly through 4 distinct visual flavors
+    const chosenSubject = lifestyleSubjects[index % 4];
 
     const prompt = customPrompt || (isBeforePhoto
       ? buildBeforeSlidePrompt({ overlayText: '', businessName, brandColor })
@@ -616,6 +629,7 @@ CRITICAL IMAGE REQUIREMENTS:
       captionText: overlayText,
       visionResult,
       designSpec,
+      logoUrl,
     });
 
     // Upload primary image
@@ -691,6 +705,7 @@ CRITICAL IMAGE REQUIREMENTS:
     serviceType?: string;
     artDirectorBrief?: any[];
     layoutType?: string;
+    logoUrl?: string;
     brandFont?: string;
     bodyFont?: string;
     visualRanking?: string[];
@@ -703,12 +718,13 @@ CRITICAL IMAGE REQUIREMENTS:
     moodboardVisionSummary?: string;
     visionResult?: VisionAnalysisResult;
     templateIntent?: 'educational' | 'promotion' | 'testimonial' | 'before_after' | 'brand_story';
+    designSpec?: import('./template-engine/interfaces').ISemanticDesignSpec;
   }): Promise<GeneratedSlide[]> {
-    const { afterPhotoUrl, beforePhotoUrl, concepts, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', depthBrandColor = '#1E1E1C', moodboardVisionSummary, visionResult, templateIntent = 'educational', ...rest } = params;
+    const { afterPhotoUrl, beforePhotoUrl, concepts, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', depthBrandColor = '#1E1E1C', moodboardVisionSummary, visionResult, templateIntent = 'educational', designSpec, ...rest } = params;
     const total = concepts.length;
 
-    // Derive pool dynamically from JSON config — never goes stale when new layouts are added
-    const layoutPool = Object.keys(templateLibraryData);
+    // Derive pool dynamically from compiled layouts — never goes stale when new layouts are added
+    const layoutPool = Object.keys(COMPILED_LAYOUTS);
 
     // Prepare vision summary mapping
     const isZoomedFace = moodboardVisionSummary ? (moodboardVisionSummary.toLowerCase().includes('macro') || moodboardVisionSummary.toLowerCase().includes('zoomed') || moodboardVisionSummary.toLowerCase().includes('close-up')) : false;
@@ -724,6 +740,13 @@ CRITICAL IMAGE REQUIREMENTS:
     
     for (let i = 0; i < total; i++) {
       const concept = concepts[i];
+      
+      if (i === 0 && params.layoutType) {
+         agentDecisions.push({ selected_layout_id: params.layoutType, reasoning: 'Pre-selected cover layout from orchestrator', designSpec: params.designSpec });
+         uniqueLayoutsForSlides.push(params.layoutType);
+         continue;
+      }
+
       const decision = await this.templateAgent.selectTemplate({
         brief: concept.overlayText || 'Slide',
         brandName: params.businessName || 'Brand',
@@ -753,7 +776,7 @@ CRITICAL IMAGE REQUIREMENTS:
       let chosen = agentDecisions[i].selected_layout_id;
       
       if (i === breatherIndex) {
-        chosen = 'text_palette_minimal';
+        chosen = Object.keys(COMPILED_LAYOUTS).find(k => k.includes('text_only')) || 'layout_v2_text_only_default_1';
         agentDecisions[i].reasoning = 'Forced text breather slide for visual pacing';
       }
       
@@ -806,6 +829,7 @@ CRITICAL IMAGE REQUIREMENTS:
             capitalizationRule,
             footerBrandToggle,
             generatorModel,
+            logoUrl: params.logoUrl,
             backgroundBrandColor,
             accentBrandColor,
             depthBrandColor,
@@ -849,6 +873,7 @@ CRITICAL IMAGE REQUIREMENTS:
     capitalizationRule?: string;
     footerBrandToggle?: boolean;
     layoutType?: string;
+    logoUrl?: string;
     generatorModel?: 'gemini' | 'dalle' | 'both' | 'none';
     backgroundBrandColor?: string;
     accentBrandColor?: string;
@@ -897,8 +922,18 @@ CRITICAL IMAGE REQUIREMENTS:
     ];
 
     for (let i = 0; i < total; i++) {
-      const chosen = clientApprovedStoryTemplates[i % clientApprovedStoryTemplates.length];
+      let chosen = clientApprovedStoryTemplates[i % clientApprovedStoryTemplates.length];
       uniqueLayoutsForFrames.push(chosen);
+    }
+    
+    // Inject a "breather" slide (text-only, aesthetic background) into the middle of the story
+    let breatherIndex = -1;
+    if (total >= 4) {
+      breatherIndex = Math.floor(total / 2);
+    }
+    if (breatherIndex !== -1) {
+      // Find a layout that has 'text_only'
+      uniqueLayoutsForFrames[breatherIndex] = 'layout_v2_text_only_default_1';
     }
 
     const results = await Promise.all(
@@ -953,6 +988,7 @@ CRITICAL IMAGE REQUIREMENTS:
             capitalizationRule,
             footerBrandToggle,
             generatorModel,
+            logoUrl: params.logoUrl,
             backgroundBrandColor,
             accentBrandColor,
             depthBrandColor,
@@ -999,6 +1035,7 @@ CRITICAL IMAGE REQUIREMENTS:
     visualRanking?: string[];
     capitalizationRule?: string;
     footerBrandToggle?: boolean;
+    logoUrl?: string;
     backgroundBrandColor?: string;
     accentBrandColor?: string;
     depthBrandColor?: string;
@@ -1034,6 +1071,7 @@ CRITICAL IMAGE REQUIREMENTS:
       outputSize,
       visionResult,
       templateIntent,
+      logoUrl,
       designSpec
     } = params;
 
@@ -1127,6 +1165,28 @@ CRITICAL IMAGE REQUIREMENTS:
 
       const escapedSpacedName = escapeXml(spacedName);
 
+      // Fetch logo as base64 for watermark if provided
+      let logoDataUri = '';
+      if (logoUrl) {
+        try {
+          const https = await import('https');
+          const http = await import('http');
+          const protocol = logoUrl.startsWith('https') ? https : http;
+          const logoBuffer = await new Promise<Buffer>((resolve, reject) => {
+            (protocol as any).get(logoUrl, (res: any) => {
+              const chunks: Buffer[] = [];
+              res.on('data', (c: Buffer) => chunks.push(c));
+              res.on('end', () => resolve(Buffer.concat(chunks)));
+              res.on('error', reject);
+            }).on('error', reject);
+          });
+          const resizedLogo = await sharp(logoBuffer).resize(600, 600, { fit: 'inside' }).png().toBuffer();
+          logoDataUri = `data:image/png;base64,${resizedLogo.toString('base64')}`;
+        } catch (e) {
+          console.warn('[Logo Fetch Warning] Failed to fetch logo for watermark:', e);
+        }
+      }
+
       // Formatting helper mapped to Brand DNA capitalization rules
       const formatTextByRule = (text: string, rule: string): string => {
         const clean = text.trim();
@@ -1183,31 +1243,28 @@ CRITICAL IMAGE REQUIREMENTS:
         footerFontSize = 16;
       }
 
-      // True Passepartout Layout Calculations using dynamic borders
-      const paddingX = Math.floor(w * borderPercent);
-      const paddingTop = Math.floor(h * borderPercent);
-      const paddingBottom = 200; // Deep bottom margin for text & footer
+      // True Passepartout Layout Calculations using dynamic borders (Now driven by Whitespace Strategy)
+      // ── Step 0: Resolve Design Tokens & Composition Metadata ──
+      const designTokens = this.themeEngine.resolveDesignTokens(visualRanking);
+      const composition = this.compositionEngine.calculateComposition(designTokens, templateIntent as any, isFirst);
+
+      // ── NEW PHASE: Digital Art Direction & Geometry Compilation ──
+      // NEW ARCHITECTURE: Pull semantic rules from the Art Direction Engine using the layout ID!
+      const intent = this.artDirectionEngine.generateDesignIntent(layoutType);
+      const behavior = this.artDirectionEngine.mapIntentToBehavior(intent);
+      const designLanguage = { intent, behavior };
+      const geometryOut = this.geometryCompiler.compile(designLanguage, w, h);
+
+      const paddingX = geometryOut.safeX;
+      const paddingTop = geometryOut.safeY;
+      const paddingBottom = geometryOut.safeY + 80; // Deep bottom margin for text & footer
 
       const innerW = w - (paddingX * 2);
       const innerH = h - (paddingTop + paddingBottom);
 
-      // â”€â”€ Step 0: Resolve Design Tokens & Composition Metadata â”€â”€
-      const designTokens = this.themeEngine.resolveDesignTokens(visualRanking);
-      const composition = this.compositionEngine.calculateComposition(designTokens, templateIntent as any, isFirst);
-
-      // We can use composition.maskPreference to override layout if we want.
+      // Layout type is passed directly from the Art Director/Template Agent without legacy shape overrides
       let computedLayoutType = layoutType;
-      
-      // Only apply generic shape overrides to the universal random templates, 
-      // NOT to our specifically contracted templates in compiled-layouts.v1.json
-      if (['random_diverse', 'universal_dynamic_base', 'passepartout_text'].includes(layoutType)) {
-        if (composition.maskPreference === 'circle') computedLayoutType = 'circle_crop';
-        else if (composition.maskPreference === 'polaroid') computedLayoutType = 'polaroid_stack';
-        else if (composition.maskPreference === 'arch') computedLayoutType = 'arch_mask';
-        else if (composition.maskPreference === 'organic') computedLayoutType = 'floating_cutout';
-        else if (composition.maskPreference === 'torn') computedLayoutType = 'torn_paper_edge';
-      }
-      
+
       // â”€â”€ Step 1: Process Base Image â€” dispatched from layout-templates.config.json â”€â”€
       const template = resolveLayoutTemplate(computedLayoutType, visualRanking);
       if (['circle_crop', 'polaroid_stack', 'arch_mask', 'floating_cutout', 'torn_paper_edge'].includes(computedLayoutType)) {
@@ -1226,6 +1283,7 @@ CRITICAL IMAGE REQUIREMENTS:
         validBackgroundColor,
         downloadImageAsBuffer,
         designSpec,
+        designLanguage,
       });
       let baseImage = baseResult.baseImage;
       let compositeTop = baseResult.compositeTop;
@@ -1252,7 +1310,13 @@ CRITICAL IMAGE REQUIREMENTS:
 
       // Determine text color using luminance to guarantee WCAG contrast
       // Explicitly enforce the Brand DNA semantic roles: Depth color is for Typography!
-      const isFullBleed = template.base === 'full_bleed_base' || template.base === 'universal_dynamic_base' || layoutType === 'look_number_plate';
+      let isFullBleed = template.base === 'full_bleed_base' || template.base === 'universal_dynamic_base' || layoutType === 'look_number_plate';
+      
+      // V2 Smart Surface Detection for Breather Slides
+      if (layoutType.includes('text_only')) {
+        isFullBleed = false;
+      }
+
       const textSurfaceColor = isFullBleed ? validBrandColor : validBackgroundColor;
 
       const surfaceLuminance = getLuminance(textSurfaceColor);
@@ -1277,28 +1341,24 @@ CRITICAL IMAGE REQUIREMENTS:
         }
       }
 
-      // Calculate dynamic font size and letter spacing to prevent clipping (Scaled for high-end aesthetic)
-      const scaleFactor = w / 1080;
-      let dynamicFontSize = Math.round(72 * scaleFactor);
+      // Instead of rigid character counting, we now defer to the Art Direction Engine's proportional weighting
+      let dynamicFontSize = geometryOut.typography.heroSize;
+      
       let maxLength = 0;
       for (const line of lines) {
         if (line.length > maxLength) maxLength = line.length;
       }
-      if (maxLength > 40) {
-        dynamicFontSize = Math.round(42 * scaleFactor);
-      } else if (maxLength > 32) {
-        dynamicFontSize = Math.round(48 * scaleFactor);
-      } else if (maxLength > 26) {
-        dynamicFontSize = Math.round(56 * scaleFactor);
-      }
-      const dyOffset = Math.round(dynamicFontSize * 1.35);
+
+      // If the template specifically requests body or secondary text scaling, we can adjust here, 
+      // but by default the primary hero text drives the composition.
+      const dyOffset = Math.round(dynamicFontSize * geometryOut.typography.heroLineHeight);
 
       // ── Step 3: Assemble SVG overlays — dispatched from layout-templates.config.json ──
       const textCtx = {
         layoutType, w, h, dynamicFontSize, dyOffset, escapedLines, lines, overlayText: finalOverlayText, maxLength,
         structuredText: { headline, subheadline, cta },
         dynamicTextColor, posterTextColor, validBrandColor, validSecondaryColor,
-        brandFont, bodyFont, escapedSpacedName, photoDataUri, escapeXml,
+        brandFont, bodyFont, escapedSpacedName, photoDataUri, escapeXml, logoUrl,
         faceCoordinates: visionResult?.faceCoordinates,
       };
       const textPanelSvg = hasText && template.textTemplate
@@ -1311,10 +1371,12 @@ CRITICAL IMAGE REQUIREMENTS:
         escapedLines, dyOffset, dynamicFontSize, dynamicTextColor, overlayText: finalOverlayText, maxLength,
         structuredText: { headline, subheadline, cta },
         visionResult: visionResult,
+        logoUrl,
         faceCoordinates: visionResult?.faceCoordinates,
         injectedFeatures: composition.injectedFeatures,
         designTokens,
         designSpec,
+        typographyMetrics: geometryOut.typography,
       };
 
       const visualAdditions = template.decoration
@@ -1383,15 +1445,19 @@ CRITICAL IMAGE REQUIREMENTS:
             </style>
           </defs>
           
-          <!-- Anti-theft transparent brand watermark across the image area (not shown on clean full bleed) -->
-          ${template.showWatermark ? `
-          <text x="${w / 2}" y="${h / 2.2}" fill="#ffffff" fill-opacity="0.10" font-family="'${brandFont}', system-ui, sans-serif" font-size="28px" font-weight="bold" transform="rotate(-30 ${w / 2} ${h / 2.2})" text-anchor="middle" letter-spacing="8px">
-            AUTHENTIC WORK â€¢ ${escapedSpacedName}
-          </text>
-          ` : ''}
-
           ${visualAdditions}
           ${textPanelSvg}
+          
+          <!-- Anti-theft transparent brand watermark across the image area (not shown on clean full bleed) -->
+          ${template.showWatermark ? `
+            ${logoDataUri ? `
+              <!-- Logo Watermark -->
+              <image href="${logoDataUri}" x="${w / 2 - 300}" y="${h / 2 - 300}" width="600" height="600" opacity="0.05" preserveAspectRatio="xMidYMid meet" />
+            ` : ''}
+            <text x="${w / 2}" y="${logoDataUri ? (h / 2 + 350) : (h / 2.2)}" fill="#ffffff" fill-opacity="${logoDataUri ? '0.08' : '0.10'}" font-family="'${brandFont}', system-ui, sans-serif" font-size="28px" font-weight="bold" transform="rotate(-30 ${w / 2} ${logoDataUri ? (h / 2 + 350) : (h / 2.2)})" text-anchor="middle" letter-spacing="8px">
+              AUTHENTIC WORK • ${escapedSpacedName}
+            </text>
+          ` : ''}
           
           <!-- Brand identity mark: randomly placed so the grid stays diverse -->
           ${template.showFooter ? (() => {

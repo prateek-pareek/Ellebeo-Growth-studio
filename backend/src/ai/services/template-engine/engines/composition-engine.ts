@@ -1,3 +1,5 @@
+import { ICompiledLayoutDSL, IDSLSceneLayer, IDSLImageLayer, IDSLTextLayer, IDSLDecorationLayer } from '../interfaces';
+import { IDesignLanguage } from './art-direction-engine';
 import { DesignTokens } from './theme-engine';
 
 export type TemplateIntent = 'educational' | 'promotion' | 'testimonial' | 'before_after' | 'brand_story';
@@ -64,5 +66,194 @@ export class CompositionEngine {
     }
 
     return metadata;
+  }
+
+  /**
+   * Translates a Behavioral Profile / Family ID into a strict, deterministic 
+   * Composition Recipe (a compiled DSL).
+   */
+  public buildRecipe(familyId: string, slideIndex: number, brandName: string): ICompiledLayoutDSL {
+    
+    // Instead of randomizing, we now use strict recipes based on the family requested.
+    const layers: IDSLSceneLayer[] = [];
+    const recipeId = `${familyId}_${slideIndex}`;
+    
+    if (familyId === 'editorial_hero' || familyId === 'brand_story') {
+      // RECIPE: Editorial Hero
+      // 1 Full bleed image, 1 massive title, 1 vertical caption, 1 large page number, 1 thin divider
+      layers.push({
+        id: 'hero_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'rectangle', 
+        paddingPercent: 0,
+        anchor: 'middle_right'
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'hero_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'middle_left',
+        role: 'heading',
+        alignment: 'left',
+        maxWidthPercent: 60
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'hero_caption',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_left',
+        role: 'body',
+        alignment: 'left',
+        maxWidthPercent: 30
+      } as IDSLTextLayer);
+
+      // Distinct Composition Primitives
+      layers.push({
+        id: 'page_number',
+        type: 'decoration',
+        zIndex: 20,
+        component: 'oversized_index',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'accent_rule',
+        type: 'decoration',
+        zIndex: 25,
+        component: 'thin_divider',
+        anchor: 'bottom_left',
+        offsetPercent: 5
+      } as IDSLDecorationLayer);
+      
+    } else if (familyId === 'editorial_quote' || familyId === 'minimalist_quote') {
+      // RECIPE: Editorial Quote
+      layers.push({
+        id: 'author_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'split',
+        paddingPercent: 10,
+        anchor: 'middle_right'
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'quote_text',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'middle_left',
+        role: 'heading',
+        alignment: 'left',
+        maxWidthPercent: 40
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'quote_author',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_left',
+        role: 'tagline',
+        alignment: 'left',
+        maxWidthPercent: 40
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'quote_marks_bg',
+        type: 'decoration',
+        zIndex: 5,
+        component: 'quote_marks',
+        anchor: 'top_left',
+        offsetPercent: 5
+      } as IDSLDecorationLayer);
+      
+      layers.push({
+        id: 'texture',
+        type: 'decoration',
+        zIndex: 90,
+        component: 'grain_overlay',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+    } else if (familyId === 'editorial_informational' || familyId === 'educational') {
+      // RECIPE: Editorial Informational / Step-by-Step
+      layers.push({
+        id: 'step_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'die_cut',
+        paddingPercent: 15,
+        anchor: 'middle_right'
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'step_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'top_left',
+        role: 'heading',
+        alignment: 'left',
+        maxWidthPercent: 45
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'step_body',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'middle_left',
+        role: 'body',
+        alignment: 'left',
+        maxWidthPercent: 45
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'grid_bg',
+        type: 'decoration',
+        zIndex: 5,
+        component: 'minimal_grid',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'step_number',
+        type: 'decoration',
+        zIndex: 25,
+        component: 'metadata_label',
+        anchor: 'top_right',
+        offsetPercent: 5
+      } as IDSLDecorationLayer);
+
+    } else {
+      // Default Fallback Recipe
+      layers.push({
+        id: 'main_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'rectangle',
+        paddingPercent: 10,
+        anchor: 'center'
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'main_text',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 80
+      } as IDSLTextLayer);
+    }
+
+    return {
+      schemaVersion: '1.0',
+      layoutVersion: '1.0',
+      id: recipeId,
+      layers
+    };
   }
 }

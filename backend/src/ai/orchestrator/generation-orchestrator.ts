@@ -472,6 +472,7 @@ export class GenerationOrchestrator {
 
         // Assign directly to allow Universal Dynamic Renderer to handle new templates
         determinedGrid.layout = agentDecision.selected_layout_id;
+        (determinedGrid as any).designSpec = agentDecision.designSpec;
         console.log(`[TEMPLATE AGENT] Intelligent selection passed to rendering engine: ${determinedGrid.layout}`);
       } catch (err) {
         console.error('[Orchestrator Step 3.5 Template Agent Error]:', err);
@@ -788,11 +789,13 @@ ${consentShowFace
             serviceType: appointment?.serviceCategory ?? 'beauty treatment',
             artDirectorBrief: briefResult.slides,
             layoutType: determinedGrid.layout,
+            designSpec: (determinedGrid as any).designSpec,
             brandFont: headingFont,
             bodyFont: bodyFont,
             visualRanking: brandDNA.visualRanking ?? [],
             capitalizationRule: (brandDNA.brandDnaV2 as any)?.typography?.capitalization_rule || (brandDNA.brandDnaV2 as any)?.typography?.capitalizationRule || 'uppercase',
             footerBrandToggle: (brandDNA.brandDnaV2 as any)?.typography?.footer_brand_toggle !== false && (brandDNA.brandDnaV2 as any)?.typography?.footerBrandToggle !== false,
+            logoUrl: typeof brandDNA.logoUrl === 'string' ? brandDNA.logoUrl : undefined,
             backgroundBrandColor: brandDNA.backgroundBrandColor ?? '#F7F4EF',
             accentBrandColor: brandDNA.accentBrandColor ?? '#D4A373',
             depthBrandColor: brandDNA.depthBrandColor ?? '#1E1E1C',
@@ -860,11 +863,13 @@ ${consentShowFace
             serviceType: appointment?.serviceCategory ?? 'beauty treatment',
             artDirectorBrief: briefResult.slides,
             layoutType: determinedGrid.layout,
+            designSpec: (determinedGrid as any).designSpec,
             brandFont: headingFont,
             bodyFont: bodyFont,
             visualRanking: brandDNA.visualRanking ?? [],
             capitalizationRule: (brandDNA.brandDnaV2 as any)?.typography?.capitalization_rule || (brandDNA.brandDnaV2 as any)?.typography?.capitalizationRule || 'uppercase',
             footerBrandToggle: (brandDNA.brandDnaV2 as any)?.typography?.footer_brand_toggle !== false && (brandDNA.brandDnaV2 as any)?.typography?.footerBrandToggle !== false,
+            logoUrl: typeof brandDNA.logoUrl === 'string' ? brandDNA.logoUrl : undefined,
             backgroundBrandColor: brandDNA.backgroundBrandColor ?? '#F7F4EF',
             accentBrandColor: brandDNA.accentBrandColor ?? '#D4A373',
             depthBrandColor: brandDNA.depthBrandColor ?? '#1E1E1C',

@@ -71,7 +71,7 @@ export interface IDSLImageLayer extends IDSLBaseLayer {
 
 export interface IDSLDecorationLayer extends IDSLBaseLayer {
   type: 'decoration';
-  component: 'wax_seal' | 'ticket_notches' | 'film_sprockets' | 'gallery_frame' | 'masking_tape' | 'gold_accents' | 'glass_card' | '3d_ribbon' | 'metric_panel' | 'editorial_sidebar' | 'status_chip' | 'divider' | 'chapter_tabs' | 'measurement_lines' | 'blueprint_grid' | 'museum_border' | 'thin_divider' | 'editorial_badge';
+  component: 'wax_seal' | 'ticket_notches' | 'film_sprockets' | 'gallery_frame' | 'masking_tape' | 'gold_accents' | 'glass_card' | '3d_ribbon' | 'metric_panel' | 'editorial_sidebar' | 'status_chip' | 'divider' | 'chapter_tabs' | 'measurement_lines' | 'blueprint_grid' | 'museum_border' | 'thin_divider' | 'editorial_badge' | 'oversized_index' | 'quote_marks' | 'grain_overlay' | 'minimal_grid' | 'metadata_label';
   anchor: LayoutAnchor;
   offsetPercent: number; // distance from the anchor
 }
@@ -83,6 +83,7 @@ export interface IDSLTextLayer extends IDSLBaseLayer {
   alignment: 'left' | 'center' | 'right';
   maxWidthPercent: number; // restricts text from hitting edges
   component?: string; // Optional background decoration component (e.g. editorial_title, oversized_index, metadata_label)
+  rotation?: number; // Optional rotation in degrees (e.g. 90, -90)
 }
 
 export type IDSLSceneLayer = IDSLImageLayer | IDSLDecorationLayer | IDSLTextLayer;
@@ -119,10 +120,12 @@ export interface ISemanticDesignSpec {
   photo: {
     role: PhotoRole;
     treatment: PhotoTreatment;
+    imageExecution?: 'triptych' | 'standard';
   };
   typography: {
     hierarchy: TypographyHierarchy;
     dominance: TypographyDominance;
+    headlineTreatment?: 'experimental' | 'standard';
   };
   decorations: {
     density: DecorationDensity;

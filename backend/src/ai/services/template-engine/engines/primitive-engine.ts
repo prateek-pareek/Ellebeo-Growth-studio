@@ -283,6 +283,55 @@ export class PrimitiveEngine {
     };
 
     // ==========================================
+    // PHASE 4: EDITORIAL BEHAVIOR PRIMITIVES
+    // ==========================================
+    this.registry['striped_background'] = {
+      category: 'effects',
+      render: (ctx) => `
+        <!-- Minimal, Elegant Stripes for Visual Texture -->
+        <defs>
+          <pattern id="premiumStripes" patternUnits="userSpaceOnUse" width="10" height="10" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="10" stroke="${ctx.validBrandColor}" stroke-width="1" opacity="0.15" />
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#premiumStripes)" />
+      `
+    };
+
+    this.registry['grain_overlay'] = {
+      category: 'effects',
+      render: (ctx) => `
+        <!-- High-end film grain texture simulation -->
+        <filter id="film_grain">
+          <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch" />
+          <feColorMatrix type="matrix" values="1 0 0 0 0, 0 1 0 0 0, 0 0 1 0 0, 0 0 0 0.08 0" />
+        </filter>
+        <rect width="100%" height="100%" filter="url(#film_grain)" style="mix-blend-mode: multiply;" pointer-events="none" />
+      `
+    };
+
+    this.registry['editorial_tape'] = {
+      category: 'layout',
+      render: (ctx) => `
+        <!-- Semi-transparent masking tape holding up the image -->
+        <g transform="translate(${ctx.w / 2}, ${ctx.constraints.safeY - 10}) rotate(-3)">
+          <rect x="-60" y="-15" width="120" height="30" fill="${ctx.validBackgroundColor}" opacity="0.9" filter="drop-shadow(0 2px 4px rgba(0,0,0,0.2))" />
+          <rect x="-60" y="-15" width="120" height="30" fill="${ctx.validBrandColor}" opacity="0.1" />
+          <!-- Jagged edges -->
+          <path d="M-60 -15 L-57 -5 L-60 5 L-58 15 M60 -15 L57 -5 L60 5 L58 15" stroke="${ctx.validSecondaryColor}" stroke-width="2" fill="none" opacity="0.5" />
+        </g>
+      `
+    };
+
+    this.registry['asymmetric_block'] = {
+      category: 'layout',
+      render: (ctx) => `
+        <!-- Massive block of solid color pushing tension to the edge -->
+        <rect x="0" y="${ctx.h - 300}" width="${ctx.w * 0.85}" height="300" fill="${ctx.validSecondaryColor}" opacity="0.95" />
+      `
+    };
+
+    // ==========================================
     // INSTAGRAM COURSE & CLINIC CANVA TEMPLATES
     // ==========================================
     this.registry['desktop_monitor_mockup'] = {
@@ -385,6 +434,19 @@ export class PrimitiveEngine {
           </filter>
         </defs>
         <rect x="${ctx.constraints.safeX}" y="${ctx.constraints.safeY}" width="${ctx.w - ctx.constraints.safeX * 2}" height="${ctx.h - ctx.constraints.safeY * 2}" fill="none" filter="url(#soft_floating_shadow)" />
+      `
+    };
+
+    this.registry['shadow'] = {
+      category: 'effects',
+      render: (ctx) => `
+        <!-- Generic shadow primitive requested by some templates -->
+        <defs>
+          <filter id="generic_shadow" x="-30%" y="-30%" width="160%" height="160%">
+            <feDropShadow dx="0" dy="15" stdDeviation="20" flood-color="#000000" flood-opacity="0.20"/>
+          </filter>
+        </defs>
+        <!-- The primitive renderer creates the filter, the actual shadow is applied to other elements via filter="url(#generic_shadow)" -->
       `
     };
 
@@ -523,6 +585,57 @@ export class PrimitiveEngine {
         <line x1="0" y1="${ctx.h * 0.66}" x2="${ctx.w}" y2="${ctx.h * 0.66}" />
       </g>`
     };
+
+    this.registry['geometric_shape'] = { category: 'geometry', render: (ctx, layer) => {
+      // Renders a sleek solid geometric block for quotes or offset accents
+      const size = 160;
+      const x = layer && layer.anchor && layer.anchor.includes('right') ? ctx.w - ctx.constraints.safeX - size : ctx.constraints.safeX;
+      const y = layer && layer.anchor && layer.anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - size : ctx.constraints.safeY;
+      return `
+      <!-- Solid Geometric Accent Shape -->
+      <rect x="${x}" y="${y}" width="${size}" height="${size}" fill="${ctx.validAccentColor || ctx.validBrandColor}" opacity="0.1" />
+      <rect x="${x + 20}" y="${y + 20}" width="${size - 40}" height="${size - 40}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="2" opacity="0.2" />`;
+    }};
+
+    // CANVA-STYLE PREMIUM PRIMITIVES (Phase 3 Additions)
+    
+    this.registry['starburst_badge'] = { category: 'geometry', render: (ctx, layer) => {
+      // Draw a Canva-style 12-point starburst
+      const cx = layer && layer.anchor && layer.anchor.includes('right') ? ctx.w - ctx.constraints.safeX - 90 : ctx.constraints.safeX + 90;
+      const cy = layer && layer.anchor && layer.anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - 90 : ctx.constraints.safeY + 90;
+      let starPath = "";
+      const outerR = 60;
+      const innerR = 48;
+      const points = 12;
+      for (let i = 0; i < points * 2; i++) {
+        const radius = i % 2 === 0 ? outerR : innerR;
+        const angle = (Math.PI / points) * i;
+        const x = cx + radius * Math.sin(angle);
+        const y = cy - radius * Math.cos(angle);
+        starPath += (i === 0 ? "M " : "L ") + x + "," + y;
+      }
+      starPath += " Z";
+      
+      return `
+      <!-- Canva-style Starburst Badge -->
+      <g opacity="0.95">
+        <path d="${starPath}" fill="${ctx.validAccentColor || ctx.validBrandColor}" stroke="${ctx.validSecondaryColor}" stroke-width="3" filter="drop-shadow(0px 4px 6px rgba(0,0,0,0.25))" />
+        <circle cx="${cx}" cy="${cy}" r="${innerR - 6}" fill="none" stroke="${ctx.validSecondaryColor}" stroke-width="1" stroke-dasharray="2 4" />
+      </g>`;
+    }};
+
+    this.registry['text_pill'] = { category: 'layout', render: (ctx, layer) => {
+      // Renders a simple pill shape behind CTA text
+      const y = layer && layer.anchor && layer.anchor.includes('top') ? ctx.constraints.safeY + 20 : ctx.h - ctx.constraints.safeY - 60;
+      return `
+      <!-- Typography Pill Background -->
+      <rect x="${ctx.w / 2 - 120}" y="${y}" width="240" height="46" rx="23" fill="${ctx.validAccentColor || ctx.validBrandColor}" opacity="0.9" filter="drop-shadow(0px 2px 4px rgba(0,0,0,0.15))" />`;
+    }};
+
+    this.registry['3d_emoji'] = { category: 'effects', render: (ctx, layer) => {
+      // AI sometimes requests "3d_emoji". We map this to the starburst so it renders beautifully.
+      return this.registry['starburst_badge'].render(ctx, layer);
+    }};
   }
 
 

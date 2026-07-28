@@ -1,4 +1,15 @@
 import { ITemplateCandidate, ITemplateContext } from './interfaces';
+import * as fs from 'fs';
+import * as path from 'path';
+
+// Load layout config to resolve structural base
+const layoutConfigPath = path.join(__dirname, '../../config/layout-templates.config.json');
+let layoutConfig: any = {};
+try {
+  layoutConfig = JSON.parse(fs.readFileSync(layoutConfigPath, 'utf8'));
+} catch (e) {
+  console.warn('[RankingEngine] Failed to load layout-templates.config.json');
+}
 
 export class RankingEngine {
   /**
@@ -35,6 +46,14 @@ export class RankingEngine {
         score += 10;
       } else if (context.textLength > 100 && template.textDensity === 'medium') {
         score += 10;
+      }
+      
+      // 3b. Layout Collision Prevention (Heavy Penalty for Full-Bleed on Long Text)
+      // Check the structural base of the template
+      const familyId = template.id.split('_variant')[0];
+      const baseGeometry = layoutConfig[familyId]?.base || 'unknown';
+      if (context.textLength > 40 && (baseGeometry === 'full_bleed' || baseGeometry === 'full_bleed_duotone')) {
+        score -= 50; // Heavily penalize full-bleed for long text, forcing framed/split layouts
       }
       
       // 4. Random Jitter (Weight: +0 to +8)

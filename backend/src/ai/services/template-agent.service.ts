@@ -111,12 +111,33 @@ ${candidateSummary}
 
 INSTRUCTIONS:
 1. Select ONE layout ID from the shortlist above that flawlessly matches the Brand Aesthetic and Brief.
-2. Return strictly in valid JSON format.
+2. Formulate a 'designSpec' to inject intent. 
+   - CRITICAL: If the image is a high quality portrait, and the aesthetic allows modern layouts, set 'photo.imageExecution = "triptych"' to slice the image into 3 vertical elegant panels.
+3. Return strictly in valid JSON format.
 
 JSON SCHEMA:
 {
   "selected_layout_id": "<exact_template_id>",
-  "reasoning": "A 1-sentence explanation of why this perfectly matches the Brand DNA."
+  "reasoning": "A 1-sentence explanation of why this perfectly matches the Brand DNA.",
+  "designSpec": {
+    "composition": {
+      "hero": "image",
+      "balance": "asymmetrical",
+      "negativeSpace": "medium"
+    },
+    "photo": {
+      "role": "hero",
+      "treatment": "framed",
+      "imageExecution": "standard" // Can be "triptych" for multi-panel splits
+    },
+    "typography": {
+      "hierarchy": "editorial",
+      "dominance": "high",
+      "headlineTreatment": "standard"
+    },
+    "decorations": { "density": "medium" },
+    "style": { "mood": "premium" }
+  }
 }
 `;
 
@@ -125,7 +146,7 @@ JSON SCHEMA:
         messages: [{ role: 'system', content: systemPrompt }],
         response_format: { type: 'json_object' },
         temperature: 0.7,
-        max_tokens: 200,
+        max_tokens: 500,
       });
 
       const responseContent = response.choices[0]?.message?.content || '{}';
@@ -153,7 +174,8 @@ JSON SCHEMA:
 
       return {
         selected_layout_id: returnedLayoutId,
-        reasoning: decision.reasoning || 'Selected via Pipeline'
+        reasoning: decision.reasoning || 'Selected via Pipeline',
+        designSpec: decision.designSpec
       };
 
     } catch (err) {

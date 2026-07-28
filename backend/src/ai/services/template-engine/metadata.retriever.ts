@@ -1,92 +1,91 @@
 import { ITemplateMetadata, ITemplateRetriever, ITemplateCandidate, ITemplateContext } from './interfaces';
-import templateLibraryData from '../../config/template-library.json';
-import { DESIGN_FAMILIES } from '../../config/design-families.config';
+import compiledLayoutsData from '../../config/compiled-layouts.v2.json';
 
 export class MetadataRetriever implements ITemplateRetriever {
   private library: Record<string, any> = {};
 
   constructor() {
     try {
-      this.library = JSON.parse(JSON.stringify(templateLibraryData));
-      // Remove any internal configs like _proposed_template_agent_library
-      Object.keys(this.library).forEach(key => {
-        if (key.startsWith('_')) delete this.library[key];
-      });
+      this.library = JSON.parse(JSON.stringify(compiledLayoutsData));
     } catch (e) {
-      console.error('Failed to load template library', e);
+      console.error('Failed to load compiled layouts library', e);
     }
   }
 
   async retrieveCandidates(context: ITemplateContext): Promise<ITemplateCandidate[]> {
     const candidates: ITemplateCandidate[] = [];
 
-    // 1. Load Rigid Templates
     for (const [id, raw] of Object.entries(this.library)) {
-      const concept = raw.concept || '';
-      const visualStructure = raw.visual_structure || '';
-      const suitablePosts = raw.suitable_posts || [];
-      const category = raw.category || 'General';
-
-      const isSplit = id.includes('split') || visualStructure.toLowerCase().includes('split');
-      const isHeavyOverlay = id.includes('overlay') || visualStructure.toLowerCase().includes('overlay');
-      const macroFaceSafe = !(isSplit || isHeavyOverlay);
-
-      const requiresText = visualStructure.toLowerCase().includes('caption') || 
-                           visualStructure.toLowerCase().includes('quote') ||
-                           visualStructure.toLowerCase().includes('text box');
-
-      let textDensity: 'low' | 'medium' | 'high' = 'medium';
-      if (visualStructure.toLowerCase().includes('massive') || visualStructure.toLowerCase().includes('large text')) {
-        textDensity = 'high';
-      } else if (visualStructure.toLowerCase().includes('minimal text') || visualStructure.toLowerCase().includes('no text')) {
-        textDensity = 'low';
+      let category = 'Procedural V2 Layout';
+      let concept = 'A dynamically generated procedural layout';
+      
+      if (id.includes('editorial')) {
+        category = 'Editorial';
+        concept = 'High-end fashion and beauty layout with striking visual structure.';
+      } else if (id.includes('minimalist_quote')) {
+        category = 'Minimalist Quote';
+        concept = 'Clean, typography-focused layout with extensive negative space.';
+      } else if (id.includes('testimonial')) {
+        category = 'Testimonial';
+        concept = 'Layout designed to highlight client reviews or quotes effectively.';
+      } else if (id.includes('text_only')) {
+        category = 'Text Only';
+        concept = 'Bold typographic layout without image dependencies.';
+      } else if (id.includes('clinical_hero')) {
+        category = 'Clinical Hero';
+        concept = 'Structured layout suited for professional or before/after visual evidence.';
       }
 
-      let premiumScore = 5;
-      if (concept.toLowerCase().includes('luxury') || concept.toLowerCase().includes('premium') || concept.toLowerCase().includes('vogue')) {
-        premiumScore = 9;
-      } else if (concept.toLowerCase().includes('minimal') || concept.toLowerCase().includes('elegant')) {
-        premiumScore = 8;
+      const isSplit = id.includes('split') || id.includes('clinical_hero');
+      const macroFaceSafe = !isSplit;
+
+      const requiresText = id.includes('text_only') || id.includes('quote') || id.includes('testimonial');
+
+      let textDensity: 'low' | 'medium' | 'high' = 'medium';
+      if (id.includes('text_only') || id.includes('quote')) {
+        textDensity = 'high';
+      } else if (id.includes('editorial')) {
+        textDensity = 'low';
       }
 
       candidates.push({
         id,
         category,
         concept,
-        best_use_cases: suitablePosts,
+        best_use_cases: ['Carousel', 'Instagram Post'],
         macroFaceSafe,
         requiresText,
         supportsNoText: !requiresText,
         textDensity,
-        isCarouselOnly: id.includes('carousel_only') || suitablePosts.includes('Carousel'),
-        premiumStyleScore: premiumScore,
-        occupiedTextZones: [], // We omit logic here for brevity, assume default
-        type: 'rigid'
+        isCarouselOnly: false,
+        premiumStyleScore: 10,
+        occupiedTextZones: [],
+        type: 'rigid' // All V2 compiled layouts are fully compiled, acting as rigid structures
       });
     }
 
-    // 2. Load Procedural Design Families
-    for (const [id, family] of Object.entries(DESIGN_FAMILIES)) {
-      let richConcept = `Dynamic Layout Family: ${id.replace(/_/g, ' ')}`;
-      if (id === 'editorial_magazine') richConcept = 'Editorial Magazine Layout - Adaptive high-end layout for portraits, education, and quotes with robust typography.';
-      if (id === 'text_palette_minimal') richConcept = 'Text Palette Minimal - Solid brand color background with massive premium typography, perfect for quotes and statements.';
-      if (id === 'modern_architectural') richConcept = 'Modern Architectural - Clean, grid-based aesthetic perfect for clinical before/afters and structural content.';
-      if (id === 'soft_organic') richConcept = 'Soft Organic - Fluid, curved borders with natural aesthetic, perfect for luxury spas and wellness.';
-      
+    // PHASE 3A: Inject Semantic Composition Recipes (Procedural)
+    // These tell the Art Director that instead of a rigid layout, it can select a dynamic Composition Recipe
+    const compositionRecipes = [
+      { id: 'editorial_hero', concept: 'Massive hero headline, vertical caption, deep negative space.', type: 'procedural' },
+      { id: 'editorial_quote', concept: 'Clean split text quote, subtle grain, huge whitespace.', type: 'procedural' },
+      { id: 'editorial_informational', concept: 'Educational layout with offset image cutouts and structural grid lines.', type: 'procedural' },
+    ];
+
+    for (const recipe of compositionRecipes) {
       candidates.push({
-        id,
-        category: 'Procedural Family',
-        concept: richConcept,
-        best_use_cases: ['Carousel', 'Instagram Post', 'Story'],
-        macroFaceSafe: true, // Procedural can adapt
-        requiresText: id.includes('text_palette'),
-        supportsNoText: !id.includes('text_palette'),
-        textDensity: 'high',
+        id: recipe.id,
+        category: 'Procedural Composition',
+        concept: recipe.concept,
+        best_use_cases: ['Carousel'],
+        macroFaceSafe: true,
+        requiresText: true,
+        supportsNoText: false,
+        textDensity: 'medium',
         isCarouselOnly: false,
-        premiumStyleScore: 10, // Families are inherently premium
+        premiumStyleScore: 20, // Heavily weight Phase 3 recipes to encourage selection
         occupiedTextZones: [],
-        type: 'procedural',
-        familyConfig: family
+        type: 'procedural' as any
       });
     }
 

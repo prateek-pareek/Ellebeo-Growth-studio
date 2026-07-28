@@ -11,9 +11,10 @@
 import sharp from 'sharp';
 import layoutTemplatesConfig from './layout-templates.config.json';
 import templateLibraryData from './template-library.json';
-import compiledLayouts from './compiled-layouts.v1.json';
+import compiledLayouts from './compiled-layouts.v2.json';
 import { processPortraitFit } from '../services/ai-image-generation.service';
 import { ICompiledLayoutDSL, IDSLSceneLayer, IDSLImageLayer, IDSLDecorationLayer, IDSLTextLayer, ISemanticDesignSpec } from '../services/template-engine/interfaces';
+import { IDesignLanguage } from '../services/template-engine/engines/art-direction-engine';
 import { LayoutEngine, LayoutFamily, NegativeSpace, BoundingBox, LayoutConstraints } from '../services/template-engine/engines/layout-engine';
 import { PrimitiveEngine, PrimitiveContext } from '../services/template-engine/engines/primitive-engine';
 import { TypographyEngine, TypographyContext, TypographySystem } from '../services/template-engine/engines/typography-engine';
@@ -94,6 +95,7 @@ export type BaseCtx = {
   validBackgroundColor: string;
   downloadImageAsBuffer: (url: string) => Promise<Buffer>;
   designSpec?: ISemanticDesignSpec;
+  designLanguage?: IDesignLanguage;
 };
 
 export type BaseResult = {
@@ -169,13 +171,13 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
       const beforeBuffer = await ctx.downloadImageAsBuffer(ctx.beforePhotoUrl);
       const leftHalf = await processPortraitFit(beforeBuffer, Math.round(ctx.innerW / 2), ctx.innerH, ctx.validBackgroundColor);
       const rightHalf = await processPortraitFit(ctx.imageBuffer, Math.round(ctx.innerW / 2), ctx.innerH, ctx.validBackgroundColor);
-      const baseImage = sharp({
+      const baseImageBuffer = await sharp({
         create: { width: ctx.innerW, height: ctx.innerH, channels: 3, background: '#000000' },
       }).composite([
         { input: leftHalf, top: 0, left: 0 },
         { input: rightHalf, top: 0, left: Math.round(ctx.innerW / 2) },
-      ]);
-      return { baseImage, compositeTop: ctx.paddingTop, compositeBottom: ctx.paddingBottom, compositeLeft: ctx.paddingX, compositeRight: ctx.paddingX };
+      ]).png().toBuffer();
+      return { baseImage: sharp(baseImageBuffer), compositeTop: ctx.paddingTop, compositeBottom: ctx.paddingBottom, compositeLeft: ctx.paddingX, compositeRight: ctx.paddingX };
     } catch (err) {
       console.error('[Sharp Split Frame Error] Failed to stitch before/after images, falling back:', err);
       return borderedDefault(ctx);
@@ -207,20 +209,71 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
     let dsl = COMPILED_LAYOUTS[ctx.layoutType];
     
     // Phase 2.5: Design Compiler takes semantic intent and mutates the DSL mathematically
-    if (ctx.designSpec && dsl) {
-      dsl = designCompiler.compile(dsl, ctx.designSpec);
+    if (ctx.designLanguage && dsl) {
+      dsl = designCompiler.compile(dsl, ctx.designLanguage);
     }
 
     if (dsl && dsl.layers) {
+      const isEditorial = ctx.layoutType.includes('editorial');
       const imageLayer = dsl.layers.find(l => l.type === 'image') as IDSLImageLayer;
+      
       if (imageLayer) {
-        if (imageLayer.mask === 'split') {
+        // AI ART DIRECTION UPGRADE: Aggressive Asymmetrical Bleed
+        const isAsymmetricalBleed = ctx.designLanguage?.behavior.imageBleedExtent === 'asymmetrical_65';
+        
+        if (isAsymmetricalBleed && (!imageLayer.mask || imageLayer.mask === 'rectangle')) {
+           const splitW = Math.floor(ctx.w * (ctx.designLanguage?.intent.readingJourney === 'z_pattern' ? 0.65 : 0.35));
+           
+           // If we have face coordinates, we can try to extract a tight focal crop!
+           // For now, let's just do a sharp aggressive vertical bleed.
+           const splitPhoto = await processPortraitFit(ctx.imageBuffer, splitW, ctx.h, ctx.validBackgroundColor);
+           const leftOffset = ctx.designLanguage?.intent.readingJourney !== 'z_pattern' ? ctx.w - splitW : 0;
+           const baseImageBuffer = await sharp({
+             create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor },
+           }).composite([{ input: splitPhoto, top: 0, left: leftOffset }]).png().toBuffer();
+           
+           return { 
+             baseImage: sharp(baseImageBuffer), 
+             compositeTop: 0, 
+             compositeBottom: 0, 
+             compositeLeft: ctx.designLanguage?.intent.readingJourney === 'z_pattern' ? splitW + 40 : 40,
+             compositeRight: ctx.designLanguage?.intent.readingJourney === 'z_pattern' ? 40 : (ctx.w - splitW) + 40 
+           };
+        }
+        else if (imageLayer.mask === 'split') {
           const halfW = Math.floor(ctx.w / 2);
           const splitPhoto = await processPortraitFit(ctx.imageBuffer, halfW, ctx.h, ctx.validBackgroundColor);
-          const baseImage = sharp({
+          const baseImageBuffer = await sharp({
             create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor },
-          }).composite([{ input: splitPhoto, top: 0, left: 0 }]);
-          return { baseImage, compositeTop: ctx.paddingTop, compositeBottom: ctx.paddingBottom, compositeLeft: halfW + ctx.paddingX, compositeRight: ctx.paddingX };
+          }).composite([{ input: splitPhoto, top: 0, left: 0 }]).png().toBuffer();
+          return { baseImage: sharp(baseImageBuffer), compositeTop: ctx.paddingTop, compositeBottom: ctx.paddingBottom, compositeLeft: halfW + ctx.paddingX, compositeRight: ctx.paddingX };
+        } else if (ctx.designSpec?.photo?.imageExecution === 'triptych') {
+          // CANVA-STYLE TRIPTYCH: Split the photo into 3 distinct vertical panels
+          const panelW = Math.floor(ctx.w * 0.28);
+          const gap = Math.floor(ctx.w * 0.04);
+          const startX = Math.floor((ctx.w - (panelW * 3 + gap * 2)) / 2);
+          const panelH = Math.floor(ctx.h * 0.75);
+          const startY = Math.floor((ctx.h - panelH) / 2);
+
+          const fullPhoto = await processPortraitFit(ctx.imageBuffer, ctx.w, ctx.h, ctx.validBackgroundColor);
+          
+          const extractPanel = async (x: number) => {
+            return sharp(fullPhoto).extract({ left: x, top: startY, width: panelW, height: panelH }).toBuffer();
+          };
+
+          const p1 = await extractPanel(startX);
+          const p2 = await extractPanel(startX + panelW + gap);
+          const p3 = await extractPanel(startX + (panelW + gap) * 2);
+
+          const baseImageBuffer = await sharp({
+            create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor },
+          }).composite([
+            { input: p1, top: startY, left: startX },
+            { input: p2, top: startY, left: startX + panelW + gap },
+            { input: p3, top: startY, left: startX + (panelW + gap) * 2 },
+          ]).png().toBuffer();
+          
+          return { baseImage: sharp(baseImageBuffer), compositeTop: startY, compositeBottom: startY, compositeLeft: startX, compositeRight: startX };
         } else if (imageLayer.mask === 'circle') {
           return fullBleedBase(ctx);
         } else {
@@ -281,9 +334,28 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
             create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validBackgroundColor },
           });
 
-          const baseImage = backgroundCanvas.composite([{ input: scaledPhoto, top, left }]);
+          const baseImageBuffer = await backgroundCanvas.composite([{ input: scaledPhoto, top, left }]).png().toBuffer();
+          const baseImage = sharp(baseImageBuffer);
 
-          return { baseImage, compositeTop: ctx.paddingTop, compositeBottom: ctx.paddingBottom, compositeLeft: ctx.paddingX, compositeRight: ctx.paddingX };
+          // Canva-Level Polish: Dynamically adjust text boundaries to dodge the photo
+          let cTop = ctx.paddingTop;
+          let cBottom = ctx.paddingBottom;
+          let cLeft = ctx.paddingX;
+          let cRight = ctx.paddingX;
+          
+          const safeAnchor = imageLayer.anchor || 'center';
+
+          if (safeAnchor === 'top_center' || safeAnchor === 'top_left' || safeAnchor === 'top_right') {
+            cTop = top + targetH + 40;
+          } else if (safeAnchor === 'bottom_center' || safeAnchor === 'bottom_left' || safeAnchor === 'bottom_right') {
+            cBottom = ctx.h - top + 40;
+          } else if (safeAnchor === 'center_left') {
+            cLeft = left + targetW + 40;
+          } else if (safeAnchor === 'center_right') {
+            cRight = ctx.w - left + 40;
+          }
+
+          return { baseImage, compositeTop: cTop, compositeBottom: cBottom, compositeLeft: cLeft, compositeRight: cRight };
         }
       }
     }
@@ -379,8 +451,58 @@ export type TextCtx = {
   structuredText?: { headline?: string; subheadline?: string; cta?: string; };
 };
 
-const tspans = (ctx: TextCtx, x: string, dyFirst = 0) =>
-  ctx.escapedLines.map((line, idx) => `<tspan x="${x}" dy="${idx === 0 ? dyFirst : ctx.dyOffset}">${line}</tspan>`).join('');
+function splitTextIntoLines(text: string, maxChars: number): string[] {
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let currentLine = '';
+  for (const word of words) {
+    if ((currentLine + word).length > maxChars) {
+      if (currentLine) lines.push(currentLine.trim());
+      currentLine = word + ' ';
+    } else {
+      currentLine += word + ' ';
+    }
+  }
+  if (currentLine) lines.push(currentLine.trim());
+  return lines;
+}
+
+const tspans = (ctx: TextCtx, x: string, dyFirst = 0) => {
+  // Canva-level Typographic Hierarchy Injection
+  if (ctx.structuredText && (ctx.structuredText.headline || ctx.structuredText.subheadline)) {
+    let svg = '';
+    const headline = ctx.structuredText.headline ? ctx.escapeXml(ctx.structuredText.headline.toUpperCase()) : '';
+    const subheadline = ctx.structuredText.subheadline ? ctx.escapeXml(ctx.structuredText.subheadline) : '';
+    let currentDy = dyFirst;
+    
+    // Headline (Massive, Bold)
+    if (headline) {
+       const hLines = splitTextIntoLines(headline, 22);
+       const hSize = ctx.dynamicFontSize;
+       svg += `<tspan x="${x}" dy="${currentDy}" font-weight="800" font-family="'${ctx.brandFont}', sans-serif" font-size="${hSize}px" letter-spacing="2px">${hLines[0]}</tspan>`;
+       for (let i = 1; i < hLines.length; i++) {
+         svg += `<tspan x="${x}" dy="${Math.round(hSize * 1.2)}">${hLines[i]}</tspan>`;
+       }
+       currentDy = Math.round(hSize * 1.5); // Push subheadline down
+    }
+    
+    // Subheadline (Smaller, Lighter, Italic)
+    if (subheadline) {
+       const sLines = splitTextIntoLines(subheadline, 40);
+       const sSize = Math.round(ctx.dynamicFontSize * 0.55);
+       const fontStyle = "italic";
+       const fontWeight = "300";
+       svg += `<tspan x="${x}" dy="${currentDy}" font-weight="${fontWeight}" font-style="${fontStyle}" font-size="${sSize}px" font-family="'Georgia', serif" letter-spacing="1px">${sLines[0]}</tspan>`;
+       for (let i = 1; i < sLines.length; i++) {
+         svg += `<tspan x="${x}" dy="${Math.round(sSize * 1.4)}">${sLines[i]}</tspan>`;
+       }
+    }
+    return svg;
+  }
+  
+  // Fallback to legacy lines
+  return ctx.escapedLines.map((line, idx) => `<tspan x="${x}" dy="${idx === 0 ? dyFirst : ctx.dyOffset}">${line}</tspan>`).join('');
+};
 
 function calculateDodgedY(ctx: TextCtx, intendedY: number, textHeight: number): number {
   // ARCHITECTURE DECISION:
@@ -680,7 +802,9 @@ export type DecoCtx = {
   injectedFeatures?: string[];
   designTokens?: any;
   designSpec?: ISemanticDesignSpec;
+  designLanguage?: IDesignLanguage;
   structuredText?: { headline?: string; subheadline?: string; cta?: string; };
+  typographyMetrics?: any;
 };
 
 export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
@@ -754,9 +878,9 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     const sidePanelW = Math.round(ctx.w * 0.38);
     return `
       <!-- Photo embedded into its own panel, clean vertical divider against the solid side panel -->
-      <defs><clipPath id="sidePhotoClip"><rect x="${sidePanelW}" y="0" width="${ctx.w - sidePanelW}" height="${ctx.h}" /></clipPath></defs>
-      <image href="${ctx.photoDataUri}" x="${sidePanelW}" y="0" width="${ctx.w - sidePanelW}" height="${ctx.h}" preserveAspectRatio="xMidYMid slice" clip-path="url(#sidePhotoClip)" />
-      <rect x="${sidePanelW - 2}" y="0" width="4" height="${ctx.h}" fill="${ctx.validBrandColor}" fill-opacity="0.5" />`;
+      <defs><clipPath id="sidePhotoClip"><rect x="${ctx.w - sidePanelW}" y="0" width="${sidePanelW}" height="${ctx.h}" /></clipPath></defs>
+      <image href="${ctx.photoDataUri}" x="${ctx.w - sidePanelW}" y="0" width="${sidePanelW}" height="${ctx.h}" preserveAspectRatio="xMidYMid slice" clip-path="url(#sidePhotoClip)" />
+      <rect x="${ctx.w - sidePanelW - 2}" y="0" width="4" height="${ctx.h}" fill="${ctx.validBrandColor}" fill-opacity="0.5" />`;
   },
 
   universal_dynamic_deco: (ctx) => {
@@ -765,6 +889,11 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     // Phase 2.5: Design Compiler mutates text widths and alignments based on semantic intent
     if (ctx.designSpec && dsl) {
       dsl = designCompiler.compile(dsl, ctx.designSpec);
+    }
+    
+    // Compile DSL rules dynamically based on semantic intent
+    if (ctx.designLanguage) {
+      dsl = designCompiler.compile(dsl, ctx.designLanguage);
     }
 
     if (!dsl || !dsl.layers) return '';
@@ -787,18 +916,8 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     // For now, we inject the definitions. Later, we can apply the overlay at the end.
     const overlayLayers = dsl.layers.filter(l => l.type === 'decoration' || l.type === 'text' || (l.type === 'image' && l.component));
     
-    // Inject dynamic features from CompositionEngine
-    if (ctx.injectedFeatures && ctx.injectedFeatures.length > 0) {
-      ctx.injectedFeatures.forEach((feature, idx) => {
-        overlayLayers.push({
-          id: `injected_${feature}_${idx}`,
-          type: 'decoration',
-          component: feature,
-          zIndex: 100 + idx, // Ensure it stays on top of base layers
-          constraints: {}
-        } as unknown as IDSLDecorationLayer);
-      });
-    }
+    // PHASE 3A: We have removed the random 'injectedFeatures' block.
+    // Decorations are now STRICTLY dictated by the Composition Recipe DSL.
     
     overlayLayers.sort((a, b) => a.zIndex - b.zIndex);
 
@@ -807,9 +926,21 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     if (ctx.layoutType?.includes('editorial') || ctx.layoutType?.includes('magazine')) family = 'editorial';
     if (ctx.layoutType?.includes('architectural') || ctx.layoutType?.includes('diagram') || ctx.layoutType?.includes('grid')) family = 'architectural';
     
-    // We pass undefined for faceBox since visionResult currently yields { eyesYPercent } not BoundingBox
-    const layoutEngine = new LayoutEngine(ctx.w, ctx.h, undefined);
-    const constraints = layoutEngine.calculateConstraints(family, 'balanced');
+    // Construct an estimated face BoundingBox from the vision result's Y coordinates
+    let faceBox: BoundingBox | undefined = undefined;
+    if (ctx.faceCoordinates && ctx.faceCoordinates.eyesYPercent) {
+      const faceY = Math.round(ctx.h * (ctx.faceCoordinates.eyesYPercent / 100));
+      // Assume face occupies roughly 60% of the canvas height and 50% of the width (centered)
+      const faceHeight = Math.round(ctx.h * 0.60);
+      const faceWidth = Math.round(ctx.w * 0.50);
+      const faceX = Math.round((ctx.w - faceWidth) / 2);
+      faceBox = { x: faceX, y: Math.max(0, faceY - 60), width: faceWidth, height: faceHeight };
+    }
+
+    const layoutEngine = new LayoutEngine(ctx.w, ctx.h, faceBox);
+    const isTensionEnabled = family === 'editorial';
+    const behaviorProfile = (dsl as any)?.behavior;
+    const constraints = layoutEngine.calculateConstraints(family, 'balanced', isTensionEnabled, behaviorProfile);
 
     const primitiveCtx: PrimitiveContext = {
       w: ctx.w,
@@ -836,6 +967,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
         
         const renderedPrimitive = primitiveEngine.renderPrimitive(componentName, primitiveCtx, layer as IDSLDecorationLayer);
         if (renderedPrimitive) {
+          console.log(`[Renderer Sprint] SUCCESS: Applied primitive decoration '${componentName}' to layout.`);
           svg += renderedPrimitive;
         } else {
           // Strict Validation: Unknown components fail loudly
@@ -855,6 +987,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
         if (imageLayer.component) {
           const renderedPrimitive = primitiveEngine.renderPrimitive(imageLayer.component, primitiveCtx, imageLayer);
           if (renderedPrimitive) {
+            console.log(`[Renderer Sprint] SUCCESS: Applied primitive image component '${imageLayer.component}' to layout.`);
             svg += renderedPrimitive;
           } else {
             console.error(`[Renderer Sprint] CRITICAL ERROR: Image Component '${imageLayer.component}' not found in PrimitiveEngine!`);
@@ -905,11 +1038,12 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           constraints,
           layoutEngine,
           designTokens: ctx.designTokens,
+          typographyMetrics: ctx.typographyMetrics,
           escapeXml: (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
         };
-        let typoSystem: TypographySystem = 'minimal';
-        if (family === 'editorial') typoSystem = 'editorial';
-        if (family === 'architectural') typoSystem = 'technical';
+        // TEMPORARY OVERRIDE: Force all V2 layouts to use the 'editorial' typography system 
+        // to guarantee semantic text chunking and rich blend modes are applied.
+        let typoSystem: TypographySystem = 'editorial';
         
         svg += typographyEngine.renderTextLayer(typoCtx, textLayer, typoSystem);
         

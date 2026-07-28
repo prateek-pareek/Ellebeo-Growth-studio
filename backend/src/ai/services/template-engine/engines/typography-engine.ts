@@ -1,6 +1,7 @@
 import { IDSLTextLayer } from '../interfaces';
 import { LayoutConstraints, LayoutEngine } from './layout-engine';
 import { DesignTokens } from './theme-engine';
+import { FontRegistry } from '../font-registry';
 
 export interface TypographyContext {
   w: number;
@@ -17,11 +18,27 @@ export interface TypographyContext {
   constraints: LayoutConstraints;
   layoutEngine: LayoutEngine;
   designTokens?: DesignTokens;
+  typographyMetrics?: {
+    heroSize: number;
+    primarySize: number;
+    secondarySize: number;
+    bodySize: number;
+    metadataSize: number;
+    heroLineHeight: number;
+    bodyLineHeight: number;
+    heroTracking: string;
+    metadataTracking: string;
+  };
 }
 
 export type TypographySystem = 'editorial' | 'technical' | 'minimal';
 
 export class TypographyEngine {
+  private fontRegistry: FontRegistry;
+
+  constructor() {
+    this.fontRegistry = new FontRegistry();
+  }
   
   /**
    * Main text rendering entry point that handles wrapping, styling, and safe-zone collision
@@ -32,6 +49,7 @@ export class TypographyEngine {
 
     // Map text layer ID to structured text fields if available
     let rawText = ctx.overlayText || '';
+
     if (ctx.structuredText) {
       if (layer.id === 'headline' && ctx.structuredText.headline) rawText = ctx.structuredText.headline;
       else if (layer.id === 'subheadline' && ctx.structuredText.subheadline) rawText = ctx.structuredText.subheadline;
@@ -44,35 +62,88 @@ export class TypographyEngine {
 
     if (!rawText) return ''; // Skip rendering if text is empty for this layer
 
-    // 2. Line Wrapping
-    const escapedLines = this.wrapText(rawText, style.fontSize, layer, ctx, system);
-    const lineHeight = layer.role === 'heading' ? Math.round(style.fontSize * 1.18) : layer.role === 'tagline' || layer.role === 'footnote' ? 26 : Math.round(style.fontSize * 1.35);
+    // 2. Line Wrapping & Semantic Chunking
+    let heroWord = '';
+    let remainingText = '';
+    const isHeroHeading = layer.role === 'heading';
+    const isIntenseHierarchy = isHeroHeading && style.fontSize > 110 && system === 'editorial';
+
+    if (isIntenseHierarchy && rawText.includes(' ')) {
+      const words = rawText.split(/\s+/);
+      heroWord = words[0];
+      remainingText = words.slice(1).join(' ');
+    }
+
+    const textToWrap = isIntenseHierarchy ? heroWord : rawText;
+    const escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, system);
+    let lineHeight = Math.round(style.fontSize * 1.35);
+    
+    if ((layer as any).lineHeight !== undefined) {
+      lineHeight = Math.round(style.fontSize * (layer as any).lineHeight);
+    } else if (layer.role === 'heading') {
+      lineHeight = Math.round(style.fontSize * (ctx.typographyMetrics?.heroLineHeight || 1.18));
+    } else if (layer.role === 'body') {
+      lineHeight = Math.round(style.fontSize * (ctx.typographyMetrics?.bodyLineHeight || 1.35));
+    } else if (layer.role === 'tagline' || layer.role === 'footnote') {
+      lineHeight = 26;
+    }
+    
     const textHeightGuess = escapedLines.length * lineHeight;
 
-    // 3. Resolve Coordinates via Layout Engine
-    const anchorResult = ctx.layoutEngine.resolveAnchor(layer.anchor, 0, textHeightGuess, ctx.constraints);
-    let x = anchorResult.x;
-    let y = anchorResult.y;
+    // 3. Pre-resolve X and alignment to get accurate bounding box for collision detection
+    let anchor = 'start';
+    if (layer.alignment === 'center' || layer.anchor.includes('center')) anchor = 'middle';
+    if (layer.alignment === 'right' || layer.anchor.includes('right')) anchor = 'end';
+    if (layer.alignment === 'left' || layer.anchor.includes('left')) anchor = 'start';
+    
+    // Explicit override
+    if (layer.alignment === 'center') anchor = 'middle';
+    if (layer.alignment === 'right') anchor = 'end';
+    if (layer.alignment === 'left') anchor = 'start';
 
-    if (layer.anchor.includes('center') && ctx.faceCoordinates) {
-      y = ctx.layoutEngine.resolveFaceCollision({ x, y, width: 0, height: textHeightGuess }, ctx.constraints);
+    const baseAnchorResult = ctx.layoutEngine.resolveAnchor(layer.anchor, 0, textHeightGuess, ctx.constraints);
+    let x = baseAnchorResult.x;
+    let y = baseAnchorResult.y;
+
+    let layerMaxWidth = ctx.constraints.contentMaxWidth;
+    const layerObj = layer as any;
+    if (layerObj.maxWidthPercent) layerMaxWidth = Math.round(ctx.w * (layerObj.maxWidthPercent / 100));
+    const maxW = Math.min(layerMaxWidth, ctx.constraints.contentMaxWidth);
+
+    if (anchor === 'middle') {
+      if (layer.anchor.includes('left')) x = ctx.constraints.safeX + maxW / 2;
+      else if (layer.anchor.includes('right')) x = ctx.w - ctx.constraints.safeX - maxW / 2;
+      else x = ctx.w / 2;
+    } else if (anchor === 'end') {
+      if (layer.anchor.includes('left')) x = ctx.constraints.safeX + maxW;
+      else if (layer.anchor === 'center') x = ctx.w / 2 + maxW / 2;
+      else x = ctx.w - ctx.constraints.safeX;
+    } else if (anchor === 'start') {
+      if (layer.anchor === 'center') x = ctx.w / 2 - maxW / 2;
+    }
+
+    // 4. Strict Face Collision Dodging (Client Trust Rule)
+    // We compute the true visual bounding box of the text to ensure it NEVER covers the detected face.
+    if (ctx.faceCoordinates) {
+      let boxX = x;
+      if (anchor === 'middle') boxX = x - maxW / 2;
+      else if (anchor === 'end') boxX = x - maxW;
+
+      // EDITORIAL UPGRADE: If the headline is massive and system is editorial, we allow it to act as a background element (opacity < 0.2)
+      // and NOT run away from the face, because it creates visual tension. 
+      // But if it's solid text (opacity > 0.5), it MUST avoid the face.
+      const isBackgroundText = system === 'editorial' && layer.role === 'heading' && style.fill.includes('opacity'); 
+      
+      if (!isBackgroundText) {
+        const textBBox = { x: boxX, y, width: maxW, height: textHeightGuess };
+        y = ctx.layoutEngine.resolveFaceCollision(textBBox, ctx.constraints);
+      }
     }
 
     // Bounds checking to prevent text from clipping off the bottom
     if (y + textHeightGuess > ctx.h - 40) {
       y = ctx.h - textHeightGuess - 40;
     }
-
-    // 4. Resolve Alignment
-    let anchor = 'start';
-    if (layer.alignment === 'center' || layer.anchor.includes('center')) anchor = 'middle';
-    if (layer.alignment === 'right' || layer.anchor.includes('right')) anchor = 'end';
-    if (layer.alignment === 'left' || layer.anchor.includes('left')) anchor = 'start';
-
-    // Explicit override
-    if (layer.alignment === 'center') anchor = 'middle';
-    if (layer.alignment === 'right') anchor = 'end';
-    if (layer.alignment === 'left') anchor = 'start';
     
     // OPTICAL BALANCE: Mathematical centering looks too low to the human eye. 
     // Shift slightly upwards (-12px) when text is centered to make it feel premium.
@@ -81,20 +152,50 @@ export class TypographyEngine {
     }
 
     // 5. Generate SVG
-    const mixFonts = system === 'editorial' && layer.role === 'heading' && escapedLines.length > 1;
-
     const content = escapedLines.map((line: string, idx: number) => {
       let tspanStyle = '';
-      if (mixFonts && idx === 0) {
-         tspanStyle = `font-family: 'Playfair Display', Georgia, serif; font-style: italic; font-weight: 300; font-size: ${style.fontSize * 1.1}px; text-transform: lowercase;`;
-      }
-      // CRITICAL FIX: Only apply `x` if we are absolutely anchored left/right, else inherit safely. Actually, applying `x` to tspan with text-anchor='middle' forces the center of EVERY line to align at X, which pushes long lines off canvas if X is small!
-      // By using x="${x}", we explicitly force every line to start/center at X. If X is safeX (60), and text is middle, it pushes left.
-      // We will keep x="${x}" but ensure text-anchor is CORRECT.
-      return `<tspan x="${x}" dy="${idx === 0 ? 0 : lineHeight}" style="${tspanStyle}">${line}</tspan>`;
+      let currentLineHeight = lineHeight;
+      return `<tspan x="${x}" dy="${idx === 0 ? 0 : currentLineHeight}" style="${tspanStyle}">${line}</tspan>`;
     }).join('');
 
-    return `<text x="${x}" y="${y}" text-anchor="${anchor}" class="overlay-text" style="font-family: '${ctx.brandFont}', sans-serif; font-size: ${style.fontSize}px; fill: ${style.fill}; font-weight: ${style.fontWeight}; font-style: ${style.fontStyle}; letter-spacing: ${style.letterSpacing};" filter="url(#premium_shadow)">${content}</text>`;
+    let strokeAddition = '';
+    const fontBehavior = this.fontRegistry.getBehavior(ctx.brandFont);
+    if (layer.role === 'heading' && fontBehavior.requiresFauxStrokeForDominance) {
+      strokeAddition = ` stroke="${style.fill}" stroke-width="2" stroke-linejoin="round" `;
+    }
+
+    let transformStr = '';
+    if (layer.rotation) {
+      transformStr = ` transform="rotate(${layer.rotation} ${x} ${y})"`;
+    }
+
+    let opacityStr = '';
+    if ((layer as any).opacity !== undefined) {
+      opacityStr = ` opacity="${(layer as any).opacity}"`;
+    }
+
+    let blendModeStr = '';
+    if (isIntenseHierarchy && system === 'editorial') {
+      blendModeStr = ` mix-blend-mode: exclusion;`;
+    }
+
+    let resultSvg = `<text x="${x}" y="${y}" text-anchor="${anchor}" class="overlay-text" style="font-family: '${ctx.brandFont}', sans-serif; font-size: ${style.fontSize}px; fill: ${style.fill}; font-weight: ${style.fontWeight}; font-style: ${style.fontStyle}; letter-spacing: ${style.letterSpacing};${blendModeStr}" filter="url(#premium_shadow)"${strokeAddition}${transformStr}${opacityStr}>${content}</text>`;
+
+    // Render the semantic secondary chunk
+    if (isIntenseHierarchy && remainingText) {
+      const subSize = Math.max(16, Math.round(style.fontSize * 0.15));
+      const subLineHeight = Math.round(subSize * 1.4);
+      const subLines = this.wrapText(remainingText, subSize, layer, ctx, system);
+      
+      const subContent = subLines.map((line: string, idx: number) => {
+        return `<tspan x="${x}" dy="${idx === 0 ? 0 : subLineHeight}">${line}</tspan>`;
+      }).join('');
+      
+      const subY = y + lineHeight * escapedLines.length + 20; // 20px gap
+      resultSvg += `\n<text x="${x}" y="${subY}" text-anchor="${anchor}" style="font-family: 'Inter', system-ui, sans-serif; font-size: ${subSize}px; fill: ${style.fill}; font-weight: 400; letter-spacing: 2px;" opacity="0.8"${transformStr}>${subContent}</text>`;
+    }
+
+    return resultSvg;
   }
 
   /**
@@ -108,31 +209,50 @@ export class TypographyEngine {
     let fill = ctx.dynamicTextColor;
     let letterSpacing = 'normal';
 
+    const fontBehavior = this.fontRegistry.getBehavior(ctx.brandFont);
+
     // 1. DSL Layer Direct Property Overrides (if defined)
     const layerObj = layer as any;
     if (layerObj.fontSize) {
       fontSize = layerObj.fontSize;
     } else if (layerObj.scale) {
       fontSize = Math.round(ctx.w * layerObj.scale);
-    } else if (role === 'heading') {
-      fontSize = Math.max(72, Math.round(ctx.dynamicFontSize * 1.25));
-      fontWeight = '800';
-      letterSpacing = '-0.02em';
-    } else if (role === 'tagline' || role === 'footnote') {
-      fontSize = Math.max(16, Math.round(ctx.dynamicFontSize * 0.7));
-      letterSpacing = '0.15em'; // Upgraded from 0.08em for premium feel
-      fill = ctx.validSecondaryColor || ctx.dynamicTextColor;
-    } else if (role === 'body') {
-      fontSize = Math.max(18, Math.round(ctx.dynamicFontSize * 0.8));
-      fontWeight = '400';
+    } 
+    
+    if (layerObj.tracking !== undefined) {
+      letterSpacing = `${layerObj.tracking}em`;
+    }
+    
+    if (!layerObj.fontSize && !layerObj.scale) {
+      if (role === 'heading') {
+        fontSize = ctx.typographyMetrics ? ctx.typographyMetrics.heroSize : Math.max(72, Math.round(ctx.dynamicFontSize * 1.25));
+        fontWeight = Math.min(800, fontBehavior.maxWeight).toString();
+        letterSpacing = ctx.typographyMetrics ? ctx.typographyMetrics.heroTracking : `${fontBehavior.headlineTracking}em`;
+      } else if (role === 'tagline' || role === 'footnote') {
+        fontSize = ctx.typographyMetrics ? ctx.typographyMetrics.metadataSize : Math.max(16, Math.round(ctx.dynamicFontSize * 0.7));
+        letterSpacing = ctx.typographyMetrics ? ctx.typographyMetrics.metadataTracking : `${fontBehavior.taglineTracking}em`; 
+        fill = ctx.validSecondaryColor || ctx.dynamicTextColor;
+      } else if (role === 'body') {
+        fontSize = ctx.typographyMetrics ? ctx.typographyMetrics.bodySize : Math.max(18, Math.round(ctx.dynamicFontSize * 0.8));
+        fontWeight = '400';
+      }
     }
 
     if (system === 'editorial' && role === 'heading') {
-      fontWeight = '900';
-      letterSpacing = '-0.03em';
+      // EDITORIAL UPGRADE: Massive scale and extreme weight contrast
+      fontSize = Math.max(140, Math.round(fontSize * 1.8)); // Huge scaling
+      fontWeight = '900'; // Maximum visual weight
+      letterSpacing = '-0.04em'; // Tight tracking for tension
+      
+      // If the text is really long, we might need to compress it slightly
+    } else if (system === 'editorial' && role === 'tagline') {
+      fontSize = 12; // Tiny metadata for contrast
+      fontWeight = '300';
+      letterSpacing = '0.3em'; // Wide tracking
+      fill = ctx.validSecondaryColor || ctx.dynamicTextColor;
     } else if (system === 'technical') {
       if (role === 'heading') {
-        fontWeight = '800';
+        fontWeight = Math.min(800, fontBehavior.maxWeight).toString();
         letterSpacing = '0.04em';
       } else if (role === 'tagline' || role === 'footnote') {
         letterSpacing = '0.2em';
@@ -166,7 +286,17 @@ export class TypographyEngine {
     }
 
     const maxAvailableWidth = Math.min(layerMaxWidth, ctx.constraints.contentMaxWidth);
-    const maxCharsPerLine = Math.max(10, Math.floor(maxAvailableWidth / estimatedCharWidth));
+    let maxCharsPerLine = Math.max(10, Math.floor(maxAvailableWidth / estimatedCharWidth));
+    
+    // BEHAVIORAL DESIGN: Dominance Stacking
+    // Premium editorial design forces massive headlines to stack vertically rather than stretch wide.
+    if (layer.role === 'heading') {
+      if (system === 'editorial') {
+        maxCharsPerLine = 12; // Extremely tight word wrap for tall, blocky editorial text
+      } else if (fontSize >= 80) {
+        maxCharsPerLine = 18;
+      }
+    }
     
     const words = text.split(/\s+/);
     const smartLines: string[] = [];
@@ -192,8 +322,16 @@ export class TypographyEngine {
     const esc = ctx.escapeXml || defaultEscape;
     
     return smartLines.map(line => {
-      if (system === 'editorial') return esc(line);
-      return esc(line.toUpperCase() !== line ? line.toUpperCase() : line);
+      let transformed = line;
+      if ((layer as any).capitalizationRule === 'force_uppercase') {
+        transformed = line.toUpperCase();
+      } else if ((layer as any).capitalizationRule === 'force_lowercase') {
+        transformed = line.toLowerCase();
+      } else if (system !== 'editorial') {
+        // legacy behavior
+        transformed = line.toUpperCase() !== line ? line.toUpperCase() : line;
+      }
+      return esc(transformed);
     });
   }
 
