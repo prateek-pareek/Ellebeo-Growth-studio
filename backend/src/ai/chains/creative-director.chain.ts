@@ -59,6 +59,7 @@ DESIGN RULES (non-negotiable):
 2. The real photo is the hero — do NOT tell the generator to draw cartoon characters, clipart, or replace real background details.
 3. Every slide must have a designated layoutType, panelHexColor, borderHexColor, and textPosition.
 4. Keep overlays minimal and high-contrast. Use white or the Accent/Background hex for text, and Primary/Secondary/Depth hex for panels.
+5. EXTREMELY CRITICAL: NEVER invent, hallucinate, or alter hex codes. You MUST pick EXACTLY one of the 5 hex codes provided above. Returning a different hex code will crash the system.
 
 Return a JSON array of slide design briefs.`;
 

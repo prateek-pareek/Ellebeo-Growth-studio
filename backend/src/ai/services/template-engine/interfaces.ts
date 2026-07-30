@@ -17,6 +17,18 @@ export interface ITemplateMetadata {
   isCarouselOnly: boolean;
   premiumStyleScore: number; // 1-10
   occupiedTextZones: BoundingBox[]; // Used for collision avoidance
+  
+  // HYBRID ARCHITECTURE FIELDS
+  type: 'rigid' | 'procedural'; // Rigid = fixed compiled layout. Procedural = generated via Design Family.
+  familyConfig?: IDesignFamily; // Only present if type === 'procedural'
+}
+
+export interface IDesignFamily {
+  id: string;
+  allowedBackgrounds: string[];
+  allowedMasks: string[];
+  allowedDecorations: string[];
+  typographySystems: string[];
 }
 
 export interface ITemplateCandidate extends ITemplateMetadata {
@@ -33,28 +45,38 @@ export interface ITemplateContext {
   slideIndex: number;
   totalSlides: number;
   visionResult?: any;
+  templateIntent?: 'educational' | 'promotion' | 'testimonial' | 'before_after' | 'brand_story';
+  visualRanking?: string[];
+  activeTheme?: string;
 }
 
 export interface ITemplateRetriever {
   retrieveCandidates(context: ITemplateContext): Promise<ITemplateCandidate[]>;
 }
 
-export type LayoutAnchor = 'center' | 'top_left' | 'top_right' | 'top_center' | 'bottom_left' | 'bottom_right' | 'bottom_center' | 'bottom_edge' | 'corners' | 'edges' | 'middle_left' | 'middle_right';
+export type LayoutAnchor = 'center' | 'top_left' | 'top_right' | 'top_center' | 'bottom_left' | 'bottom_right' | 'bottom_center' | 'bottom_edge' | 'corners' | 'edges' | 'middle_left' | 'middle_right' | 'center_left' | 'center_right';
 
 export interface IDSLBaseLayer {
   id: string; // e.g., "hero-image", "main-heading"
   zIndex: number; // explicit render order (e.g., 10, 20, 30)
+  allowedAnchors?: LayoutAnchor[]; // Used for layout variation picking by the optimizer
+  attachTo?: string; // ID of another layer to relatively position against
+  attachPosition?: 'top' | 'bottom' | 'left' | 'right' | 'center' | 'overlap';
+  attachOffset?: number; // pixel offset from the attached position
+  allocatedBox?: { x: number; y: number; width: number; height: number; }; // allocated by CompositionOptimizer
 }
 
 export interface IDSLImageLayer extends IDSLBaseLayer {
   type: 'image';
   mask: 'rectangle' | 'circle' | 'arch' | 'die_cut' | 'split' | 'polaroid';
   paddingPercent: number; // e.g., 0 for full-bleed, 10 for inset
+  anchor?: LayoutAnchor; // Used for corner positioning
+  component?: string; // Optional device frame component (e.g. desktop_monitor_mockup, tablet_device_mockup)
 }
 
 export interface IDSLDecorationLayer extends IDSLBaseLayer {
   type: 'decoration';
-  component: 'wax_seal' | 'ticket_notches' | 'film_sprockets' | 'gallery_frame' | 'masking_tape' | 'gold_accents' | 'glass_card' | '3d_ribbon' | 'metric_panel' | 'editorial_sidebar' | 'status_chip' | 'divider' | 'chapter_tabs';
+  component: 'wax_seal' | 'ticket_notches' | 'film_sprockets' | 'gallery_frame' | 'masking_tape' | 'gold_accents' | 'glass_card' | '3d_ribbon' | 'metric_panel' | 'editorial_sidebar' | 'status_chip' | 'divider' | 'chapter_tabs' | 'measurement_lines' | 'blueprint_grid' | 'museum_border' | 'thin_divider' | 'editorial_badge' | 'oversized_index' | 'quote_marks' | 'grain_overlay' | 'minimal_grid' | 'metadata_label' | 'ghost_headline' | 'outline_headline' | 'vertical_label' | 'running_header' | 'pull_quote' | 'organic_blob' | 'torn_paper' | 'pill_tag' | 'double_divider' | 'margin_rule' | 'accent_rule' | 'noise_texture' | 'paper_texture' | 'light_leak' | 'organic_accent' | 'structural_border' | 'handmade_mark' | 'margin_notes' | 'ink_stamp' | 'fold_line' | 'editorial_number_block' | 'corner_frame' | 'clinical_callout_box' | 'step_badge' | 'metric_label' | 'large_numeral_bullet' | 'myth_fact_badge' | 'quote_mark_accent' | 'meteor_shower' | 'elegant_line_art' | 'premium_stars' | 'abstract_rings';
   anchor: LayoutAnchor;
   offsetPercent: number; // distance from the anchor
 }
@@ -65,6 +87,8 @@ export interface IDSLTextLayer extends IDSLBaseLayer {
   anchor: LayoutAnchor;
   alignment: 'left' | 'center' | 'right';
   maxWidthPercent: number; // restricts text from hitting edges
+  component?: string; // Optional background decoration component (e.g. editorial_title, oversized_index, metadata_label)
+  rotation?: number; // Optional rotation in degrees (e.g. 90, -90)
 }
 
 export type IDSLSceneLayer = IDSLImageLayer | IDSLDecorationLayer | IDSLTextLayer;
@@ -74,4 +98,68 @@ export interface ICompiledLayoutDSL {
   layoutVersion: "1.0";
   id: string; // e.g. "wax_seal_emblem"
   layers: IDSLSceneLayer[]; // Scene Graph approach
+  canvasRegions?: {
+    imageRegion: { x: number; y: number; width: number; height: number };
+    textRegion: { x: number; y: number; width: number; height: number };
+  };
 }
+
+// ============================================================================
+// PHASE 2: SEMANTIC DESIGN SPECIFICATION CONTRACT
+// ============================================================================
+
+export type CompositionHero = 'headline' | 'image' | 'badge' | 'balanced';
+export type CompositionBalance = 'symmetrical' | 'asymmetrical';
+export type NegativeSpace = 'minimal' | 'medium' | 'large' | 'massive';
+
+export type PhotoRole = 'hero' | 'supporting' | 'background' | 'texture';
+export type PhotoTreatment = 'full_bleed' | 'framed' | 'die_cut' | 'floating';
+
+export type TypographyHierarchy = 'editorial' | 'minimal' | 'bold' | 'technical';
+export type TypographyDominance = 'low' | 'medium' | 'high';
+
+export type DecorationDensity = 'none' | 'low' | 'medium' | 'high';
+
+export interface ISemanticDesignSpec {
+  composition: {
+    hero: CompositionHero;
+    balance: CompositionBalance;
+    negativeSpace: NegativeSpace;
+  };
+  photo: {
+    role: PhotoRole;
+    treatment: PhotoTreatment;
+    imageExecution?: 'triptych' | 'standard';
+  };
+  typography: {
+    hierarchy: TypographyHierarchy;
+    dominance: TypographyDominance;
+    headlineTreatment?: 'experimental' | 'standard';
+  };
+  decorations: {
+    density: DecorationDensity;
+  };
+  style: {
+    mood: string;
+  };
+}
+
+export interface ILayoutRegion {
+  id: string; // The layer ID (e.g., 'main-heading')
+  role: string; // The layer role (e.g., 'heading', 'ghost_headline')
+  x: number; // Absolute X coordinate of the top-left corner
+  y: number; // Absolute Y coordinate of the top-left corner
+  width: number; // Width of the bounding box
+  height: number; // Height of the bounding box
+  baseline?: number; // Absolute Y coordinate of the text baseline
+  fontSize?: number; // The actual rendered font size
+  lineHeight?: number; // The actual rendered line height
+  zIndex: number; // The render order depth
+  visualWeight?: string; // e.g., '900', 'bold', 'light'
+  opticalCenter?: { x: number; y: number }; // The perceptual center (ignoring ascenders/descenders)
+}
+
+export interface ILayoutState {
+  occupiedRegions: ILayoutRegion[];
+}
+

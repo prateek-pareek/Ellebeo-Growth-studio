@@ -17,15 +17,25 @@ interface MoodboardAnalysisResult {
 }
 
 export async function downloadImageAsBuffer(url: string): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const protocol = url.startsWith('https') ? https : http;
-    protocol.get(url, (res) => {
-      const chunks: Buffer[] = [];
-      res.on('data', (chunk) => chunks.push(chunk));
-      res.on('end', () => resolve(Buffer.concat(chunks)));
-      res.on('error', reject);
-    }).on('error', reject);
-  });
+  if (!url.startsWith('http')) {
+    try {
+      const fs = require('fs');
+      return await fs.promises.readFile(url);
+    } catch (err) {
+      throw new Error(`Failed to read local file ${url}: ${err}`);
+    }
+  }
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  } catch (err) {
+    throw new Error(`Failed to download image from ${url}: ${err}`);
+  }
 }
 
 function fileToGenerativePart(buffer: Buffer, mimeType: string) {

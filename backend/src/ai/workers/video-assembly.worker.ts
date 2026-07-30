@@ -17,8 +17,7 @@ const bullMQConnection = {
   tls: process.env['REDIS_TLS'] === 'true' ? {} : undefined,
 };
 
-export function startVideoAssemblyWorker(): Worker<VideoAssemblyJobPayload> {
-  const prisma = new PrismaClient();
+export function startVideoAssemblyWorker(prisma: PrismaClient): Worker<VideoAssemblyJobPayload> {
   const reelAssembler = new ReelAssemblerService(prisma);
 
   const worker = new Worker<VideoAssemblyJobPayload>(
@@ -86,15 +85,14 @@ export function startVideoAssemblyWorker(): Worker<VideoAssemblyJobPayload> {
     if (!job) return;
 
     // Mark ONLY reel_status as failed — caption and image remain valid
-    const prismaInstance = new PrismaClient();
     try {
-      await prismaInstance.$executeRaw`
+      await prisma.$executeRaw`
         UPDATE content_items
         SET reel_status = 'failed', updated_at = NOW()
         WHERE content_item_id = ${job.data.contentItemId}::uuid
       `;
-    } finally {
-      await prismaInstance.$disconnect();
+    } catch (logErr) {
+      console.error('[Video Assembly Worker] Failed to update content item status:', logErr);
     }
   });
 
@@ -106,5 +104,6 @@ export function startVideoAssemblyWorker(): Worker<VideoAssemblyJobPayload> {
 
 // Start automatically when run as a standalone process (dedicated worker container).
 if (require.main === module) {
-  startVideoAssemblyWorker();
+  const prismaInstance = new PrismaClient();
+  startVideoAssemblyWorker(prismaInstance);
 }
