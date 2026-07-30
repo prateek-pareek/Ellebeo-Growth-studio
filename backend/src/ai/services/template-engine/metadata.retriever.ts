@@ -48,6 +48,8 @@ export class MetadataRetriever implements ITemplateRetriever {
         textDensity = 'low';
       }
 
+      // We keep the legacy rigid layouts active as they provide the 266 base templates.
+
       candidates.push({
         id,
         category,
@@ -66,13 +68,30 @@ export class MetadataRetriever implements ITemplateRetriever {
 
     // PHASE 3A: Inject Semantic Composition Recipes (Procedural)
     // These tell the Art Director that instead of a rigid layout, it can select a dynamic Composition Recipe
-    const compositionRecipes = [
+    let compositionRecipes = [
       { id: 'editorial_hero', concept: 'Massive hero headline, vertical caption, deep negative space.', type: 'procedural' },
       { id: 'editorial_quote', concept: 'Clean split text quote, subtle grain, huge whitespace.', type: 'procedural' },
       { id: 'editorial_informational', concept: 'Educational layout with offset image cutouts and structural grid lines.', type: 'procedural' },
+      { id: 'editorial_breather', concept: 'Text-only composition with rich paper textures and bold ghost typography, no image required.', type: 'procedural' },
+      
+      // Minimalist Family
+      { id: 'minimalist_quote', concept: 'Ultra clean minimalist quote layout with massive whitespace.', type: 'procedural' },
+      
+      // Clinical Family
+      { id: 'clinical_step_routine', concept: 'Structured, highly aligned step-by-step clinical routine.', type: 'procedural' },
+      { id: 'clinical_analysis_card', concept: 'Data-driven clinical analysis layout with metric labels.', type: 'procedural' },
+      
+      // Educational Family
+      { id: 'educational_numbered_list', concept: 'Bold numbered educational list focusing purely on typography.', type: 'procedural' },
+      { id: 'educational_myth_vs_fact', concept: 'Text-heavy myth vs fact layout with floating badge.', type: 'procedural' },
+      { id: 'educational_quote_hero', concept: 'Educational quote emphasis with massive typographic accents.', type: 'procedural' },
+      
+      // Premium Text Only Family
+      { id: 'premium_text_only', concept: 'Premium text-only slide with exquisite SVG deco elements (stars, meteors, rings). No image required. Pure brand DNA.', type: 'procedural' }
     ];
 
     for (const recipe of compositionRecipes) {
+      
       candidates.push({
         id: recipe.id,
         category: 'Procedural Composition',

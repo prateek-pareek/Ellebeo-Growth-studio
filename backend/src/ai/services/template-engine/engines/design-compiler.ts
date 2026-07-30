@@ -37,19 +37,19 @@ export class DesignCompiler {
         const body = textLayers.find(t => t.role === 'body');
         
         if (heading) {
-          (heading as any).scale = behavior.heroScaleRatio * 0.12; // Base scalar
+          (heading as any).fontSize = behavior.heroBaseFontSize;
           (heading as any).tracking = behavior.trackingHero;
           (heading as any).lineHeight = behavior.lineHeightMultiplier;
           (heading as any).capitalizationRule = behavior.capitalizationRule;
         }
         if (tagline) {
-          (tagline as any).scale = behavior.metadataScaleRatio * 0.12;
+          (tagline as any).fontSize = behavior.metadataBaseFontSize;
           (tagline as any).tracking = behavior.trackingMetadata;
           (tagline as any).capitalizationRule = behavior.capitalizationRule;
           (tagline as any).opacity = behavior.secondaryTextOpacity;
         }
         if (body) {
-          (body as any).scale = behavior.metadataScaleRatio * 1.5 * 0.12;
+          (body as any).fontSize = behavior.bodyBaseFontSize;
           (body as any).lineHeight = behavior.lineHeightMultiplier;
           (body as any).opacity = behavior.secondaryTextOpacity;
         }
@@ -98,8 +98,8 @@ export class DesignCompiler {
       if (heading) {
         if (spec.typography.hierarchy === 'editorial') {
           heading.alignment = spec.composition?.balance === 'asymmetrical' ? 'left' : heading.alignment || 'center';
-          // BEHAVIORAL DOMINANCE: Inject massive font scaling overrides (12-16% of canvas width)
-          (heading as any).scale = 0.14; 
+          // BEHAVIORAL DOMINANCE: Inject massive font scaling overrides
+          (heading as any).fontSize = 140; 
           
           if (spec.typography.headlineTreatment === 'experimental') {
             heading.rotation = -90; // Rotate vertically
@@ -110,12 +110,12 @@ export class DesignCompiler {
       }
       
       if (tagline && spec.typography.hierarchy === 'editorial') {
-        // BEHAVIORAL CONTRAST: Tiny subheadline (approx 1.5% of canvas width) against the massive headline
-        (tagline as any).scale = 0.018;
+        // BEHAVIORAL CONTRAST: Tiny subheadline against the massive headline
+        (tagline as any).fontSize = 18;
       }
       
       if (body && spec.typography.hierarchy === 'editorial') {
-        (body as any).scale = 0.022;
+        (body as any).fontSize = 22;
       }
     }
 

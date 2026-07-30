@@ -31,7 +31,9 @@ export function registerDynamicLayout(layout: ICompiledLayoutDSL) {
   COMPILED_LAYOUTS[layout.id] = layout;
 }
 const themeEngine = new ThemeEngine();
+import { CompositionOptimizer } from '../services/template-engine/engines/composition-optimizer';
 const designCompiler = new DesignCompiler();
+const optimizer = new CompositionOptimizer();
 const visualEngine = new VisualResourceEngine();
 
 
@@ -212,42 +214,44 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
     if (ctx.designLanguage && dsl) {
       dsl = designCompiler.compile(dsl, ctx.designLanguage);
     }
+    
+    // Phase 2.6: Composition Optimizer balances whitespace and assigns strict bounding boxes
+    if (dsl) {
+      const layoutEngine = new LayoutEngine(ctx.w, ctx.h);
+      const constraints = layoutEngine.calculateConstraints('minimal', 'balanced');
+      dsl = optimizer.optimize(dsl, constraints, ctx.w, ctx.h);
+    }
 
     if (dsl && dsl.layers) {
       const isEditorial = ctx.layoutType.includes('editorial');
       const imageLayer = dsl.layers.find(l => l.type === 'image') as IDSLImageLayer;
       
       if (imageLayer) {
-        // AI ART DIRECTION UPGRADE: Aggressive Asymmetrical Bleed
-        const isAsymmetricalBleed = ctx.designLanguage?.behavior.imageBleedExtent === 'asymmetrical_65';
-        
-        if (isAsymmetricalBleed && (!imageLayer.mask || imageLayer.mask === 'rectangle')) {
-           const splitW = Math.floor(ctx.w * (ctx.designLanguage?.intent.readingJourney === 'z_pattern' ? 0.65 : 0.35));
-           
-           // If we have face coordinates, we can try to extract a tight focal crop!
-           // For now, let's just do a sharp aggressive vertical bleed.
-           const splitPhoto = await processPortraitFit(ctx.imageBuffer, splitW, ctx.h, ctx.validBackgroundColor);
-           const leftOffset = ctx.designLanguage?.intent.readingJourney !== 'z_pattern' ? ctx.w - splitW : 0;
-           const baseImageBuffer = await sharp({
-             create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor },
-           }).composite([{ input: splitPhoto, top: 0, left: leftOffset }]).png().toBuffer();
-           
-           return { 
-             baseImage: sharp(baseImageBuffer), 
-             compositeTop: 0, 
-             compositeBottom: 0, 
-             compositeLeft: ctx.designLanguage?.intent.readingJourney === 'z_pattern' ? splitW + 40 : 40,
-             compositeRight: ctx.designLanguage?.intent.readingJourney === 'z_pattern' ? 40 : (ctx.w - splitW) + 40 
-           };
+        // AI ART DIRECTION UPGRADE: Region-Based Extraction
+        // If the optimizer successfully allocated rigorous Image and Text Regions,
+        // use those explicit mathematical coordinates.
+        if (dsl.canvasRegions && (!imageLayer.mask || imageLayer.mask === 'rectangle' || imageLayer.mask === 'split')) {
+          const region = dsl.canvasRegions.imageRegion;
+          
+          if (region.width < ctx.w) {
+            // Asymmetrical Bleed or Split (Photo does not occupy 100% of canvas width)
+            const splitPhoto = await processPortraitFit(ctx.imageBuffer, region.width, region.height, ctx.validBackgroundColor);
+            
+            const baseImageBuffer = await sharp({
+              create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validBackgroundColor },
+            }).composite([{ input: splitPhoto, top: region.y, left: region.x }]).png().toBuffer();
+            
+            return { 
+              baseImage: sharp(baseImageBuffer), 
+              compositeTop: dsl.canvasRegions.textRegion.y, 
+              compositeBottom: 0, 
+              compositeLeft: dsl.canvasRegions.textRegion.x,
+              compositeRight: ctx.w - (dsl.canvasRegions.textRegion.x + dsl.canvasRegions.textRegion.width) 
+            };
+          }
         }
-        else if (imageLayer.mask === 'split') {
-          const halfW = Math.floor(ctx.w / 2);
-          const splitPhoto = await processPortraitFit(ctx.imageBuffer, halfW, ctx.h, ctx.validBackgroundColor);
-          const baseImageBuffer = await sharp({
-            create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor },
-          }).composite([{ input: splitPhoto, top: 0, left: 0 }]).png().toBuffer();
-          return { baseImage: sharp(baseImageBuffer), compositeTop: ctx.paddingTop, compositeBottom: ctx.paddingBottom, compositeLeft: halfW + ctx.paddingX, compositeRight: ctx.paddingX };
-        } else if (ctx.designSpec?.photo?.imageExecution === 'triptych') {
+        
+        if (ctx.designSpec?.photo?.imageExecution === 'triptych') {
           // CANVA-STYLE TRIPTYCH: Split the photo into 3 distinct vertical panels
           const panelW = Math.floor(ctx.w * 0.28);
           const gap = Math.floor(ctx.w * 0.04);
@@ -275,7 +279,36 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
           
           return { baseImage: sharp(baseImageBuffer), compositeTop: startY, compositeBottom: startY, compositeLeft: startX, compositeRight: startX };
         } else if (imageLayer.mask === 'circle') {
-          return fullBleedBase(ctx);
+          const size = Math.floor(Math.min(ctx.w, ctx.h) * 0.6); // 60% of canvas width
+          const paddingPx = Math.floor(ctx.w * (imageLayer.paddingPercent || 15) / 100);
+          
+          let cx = ctx.w / 2;
+          let cy = ctx.h / 2;
+          
+          if (imageLayer.anchor) {
+            if (imageLayer.anchor.includes('right')) cx = ctx.w - paddingPx - (size / 2);
+            if (imageLayer.anchor.includes('left')) cx = paddingPx + (size / 2);
+            if (imageLayer.anchor.includes('top')) cy = paddingPx + (size / 2);
+            if (imageLayer.anchor.includes('bottom')) cy = ctx.h - paddingPx - (size / 2);
+          }
+          
+          const leftOffset = Math.floor(cx - (size / 2));
+          const topOffset = Math.floor(cy - (size / 2));
+          
+          const circleSvg = `<svg width="${size}" height="${size}"><circle cx="${size/2}" cy="${size/2}" r="${size/2}" fill="#fff"/></svg>`;
+          const splitPhoto = await processPortraitFit(ctx.imageBuffer, size, size, ctx.validBackgroundColor);
+          const roundedPhoto = await sharp(splitPhoto).composite([{ input: Buffer.from(circleSvg), blend: 'dest-in' }]).png().toBuffer();
+          
+          const baseImageBuffer = await sharp({
+            create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor },
+          }).composite([{ input: roundedPhoto, top: topOffset, left: leftOffset }]).png().toBuffer();
+          
+          const isRight = imageLayer.anchor?.includes('right');
+          const isLeft = imageLayer.anchor?.includes('left');
+          const compLeft = isRight ? ctx.paddingX : (isLeft ? leftOffset + size + ctx.paddingX : ctx.paddingX);
+          const compRight = isLeft ? ctx.paddingX : (isRight ? ctx.w - leftOffset + ctx.paddingX : ctx.paddingX);
+          
+          return { baseImage: sharp(baseImageBuffer), compositeTop: ctx.paddingTop, compositeBottom: ctx.paddingBottom, compositeLeft: compLeft, compositeRight: compRight };
         } else {
           let targetW: number;
           let targetH: number;
@@ -805,6 +838,7 @@ export type DecoCtx = {
   designLanguage?: IDesignLanguage;
   structuredText?: { headline?: string; subheadline?: string; cta?: string; };
   typographyMetrics?: any;
+  activeTheme?: string;
 };
 
 export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
@@ -895,6 +929,13 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     if (ctx.designLanguage) {
       dsl = designCompiler.compile(dsl, ctx.designLanguage);
     }
+    
+    // Phase 2.6: Composition Optimizer
+    if (dsl) {
+      const layoutEngine = new LayoutEngine(ctx.w, ctx.h);
+      const constraints = layoutEngine.calculateConstraints('minimal', 'balanced');
+      dsl = optimizer.optimize(dsl, constraints, ctx.w, ctx.h);
+    }
 
     if (!dsl || !dsl.layers) return '';
 
@@ -948,17 +989,21 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       validBrandColor: ctx.validBrandColor,
       validSecondaryColor: ctx.validSecondaryColor,
       validBackgroundColor: ctx.validBackgroundColor,
-      constraints
+      constraints,
+      behavior: behaviorProfile,
+      layoutState: { occupiedRegions: [] }
     };
 
-    const resolvedBounds = new Map<string, {x: number, y: number, w: number, h: number}>();
-    resolvedBounds.set('hero-image', { 
+    const layoutState = primitiveCtx.layoutState!;
+    layoutState.occupiedRegions.push({ 
+      id: 'hero-image',
+      role: 'image',
       x: ctx.paddingX, 
       y: ctx.paddingTop, 
-      w: ctx.innerW, 
-      h: ctx.innerH 
+      width: ctx.innerW, 
+      height: ctx.innerH,
+      zIndex: 10
     });
-
     // Iteratively render each layer using the Primitive Engine
     for (const layer of overlayLayers) {
       if (layer.type === 'decoration') {
@@ -1006,28 +1051,76 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           }
         }
         
-        // CONDITIONAL SCRIM: Contrast-aware text protection
-        // Only apply to full bleed or hero photos that have a high brightness/lighting score
-        if (ctx.layoutType.includes('full_bleed') || ctx.layoutType.includes('hero') || ctx.layoutType.includes('poster')) {
-          let scrimOpacity = 0;
-          const lighting = ctx.visionResult?.suitabilityScores?.lightingQuality || 60; // default to slightly bright
+        
+        // CONDITIONAL SCRIM: Premium Contrast Protection (Glassmorphism / Gradient)
+        // Check if the Text Region mathematically overlaps the Image Region.
+        let needsScrim = false;
+        let scrimX = 0, scrimY = 0, scrimW = ctx.w, scrimH = ctx.h;
+        
+        if (dsl.canvasRegions) {
+          const imgR = dsl.canvasRegions.imageRegion;
+          const txtR = dsl.canvasRegions.textRegion;
           
-          if (lighting >= 75) {
-            scrimOpacity = 0.4; // Very bright spa image
-          } else if (lighting >= 50) {
-            scrimOpacity = 0.15; // Outdoor sunlight
-          } // Dark images (lighting < 50) get NO scrim!
+          // Check intersection
+          const overlapsX = txtR.x < imgR.x + imgR.width && txtR.x + txtR.width > imgR.x;
+          const overlapsY = txtR.y < imgR.y + imgR.height && txtR.y + txtR.height > imgR.y;
           
-          if (scrimOpacity > 0) {
+          if (overlapsX && overlapsY) {
+            needsScrim = true;
+            // The scrim should cover the text region with some padding
+            scrimX = Math.max(0, txtR.x - 40);
+            scrimY = Math.max(0, txtR.y - 40);
+            scrimW = Math.min(ctx.w - scrimX, txtR.width + 80);
+            scrimH = Math.min(ctx.h - scrimY, txtR.height + 80);
+            
+            // If it's a massive text region (like full bleed bottom), extend to edges
+            if (scrimW > ctx.w * 0.8) {
+               scrimX = 0;
+               scrimW = ctx.w;
+            }
+          }
+        } else if (ctx.layoutType.includes('full_bleed') || ctx.layoutType.includes('hero')) {
+          needsScrim = true;
+          scrimY = Math.floor(ctx.h * 0.3);
+          scrimH = Math.floor(ctx.h * 0.7);
+        }
+
+        if (needsScrim) {
+          const lighting = ctx.visionResult?.suitabilityScores?.lightingQuality || 60;
+          if (lighting >= 40) { // Apply to most images unless very dark
+            let scrimColorStr = '';
+            // THEME SEPARATION logic
+            if (ctx.activeTheme === 'editorial_beauty' || ctx.activeTheme === 'warm_wellness') {
+               // Editorial uses the brand's background color (beige/milky) to create "fog"
+               scrimColorStr = `
+                  <stop offset="0%" stop-color="${ctx.validBackgroundColor}" stop-opacity="0" />
+                  <stop offset="30%" stop-color="${ctx.validBackgroundColor}" stop-opacity="0.4" />
+                  <stop offset="100%" stop-color="${ctx.validBackgroundColor}" stop-opacity="0.95" />
+               `;
+            } else if (ctx.activeTheme === 'quiet_luxury' || ctx.activeTheme === 'natural_organic') {
+               // Minimalist uses a very subtle shadow, barely there
+               scrimColorStr = `
+                  <stop offset="0%" stop-color="#000000" stop-opacity="0" />
+                  <stop offset="50%" stop-color="#000000" stop-opacity="0.15" />
+                  <stop offset="100%" stop-color="#000000" stop-opacity="0.4" />
+               `;
+            } else {
+               // Clinical, High Fashion, Polished Commercial use stark contrast black shadows for high legibility without fog
+               scrimColorStr = `
+                  <stop offset="0%" stop-color="#000000" stop-opacity="0" />
+                  <stop offset="40%" stop-color="#000000" stop-opacity="0.5" />
+                  <stop offset="100%" stop-color="#000000" stop-opacity="0.85" />
+               `;
+            }
+
             svg += `
               <defs>
-                <linearGradient id="scrim_${layer.id}" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stop-color="#000000" stop-opacity="0" />
-                  <stop offset="50%" stop-color="#000000" stop-opacity="${scrimOpacity * 0.5}" />
-                  <stop offset="100%" stop-color="#000000" stop-opacity="${scrimOpacity}" />
+                <linearGradient id="premium_scrim_${layer.id}" x1="0%" y1="0%" x2="0%" y2="100%">
+                  ${scrimColorStr}
                 </linearGradient>
               </defs>
-              <rect x="0" y="${Math.floor(ctx.h * 0.4)}" width="${ctx.w}" height="${Math.floor(ctx.h * 0.6)}" fill="url(#scrim_${layer.id})" style="mix-blend-mode: multiply;" />
+              <!-- Premium Scrim Gradient -->
+              <rect x="${scrimX}" y="${scrimY}" width="${scrimW}" height="${scrimH}" fill="url(#premium_scrim_${layer.id})" />
             `;
           }
         }
@@ -1037,18 +1130,20 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           ...ctx,
           constraints,
           layoutEngine,
+          layoutState,
           designTokens: ctx.designTokens,
           typographyMetrics: ctx.typographyMetrics,
           escapeXml: (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
         };
-        // TEMPORARY OVERRIDE: Force all V2 layouts to use the 'editorial' typography system 
-        // to guarantee semantic text chunking and rich blend modes are applied.
+        // TEMPORARY OVERRIDE REMOVED: Typography system is now theme-aware
         let typoSystem: TypographySystem = 'editorial';
+        if (ctx.activeTheme === 'clinical_minimalist' || ctx.activeTheme === 'contemporary_cool') {
+          typoSystem = 'technical';
+        } else if (ctx.activeTheme === 'quiet_luxury' || ctx.activeTheme === 'natural_organic') {
+          typoSystem = 'minimal';
+        }
         
         svg += typographyEngine.renderTextLayer(typoCtx, textLayer, typoSystem);
-        
-        // Very rough bounds approximation for text
-        resolvedBounds.set(layer.id, { x: 0, y: 0, w: ctx.w, h: 50 });
       }
     }
 

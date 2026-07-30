@@ -64,6 +64,10 @@ You MUST follow these strict Content Density constraints:
 - headline: 1-3 words MAX (Extremely punchy. If it is longer, you have failed.)
 - subheadline: 6-12 words MAX (Optional context)
 - cta: 2-4 words MAX (Optional)
+CRITICAL BRAND CONTENT RULE for Body Slides (Slides 2 to N-1):
+- If the goal is "educational", these slides MUST contain pure educational value about the specific service and the Brand's DNA. No fluff.
+- If the goal is "promotional", these slides MUST contain pure promotional value, highlighting safety measures, expertise, and the specific offer.
+NEVER inject variable placeholders, hex codes, or technical IDs.
 NEVER write marketing paragraphs. Treat copy as a precise design object.
 Return ONLY valid JSON, no markdown, no explanation.`;
 
@@ -77,15 +81,15 @@ Goal: ${businessGoal.replace(/_/g, ' ')}
 ${voiceBlock ? `\n${voiceBlock}\n` : ''}
 Generate exactly ${count} slides:
 - Slide 1: Cover — eye-catching opener using the hook
-- Slides 2 to ${count - 1}: Body slides — service detail, technique, or result context
+- Slides 2 to ${count - 1}: Body slides — EXTREMELY CRITICAL: Ensure these are purely educational or purely promotional based on the Goal. Deeply weave in the Brand's DNA and the technician's expertise regarding the Service.
 - Slide ${count}: CTA — invite to book or follow
 
 Return exactly this JSON shape:
 {
   "concepts": [
     { "index": 1, "title": "01 · Cover", "headline": "Reveal Your Glow", "subheadline": "Ayurvedic Facial Therapy", "cta": "" },
-    { "index": 2, "title": "02 · The technique", "headline": "Deep Hydration", "subheadline": "Using active botanicals", "cta": "" },
-    { "index": 3, "title": "03 · The result", "headline": "Glass Skin", "subheadline": "Ready for the weekend", "cta": "" },
+    { "index": 2, "title": "02 · The technique", "headline": "Deep Hydration", "subheadline": "Using active botanicals specific to our holistic approach", "cta": "" },
+    { "index": 3, "title": "03 · The result", "headline": "Glass Skin", "subheadline": "Safe, proven results with zero downtime", "cta": "" },
     { "index": 4, "title": "04 · Book now", "headline": "Claim Your Slot", "subheadline": "", "cta": "Book via Link" }
   ]
 }`;

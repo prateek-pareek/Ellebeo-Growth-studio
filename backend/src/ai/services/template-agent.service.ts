@@ -43,6 +43,7 @@ export class TemplateAgentService {
     gridConstraints?: string;
     visionResult?: import('../types/chain-output.types').VisionAnalysisResult | null;
     excludeLayouts?: string[];
+    templateIntent?: 'educational' | 'promotion' | 'testimonial' | 'before_after' | 'brand_story';
   }): Promise<{ selected_layout_id: string; reasoning: string; designSpec?: import('./template-engine/interfaces').ISemanticDesignSpec }> {
     
     const context: ITemplateContext = {
@@ -52,7 +53,8 @@ export class TemplateAgentService {
       textLength: params.textLength,
       slideIndex: params.slideIndex,
       totalSlides: params.totalSlides,
-      visionResult: params.visionResult
+      visionResult: params.visionResult,
+      templateIntent: params.templateIntent
     };
 
     try {
@@ -95,11 +97,13 @@ We have mathematically narrowed down our layout library to the absolute Top ${to
 Your ONLY job is to select the single best layout or family from this shortlist based strictly on the provided Brand Aesthetic and visual storytelling for the given brief.
 
 Do NOT default to "minimal" or "high-end fashion" unless it perfectly matches the Brand Aesthetic. Adapt dynamically.
+CRITICAL DESIGN RULE: You MUST rotate across different Design Families (e.g., if previous slides used 'editorial', you must actively select 'minimalist_quote', 'clinical_hero' or other distinct families). Variants from the same design family must NOT be used continuously. Ensure each slide is distinct visually while maintaining brand coherence.
 
 CONTEXT:
 - Brand Aesthetic: ${context.aesthetic}
 - Slide Position: ${context.slideIndex + 1} of ${context.totalSlides}
 - Overlay Text Length: ${context.textLength} characters
+- Previously Used Layouts: ${params.excludeLayouts?.join(', ') || 'None'}
 ${params.gridConstraints ? `- GRID CONSTRAINTS: ${params.gridConstraints}` : ''}
 ${context.visionResult?.suitabilityScores ? `- PHOTO SUITABILITY: Technical Quality=${context.visionResult.suitabilityScores.technicalQuality}/100, Brand Compatibility=${context.visionResult.suitabilityScores.brandCompatibility}/100. CRITICAL: If Brand Compatibility is low (<50), choose a layout with heavy masks to hide the background.` : ''}
 

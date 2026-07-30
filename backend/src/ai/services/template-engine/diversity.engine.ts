@@ -52,6 +52,25 @@ export class DiversityEngine {
         }
       }
 
+      // 4. Macro-Family Diversity Penalty (Ensures Carousel hits distinct families)
+      if (carouselHistory.length > 0) {
+        const getMacroFamily = (id: string) => {
+          if (id.includes('quote')) return 'quote';
+          if (id.startsWith('editorial')) return 'editorial';
+          if (id.startsWith('clinical')) return 'clinical';
+          if (id.startsWith('educational')) return 'educational';
+          if (id.startsWith('premium_text') || id.includes('breather')) return 'text_only';
+          return id.split('_')[0];
+        };
+        
+        const currentMacro = getMacroFamily(template.id);
+        const usedMacros = carouselHistory.map(historyId => getMacroFamily(historyId.split('_variant')[0] || ''));
+        
+        if (usedMacros.includes(currentMacro)) {
+           penalty += 500; // Strong penalty to force picking a different macro-family
+        }
+      }
+
       const finalRank = (template.score || 0) - penalty;
 
       return {

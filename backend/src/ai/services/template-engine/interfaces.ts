@@ -45,6 +45,9 @@ export interface ITemplateContext {
   slideIndex: number;
   totalSlides: number;
   visionResult?: any;
+  templateIntent?: 'educational' | 'promotion' | 'testimonial' | 'before_after' | 'brand_story';
+  visualRanking?: string[];
+  activeTheme?: string;
 }
 
 export interface ITemplateRetriever {
@@ -56,9 +59,11 @@ export type LayoutAnchor = 'center' | 'top_left' | 'top_right' | 'top_center' | 
 export interface IDSLBaseLayer {
   id: string; // e.g., "hero-image", "main-heading"
   zIndex: number; // explicit render order (e.g., 10, 20, 30)
+  allowedAnchors?: LayoutAnchor[]; // Used for layout variation picking by the optimizer
   attachTo?: string; // ID of another layer to relatively position against
   attachPosition?: 'top' | 'bottom' | 'left' | 'right' | 'center' | 'overlap';
   attachOffset?: number; // pixel offset from the attached position
+  allocatedBox?: { x: number; y: number; width: number; height: number; }; // allocated by CompositionOptimizer
 }
 
 export interface IDSLImageLayer extends IDSLBaseLayer {
@@ -71,7 +76,7 @@ export interface IDSLImageLayer extends IDSLBaseLayer {
 
 export interface IDSLDecorationLayer extends IDSLBaseLayer {
   type: 'decoration';
-  component: 'wax_seal' | 'ticket_notches' | 'film_sprockets' | 'gallery_frame' | 'masking_tape' | 'gold_accents' | 'glass_card' | '3d_ribbon' | 'metric_panel' | 'editorial_sidebar' | 'status_chip' | 'divider' | 'chapter_tabs' | 'measurement_lines' | 'blueprint_grid' | 'museum_border' | 'thin_divider' | 'editorial_badge' | 'oversized_index' | 'quote_marks' | 'grain_overlay' | 'minimal_grid' | 'metadata_label';
+  component: 'wax_seal' | 'ticket_notches' | 'film_sprockets' | 'gallery_frame' | 'masking_tape' | 'gold_accents' | 'glass_card' | '3d_ribbon' | 'metric_panel' | 'editorial_sidebar' | 'status_chip' | 'divider' | 'chapter_tabs' | 'measurement_lines' | 'blueprint_grid' | 'museum_border' | 'thin_divider' | 'editorial_badge' | 'oversized_index' | 'quote_marks' | 'grain_overlay' | 'minimal_grid' | 'metadata_label' | 'ghost_headline' | 'outline_headline' | 'vertical_label' | 'running_header' | 'pull_quote' | 'organic_blob' | 'torn_paper' | 'pill_tag' | 'double_divider' | 'margin_rule' | 'accent_rule' | 'noise_texture' | 'paper_texture' | 'light_leak' | 'organic_accent' | 'structural_border' | 'handmade_mark' | 'margin_notes' | 'ink_stamp' | 'fold_line' | 'editorial_number_block' | 'corner_frame' | 'clinical_callout_box' | 'step_badge' | 'metric_label' | 'large_numeral_bullet' | 'myth_fact_badge' | 'quote_mark_accent' | 'meteor_shower' | 'elegant_line_art' | 'premium_stars' | 'abstract_rings';
   anchor: LayoutAnchor;
   offsetPercent: number; // distance from the anchor
 }
@@ -93,6 +98,10 @@ export interface ICompiledLayoutDSL {
   layoutVersion: "1.0";
   id: string; // e.g. "wax_seal_emblem"
   layers: IDSLSceneLayer[]; // Scene Graph approach
+  canvasRegions?: {
+    imageRegion: { x: number; y: number; width: number; height: number };
+    textRegion: { x: number; y: number; width: number; height: number };
+  };
 }
 
 // ============================================================================
@@ -134,3 +143,23 @@ export interface ISemanticDesignSpec {
     mood: string;
   };
 }
+
+export interface ILayoutRegion {
+  id: string; // The layer ID (e.g., 'main-heading')
+  role: string; // The layer role (e.g., 'heading', 'ghost_headline')
+  x: number; // Absolute X coordinate of the top-left corner
+  y: number; // Absolute Y coordinate of the top-left corner
+  width: number; // Width of the bounding box
+  height: number; // Height of the bounding box
+  baseline?: number; // Absolute Y coordinate of the text baseline
+  fontSize?: number; // The actual rendered font size
+  lineHeight?: number; // The actual rendered line height
+  zIndex: number; // The render order depth
+  visualWeight?: string; // e.g., '900', 'bold', 'light'
+  opticalCenter?: { x: number; y: number }; // The perceptual center (ignoring ascenders/descenders)
+}
+
+export interface ILayoutState {
+  occupiedRegions: ILayoutRegion[];
+}
+

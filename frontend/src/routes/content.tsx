@@ -628,11 +628,24 @@ function EditSidebar({
   const slides = isCarousel ? (platformVariants?.slides ?? []) : isStory ? (platformVariants?.frames ?? []) : [];
   const [activeSlide, setActiveSlide] = useState(0);
 
-  // Auto-scroll removed to allow users to inspect each slide manually.
+  // Keyboard navigation for slides
   useEffect(() => {
-    // Keeps hook structure without the setInterval logic.
-    return () => {};
-  }, [slides]);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't change slide if user is typing in an input or textarea
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        setActiveSlide(prev => Math.max(0, prev - 1));
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        setActiveSlide(prev => Math.min(slides.length - 1, prev + 1));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [slides.length]);
 
   const opt = variants[activeVariant] ?? variants[0];
   

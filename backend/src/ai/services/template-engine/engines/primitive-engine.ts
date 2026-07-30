@@ -1,7 +1,7 @@
 import { IDSLDecorationLayer, IDSLTextLayer } from '../interfaces';
 import { LayoutConstraints } from './layout-engine';
 
-export type PrimitiveCategory = 'geometry' | 'layout' | 'effects';
+export type PrimitiveCategory = 'geometry' | 'layout' | 'effects' | 'typography';
 
 export interface PrimitiveContext {
   w: number;
@@ -10,7 +10,9 @@ export interface PrimitiveContext {
   validSecondaryColor: string;
   validBackgroundColor: string;
   validAccentColor?: string;
-  constraints: LayoutConstraints;
+  constraints: any; // Using any for brevity, typically LayoutConstraints
+  behavior?: any; // Semantic Design Behavior Profile
+  layoutState?: import('../interfaces').ILayoutState; // Shared geometric state
 }
 
 export type PrimitiveRenderer = (ctx: PrimitiveContext, layer?: IDSLDecorationLayer | IDSLTextLayer) => string;
@@ -76,13 +78,17 @@ export class PrimitiveEngine {
       `
     };
 
-    // Migrated divider
+    // Migrated divider with behavior wiring
     this.registry['divider'] = {
       category: 'geometry',
-      render: (ctx) => `
-        <line x1="${ctx.w / 2 - 60}" y1="${ctx.h / 2 + 100}" x2="${ctx.w / 2 + 60}" y2="${ctx.h / 2 + 100}" stroke="${ctx.validBrandColor}" stroke-width="2" opacity="0.5" />
-        <circle cx="${ctx.w / 2}" cy="${ctx.h / 2 + 100}" r="4" fill="${ctx.validBackgroundColor}" stroke="${ctx.validBrandColor}" stroke-width="2" />
-      `
+      render: (ctx) => {
+        const weight = ctx.behavior?.dividerStrokeWeight || 2;
+        const padding = ctx.behavior?.dividerPadding || 60;
+        return `
+          <line x1="${ctx.w / 2 - padding}" y1="${ctx.h / 2 + 100}" x2="${ctx.w / 2 + padding}" y2="${ctx.h / 2 + 100}" stroke="${ctx.validBrandColor}" stroke-width="${weight}" opacity="0.5" />
+          <circle cx="${ctx.w / 2}" cy="${ctx.h / 2 + 100}" r="${weight * 2}" fill="${ctx.validBackgroundColor}" stroke="${ctx.validBrandColor}" stroke-width="${weight}" />
+        `;
+      }
     };
 
     this.registry['editorial_badge'] = {
@@ -248,6 +254,42 @@ export class PrimitiveEngine {
           ${Array.from({ length: 20 }).map((_, i) => `<rect x="${ctx.w - 27}" y="${i * 60 + 20}" width="12" height="30" rx="2" />`).join('')}
         </g>
       `
+    };
+
+    // --- Phase 3C: Editorial Breather Textures ---
+    this.registry['noise_texture'] = {
+      category: 'effects',
+      render: (ctx) => {
+        const intensity = ctx.behavior?.noiseIntensity || 0.15;
+        return `
+        <defs>
+          <filter id="noiseFilter">
+            <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch"/>
+          </filter>
+        </defs>
+        <!-- Toned down from 0.15 to 0.05 so it doesn't create fog -->
+        <rect width="100%" height="100%" opacity="0.05" style="mix-blend-mode: multiply;" filter="url(#noiseFilter)" />
+        `;
+      }
+    };
+
+    this.registry['paper_texture'] = {
+      category: 'effects',
+      render: (ctx) => {
+        const blendMode = ctx.behavior?.colorBlendingMode || 'multiply';
+        return `
+        <defs>
+          <filter id="paperFilter">
+            <feTurbulence type="fractalNoise" baseFrequency="0.04" result="noise" />
+            <feDiffuseLighting in="noise" lighting-color="#fff" surfaceScale="1">
+              <feDistantLight azimuth="45" elevation="60" />
+            </feDiffuseLighting>
+          </filter>
+        </defs>
+        <!-- Toned down from 0.4 to 0.15 to prevent washing out the image/colors -->
+        <rect width="100%" height="100%" opacity="0.15" style="mix-blend-mode: ${blendMode};" filter="url(#paperFilter)" />
+        `;
+      }
     };
 
     this.registry['ticket_notches'] = {
@@ -554,8 +596,8 @@ export class PrimitiveEngine {
       <rect x="${ctx.constraints.safeX + 10}" y="${ctx.constraints.safeY + 10}" width="${ctx.w - (ctx.constraints.safeX + 10) * 2}" height="${ctx.h - (ctx.constraints.safeY + 10) * 2}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1" opacity="0.6" />`
     };
 
-    this.registry['editorial_badge'] = { category: 'geometry', render: (ctx) => `
-      <!-- Editorial Circle Badge -->
+    this.registry['geometric_badge'] = { category: 'geometry', render: (ctx) => `
+      <!-- Geometric Circle Badge -->
       <g transform="translate(${ctx.w - ctx.constraints.safeX - 80}, ${ctx.h - ctx.constraints.safeY - 80})">
         <circle cx="0" cy="0" r="45" fill="${ctx.validSecondaryColor}" opacity="0.9" />
         <circle cx="0" cy="0" r="38" fill="none" stroke="${ctx.validBrandColor}" stroke-width="0.5" stroke-dasharray="2 4" />
@@ -597,6 +639,131 @@ export class PrimitiveEngine {
       <rect x="${x + 20}" y="${y + 20}" width="${size - 40}" height="${size - 40}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="2" opacity="0.2" />`;
     }};
 
+    // ==========================================
+    // PHASE 5: PREMIUM TEXT-ONLY DECORATORS
+    // ==========================================
+    
+    this.registry['meteor_shower'] = { category: 'effects', render: (ctx) => {
+      return `
+      <!-- Premium Meteor Shower Accent -->
+      <g stroke="${ctx.validAccentColor || ctx.validBrandColor}" stroke-width="1.5" stroke-linecap="round" opacity="0.4">
+        <line x1="${ctx.w - 100}" y1="-50" x2="${ctx.w - 300}" y2="150" />
+        <line x1="${ctx.w - 50}" y1="20" x2="${ctx.w - 200}" y2="170" opacity="0.2" />
+        <line x1="${ctx.w - 180}" y1="-20" x2="${ctx.w - 350}" y2="150" opacity="0.6" stroke-width="2" />
+        <!-- Glowing head -->
+        <circle cx="${ctx.w - 300}" cy="150" r="2" fill="${ctx.validAccentColor || ctx.validBrandColor}" />
+        <circle cx="${ctx.w - 200}" cy="170" r="1.5" fill="${ctx.validAccentColor || ctx.validBrandColor}" />
+        <circle cx="${ctx.w - 350}" cy="150" r="3" fill="${ctx.validAccentColor || ctx.validBrandColor}" />
+      </g>`;
+    }};
+
+    this.registry['elegant_line_art'] = { category: 'geometry', render: (ctx) => {
+      return `
+      <!-- Elegant Wavy Line Art -->
+      <path d="M -50 ${ctx.h * 0.8} C ${ctx.w * 0.2} ${ctx.h * 0.9}, ${ctx.w * 0.3} ${ctx.h * 0.6}, ${ctx.w * 0.5} ${ctx.h * 0.7} S ${ctx.w * 0.8} ${ctx.h * 0.9}, ${ctx.w + 50} ${ctx.h * 0.85}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1" opacity="0.3" />
+      <path d="M -50 ${ctx.h * 0.82} C ${ctx.w * 0.25} ${ctx.h * 0.95}, ${ctx.w * 0.35} ${ctx.h * 0.65}, ${ctx.w * 0.55} ${ctx.h * 0.75} S ${ctx.w * 0.85} ${ctx.h * 0.95}, ${ctx.w + 50} ${ctx.h * 0.87}" fill="none" stroke="${ctx.validAccentColor || ctx.validBrandColor}" stroke-width="0.5" opacity="0.5" />`;
+    }};
+
+    this.registry['premium_stars'] = { category: 'effects', render: (ctx) => {
+      return `
+      <!-- Premium Four-Point Stars -->
+      <g fill="${ctx.validAccentColor || ctx.validBrandColor}" opacity="0.8">
+        <path d="M ${ctx.constraints.safeX + 50} ${ctx.constraints.safeY + 80} Q ${ctx.constraints.safeX + 60} ${ctx.constraints.safeY + 80} ${ctx.constraints.safeX + 60} ${ctx.constraints.safeY + 70} Q ${ctx.constraints.safeX + 60} ${ctx.constraints.safeY + 80} ${ctx.constraints.safeX + 70} ${ctx.constraints.safeY + 80} Q ${ctx.constraints.safeX + 60} ${ctx.constraints.safeY + 80} ${ctx.constraints.safeX + 60} ${ctx.constraints.safeY + 90} Q ${ctx.constraints.safeX + 60} ${ctx.constraints.safeY + 80} ${ctx.constraints.safeX + 50} ${ctx.constraints.safeY + 80} Z" />
+        <path d="M ${ctx.w - ctx.constraints.safeX - 80} ${ctx.h * 0.6} Q ${ctx.w - ctx.constraints.safeX - 65} ${ctx.h * 0.6} ${ctx.w - ctx.constraints.safeX - 65} ${ctx.h * 0.6 - 15} Q ${ctx.w - ctx.constraints.safeX - 65} ${ctx.h * 0.6} ${ctx.w - ctx.constraints.safeX - 50} ${ctx.h * 0.6} Q ${ctx.w - ctx.constraints.safeX - 65} ${ctx.h * 0.6} ${ctx.w - ctx.constraints.safeX - 65} ${ctx.h * 0.6 + 15} Q ${ctx.w - ctx.constraints.safeX - 65} ${ctx.h * 0.6} ${ctx.w - ctx.constraints.safeX - 80} ${ctx.h * 0.6} Z" opacity="0.5" transform="scale(0.6) translate(${ctx.w * 0.4}, ${ctx.h * 0.4})" />
+      </g>`;
+    }};
+
+    this.registry['abstract_rings'] = { category: 'geometry', render: (ctx) => {
+      return `
+      <!-- Abstract Concentric Rings -->
+      <g transform="translate(${ctx.w}, 0)" opacity="0.15">
+        <circle cx="0" cy="0" r="200" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1" />
+        <circle cx="0" cy="0" r="280" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1.5" stroke-dasharray="4 8" />
+        <circle cx="0" cy="0" r="360" fill="none" stroke="${ctx.validBrandColor}" stroke-width="0.5" />
+      </g>`;
+    }};
+
+    // ==========================================
+    // SEMANTIC CATEGORY DELEGATES
+    // ==========================================
+    
+    this.registry['organic_accent'] = {
+      category: 'effects',
+      render: (ctx, layer) => {
+        const choices = ['flower', 'doodle', 'sparkle', 'organic_blob'];
+        const choice = choices[Math.floor(Math.random() * choices.length)];
+        return this.registry[choice] ? this.registry[choice].render(ctx, layer) : '';
+      }
+    };
+
+    this.registry['structural_border'] = {
+      category: 'geometry',
+      render: (ctx, layer) => {
+        const choices = ['museum_border', 'thin_border', 'minimal_grid', 'die_cut_mask'];
+        const choice = choices[Math.floor(Math.random() * choices.length)];
+        return this.registry[choice] ? this.registry[choice].render(ctx, layer) : '';
+      }
+    };
+
+    this.registry['handmade_mark'] = {
+      category: 'effects',
+      render: (ctx, layer) => {
+        const choices = ['tape', 'editorial_tape', 'wax_seal', 'ticket_notches', 'paper_attachment'];
+        const choice = choices[Math.floor(Math.random() * choices.length)];
+        return this.registry[choice] ? this.registry[choice].render(ctx, layer) : '';
+      }
+    };
+
+    this.registry['margin_notes'] = {
+      category: 'typography',
+      render: (ctx, layer) => {
+        const choices = ['vertical_label', 'running_header', 'metadata_label'];
+        const choice = choices[Math.floor(Math.random() * choices.length)];
+        return this.registry[choice] ? this.registry[choice].render(ctx, layer) : '';
+      }
+    };
+
+    this.registry['editorial_number_block'] = {
+      category: 'layout',
+      render: (ctx, layer) => {
+        const choices = ['oversized_index', 'number_plate'];
+        const choice = choices[Math.floor(Math.random() * choices.length)];
+        return this.registry[choice] ? this.registry[choice].render(ctx, layer) : '';
+      }
+    };
+
+    this.registry['ink_stamp'] = {
+      category: 'effects',
+      render: (ctx, layer) => `
+        <g transform="translate(${ctx.w - 120}, ${ctx.constraints.safeY + 80}) rotate(15)">
+          <circle cx="40" cy="40" r="38" fill="none" stroke="${ctx.validBrandColor}" stroke-width="2" stroke-dasharray="1 3" opacity="0.4" />
+          <text x="40" y="44" font-family="monospace" font-size="12" font-weight="bold" fill="${ctx.validBrandColor}" text-anchor="middle" opacity="0.6">NO. 1</text>
+        </g>
+      `
+    };
+
+    this.registry['fold_line'] = {
+      category: 'geometry',
+      render: (ctx, layer) => `
+        <!-- Creased Fold Line -->
+        <g opacity="0.3">
+          <line x1="0" y1="${ctx.h / 2}" x2="${ctx.w}" y2="${ctx.h / 2}" stroke="#fff" stroke-width="2" filter="blur(1px)" />
+          <line x1="0" y1="${ctx.h / 2 + 1}" x2="${ctx.w}" y2="${ctx.h / 2 + 1}" stroke="#000" stroke-width="1" opacity="0.2" />
+        </g>
+      `
+    };
+
+    this.registry['corner_frame'] = {
+      category: 'geometry',
+      render: (ctx, layer) => `
+        <!-- Minimal Corner Framing Brackets -->
+        <g stroke="${ctx.validBrandColor}" stroke-width="2" fill="none" opacity="0.7">
+          <path d="M ${ctx.constraints.safeX + 20},${ctx.constraints.safeY} L ${ctx.constraints.safeX},${ctx.constraints.safeY} L ${ctx.constraints.safeX},${ctx.constraints.safeY + 20}" />
+          <path d="M ${ctx.w - ctx.constraints.safeX - 20},${ctx.h - ctx.constraints.safeY} L ${ctx.w - ctx.constraints.safeX},${ctx.h - ctx.constraints.safeY} L ${ctx.w - ctx.constraints.safeX},${ctx.h - ctx.constraints.safeY - 20}" />
+        </g>
+      `
+    };
+
     // CANVA-STYLE PREMIUM PRIMITIVES (Phase 3 Additions)
     
     this.registry['starburst_badge'] = { category: 'geometry', render: (ctx, layer) => {
@@ -635,6 +802,235 @@ export class PrimitiveEngine {
     this.registry['3d_emoji'] = { category: 'effects', render: (ctx, layer) => {
       // AI sometimes requests "3d_emoji". We map this to the starburst so it renders beautifully.
       return this.registry['starburst_badge'].render(ctx, layer);
+    }};
+
+    // --- TYPOGRAPHY PRIMITIVES ---
+    
+    this.registry['ghost_headline'] = { category: 'typography', render: (ctx, layer) => {
+      const text = (ctx as any).structuredText?.headline || "EDITORIAL";
+      
+      // Phase 3: Relative Anchor logic for Ghost Headline
+      let anchorY = ctx.h / 2 + 150;
+      if (layer?.attachTo && ctx.layoutState) {
+        const target = ctx.layoutState.occupiedRegions.find((r: any) => r.id === layer.attachTo);
+        if (target) {
+          anchorY = target.y + target.height + 80;
+        }
+      }
+
+      // Phase 5: Massive structural rhythm instead of faint centered text
+      // We push it slightly off-canvas to the left, massively scaled, very low opacity
+      return `
+      <!-- Ghost Headline (Structural) -->
+      <text x="-40" y="${anchorY}" font-family="sans-serif" font-size="800" font-weight="900" fill="${ctx.validBrandColor}" opacity="0.04" text-anchor="start" letter-spacing="-10px" transform="scale(1, 1.2)">
+        ${text.toUpperCase()}
+      </text>`;
+    }};
+
+    this.registry['outline_headline'] = { category: 'typography', render: (ctx, layer) => {
+      const text = (ctx as any).structuredText?.headline || "ELEGANCE";
+      const y = layer && layer.anchor && layer.anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - 40 : ctx.constraints.safeY + 120;
+      return `
+      <!-- Outline Headline -->
+      <text x="${ctx.constraints.safeX}" y="${y}" font-family="sans-serif" font-size="140" font-weight="800" fill="none" stroke="${ctx.validBrandColor}" stroke-width="3" text-anchor="start">
+        ${text.toUpperCase()}
+      </text>`;
+    }};
+
+    this.registry['vertical_label'] = { category: 'typography', render: (ctx, layer) => {
+      const text = (ctx as any).rawName || "EDITORIAL";
+      return `
+      <!-- Vertical Label -->
+      <g transform="translate(${ctx.constraints.safeX + 20}, ${ctx.h - ctx.constraints.safeY}) rotate(-90)">
+        <text x="0" y="0" font-family="sans-serif" font-size="14" font-weight="600" fill="${ctx.validBrandColor}" letter-spacing="4px" opacity="0.6">${text.toUpperCase()}</text>
+      </g>`;
+    }};
+
+    this.registry['running_header'] = { category: 'typography', render: (ctx) => {
+      const text = (ctx as any).rawName || "EDITORIAL";
+      return `
+      <!-- Running Header -->
+      <text x="${ctx.constraints.safeX}" y="${ctx.constraints.safeY - 10}" font-family="sans-serif" font-size="12" font-weight="500" fill="${ctx.validBrandColor}" letter-spacing="2px" opacity="0.5">
+        ${text.toUpperCase()} // VOL. 1
+      </text>`;
+    }};
+
+    this.registry['pull_quote'] = { category: 'typography', render: (ctx) => {
+      const text = (ctx as any).overlayText || "Design is intelligence made visible.";
+      return `
+      <!-- Pull Quote -->
+      <g transform="translate(${ctx.w / 2}, ${ctx.h / 2})">
+        <text x="0" y="-40" font-family="Georgia, serif" font-size="160" fill="${ctx.validBrandColor}" opacity="0.1" text-anchor="middle">"</text>
+        <text x="0" y="0" font-family="Georgia, serif" font-size="32" font-style="italic" fill="${ctx.validBrandColor}" text-anchor="middle">
+          ${text}
+        </text>
+      </g>`;
+    }};
+
+    // --- SHAPE PRIMITIVES ---
+
+    this.registry['glass_card'] = { category: 'geometry', render: (ctx, layer) => {
+      const w = 400;
+      const h = 250;
+      const x = ctx.constraints.safeX;
+      const y = ctx.h - ctx.constraints.safeY - h;
+      return `
+      <!-- Glassmorphism Card -->
+      <g transform="translate(${x}, ${y})">
+        <rect x="0" y="0" width="${w}" height="${h}" rx="16" fill="${ctx.validSecondaryColor}" opacity="0.6" filter="blur(8px)" />
+        <rect x="0" y="0" width="${w}" height="${h}" rx="16" fill="none" stroke="${ctx.validSecondaryColor}" stroke-width="1.5" opacity="0.8" />
+      </g>`;
+    }};
+
+    this.registry['organic_blob'] = { category: 'geometry', render: (ctx, layer) => {
+      return `
+      <!-- Organic Blob -->
+      <path d="M45.7,-76.3C58.9,-69.3,69.1,-55.3,77.3,-40.4C85.5,-25.5,91.7,-9.6,90.4,5.7C89,20.9,80.1,35.6,69.5,47.9C58.8,60.2,46.5,70.1,32.3,76.5C18.2,82.9,2.2,85.8,-13.2,83.5C-28.7,81.1,-43.5,73.5,-55.6,62.8C-67.6,52.1,-76.8,38.3,-82.4,22.8C-88,7.3,-89.9,-9.8,-85.1,-24.8C-80.4,-39.8,-69,-52.7,-55.2,-59.5C-41.4,-66.3,-25.2,-67.1,-9.5,-64.1C6.1,-61,22.3,-54.2,32.5,-60.7Z" transform="translate(${ctx.w * 0.8}, ${ctx.h * 0.2}) scale(4)" fill="${ctx.validBrandColor}" opacity="0.05" />`;
+    }};
+
+    this.registry['torn_paper'] = { category: 'geometry', render: (ctx) => {
+      return `
+      <!-- Torn Paper Edge (Top) -->
+      <path d="M0,0 L${ctx.w},0 L${ctx.w},40 Q${ctx.w * 0.75},10 ${ctx.w * 0.5},45 T0,30 Z" fill="${ctx.validSecondaryColor}" />`;
+    }};
+
+    this.registry['pill_tag'] = { category: 'geometry', render: (ctx, layer) => {
+      const text = "NEW IN";
+      return `
+      <!-- Pill Tag -->
+      <g transform="translate(${ctx.constraints.safeX}, ${ctx.constraints.safeY})">
+        <rect x="0" y="0" width="80" height="28" rx="14" fill="${ctx.validBrandColor}" />
+        <text x="40" y="18" font-family="sans-serif" font-size="10" font-weight="bold" fill="${ctx.validSecondaryColor}" text-anchor="middle" letter-spacing="1px">${text}</text>
+      </g>`;
+    }};
+
+    // --- LINE PRIMITIVES ---
+
+    this.registry['double_divider'] = { category: 'geometry', render: (ctx, layer) => {
+      const y = layer && layer.anchor && layer.anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY : ctx.constraints.safeY;
+      return `
+      <!-- Double Divider -->
+      <g transform="translate(${ctx.constraints.safeX}, ${y})">
+        <line x1="0" y1="0" x2="100" y2="0" stroke="${ctx.validBrandColor}" stroke-width="2" />
+        <line x1="0" y1="6" x2="100" y2="6" stroke="${ctx.validBrandColor}" stroke-width="0.5" />
+      </g>`;
+    }};
+
+    this.registry['margin_rule'] = { category: 'geometry', render: (ctx) => {
+      return `
+      <!-- Margin Rule -->
+      <line x1="${ctx.constraints.safeX / 2}" y1="${ctx.constraints.safeY}" x2="${ctx.constraints.safeX / 2}" y2="${ctx.h - ctx.constraints.safeY}" stroke="${ctx.validBrandColor}" stroke-width="1" opacity="0.3" />`;
+    }};
+
+    this.registry['accent_rule'] = { category: 'geometry', render: (ctx, layer) => {
+      let y = layer && layer.anchor && layer.anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY : ctx.constraints.safeY;
+      let x = ctx.constraints.safeX;
+      
+      // Phase 3: Connect accent rule to text baseline if specified
+      if (layer?.attachTo && ctx.layoutState) {
+        const target = ctx.layoutState.occupiedRegions.find((r: any) => r.id === layer.attachTo);
+        if (target) {
+          y = (target.baseline || target.y + target.height) + (layer.attachOffset || 20);
+          x = target.x;
+        }
+      }
+
+      return `
+      <!-- Accent Rule -->
+      <line x1="${x}" y1="${y}" x2="${x + 60}" y2="${y}" stroke="${ctx.validAccentColor || ctx.validBrandColor}" stroke-width="4" />`;
+    }};
+
+    // --- TEXTURE PRIMITIVES ---
+
+    this.registry['noise_texture'] = { category: 'effects', render: (ctx) => {
+      return `
+      <!-- Subtle Noise Texture -->
+      <filter id="noiseFilter">
+        <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/>
+        <feColorMatrix type="matrix" values="1 0 0 0 0, 0 1 0 0 0, 0 0 1 0 0, 0 0 0 0.08 0" />
+      </filter>
+      <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" style="pointer-events:none;" filter="url(#noiseFilter)" />`;
+    }};
+
+    this.registry['paper_texture'] = { category: 'effects', render: (ctx) => {
+      return `
+      <!-- Paper Texture -->
+      <filter id="paperFilter">
+        <feTurbulence type="fractalNoise" baseFrequency="0.04" result="noise" />
+        <feDiffuseLighting in="noise" lighting-color="#fff" surfaceScale="2">
+          <feDistantLight azimuth="45" elevation="60" />
+        </feDiffuseLighting>
+        <feBlend mode="multiply" in="SourceGraphic" in2="noise" />
+      </filter>
+      <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" fill="${ctx.validSecondaryColor}" filter="url(#paperFilter)" opacity="0.4" style="mix-blend-mode: multiply;" />`;
+    }};
+
+    this.registry['light_leak'] = { category: 'effects', render: (ctx) => {
+      return `
+      <!-- Light Leak Gradient -->
+      <defs>
+        <radialGradient id="lightLeakGrad" cx="0%" cy="0%" r="70%">
+          <stop offset="0%" stop-color="${ctx.validAccentColor || '#ff9900'}" stop-opacity="0.25" />
+          <stop offset="100%" stop-color="${ctx.validAccentColor || '#ff9900'}" stop-opacity="0" />
+        </radialGradient>
+      </defs>
+      <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" fill="url(#lightLeakGrad)" style="mix-blend-mode: screen;" />`;
+    }};
+
+    // ==========================================
+    // PHASE 3 & 4: CLINICAL AND EDUCATIONAL PRIMITIVES
+    // ==========================================
+    this.registry['clinical_callout_box'] = { category: 'geometry', render: (ctx, layer) => {
+      return `
+      <!-- Clinical Callout Box with Data / Analysis Style -->
+      <g transform="translate(${ctx.constraints.safeX}, ${ctx.h / 2})">
+        <rect x="0" y="0" width="320" height="180" fill="${ctx.validSecondaryColor}" opacity="0.95" stroke="${ctx.validBrandColor}" stroke-width="2" />
+        <line x1="0" y1="40" x2="320" y2="40" stroke="${ctx.validBrandColor}" stroke-width="1" />
+        <text x="20" y="25" font-family="monospace" font-size="12" font-weight="bold" fill="${ctx.validBrandColor}">ANALYSIS RESULTS</text>
+        <!-- Mock Data Bars -->
+        <rect x="20" y="70" width="280" height="8" fill="${ctx.validBrandColor}" opacity="0.1" />
+        <rect x="20" y="70" width="210" height="8" fill="${ctx.validBrandColor}" />
+        
+        <rect x="20" y="100" width="280" height="8" fill="${ctx.validBrandColor}" opacity="0.1" />
+        <rect x="20" y="100" width="160" height="8" fill="${ctx.validBrandColor}" />
+        
+        <rect x="20" y="130" width="280" height="8" fill="${ctx.validBrandColor}" opacity="0.1" />
+        <rect x="20" y="130" width="250" height="8" fill="${ctx.validBrandColor}" />
+      </g>`;
+    }};
+
+    this.registry['step_badge'] = { category: 'geometry', render: (ctx, layer) => {
+      return `
+      <!-- Clinical Step Badge (e.g., Step 1, Step 2) -->
+      <g transform="translate(${ctx.constraints.safeX}, ${ctx.constraints.safeY})">
+        <rect x="0" y="0" width="120" height="36" rx="18" fill="${ctx.validBrandColor}" />
+        <text x="60" y="22" font-family="sans-serif" font-size="12" font-weight="bold" fill="${ctx.validSecondaryColor}" text-anchor="middle" letter-spacing="2px">STEP 01</text>
+      </g>`;
+    }};
+
+    this.registry['large_numeral_bullet'] = { category: 'geometry', render: (ctx, layer) => {
+      return `
+      <!-- Educational Large Numeral Background -->
+      <text x="${ctx.constraints.safeX}" y="${ctx.constraints.safeY + 180}" font-family="Georgia, serif" font-size="250" font-weight="900" fill="${ctx.validBrandColor}" opacity="0.08" text-anchor="start">
+        1.
+      </text>`;
+    }};
+
+    this.registry['myth_fact_badge'] = { category: 'geometry', render: (ctx, layer) => {
+      return `
+      <!-- Educational Myth vs Fact Floating Badge -->
+      <g transform="translate(${ctx.w / 2 - 100}, ${ctx.constraints.safeY})">
+        <rect x="0" y="0" width="200" height="50" rx="25" fill="${ctx.validSecondaryColor}" stroke="${ctx.validBrandColor}" stroke-width="2" filter="drop-shadow(0 10px 20px rgba(0,0,0,0.1))" />
+        <text x="100" y="30" font-family="sans-serif" font-size="14" font-weight="800" fill="${ctx.validBrandColor}" text-anchor="middle" letter-spacing="3px">MYTH VS FACT</text>
+      </g>`;
+    }};
+
+    this.registry['quote_mark_accent'] = { category: 'effects', render: (ctx, layer) => {
+      return `
+      <!-- Centered Premium Quote Mark Background -->
+      <text x="${ctx.w / 2}" y="${ctx.h / 2 + 100}" font-family="Georgia, serif" font-size="300" font-style="italic" fill="${ctx.validBrandColor}" opacity="0.08" text-anchor="middle">
+        "
+      </text>`;
     }};
   }
 

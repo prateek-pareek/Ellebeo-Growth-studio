@@ -1311,20 +1311,9 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, 
 
   const [activeTab, setActiveTab] = useState<'visual' | 'copywriting' | 'prompt'>('visual');
 
-  if (generating) {
-    return <GeneratingScreen jobStatus={jobStatus} brandDna={brandDna} appointment={appointment} estimatedSeconds={estimatedSeconds} />;
-  }
 
-  if (!backendVariants || backendVariants.length === 0) {
-    return (
-      <div className="artifact p-12 text-center">
-        <p className="eyebrow mb-3">No content generated</p>
-        <p className="text-sm text-taupe">The job completed but returned no content. Try again.</p>
-      </div>
-    );
-  }
 
-  const contentItem = backendVariants[0];
+  const contentItem = backendVariants?.[0] || {};
   const variants: any[] = Array.isArray(contentItem.generationOptions) && contentItem.generationOptions.length > 0
     ? contentItem.generationOptions
     : [{ caption: contentItem.caption, hashtags: contentItem.hashtags, hookSentence: contentItem.hookSentence, callToAction: contentItem.callToAction }];
@@ -1340,6 +1329,41 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, 
   const reelHookOverlay: string = isReel ? (contentItem.platformVariants?.hookOverlayText ?? '') : '';
   const safeSlide = Math.min(activeSlide, Math.max(0, carouselSlides.length - 1));
   const safeFrame = Math.min(activeSlide, Math.max(0, storyFrames.length - 1));
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't change slide if user is typing in an input or textarea
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        setActiveSlide(prev => Math.max(0, prev - 1));
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        setActiveSlide(prev => {
+          const maxIdx = isCarousel ? carouselSlides.length - 1 : isStory ? storyFrames.length - 1 : 0;
+          return Math.min(maxIdx, prev + 1);
+        });
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isCarousel, isStory, carouselSlides.length, storyFrames.length]);
+
+  if (generating) {
+    return <GeneratingScreen jobStatus={jobStatus} brandDna={brandDna} appointment={appointment} estimatedSeconds={estimatedSeconds} />;
+  }
+
+  if (!backendVariants || backendVariants.length === 0) {
+    return (
+      <div className="artifact p-12 text-center">
+        <p className="eyebrow mb-3">No content generated</p>
+        <p className="text-sm text-taupe">The job completed but returned no content. Try again.</p>
+      </div>
+    );
+  }
+
 
   // Determine active image URL based on selected text variant
   const getVariantUrl = (slideData: any) => {

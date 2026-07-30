@@ -127,31 +127,87 @@ export class LayoutEngine {
 
   /**
    * Resolves absolute X, Y coordinates from semantic layout anchors.
-   * Forces alignment strictly onto the Editorial Grid tracks to prevent floating text.
+   * Forces alignment strictly onto the Editorial Grid tracks or within a targetRegion.
    */
-  public resolveAnchor(anchor: string, boxWidth: number, boxHeight: number, constraints: LayoutConstraints): { x: number; y: number } {
-    let x = this.canvasWidth / 2;
-    let y = this.canvasHeight / 2;
+  public resolveAnchor(
+    anchor: string, 
+    boxWidth: number, 
+    boxHeight: number, 
+    constraints: LayoutConstraints,
+    targetRegion?: BoundingBox
+  ): { x: number; y: number } {
+    const contextW = targetRegion ? targetRegion.width : this.canvasWidth;
+    const contextH = targetRegion ? targetRegion.height : this.canvasHeight;
+    const contextX = targetRegion ? targetRegion.x : 0;
+    const contextY = targetRegion ? targetRegion.y : 0;
+    
+    // Default to center
+    let x = contextX + (contextW / 2);
+    let y = contextY + (contextH / 2);
 
     const { safeX, safeY, grid } = constraints;
+    
+    // If targetRegion is provided, we don't apply global canvas safe margins again 
+    // to the edges of the region since the region should already be safe.
+    const padX = targetRegion ? 0 : safeX;
+    const padY = targetRegion ? 0 : safeY;
 
-    if (anchor.includes('left') || anchor === 'edges') x = safeX;
+    if (anchor.includes('left') || anchor === 'edges') x = contextX + padX;
     
     // Grid alignment for left heavy layout (asymmetrical splits)
-    if (anchor === 'split_left' && grid) {
+    if (anchor === 'split_left' && grid && !targetRegion) {
         x = grid.tracks[0];
     }
-    if (anchor === 'split_right' && grid) {
+    if (anchor === 'split_right' && grid && !targetRegion) {
         // Start right text at column 7
         x = grid.tracks[6];
     }
 
-    if (anchor.includes('right')) x = this.canvasWidth - safeX;
+    if (anchor.includes('right')) x = contextX + contextW - padX;
     
-    if (anchor.includes('top')) y = safeY;
-    if (anchor.includes('bottom')) y = this.canvasHeight - safeY - 40;
-    if (anchor === 'bottom_edge' || anchor === 'edges') y = this.canvasHeight - 80;
+    if (anchor.includes('top')) y = contextY + padY;
+    if (anchor.includes('bottom')) y = contextY + contextH - padY - 40;
+    if (anchor === 'bottom_edge' || anchor === 'edges') y = contextY + contextH - 80;
 
     return { x, y };
+  }
+
+  /**
+   * Deterministically allocates canvas space into non-overlapping regions for Image and Text.
+   * This ensures text never floats randomly over photo content unless explicitly designed (full bleed).
+   */
+  public allocateRegions(
+    behavior: { imageBleedExtent?: string; readingJourney?: string },
+    constraints: LayoutConstraints
+  ): { imageRegion: BoundingBox; textRegion: BoundingBox } {
+    const isZPattern = behavior.readingJourney === 'z_pattern';
+    
+    // Default: Full bleed (text overlays image directly, requires scrims)
+    let imageRegion: BoundingBox = { x: 0, y: 0, width: this.canvasWidth, height: this.canvasHeight };
+    let textRegion: BoundingBox = { x: constraints.safeX, y: constraints.safeY, width: constraints.contentMaxWidth, height: this.canvasHeight - constraints.safeY * 2 };
+
+    if (behavior.imageBleedExtent === 'asymmetrical_65') {
+      const splitW = Math.floor(this.canvasWidth * (isZPattern ? 0.65 : 0.35));
+      if (isZPattern) {
+        // Image on Left, Text on Right
+        imageRegion = { x: 0, y: 0, width: splitW, height: this.canvasHeight };
+        textRegion = { x: splitW + 40, y: constraints.safeY, width: (this.canvasWidth - splitW) - 40 - constraints.safeX, height: this.canvasHeight - constraints.safeY * 2 };
+      } else {
+        // Text on Left, Image on Right
+        imageRegion = { x: this.canvasWidth - splitW, y: 0, width: splitW, height: this.canvasHeight };
+        textRegion = { x: constraints.safeX, y: constraints.safeY, width: (this.canvasWidth - splitW) - 40 - constraints.safeX, height: this.canvasHeight - constraints.safeY * 2 };
+      }
+    } else if (behavior.imageBleedExtent === 'split_50') {
+      const splitW = Math.floor(this.canvasWidth / 2);
+      if (isZPattern) {
+        imageRegion = { x: 0, y: 0, width: splitW, height: this.canvasHeight };
+        textRegion = { x: splitW + 40, y: constraints.safeY, width: splitW - 40 - constraints.safeX, height: this.canvasHeight - constraints.safeY * 2 };
+      } else {
+        imageRegion = { x: splitW, y: 0, width: splitW, height: this.canvasHeight };
+        textRegion = { x: constraints.safeX, y: constraints.safeY, width: splitW - 40 - constraints.safeX, height: this.canvasHeight - constraints.safeY * 2 };
+      }
+    }
+
+    return { imageRegion, textRegion };
   }
 }

@@ -1,4 +1,5 @@
 import { IDesignLanguage } from './art-direction-engine';
+import { ISemanticDesignSpec } from '../interfaces';
 
 export interface IGeometryOutput {
   canvasWidth: number;
@@ -34,7 +35,8 @@ export class GeometryCompiler {
   public compile(
     preset: IDesignLanguage,
     canvasWidth: number,
-    canvasHeight: number
+    canvasHeight: number,
+    designSpec?: ISemanticDesignSpec
   ): IGeometryOutput {
     const intent = preset.intent;
     const behavior = preset.behavior;
@@ -42,6 +44,14 @@ export class GeometryCompiler {
     // 1. SAFE ZONES (Whitespace Strategy)
     let safeX = Math.round(60 * behavior.negativeSpaceMultiplier);
     let safeY = Math.round(80 * behavior.negativeSpaceMultiplier);
+
+    if (designSpec?.composition?.negativeSpace === 'massive') {
+      safeX = Math.round(safeX * 1.5);
+      safeY = Math.round(safeY * 1.5);
+    } else if (designSpec?.composition?.negativeSpace === 'minimal') {
+      safeX = Math.round(safeX * 0.6);
+      safeY = Math.round(safeY * 0.6);
+    }
 
     if (behavior.marginHugging) {
       safeX = Math.round(safeX * 0.3);
@@ -52,13 +62,27 @@ export class GeometryCompiler {
 
     // 2. TYPOGRAPHY SCALING (Proportional Strategy)
     const baseScale = canvasWidth;
+    let heroSize = behavior.heroBaseFontSize;
+    let bodySize = behavior.bodyBaseFontSize;
+
+    if (designSpec?.typography?.dominance === 'high') {
+      heroSize = Math.round(heroSize * 1.3);
+    } else if (designSpec?.typography?.dominance === 'low') {
+      heroSize = Math.round(heroSize * 0.7);
+    }
+
+    if (designSpec?.typography?.hierarchy === 'bold') {
+      bodySize = Math.round(bodySize * 1.2);
+    } else if (designSpec?.typography?.hierarchy === 'minimal') {
+      bodySize = Math.round(bodySize * 0.8);
+    }
 
     const typography = {
-      heroSize: Math.round(behavior.heroScaleRatio * baseScale * 0.12),
-      primarySize: Math.round(behavior.metadataScaleRatio * 3 * baseScale * 0.12),
-      secondarySize: Math.round(behavior.metadataScaleRatio * 2 * baseScale * 0.12),
-      bodySize: Math.round(behavior.metadataScaleRatio * 1.5 * baseScale * 0.12),
-      metadataSize: Math.max(12, Math.round(behavior.metadataScaleRatio * baseScale * 0.12)),
+      heroSize: heroSize,
+      primarySize: Math.round(bodySize * 1.5),
+      secondarySize: Math.round(bodySize * 1.2),
+      bodySize: bodySize,
+      metadataSize: behavior.metadataBaseFontSize,
       
       heroLineHeight: behavior.lineHeightMultiplier,
       bodyLineHeight: behavior.lineHeightMultiplier,

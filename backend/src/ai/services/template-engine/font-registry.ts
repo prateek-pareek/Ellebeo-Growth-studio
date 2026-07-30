@@ -20,6 +20,8 @@ export interface FontBehavior {
   taglineTracking: number;
   /** Whether the font supports vertical writing / rotation gracefully */
   supportsVertical?: boolean;
+  /** Mathematical baseline ratio for this font family */
+  baseline: number;
 }
 
 export class FontRegistry {
@@ -40,6 +42,7 @@ export class FontRegistry {
       headlineTracking: -0.05,
       taglineTracking: 0.15,
       supportsVertical: true,
+      baseline: 0.71,
     });
     this.registry.set('lora', {
       classification: 'serif_text',
@@ -48,6 +51,17 @@ export class FontRegistry {
       headlineTracking: -0.02,
       taglineTracking: 0.1,
       supportsVertical: true,
+      baseline: 0.71,
+    });
+
+    this.registry.set('cormorant', {
+      classification: 'serif_display',
+      maxWeight: 700,
+      dominanceStrategy: 'scale',
+      headlineTracking: -0.02,
+      taglineTracking: 0.1,
+      supportsVertical: true,
+      baseline: 0.69,
     });
 
     // Geometric Sans (Inter, Montserrat, Roboto)
@@ -59,6 +73,7 @@ export class FontRegistry {
       headlineTracking: -0.04,
       taglineTracking: 0.2,
       supportsVertical: true,
+      baseline: 0.79,
     });
     this.registry.set('montserrat', {
       classification: 'sans_geometric',
@@ -67,6 +82,7 @@ export class FontRegistry {
       headlineTracking: -0.05,
       taglineTracking: 0.25,
       supportsVertical: true,
+      baseline: 0.76,
     });
     
     this.registry.set('roboto', {
@@ -76,6 +92,17 @@ export class FontRegistry {
       headlineTracking: -0.02,
       taglineTracking: 0.15,
       supportsVertical: true,
+      baseline: 0.75,
+    });
+
+    this.registry.set('manrope', {
+      classification: 'sans_geometric',
+      maxWeight: 800,
+      dominanceStrategy: 'weight',
+      headlineTracking: -0.03,
+      taglineTracking: 0.2,
+      supportsVertical: true,
+      baseline: 0.78,
     });
   }
 
@@ -97,6 +124,7 @@ export class FontRegistry {
         headlineTracking: -0.02,
         taglineTracking: 0.15,
         supportsVertical: true,
+        baseline: 0.72,
       };
     } else {
       // Default to Geometric Sans behavior
@@ -107,6 +135,7 @@ export class FontRegistry {
         headlineTracking: -0.03,
         taglineTracking: 0.2,
         supportsVertical: true,
+        baseline: 0.75,
       };
     }
   }

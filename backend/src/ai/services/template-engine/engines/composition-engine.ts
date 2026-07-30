@@ -87,14 +87,16 @@ export class CompositionEngine {
         zIndex: 10,
         mask: 'rectangle', 
         paddingPercent: 0,
-        anchor: 'middle_right'
+        anchor: 'middle_right',
+        allowedAnchors: ['middle_right', 'middle_left', 'center']
       } as IDSLImageLayer);
 
       layers.push({
         id: 'hero_heading',
         type: 'text',
         zIndex: 30,
-        anchor: 'middle_left',
+        anchor: 'bottom_left',
+        allowedAnchors: ['bottom_left', 'bottom_center', 'middle_left'],
         role: 'heading',
         alignment: 'left',
         maxWidthPercent: 60
@@ -104,7 +106,8 @@ export class CompositionEngine {
         id: 'hero_caption',
         type: 'text',
         zIndex: 31,
-        anchor: 'bottom_left',
+        anchor: 'top_left',
+        allowedAnchors: ['top_left', 'bottom_right'],
         role: 'body',
         alignment: 'left',
         maxWidthPercent: 30
@@ -112,21 +115,32 @@ export class CompositionEngine {
 
       // Distinct Composition Primitives
       layers.push({
-        id: 'page_number',
+        id: 'bg_ghost_text',
         type: 'decoration',
-        zIndex: 20,
-        component: 'oversized_index',
+        zIndex: 5,
+        component: 'ghost_headline',
         anchor: 'center',
         offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'corner_badge',
+        type: 'decoration',
+        zIndex: 20,
+        component: 'handmade_mark', // Semantic category
+        anchor: 'top_right',
+        allowedAnchors: ['top_right', 'bottom_right'],
+        offsetPercent: 5
       } as IDSLDecorationLayer);
 
       layers.push({
         id: 'accent_rule',
         type: 'decoration',
         zIndex: 25,
-        component: 'thin_divider',
+        component: 'structural_border', // Semantic category
         anchor: 'bottom_left',
-        offsetPercent: 5
+        allowedAnchors: ['bottom_left', 'top_left'],
+        offsetPercent: 10
       } as IDSLDecorationLayer);
       
     } else if (familyId === 'editorial_quote' || familyId === 'minimalist_quote') {
@@ -137,7 +151,8 @@ export class CompositionEngine {
         zIndex: 10,
         mask: 'split',
         paddingPercent: 10,
-        anchor: 'middle_right'
+        anchor: 'middle_right',
+        allowedAnchors: ['middle_right', 'middle_left']
       } as IDSLImageLayer);
 
       layers.push({
@@ -145,6 +160,7 @@ export class CompositionEngine {
         type: 'text',
         zIndex: 30,
         anchor: 'middle_left',
+        allowedAnchors: ['middle_left', 'middle_right'],
         role: 'heading',
         alignment: 'left',
         maxWidthPercent: 40
@@ -155,6 +171,7 @@ export class CompositionEngine {
         type: 'text',
         zIndex: 31,
         anchor: 'bottom_left',
+        allowedAnchors: ['bottom_left', 'bottom_right'],
         role: 'tagline',
         alignment: 'left',
         maxWidthPercent: 40
@@ -164,18 +181,27 @@ export class CompositionEngine {
         id: 'quote_marks_bg',
         type: 'decoration',
         zIndex: 5,
-        component: 'quote_marks',
-        anchor: 'top_left',
-        offsetPercent: 5
+        component: 'pull_quote',
+        anchor: 'center',
+        offsetPercent: 0
       } as IDSLDecorationLayer);
       
       layers.push({
         id: 'texture',
         type: 'decoration',
         zIndex: 90,
-        component: 'grain_overlay',
+        component: 'paper_texture',
         anchor: 'center',
         offsetPercent: 0
+      } as IDSLDecorationLayer);
+      
+      layers.push({
+        id: 'museum_border',
+        type: 'decoration',
+        zIndex: 25,
+        component: 'structural_border', // Resolves to museum_border or similar
+        anchor: 'center',
+        offsetPercent: 10
       } as IDSLDecorationLayer);
 
     } else if (familyId === 'editorial_informational' || familyId === 'educational') {
@@ -184,9 +210,10 @@ export class CompositionEngine {
         id: 'step_image',
         type: 'image',
         zIndex: 10,
-        mask: 'die_cut',
+        mask: 'circle',
         paddingPercent: 15,
-        anchor: 'middle_right'
+        anchor: 'middle_right',
+        allowedAnchors: ['middle_right', 'middle_left', 'top_center']
       } as IDSLImageLayer);
 
       layers.push({
@@ -194,6 +221,7 @@ export class CompositionEngine {
         type: 'text',
         zIndex: 30,
         anchor: 'top_left',
+        allowedAnchors: ['top_left', 'bottom_left'],
         role: 'heading',
         alignment: 'left',
         maxWidthPercent: 45
@@ -204,29 +232,282 @@ export class CompositionEngine {
         type: 'text',
         zIndex: 31,
         anchor: 'middle_left',
+        allowedAnchors: ['middle_left', 'bottom_left'],
         role: 'body',
         alignment: 'left',
         maxWidthPercent: 45
       } as IDSLTextLayer);
 
       layers.push({
-        id: 'grid_bg',
+        id: 'number_block',
         type: 'decoration',
         zIndex: 5,
-        component: 'minimal_grid',
+        component: 'editorial_number_block',
         anchor: 'center',
         offsetPercent: 0
       } as IDSLDecorationLayer);
 
       layers.push({
-        id: 'step_number',
+        id: 'texture_bg',
+        type: 'decoration',
+        zIndex: 15,
+        component: 'paper_texture',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+      
+      // Add an editorial breather family recipe as well
+    } else if (familyId === 'editorial_breather') {
+      layers.push({
+        id: 'breather_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'center',
+        allowedAnchors: ['center', 'middle_left'],
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 70
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'organic_accent_1',
+        type: 'decoration',
+        zIndex: 15,
+        component: 'organic_accent',
+        anchor: 'top_left',
+        allowedAnchors: ['top_left', 'bottom_right'],
+        offsetPercent: 10
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'texture_bg',
+        type: 'decoration',
+        zIndex: 5,
+        component: 'paper_texture',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'running_header',
         type: 'decoration',
         zIndex: 25,
-        component: 'metadata_label',
-        anchor: 'top_right',
+        component: 'running_header',
+        anchor: 'top_center',
         offsetPercent: 5
       } as IDSLDecorationLayer);
 
+    } else if (familyId === 'editorial_breather') {
+      // RECIPE: Editorial Breather (Text only, rich texture)
+      layers.push({
+        id: 'bg_paper',
+        type: 'decoration',
+        zIndex: 5,
+        component: 'paper_texture',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'bg_noise',
+        type: 'decoration',
+        zIndex: 6,
+        component: 'noise_texture',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+      
+      layers.push({
+        id: 'breather_ghost_text',
+        type: 'decoration',
+        zIndex: 10,
+        component: 'ghost_headline',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'breather_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 70
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'accent_rule',
+        type: 'decoration',
+        zIndex: 25,
+        component: 'accent_rule',
+        anchor: 'bottom_center',
+        offsetPercent: 10
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'breather_page_num',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_center',
+        role: 'footnote',
+        alignment: 'center',
+        maxWidthPercent: 10
+      } as IDSLTextLayer);
+
+    } else if (familyId.startsWith('clinical')) {
+      // RECIPE: Clinical Family (Precision, Alignment, Steps)
+      // Focuses on structured information, steps, and callout boxes
+      layers.push({
+        id: 'clinical_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'split',
+        paddingPercent: 5,
+        anchor: 'middle_right',
+        allowedAnchors: ['middle_right', 'top_center']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'clinical_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'top_left',
+        role: 'heading',
+        alignment: 'left',
+        maxWidthPercent: 40
+      } as IDSLTextLayer);
+      
+      layers.push({
+        id: 'clinical_callout',
+        type: 'decoration',
+        zIndex: 15,
+        component: 'clinical_callout_box',
+        anchor: 'middle_left',
+        offsetPercent: 5
+      } as IDSLDecorationLayer);
+
+      if (familyId === 'clinical_step_routine') {
+        layers.push({
+          id: 'step_badge',
+          type: 'decoration',
+          zIndex: 35,
+          component: 'step_badge',
+          anchor: 'top_left',
+          offsetPercent: 2
+        } as IDSLDecorationLayer);
+      } else if (familyId === 'clinical_analysis_card') {
+        layers.push({
+          id: 'metric_label',
+          type: 'decoration',
+          zIndex: 35,
+          component: 'metric_label',
+          anchor: 'bottom_left',
+          offsetPercent: 10
+        } as IDSLDecorationLayer);
+      }
+
+    } else if (familyId.startsWith('educational')) {
+      // RECIPE: Educational Family (Text-Based, Informational, Structured)
+      // Usually lacks a hero image, focusing purely on high-end typography layout
+      layers.push({
+        id: 'educational_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'top_center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 80
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'educational_body',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'center',
+        role: 'body',
+        alignment: 'center',
+        maxWidthPercent: 70
+      } as IDSLTextLayer);
+
+      if (familyId === 'educational_numbered_list') {
+        layers.push({
+          id: 'large_numeral',
+          type: 'decoration',
+          zIndex: 5,
+          component: 'large_numeral_bullet',
+          anchor: 'top_left',
+          offsetPercent: 0
+        } as IDSLDecorationLayer);
+      } else if (familyId === 'educational_myth_vs_fact') {
+        layers.push({
+          id: 'myth_fact_badge',
+          type: 'decoration',
+          zIndex: 35,
+          component: 'myth_fact_badge',
+          anchor: 'top_center',
+          offsetPercent: 5
+        } as IDSLDecorationLayer);
+      } else if (familyId === 'educational_quote_hero') {
+        layers.push({
+          id: 'quote_mark',
+          type: 'decoration',
+          zIndex: 5,
+          component: 'quote_mark_accent',
+          anchor: 'center',
+          offsetPercent: 0
+        } as IDSLDecorationLayer);
+      }
+    } else if (familyId === 'premium_text_only') {
+      // RECIPE: Premium Text Only (For slides requiring no image but massive brand/visual identity)
+      layers.push({
+        id: 'premium_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'center',
+        allowedAnchors: ['center', 'middle_left'],
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 85
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'premium_body',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_center',
+        role: 'body',
+        alignment: 'center',
+        maxWidthPercent: 70
+      } as IDSLTextLayer);
+
+      // Add one of the new premium decorators randomly or deterministically (here we add multiple but with distinct placement)
+      layers.push({
+        id: 'premium_deco_1',
+        type: 'decoration',
+        zIndex: 5,
+        component: 'abstract_rings',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'premium_deco_2',
+        type: 'decoration',
+        zIndex: 15,
+        component: slideIndex % 2 === 0 ? 'meteor_shower' : 'elegant_line_art',
+        anchor: 'top_left',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'premium_deco_3',
+        type: 'decoration',
+        zIndex: 16,
+        component: 'premium_stars',
+        anchor: 'bottom_right',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
     } else {
       // Default Fallback Recipe
       layers.push({

@@ -12,8 +12,9 @@ export interface IDesignIntent {
 }
 
 export interface IDesignBehaviorProfile {
-  heroScaleRatio: number;
-  metadataScaleRatio: number;
+  heroBaseFontSize: number;
+  metadataBaseFontSize: number;
+  bodyBaseFontSize: number;
   trackingHero: number;
   trackingMetadata: number;
   lineHeightMultiplier: number;
@@ -60,19 +61,63 @@ export class ArtDirectionEngine {
    * Generates Semantic Design Intent from knowledge tags
    */
   public generateDesignIntent(layoutId: string): IDesignIntent {
-    const knowledge = (designKnowledgeMap as any)[layoutId];
+    // 1. Procedural Layout Interception
+    // Strip numeric suffixes from compiled procedural variants (e.g. editorial_hero_0 -> editorial_hero)
+    const baseId = layoutId.replace(/_\d+$/, '');
     
-    // Default semantic tags
     let family = 'editorial';
     let energy = 'calm';
     let balance = 'symmetrical';
     let readingFlow = 'center_anchored';
+
+    let foundKnowledge = false;
+
+    // Hardcode semantic DNA for our new procedural Phase 3 recipes
+    if (baseId === 'editorial_hero') {
+      energy = 'bold';
+      balance = 'asymmetrical';
+      readingFlow = 'z_pattern';
+      foundKnowledge = true;
+    } else if (baseId === 'editorial_quote') {
+      energy = 'minimal';
+      balance = 'symmetrical';
+      readingFlow = 'center_down';
+      foundKnowledge = true;
+    } else if (baseId === 'editorial_informational') {
+      energy = 'structured';
+      balance = 'asymmetrical';
+      readingFlow = 'z_pattern';
+      foundKnowledge = true;
+    } else if (baseId === 'editorial_breather') {
+      energy = 'bold';
+      balance = 'symmetrical';
+      readingFlow = 'center_anchored';
+      foundKnowledge = true;
+    } else if (baseId.startsWith('clinical')) {
+      energy = 'structured';
+      balance = 'symmetrical'; // Clinical needs high alignment
+      readingFlow = 'center_down';
+      foundKnowledge = true;
+    } else if (baseId.startsWith('educational')) {
+      energy = 'minimal';
+      balance = 'symmetrical';
+      readingFlow = 'center_down';
+      foundKnowledge = true;
+    }
+
+    // 2. Legacy Knowledge Map Lookup
+    if (!foundKnowledge) {
+      const knowledge = (designKnowledgeMap as any)[layoutId];
+      if (knowledge) {
+        family = knowledge.layoutFamily?.value || family;
+        energy = knowledge.visualLanguage?.energy || energy;
+        balance = knowledge.composition?.balance || balance;
+        readingFlow = knowledge.composition?.readingFlow || readingFlow;
+        foundKnowledge = true;
+      }
+    }
     
-    if (knowledge) {
-      family = knowledge.layoutFamily?.value || family;
-      energy = knowledge.visualLanguage?.energy || energy;
-      balance = knowledge.composition?.balance || balance;
-      readingFlow = knowledge.composition?.readingFlow || readingFlow;
+    if (foundKnowledge) {
       console.log(`[ArtDirectionEngine] Extracted Semantic Tags for ${layoutId}:`, { family, energy, balance, readingFlow });
     } else {
       console.warn(`[ArtDirectionEngine] No knowledge found for ${layoutId}. Falling back to default.`);
@@ -98,8 +143,9 @@ export class ArtDirectionEngine {
   public mapIntentToBehavior(intent: IDesignIntent): IDesignBehaviorProfile {
     // Start with a generic, safe baseline
     const profile: IDesignBehaviorProfile = {
-      heroScaleRatio: 1.0,
-      metadataScaleRatio: 0.3,
+      heroBaseFontSize: 90,
+      metadataBaseFontSize: 24,
+      bodyBaseFontSize: 32,
       trackingHero: 0,
       trackingMetadata: 0,
       lineHeightMultiplier: 1.1,
@@ -136,16 +182,18 @@ export class ArtDirectionEngine {
     // Apply strict geometric overrides based on philosophical intent
     
     if (intent.visualPriority === 'typography_hero') {
-      profile.heroScaleRatio = 2.3;
-      profile.metadataScaleRatio = 0.15;
+      profile.heroBaseFontSize = 140;
+      profile.metadataBaseFontSize = 20;
+      profile.bodyBaseFontSize = 28;
       profile.elementOverlapAllowed = true;
       profile.marginHugging = true;
     } else if (intent.visualPriority === 'whitespace_hero') {
-      profile.heroScaleRatio = 0.8;
-      profile.metadataScaleRatio = 0.1;
+      profile.heroBaseFontSize = 72;
+      profile.metadataBaseFontSize = 18;
+      profile.bodyBaseFontSize = 22;
       profile.marginHugging = false;
     } else {
-      profile.heroScaleRatio = 1.2;
+      profile.heroBaseFontSize = 100;
     }
 
     if (intent.typographyPhilosophy === 'editorial_contrast') {
