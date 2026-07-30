@@ -87,7 +87,22 @@ export class MetadataRetriever implements ITemplateRetriever {
       { id: 'educational_quote_hero', concept: 'Educational quote emphasis with massive typographic accents.', type: 'procedural' },
       
       // Premium Text Only Family
-      { id: 'premium_text_only', concept: 'Premium text-only slide with exquisite SVG deco elements (stars, meteors, rings). No image required. Pure brand DNA.', type: 'procedural' }
+      { id: 'premium_text_only', concept: 'Premium text-only slide with exquisite SVG deco elements (stars, meteors, rings). No image required. Pure brand DNA.', type: 'procedural' },
+
+      // Split Family
+      { id: 'split_vertical_stack', concept: 'Heading block on top, circle-masked photo filling the bottom, divider at the seam.', type: 'procedural' },
+      { id: 'split_horizontal_band', concept: 'Full-width photo band on top, solid-color text block below, divider at the seam.', type: 'procedural' },
+      { id: 'split_left_right', concept: 'Circle photo on one side, heading and tagline anchored opposite, textured background.', type: 'procedural' },
+
+      // Countdown Promo Family
+      { id: 'countdown_promo_frames', concept: 'Text stack on one side, overlapping polaroid-style photo frames on the other, CTA accent chip.', type: 'procedural' },
+      { id: 'countdown_promo_headline', concept: 'Full-bleed photo on one half, single large centered headline on the other, minimal decoration.', type: 'procedural' },
+      { id: 'countdown_promo_circle', concept: 'Circle-cropped photo centered on a flat background, tight negative space, minimal decoration.', type: 'procedural' },
+
+      // Product Showcase Family
+      { id: 'product_showcase_overlay', concept: 'Full-bleed background photo with headline and tagline text overlaid directly on top.', type: 'procedural' },
+      { id: 'product_showcase_halo', concept: 'Circle-cropped product photo with a larger decorative halo ring behind it.', type: 'procedural' },
+      { id: 'product_showcase_band', concept: 'Heading and tagline band over a photo starting mid-canvas, divider at the seam, CTA chip at the bottom.', type: 'procedural' }
     ];
 
     for (const recipe of compositionRecipes) {

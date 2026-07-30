@@ -93,6 +93,21 @@ export class ArtDirectionEngine {
       balance = 'symmetrical';
       readingFlow = 'center_anchored';
       foundKnowledge = true;
+    } else if (baseId.startsWith('split')) {
+      energy = 'structured';
+      balance = 'asymmetrical';
+      readingFlow = 'z_pattern'; // photo and text occupy distinct halves/bands, eye moves between them
+      foundKnowledge = true;
+    } else if (baseId.startsWith('countdown_promo')) {
+      energy = 'bold';
+      balance = 'asymmetrical';
+      readingFlow = 'z_pattern'; // urgency-driven layouts favor a punchy, directional read
+      foundKnowledge = true;
+    } else if (baseId.startsWith('product_showcase')) {
+      energy = 'calm';
+      balance = 'symmetrical'; // product-hero layouts are centered/balanced around the subject
+      readingFlow = 'center_down';
+      foundKnowledge = true;
     } else if (baseId.startsWith('clinical')) {
       energy = 'structured';
       balance = 'symmetrical'; // Clinical needs high alignment

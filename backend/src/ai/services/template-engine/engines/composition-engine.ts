@@ -355,6 +355,379 @@ export class CompositionEngine {
         maxWidthPercent: 10
       } as IDSLTextLayer);
 
+    } else if (familyId === 'split_vertical_stack') {
+      // RECIPE: Split - Vertical Stack
+      // Heading block on top ~40%, circle-masked photo filling the bottom ~40-95%
+      layers.push({
+        id: 'split_stack_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'circle',
+        paddingPercent: 10,
+        anchor: 'bottom_center',
+        allowedAnchors: ['bottom_center', 'center']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'split_stack_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'top_center',
+        allowedAnchors: ['top_center', 'top_left'],
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 70
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'split_stack_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'top_center',
+        role: 'tagline',
+        alignment: 'center',
+        maxWidthPercent: 60
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'split_stack_divider',
+        type: 'decoration',
+        zIndex: 20,
+        component: 'thin_divider',
+        anchor: 'center',
+        offsetPercent: 40
+      } as IDSLDecorationLayer);
+
+    } else if (familyId === 'split_horizontal_band') {
+      // RECIPE: Split - Horizontal Band
+      // Full-width photo band on top third, solid text block on the bottom two-thirds, divider at the seam
+      layers.push({
+        id: 'split_band_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'rectangle',
+        paddingPercent: 0,
+        anchor: 'top_center',
+        allowedAnchors: ['top_center']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'split_band_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'center',
+        allowedAnchors: ['center', 'bottom_center'],
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 80
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'split_band_body',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_center',
+        role: 'body',
+        alignment: 'left',
+        maxWidthPercent: 70
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'split_band_divider',
+        type: 'decoration',
+        zIndex: 20,
+        component: 'divider',
+        anchor: 'top_center',
+        offsetPercent: 33
+      } as IDSLDecorationLayer);
+
+    } else if (familyId === 'split_left_right') {
+      // RECIPE: Split - Left/Right
+      // Circle photo occupying the right half, heading+tagline anchored bottom-left, decorative background texture
+      layers.push({
+        id: 'split_lr_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'circle',
+        paddingPercent: 8,
+        anchor: 'middle_right',
+        allowedAnchors: ['middle_right', 'top_right']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'split_lr_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'bottom_left',
+        allowedAnchors: ['bottom_left', 'middle_left'],
+        role: 'heading',
+        alignment: 'left',
+        maxWidthPercent: 45
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'split_lr_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_left',
+        role: 'tagline',
+        alignment: 'left',
+        maxWidthPercent: 40
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'split_lr_texture',
+        type: 'decoration',
+        zIndex: 5,
+        component: 'grain_overlay',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+    } else if (familyId === 'countdown_promo_frames') {
+      // RECIPE: Countdown Promo - Stacked Frames
+      // Left 60% text stack, right 40% overlapping polaroid-style photo frames, CTA-style accent chip
+      layers.push({
+        id: 'promo_frames_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'polaroid',
+        paddingPercent: 5,
+        anchor: 'middle_right',
+        allowedAnchors: ['middle_right', 'top_right']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'promo_frames_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'middle_left',
+        allowedAnchors: ['middle_left', 'top_left'],
+        role: 'heading',
+        alignment: 'left',
+        maxWidthPercent: 55
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'promo_frames_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_left',
+        role: 'tagline',
+        alignment: 'left',
+        maxWidthPercent: 50
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'promo_frames_cta',
+        type: 'decoration',
+        zIndex: 35,
+        component: 'status_chip',
+        anchor: 'bottom_right',
+        offsetPercent: 5
+      } as IDSLDecorationLayer);
+
+    } else if (familyId === 'countdown_promo_headline') {
+      // RECIPE: Countdown Promo - Photo/Headline Split
+      // Left half full-bleed photo, right half single large centered headline, minimal decoration
+      layers.push({
+        id: 'promo_headline_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'rectangle',
+        paddingPercent: 0,
+        anchor: 'middle_left',
+        allowedAnchors: ['middle_left']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'promo_headline_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'middle_right',
+        allowedAnchors: ['middle_right', 'center'],
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 40
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'promo_headline_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'middle_right',
+        role: 'tagline',
+        alignment: 'center',
+        maxWidthPercent: 35
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'promo_headline_divider',
+        type: 'decoration',
+        zIndex: 20,
+        component: 'divider',
+        anchor: 'center',
+        offsetPercent: 50
+      } as IDSLDecorationLayer);
+
+    } else if (familyId === 'countdown_promo_circle') {
+      // RECIPE: Countdown Promo - Circle Minimal
+      // Circle-cropped photo centered on a flat background, minimal decoration, tight negative space
+      layers.push({
+        id: 'promo_circle_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'circle',
+        paddingPercent: 15,
+        anchor: 'center',
+        allowedAnchors: ['center']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'promo_circle_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'bottom_center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 70
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'promo_circle_accent',
+        type: 'decoration',
+        zIndex: 5,
+        component: 'gold_accents',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+    } else if (familyId === 'product_showcase_overlay') {
+      // RECIPE: Product Showcase - Full-Bleed Overlay
+      // Full-bleed background photo with headline+tagline text overlaid directly on top
+      layers.push({
+        id: 'showcase_overlay_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'rectangle',
+        paddingPercent: 0,
+        anchor: 'center',
+        allowedAnchors: ['center']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'showcase_overlay_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'top_center',
+        allowedAnchors: ['top_center', 'center'],
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 80
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'showcase_overlay_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'top_center',
+        role: 'tagline',
+        alignment: 'center',
+        maxWidthPercent: 60
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'showcase_overlay_grain',
+        type: 'decoration',
+        zIndex: 15,
+        component: 'grain_overlay',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+    } else if (familyId === 'product_showcase_halo') {
+      // RECIPE: Product Showcase - Halo Circle
+      // Circle-cropped product photo with a larger decorative "halo" ring behind it
+      layers.push({
+        id: 'showcase_halo_ring',
+        type: 'decoration',
+        zIndex: 5,
+        component: 'gold_accents',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'showcase_halo_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'circle',
+        paddingPercent: 20,
+        anchor: 'center',
+        allowedAnchors: ['center']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'showcase_halo_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'bottom_center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 70
+      } as IDSLTextLayer);
+
+    } else if (familyId === 'product_showcase_band') {
+      // RECIPE: Product Showcase - 3-Band with CTA
+      // Heading/tagline band over a photo starting mid-canvas, divider at the seam, CTA chip at the bottom
+      layers.push({
+        id: 'showcase_band_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'rectangle',
+        paddingPercent: 0,
+        anchor: 'bottom_center',
+        allowedAnchors: ['bottom_center']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'showcase_band_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'top_center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 80
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'showcase_band_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'top_center',
+        role: 'tagline',
+        alignment: 'center',
+        maxWidthPercent: 60
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'showcase_band_divider',
+        type: 'decoration',
+        zIndex: 20,
+        component: 'divider',
+        anchor: 'center',
+        offsetPercent: 40
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'showcase_band_cta',
+        type: 'decoration',
+        zIndex: 35,
+        component: 'status_chip',
+        anchor: 'bottom_center',
+        offsetPercent: 10
+      } as IDSLDecorationLayer);
+
     } else if (familyId.startsWith('clinical')) {
       // RECIPE: Clinical Family (Precision, Alignment, Steps)
       // Focuses on structured information, steps, and callout boxes

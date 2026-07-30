@@ -97,7 +97,7 @@ We have mathematically narrowed down our layout library to the absolute Top ${to
 Your ONLY job is to select the single best layout or family from this shortlist based strictly on the provided Brand Aesthetic and visual storytelling for the given brief.
 
 Do NOT default to "minimal" or "high-end fashion" unless it perfectly matches the Brand Aesthetic. Adapt dynamically.
-CRITICAL DESIGN RULE: You MUST rotate across different Design Families (e.g., if previous slides used 'editorial', you must actively select 'minimalist_quote', 'clinical_hero' or other distinct families). Variants from the same design family must NOT be used continuously. Ensure each slide is distinct visually while maintaining brand coherence.
+CRITICAL DESIGN RULE: You MUST rotate across different Design Families (e.g., if previous slides used 'editorial', you must actively select 'minimalist_quote', 'clinical_hero', 'split', 'countdown_promo', 'product_showcase' or other distinct families). Variants from the same design family must NOT be used continuously. Ensure each slide is distinct visually while maintaining brand coherence.
 
 CONTEXT:
 - Brand Aesthetic: ${context.aesthetic}
