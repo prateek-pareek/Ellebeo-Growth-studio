@@ -45,7 +45,7 @@ export class TemplateAgentService {
     excludeLayouts?: string[];
     templateIntent?: 'educational' | 'promotion' | 'testimonial' | 'before_after' | 'brand_story';
   }): Promise<{ selected_layout_id: string; reasoning: string; designSpec?: import('./template-engine/interfaces').ISemanticDesignSpec }> {
-    
+
     const context: ITemplateContext = {
       brief: params.brief,
       brandName: params.brandName,
