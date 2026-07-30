@@ -93,12 +93,26 @@ export class ArtDirectionEngine {
       balance = 'symmetrical';
       readingFlow = 'center_anchored';
       foundKnowledge = true;
+    } else if (baseId === 'premium_text_only') {
+      family = 'premium';
+      energy = 'bold';
+      balance = 'symmetrical';
+      readingFlow = 'center_anchored';
+      foundKnowledge = true;
     } else if (baseId.startsWith('clinical')) {
+      family = 'clinical';
       energy = 'structured';
       balance = 'symmetrical'; // Clinical needs high alignment
       readingFlow = 'center_down';
       foundKnowledge = true;
+    } else if (baseId.startsWith('minimalist')) {
+      family = 'minimalist';
+      energy = 'minimal';
+      balance = 'asymmetrical'; // Often uses negative space powerfully
+      readingFlow = 'z_pattern';
+      foundKnowledge = true;
     } else if (baseId.startsWith('educational')) {
+      family = 'educational';
       energy = 'minimal';
       balance = 'symmetrical';
       readingFlow = 'center_down';

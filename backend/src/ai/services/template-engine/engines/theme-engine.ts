@@ -161,4 +161,29 @@ export class ThemeEngine {
   public generateGlobalOverlay(w: number, h: number): string {
     return '';
   }
+
+  /**
+   * Resolves the mood decorations (e.g. paper vs noise) dynamically.
+   * This decouples the aesthetic texture from the structural layout recipe.
+   */
+  public getMoodDecorations(mood?: string): any[] {
+    const layers: any[] = [];
+    
+    if (mood === 'warm_paper') {
+      layers.push({ id: 'mood_texture', type: 'decoration', zIndex: 5, component: 'paper_texture', anchor: 'center' });
+    } else if (mood === 'luxury_black') {
+      layers.push({ id: 'mood_texture', type: 'decoration', zIndex: 5, component: 'noise_texture', anchor: 'center' });
+      layers.push({ id: 'mood_scrim', type: 'decoration', zIndex: 6, component: 'dark_scrim', anchor: 'center' });
+    } else if (mood === 'clinical_white') {
+      // Clean, bright, minimal texture
+      layers.push({ id: 'mood_texture', type: 'decoration', zIndex: 5, component: 'subtle_grain', anchor: 'center' });
+    } else if (mood === 'vibrant_pop') {
+      layers.push({ id: 'mood_texture', type: 'decoration', zIndex: 5, component: 'noise_texture', anchor: 'center' });
+    } else {
+      // Fallback
+      layers.push({ id: 'mood_texture', type: 'decoration', zIndex: 5, component: 'paper_texture', anchor: 'center' });
+    }
+
+    return layers;
+  }
 }

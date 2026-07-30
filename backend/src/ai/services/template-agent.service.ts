@@ -91,13 +91,13 @@ export class TemplateAgentService {
         `- ID: ${c.id}\n  Concept: ${c.concept}\n  Why it fits: Ranked highly for ${context.aesthetic} aesthetic.`
       ).join('\n\n');
 
-      const systemPrompt = `
+const systemPrompt = `
 You are an elite Visual Art Director.
-We have mathematically narrowed down our layout library to the absolute Top ${topCandidates.length} candidates. These candidates may be either specific rigid layout templates (e.g. device mockups) or procedural Design Families (e.g. editorial_magazine) which dynamically generate a layout.
-Your ONLY job is to select the single best layout or family from this shortlist based strictly on the provided Brand Aesthetic and visual storytelling for the given brief.
+We have mathematically narrowed down our layout library to the absolute Top ${topCandidates.length} candidates. These candidates represent specific, semantically distinct structural variants (e.g. "editorial_magazine_cover", "minimalist_offset_quote", "clinical_split").
+Your ONLY job is to select the single best structural variant from this shortlist based strictly on the provided Brand Aesthetic and visual storytelling for the given brief.
 
 Do NOT default to "minimal" or "high-end fashion" unless it perfectly matches the Brand Aesthetic. Adapt dynamically.
-CRITICAL DESIGN RULE: You MUST rotate across different Design Families (e.g., if previous slides used 'editorial', you must actively select 'minimalist_quote', 'clinical_hero' or other distinct families). Variants from the same design family must NOT be used continuously. Ensure each slide is distinct visually while maintaining brand coherence.
+CRITICAL DESIGN RULE: You MUST rotate across different distinct variants. If previous slides used 'editorial_magazine_cover', you must actively select a different geometry like 'editorial_split' or 'minimalist_offset_quote'. Ensure each slide is distinct geometrically (e.g., rotating between split, centered, and full-bleed) while maintaining brand coherence.
 
 CONTEXT:
 - Brand Aesthetic: ${context.aesthetic}
@@ -140,7 +140,7 @@ JSON SCHEMA:
       "headlineTreatment": "standard"
     },
     "decorations": { "density": "medium" },
-    "style": { "mood": "premium" }
+    "style": { "mood": "warm_paper" // Must be exactly one of: "warm_paper", "luxury_black", "clinical_white", "vibrant_pop" }
   }
 }
 `;

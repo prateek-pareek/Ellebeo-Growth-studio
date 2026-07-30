@@ -32,7 +32,7 @@ export interface TypographyContext {
   };
 }
 
-export type TypographySystem = 'editorial' | 'technical' | 'minimal';
+export type TypographySystem = 'editorial' | 'clinical' | 'minimalist' | 'premium';
 
 export class TypographyEngine {
   private fontRegistry: FontRegistry;
@@ -44,7 +44,7 @@ export class TypographyEngine {
   /**
    * Main text rendering entry point that handles wrapping, styling, and safe-zone collision
    */
-  public renderTextLayer(ctx: TypographyContext, layer: IDSLTextLayer, system: TypographySystem = 'minimal'): string {
+  public renderTextLayer(ctx: TypographyContext, layer: IDSLTextLayer, system: TypographySystem = 'minimalist'): string {
     // 1. Map text layer ID to structured text fields if available
     let rawText = ctx.overlayText || '';
 
@@ -109,13 +109,13 @@ export class TypographyEngine {
       }
       const maxW = Math.min(layerMaxWidth, ctx.constraints.contentMaxWidth);
 
-      let effectiveMaxW = maxW;
+      let effectiveMaxW = layer.allocatedBox ? layer.allocatedBox.width : maxW;
 
       // If we don't have a rigid allocated box, dynamically constrain the width based on the anchor position
       // so we don't wrap using a 1080px width on a coordinate that starts at x=800.
       if (!layer.allocatedBox) {
          const tempAnchor = ctx.layoutEngine.resolveAnchor(layer.anchor, 0, 0, ctx.constraints);
-         if (anchor === 'start' && tempAnchor.x > ctx.w / 2) {
+         if (anchor === 'start') {
              const availableW = (ctx.w - ctx.constraints.safeX) - tempAnchor.x;
              if (availableW > 100 && availableW < effectiveMaxW) effectiveMaxW = availableW;
          } else if (anchor === 'middle') {
@@ -123,7 +123,7 @@ export class TypographyEngine {
              const distToRight = (ctx.w - ctx.constraints.safeX) - tempAnchor.x;
              const availableW = Math.min(distToLeft, distToRight) * 2;
              if (availableW > 100 && availableW < effectiveMaxW) effectiveMaxW = availableW;
-         } else if (anchor === 'end' && tempAnchor.x < ctx.w / 2) {
+         } else if (anchor === 'end') {
              const availableW = tempAnchor.x - ctx.constraints.safeX;
              if (availableW > 100 && availableW < effectiveMaxW) effectiveMaxW = availableW;
          }
@@ -148,16 +148,19 @@ export class TypographyEngine {
         x = baseAnchorResult.x;
         y = baseAnchorResult.y;
 
+        const anchorStr = layer.anchor as string;
+        const isCenterAnchor = anchorStr.includes('center') || anchorStr.includes('top') || anchorStr.includes('bottom') || anchorStr.includes('middle');
+        
         if (anchor === 'middle') {
           if (layer.anchor.includes('left')) x = ctx.constraints.safeX + effectiveMaxW / 2;
           else if (layer.anchor.includes('right')) x = ctx.w - ctx.constraints.safeX - effectiveMaxW / 2;
           else x = ctx.w / 2;
         } else if (anchor === 'end') {
           if (layer.anchor.includes('left')) x = ctx.constraints.safeX + effectiveMaxW;
-          else if (layer.anchor === 'center') x = ctx.w / 2 + effectiveMaxW / 2;
+          else if (isCenterAnchor) x = ctx.w / 2 + effectiveMaxW / 2;
           else x = ctx.w - ctx.constraints.safeX;
         } else if (anchor === 'start') {
-          if (layer.anchor === 'center') x = ctx.w / 2 - effectiveMaxW / 2;
+          if (isCenterAnchor) x = ctx.w / 2 - effectiveMaxW / 2;
         }
       }
 
@@ -178,11 +181,13 @@ export class TypographyEngine {
       }
 
       if (!isValid && attempt < MAX_ATTEMPTS) {
-        console.warn(`[TypographyEngine] Validation failed for layer ${layer.id} (boxX: ${boxX}, maxW: ${effectiveMaxW}). Retrying with scaled down text (Attempt ${attempt}).`);
-        currentScaleMultiplier *= 0.8; // Reduce font size by 20%
+        console.warn(`[TypographyEngine] Validation failed for layer ${layer.id} (boxX: ${boxX}, maxW: ${effectiveMaxW}). Retrying with minor scale adjustment (Attempt ${attempt}).`);
+        // Art Director philosophy: We do not aggressively shrink typography to fit tiny boxes.
+        // We allow a maximum 5% adjustment to gracefully handle slight bleeds.
+        currentScaleMultiplier *= 0.95; 
         continue;
       } else if (!isValid && attempt === MAX_ATTEMPTS) {
-        console.error(`[TypographyEngine] Validation failed after ${MAX_ATTEMPTS} attempts for layer ${layer.id}. Forcing clamp.`);
+        console.error(`[TypographyEngine] Validation failed after ${MAX_ATTEMPTS} attempts for layer ${layer.id}. Protecting typographic integrity over layout boundaries.`);
         if (y + textHeight > ctx.h - 40) y = ctx.h - textHeight - 40;
       }
 
@@ -211,7 +216,7 @@ export class TypographyEngine {
         opacityStr = ` opacity="${(layer as any).opacity}"`;
       }
 
-      finalSvg = `<text x="${x}" y="${baselineY}" text-anchor="${anchor}" class="overlay-text" style="font-family: '${ctx.brandFont}', sans-serif; font-size: ${style.fontSize}px; fill: ${style.fill}; font-weight: ${style.fontWeight}; font-style: ${style.fontStyle}; letter-spacing: ${style.letterSpacing};" filter="url(#premium_shadow)"${strokeAddition}${transformStr}${opacityStr}>${content}</text>`;
+      finalSvg = `<text x="${x}" y="${baselineY}" text-anchor="${anchor}" class="overlay-text" style="font-family: ${style.fontFamily}; font-size: ${style.fontSize}px; fill: ${style.fill}; font-weight: ${style.fontWeight}; font-style: ${style.fontStyle}; letter-spacing: ${style.letterSpacing};" filter="url(#premium_shadow)"${strokeAddition}${transformStr}${opacityStr}>${content}</text>`;
 
       // Write to Shared Layout State
       if (ctx.layoutState) {
@@ -247,6 +252,7 @@ export class TypographyEngine {
     let fontStyle = 'normal';
     let fill = ctx.dynamicTextColor;
     let letterSpacing = 'normal';
+    let fontFamily = `'${ctx.brandFont}', sans-serif`;
 
     const fontBehavior = this.fontRegistry.getBehavior(ctx.brandFont);
 
@@ -275,29 +281,58 @@ export class TypographyEngine {
       }
     }
 
-    if (system === 'editorial' && role === 'heading') {
-      fontWeight = '900'; // Maximum visual weight
-      letterSpacing = '-0.04em'; // Tight tracking for tension
-      fill = ctx.dynamicTextColor;
-    } else if (system === 'editorial' && role === 'tagline') {
-      fontWeight = '300';
-      letterSpacing = '0.3em'; // Wide tracking
-      fill = ctx.validSecondaryColor || ctx.dynamicTextColor;
-    } else if (system === 'technical') {
+    if (system === 'editorial') {
+      fontFamily = `'${ctx.brandFont}', 'Playfair Display', 'Georgia', 'Times New Roman', serif`;
       if (role === 'heading') {
-        fontWeight = Math.min(800, fontBehavior.maxWeight).toString();
-        letterSpacing = '0.04em';
+        // Editorial Weight Range [300, 400, 700]
+        fontWeight = ctx.designTokens?.headlinePresence === 'hero' ? '700' : (ctx.designTokens?.headlinePresence === 'subtle' ? '300' : '400');
+        letterSpacing = '0.05em'; // Elegant wide tracking
+        (layer as any).capitalizationRule = 'force_uppercase';
+        fill = ctx.dynamicTextColor;
+      } else if (role === 'body') {
+        fontWeight = '400';
       } else if (role === 'tagline' || role === 'footnote') {
+        fontWeight = '300';
+        letterSpacing = '0.3em'; // Very wide tracking for small captions
+        (layer as any).capitalizationRule = 'force_uppercase';
+        fill = ctx.validSecondaryColor || ctx.dynamicTextColor;
+      }
+    } else if (system === 'clinical') {
+      fontFamily = `'${ctx.brandFont}', 'Inter', 'Helvetica Neue', 'Arial', sans-serif`;
+      if (role === 'heading') {
+        // Clinical Weight Range [600, 700, 800]
+        fontWeight = ctx.designTokens?.headlinePresence === 'hero' ? '800' : (ctx.designTokens?.headlinePresence === 'subtle' ? '600' : '700');
+        letterSpacing = '-0.02em'; // Tight tracking for precision
+        (layer as any).capitalizationRule = 'force_sentence';
+      } else if (role === 'body') {
+        fontWeight = '400';
+      } else if (role === 'tagline' || role === 'footnote') {
+        fontWeight = '600';
+        letterSpacing = '0.1em';
+      }
+    } else if (system === 'minimalist') {
+      fontFamily = `'${ctx.brandFont}', 'Optima', 'Futura', 'Trebuchet MS', sans-serif`;
+      if (role === 'heading') {
+        // Minimalist Weight Range [300, 400, 500]
+        fontWeight = ctx.designTokens?.headlinePresence === 'hero' ? '500' : (ctx.designTokens?.headlinePresence === 'subtle' ? '300' : '400');
+        letterSpacing = '0.02em'; // Generous breathing room
+      } else if (role === 'body') {
+        fontWeight = '300';
+      } else if (role === 'tagline' || role === 'footnote') {
+        fontWeight = '400';
         letterSpacing = '0.2em';
       }
-    }
-
-    // Design Tokens (Typography Assertiveness)
-    if (ctx.designTokens && role === 'heading') {
-      if (ctx.designTokens.headlinePresence === 'hero') {
-        fontWeight = '900';
-      } else if (ctx.designTokens.headlinePresence === 'subtle') {
-        fontWeight = '300';
+    } else if (system === 'premium') {
+      fontFamily = `'${ctx.brandFont}', 'Helvetica Neue', 'Arial', sans-serif`;
+      if (role === 'heading') {
+        // Premium Text Weight Range [700, 800, 900]
+        fontWeight = ctx.designTokens?.headlinePresence === 'subtle' ? '700' : (ctx.designTokens?.headlinePresence === 'hero' ? '900' : '800');
+        letterSpacing = '-0.04em'; // Very tight negative tracking for modern chunky look
+      } else if (role === 'body') {
+        fontWeight = '500';
+      } else if (role === 'tagline' || role === 'footnote') {
+        fontWeight = '700';
+        letterSpacing = '0.05em';
       }
     }
 
@@ -314,7 +349,7 @@ export class TypographyEngine {
       }
     }
 
-    return { fontSize, fontWeight, fontStyle, fill, letterSpacing };
+    return { fontSize, fontWeight, fontStyle, fill, letterSpacing, fontFamily };
   }
 
   /**
