@@ -5,6 +5,7 @@ import * as path from 'path';
 const INPUT_FILE = path.join(__dirname, 'output', 'template-library-extracted.json');
 const OUTPUT_MD = path.join(__dirname, 'output', 'design-knowledge-graph-report.md');
 const OUTPUT_JSON = path.join(__dirname, 'output', 'design-knowledge-graph.json');
+const OUTPUT_PER_TEMPLATE = path.join(__dirname, 'output', 'design-knowledge-graph-per-template.json');
 
 type Elem = {
   role: string;
@@ -285,15 +286,33 @@ async function main() {
   const negativeSpaces: string[] = [];
   const typographySystems: string[] = [];
   const decorationTagsAll: string[] = [];
+  const perTemplate: Record<string, any> = {};
 
   for (const id of ids) {
     const t = templates[id];
-    layoutFamilies.push(classifyLayoutFamily(t));
-    visualStyles.push(classifyVisualStyle(t));
-    readingFlows.push(classifyReadingFlow(t));
-    negativeSpaces.push(classifyNegativeSpace(t));
-    typographySystems.push(classifyTypography(t));
-    decorationTagsAll.push(...extractDecorationTags(t));
+    const layoutFamily = classifyLayoutFamily(t);
+    const visualStyle = classifyVisualStyle(t);
+    const readingFlow = classifyReadingFlow(t);
+    const negativeSpace = classifyNegativeSpace(t);
+    const typographySystem = classifyTypography(t);
+    const decorationTags = extractDecorationTags(t);
+
+    layoutFamilies.push(layoutFamily);
+    visualStyles.push(visualStyle);
+    readingFlows.push(readingFlow);
+    negativeSpaces.push(negativeSpace);
+    typographySystems.push(typographySystem);
+    decorationTagsAll.push(...decorationTags);
+
+    perTemplate[id] = {
+      sourceFile: t.sourceFile,
+      layoutFamily,
+      visualStyle,
+      readingFlow,
+      negativeSpace,
+      typographySystem,
+      decorationTags,
+    };
   }
 
   const layoutFamilyTally = tally(layoutFamilies);
@@ -363,7 +382,9 @@ ${fmtSection('', decorationTally)}
     ),
   );
 
-  console.log(`\nDone. Wrote:\n- ${OUTPUT_MD}\n- ${OUTPUT_JSON}`);
+  fs.writeFileSync(OUTPUT_PER_TEMPLATE, JSON.stringify(perTemplate, null, 2));
+
+  console.log(`\nDone. Wrote:\n- ${OUTPUT_MD}\n- ${OUTPUT_JSON}\n- ${OUTPUT_PER_TEMPLATE} (per-template breakdown, for spot-checking any single template's classification)`);
 }
 
 main().catch((err) => {
