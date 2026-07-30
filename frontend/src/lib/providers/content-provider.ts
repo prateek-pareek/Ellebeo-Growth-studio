@@ -25,6 +25,7 @@ export type ContentItem = {
   platformVariants?: any;
   layoutType?: string;
   designDetails?: { base: string; text: string; deco: string } | null;
+  generationOptions?: any;
 };
 
 export type Appointment = {
@@ -112,6 +113,7 @@ function mapRow(row: any): { item: ContentItem; appointment: Appointment | null 
     platformVariants: row.platformVariants || null,
     layoutType: row.layoutType || undefined,
     designDetails: row.designDetails || null,
+    generationOptions: row.generationOptions || null,
   };
 
   let appointment: Appointment | null = null;

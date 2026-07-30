@@ -481,36 +481,31 @@ function ContentCard({
   const slides = isCarousel ? (platformVariants?.slides ?? []) : isStory ? (platformVariants?.frames ?? []) : [];
   const [cardSlideIndex, setCardSlideIndex] = useState(0);
 
+  // Auto-scroll removed to allow users to inspect each slide manually.
+  useEffect(() => {
+    // Keeps hook structure without the setInterval logic.
+    return () => {};
+  }, [slides]);
+
   const state   = item.state.toLowerCase();
   const blocked = state === "blocked";
   const isDraft = state === "draft" || state === "needs review";
 
   return (
     <article className="group flex flex-col border border-border bg-card shadow-sm hover:shadow-md transition-shadow overflow-hidden">
-      {/* Image */}
-      <div className="aspect-[4/5] overflow-hidden bg-nude/30 relative border-b border-border hover:cursor-pointer" onClick={onReview}>
-        {(() => {
-          const imageUrl = slides.length > 0 ? slides[cardSlideIndex]?.url : item.image;
-          if (!imageUrl) {
-            return (
-              <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-taupe/60">
-                <ImageOff className="size-6" strokeWidth={1.5} />
-                <span className="text-[9px] uppercase tracking-widest">No preview yet</span>
-              </div>
-            );
+      {/* Image Container — aspect-square for Carousel/Feed vs aspect-[9/16] for Story */}
+      <div className={`overflow-hidden bg-nude/30 relative border-b border-border hover:cursor-pointer transition-all duration-300 ${isStory ? 'aspect-[9/16]' : 'aspect-square'}`} onClick={onReview}>
+        <img
+          src={slides.length > 0 ? slides[cardSlideIndex]?.url : item.image}
+          alt={item.title}
+          loading="lazy"
+          className={
+            "w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.01] " +
+            (blocked ? "opacity-40 grayscale" : "")
           }
-          return (
-            <img
-              src={imageUrl}
-              alt={item.title}
-              loading="lazy"
-              className={
-                "w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.01] " +
-                (blocked ? "opacity-60 grayscale" : "")
-              }
-            />
-          );
-        })()}
+        />
+        
+        {/* Navigation arrows directly on the grid card removed as requested */}
 
         <div className="absolute top-3 left-3 z-10">
           <StatePill state={state} />
@@ -670,6 +665,37 @@ function EditSidebar({
   const slides = isCarousel ? (platformVariants?.slides ?? []) : isStory ? (platformVariants?.frames ?? []) : [];
   const [activeSlide, setActiveSlide] = useState(0);
 
+  // Keyboard navigation for slides
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't change slide if user is typing in an input or textarea
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        setActiveSlide(prev => Math.max(0, prev - 1));
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        setActiveSlide(prev => Math.min(slides.length - 1, prev + 1));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [slides.length]);
+
+  const opt = variants[activeVariant] ?? variants[0];
+  
+  const getVariantUrl = (slideData: any) => {
+    if (!slideData) return null;
+    const isEmpatheticOption = opt?.generatedBy?.toLowerCase().includes('empathetic');
+    if (slideData.variants) {
+      if (isEmpatheticOption && slideData.variants.gemini) return slideData.variants.gemini;
+      if (!isEmpatheticOption && slideData.variants.dalle) return slideData.variants.dalle;
+    }
+    return slideData.url;
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -717,62 +743,59 @@ function EditSidebar({
         <div className="flex-1 overflow-y-auto px-6 py-6 space-y-8">
           {/* Visual Preview Slider */}
           {slides.length > 0 && (
-            <section>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground mb-3">Preview</p>
-              <div className="border border-border bg-muted/20 p-3 rounded">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[9px] uppercase tracking-widest text-taupe">
-                    {activeSlide + 1}/{slides.length}
-                  </span>
-                  <span className="text-[8px] uppercase tracking-widest bg-foreground/10 text-foreground px-2 py-0.5 font-semibold">
-                    {isCarousel ? "Carousel" : "Story"}
-                  </span>
-                </div>
-
-                <div className="relative aspect-square w-full overflow-hidden bg-black/5 mb-2 border border-border">
-                  <img
-                    src={slides[activeSlide]?.url}
-                    alt={slides[activeSlide]?.label ?? `Slide ${activeSlide + 1}`}
-                    className="w-full h-full object-cover"
-                  />
-
-                  {activeSlide > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setActiveSlide(activeSlide - 1)}
-                      className="absolute left-2 top-1/2 -translate-y-1/2 bg-foreground/70 hover:bg-foreground text-white size-6 flex items-center justify-center rounded-full text-xs font-bold transition-all shadow-md"
-                    >
-                      ←
-                    </button>
-                  )}
-                  {activeSlide < slides.length - 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setActiveSlide(activeSlide + 1)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 bg-foreground/70 hover:bg-foreground text-white size-6 flex items-center justify-center rounded-full text-xs font-bold transition-all shadow-md"
-                    >
-                      →
-                    </button>
-                  )}
-                </div>
-
-                {/* Thumbnails strip */}
-                <div className="flex gap-1.5 overflow-x-auto py-1 scrollbar-none">
-                  {slides.map((s: any, idx: number) => (
-                    <button
-                      type="button"
-                      key={idx}
-                      onClick={() => setActiveSlide(idx)}
-                      className={`shrink-0 size-11 overflow-hidden border-2 transition-all ${
-                        idx === activeSlide ? "border-foreground scale-95" : "border-transparent opacity-60 hover:opacity-90"
-                      }`}
-                    >
-                      <img src={s.url} alt="" className="w-full h-full object-cover animate-fade-in" />
-                    </button>
-                  ))}
-                </div>
+            <div className="border border-border bg-muted/20 p-3 mb-2 rounded">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[9px] uppercase tracking-widest text-taupe">
+                  Visual Preview ({activeSlide + 1}/{slides.length})
+                </span>
+                <span className="text-[8px] uppercase tracking-widest bg-foreground/10 text-foreground px-2 py-0.5 font-semibold">
+                  {isCarousel ? "Carousel (1:1 Square)" : "Story (9:16 Vertical)"}
+                </span>
               </div>
-            </section>
+              
+              <div className={`relative w-full overflow-hidden bg-black/5 mb-2 border border-border transition-all duration-300 ${isStory ? 'aspect-[9/16] max-h-[460px] mx-auto' : 'aspect-square'}`}>
+                <img
+                  src={getVariantUrl(slides[activeSlide])}
+                  alt={slides[activeSlide]?.label ?? `Slide ${activeSlide + 1}`}
+                  className="w-full h-full object-cover"
+                />
+                
+                {activeSlide > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveSlide(activeSlide - 1)}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-foreground/70 hover:bg-foreground text-white size-6 flex items-center justify-center rounded-full text-xs font-bold transition-all shadow-md"
+                  >
+                    ←
+                  </button>
+                )}
+                {activeSlide < slides.length - 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveSlide(activeSlide + 1)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-foreground/70 hover:bg-foreground text-white size-6 flex items-center justify-center rounded-full text-xs font-bold transition-all shadow-md"
+                  >
+                    →
+                  </button>
+                )}
+              </div>
+
+              {/* Thumbnails strip */}
+              <div className="flex gap-1.5 overflow-x-auto py-1 scrollbar-none">
+                {slides.map((s: any, idx: number) => (
+                  <button
+                    type="button"
+                    key={idx}
+                    onClick={() => setActiveSlide(idx)}
+                    className={`shrink-0 size-11 overflow-hidden border-2 transition-all ${
+                      idx === activeSlide ? "border-foreground scale-95" : "border-transparent opacity-60 hover:opacity-90"
+                    }`}
+                  >
+                    <img src={getVariantUrl(s)} alt="" className="w-full h-full object-cover animate-fade-in" />
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
 
           {variants.length > 1 && (

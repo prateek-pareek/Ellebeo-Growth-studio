@@ -1075,6 +1075,17 @@ function FormatStep({
         })}
       </div>
 
+      {/* Pro Studio Tip Banner */}
+      <div className="mb-6 p-4 bg-muted/40 border border-border rounded-xl flex items-start gap-3">
+        <span className="text-amber-500 font-bold text-base leading-none">✦</span>
+        <div>
+          <p className="text-[9px] uppercase tracking-widest font-bold text-taupe mb-1">PRO STUDIO INSIGHT · CAROUSEL VS STORY</p>
+          <p className="text-xs text-foreground/80 leading-relaxed font-serif italic">
+            "Carousels are saved and re-read for education, while Stories build immediate same-day appointment bookings. Combine both for maximum growth."
+          </p>
+        </div>
+      </div>
+
       {/* Navigation */}
       <div className="flex items-center justify-between pt-2">
         <button
@@ -1094,34 +1105,40 @@ function FormatStep({
   );
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  created: "Starting job...",
-  queued: "Queued...",
-  processing_image: "Analysing your photo...",
-  processing_vision: "Reading the details in your photo...",
-  building_prompt: "Loading your Brand DNA...",
-  generating_text: "Writing your caption...",
-  generating_reel: "Assembling reel...",
-};
-
-const STATUS_STEPS = [
-  { key: "processing_vision",  label: "Analysing photo" },
-  { key: "building_prompt",    label: "Loading Brand DNA" },
-  { key: "generating_text",    label: "Writing caption" },
-  { key: "completed",          label: "Designing images" },
+const PREMIUM_MESSAGES = [
+  "Crafting something beautiful...",
+  "Refining every detail...",
+  "Curating your brand aesthetics...",
+  "Balancing the composition...",
+  "Preparing your final result...",
 ];
 
-const BEAUTY_TIPS = [
-  "Posts with before & after photos get 3× more saves on Instagram.",
-  "Replying to comments within the first hour boosts your reach by up to 30%.",
-  "Reels under 15 seconds have the highest completion rate for beauty content.",
-  "A consistent brand colour palette makes your grid 40% more recognisable.",
-  "Posting behind-the-chair content builds trust faster than any promotion.",
-  "Clients who follow you on Instagram are 2× more likely to rebook.",
-  "Educational posts — 'why I use this technique' — outperform promotional posts every time.",
-  "Your bio is your best SEO tool. Include your suburb and specialty.",
-  "Stories with polls get 20% more profile visits than standard stories.",
-  "Tagging your location on every post puts you in local discovery search.",
+const PRO_STUDIO_TIPS = [
+  {
+    category: "SAVERATES & REACH",
+    stat: "+3.1× SAVES",
+    tip: "Educational carousels with clear step-by-step key takeaways generate 3.1× more Instagram saves than single image posts."
+  },
+  {
+    category: "CLIENT CONVERSION",
+    stat: "+40% DMs",
+    tip: "Preserving real client before & after face transformations increases direct booking inquiries by up to 40%."
+  },
+  {
+    category: "TYPOGRAPHY HIERARCHY",
+    stat: "BOLD TITLES",
+    tip: "Headline text at 38px bold on slide 1 stops the Instagram scroll and increases profile visit conversion by 50%."
+  },
+  {
+    category: "ENGAGEMENT STRATEGY",
+    stat: "+45% REPLIES",
+    tip: "Ending slide 4 with a clear call-to-action prompt drives 45% higher comment section interaction."
+  },
+  {
+    category: "BRAND CONSISTENCY",
+    stat: "RECOGNIZABLE",
+    tip: "Using a consistent 3-color palette makes your studio's grid instantly recognizable in client home feeds."
+  }
 ];
 
 const REFINE_OPTIONS = [
@@ -1152,70 +1169,58 @@ const MODEL_LABELS: Record<string, string> = {
   "GPT-4o-Strategist (Empathetic)": "Empathetic Direction",
 };
 
-function GeneratingScreen({ jobStatus, brandDna, appointment, estimatedSeconds = 45 }: { jobStatus: string; brandDna: any; appointment: any; estimatedSeconds?: number }) {
-  const [tipIndex, setTipIndex] = useState(0);
+function GeneratingScreen({ jobStatus, brandDna, appointment }: { jobStatus: string; brandDna: any; appointment: any; estimatedSeconds?: number }) {
+  const [msgIndex, setMsgIndex] = useState(0);
   const [fade, setFade] = useState(true);
-  const [phaseElapsed, setPhaseElapsed] = useState(0);
+  const [displayProgress, setDisplayProgress] = useState(0);
 
-  // Reset phase timer whenever the backend status advances
-  useEffect(() => {
-    setPhaseElapsed(0);
-  }, [jobStatus]);
-
-  // Map backend status explicitly to deterministic progress percentages
-  const statusToProgress: Record<string, number> = {
-    initializing: 5,
-    processing_image: 20,
-    processing_vision: 30,
-    building_prompt: 45,
-    generating_text: 65, // This is the longest phase
+  // Define the target progress for each backend state
+  const statusToTargetProgress: Record<string, number> = {
+    initializing: 10,
+    processing_image: 35,
+    processing_vision: 50,
+    building_prompt: 65,
+    generating_text: 85,
+    generating_reel: 85,
     completed: 100,
   };
 
-  const progressPercent = statusToProgress[jobStatus] || 15;
+  const targetProgress = statusToTargetProgress[jobStatus] || 15;
 
-  const dynamicTips = [
-    `Infusing ${brandDna?.businessName || 'your brand'}'s unique DNA into the strategy.`,
-    `Analyzing visual composition for ${brandDna?.aestheticDirection || 'premium'} aesthetics.`,
-    `Curating messaging tailored for ${appointment?.serviceCategory || 'your service'} clients.`,
-    `Selecting dynamic layouts to maximize visual impact.`,
-    `Composing sophisticated editorial copy that converts.`,
-    `Ensuring perfect typography alignment across all assets.`,
-  ];
-
+  // Optimistic Easing Progress Bar
   useEffect(() => {
-    const tipInterval = setInterval(() => {
+    const interval = setInterval(() => {
+      setDisplayProgress(current => {
+        if (targetProgress === 100) return 100; // Snap to 100 if done
+        if (current < targetProgress) {
+          // Move quickly towards the target
+          return Math.min(current + (targetProgress - current) * 0.1 + 0.1, targetProgress);
+        } else if (current < 98) {
+          // Trickle slowly if we hit the target but backend hasn't updated yet
+          return current + 0.05;
+        }
+        return current;
+      });
+    }, 100);
+    return () => clearInterval(interval);
+  }, [targetProgress]);
+
+  // Rotate luxury messages
+  useEffect(() => {
+    const msgInterval = setInterval(() => {
       setFade(false);
       setTimeout(() => {
-        setTipIndex(i => (i + 1) % dynamicTips.length);
+        setMsgIndex(i => (i + 1) % PREMIUM_MESSAGES.length);
         setFade(true);
       }, 500);
-    }, 4500);
+    }, 3500);
+    return () => clearInterval(msgInterval);
+  }, []);
 
-    const timeInterval = setInterval(() => {
-      setPhaseElapsed(e => e + 1);
-    }, 1000);
-
-    return () => {
-      clearInterval(tipInterval);
-      clearInterval(timeInterval);
-    };
-  }, [dynamicTips.length]);
-
-  // Uber-style dynamic ETA routing
-  const statusToBaseRemaining: Record<string, number> = {
-    initializing: 45,
-    processing_image: 40,
-    processing_vision: 35,
-    building_prompt: 30,
-    generating_text: 20,
-    generating_reel: 30,
-    completed: 0,
-  };
-
-  const timeMultiplier = estimatedSeconds / 45;
-  const baseRemaining = Math.round((statusToBaseRemaining[jobStatus] || 45) * timeMultiplier);
-  const remaining = Math.max(1, baseRemaining - phaseElapsed); // Never show 0s unless completed
+  // Fuzzy ETA Logic
+  let fuzzyEta = "About 1 minute";
+  if (displayProgress > 85) fuzzyEta = "Almost ready...";
+  else if (displayProgress > 50) fuzzyEta = "About 40 seconds";
 
   return (
     <div className="artifact relative flex flex-col items-center justify-center overflow-hidden bg-background border border-border/40 shadow-xl rounded-2xl w-full max-w-4xl mx-auto min-h-[600px]">
@@ -1251,41 +1256,41 @@ function GeneratingScreen({ jobStatus, brandDna, appointment, estimatedSeconds =
         <h2 className="font-serif text-4xl italic mb-4 bg-gradient-to-r from-foreground to-taupe bg-clip-text text-transparent">
           Composing
         </h2>
-        <p className="text-[10px] uppercase tracking-[0.2em] text-taupe font-semibold mb-10">
-          {STATUS_LABELS[jobStatus] ?? "Curating your assets..."}
+        <p 
+          className="text-[10px] uppercase tracking-[0.2em] text-taupe font-semibold mb-10 transition-opacity duration-500"
+          style={{ opacity: fade ? 1 : 0 }}
+        >
+          {PREMIUM_MESSAGES[msgIndex]}
         </p>
 
         {/* Dynamic Progress Bar */}
         <div className="w-full max-w-sm mx-auto mb-10">
           <div className="flex justify-between items-end text-[10px] uppercase tracking-widest text-taupe font-bold mb-2 px-1">
-            <span>{Math.round(progressPercent)}% Complete</span>
-            <span>{jobStatus === 'completed' ? 'Done' : `~${remaining}s remaining`}</span>
+            <span>{Math.floor(displayProgress)}%</span>
+            <span>{jobStatus === 'completed' ? 'Done' : fuzzyEta}</span>
           </div>
           <div className="relative w-full h-1 bg-border/50 overflow-hidden rounded-full shadow-inner">
             <div 
-              className="absolute top-0 left-0 h-full bg-foreground transition-all duration-[1500ms] ease-in-out" 
-              style={{ width: `${progressPercent}%` }}
+              className="absolute top-0 left-0 h-full bg-foreground" 
+              style={{ width: `${displayProgress}%` }}
             />
           </div>
         </div>
 
-        {/* Dynamic Concierge Tip */}
-        <div className="w-full text-center bg-card/60 p-6 rounded-lg border border-border/30 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] backdrop-blur-md">
-          <p className="text-[9px] uppercase tracking-[0.2em] text-taupe font-bold mb-4 flex justify-center items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-foreground animate-pulse" /> Strategy Engine
-          </p>
-          <p
-            className="font-serif text-[15px] leading-relaxed text-foreground transition-opacity duration-500 min-h-[3.5rem] flex items-center justify-center italic px-4"
-            style={{ opacity: fade ? 1 : 0 }}
-          >
-            "{dynamicTips[tipIndex]}"
-          </p>
-          {/* Tip dots */}
-          <div className="flex justify-center gap-2 mt-5">
-            {dynamicTips.map((_, i) => (
-              <div key={i} className={"h-1 rounded-full transition-all duration-300 " + (i === tipIndex ? "bg-foreground w-4" : "bg-border w-1.5")} />
-            ))}
+        {/* Luxury Pro Studio Tip Card */}
+        <div className="w-full max-w-md bg-card/80 border border-border/80 p-4 rounded-xl shadow-sm backdrop-blur-sm transition-all duration-500 text-left relative overflow-hidden group">
+          <div className="flex items-center justify-between mb-2">
+            <span className="inline-flex items-center gap-1.5 text-[9px] uppercase tracking-[0.2em] font-bold text-taupe">
+              <span className="size-1.5 rounded-full bg-amber-400 animate-pulse" />
+              Pro Studio Tip · {PRO_STUDIO_TIPS[msgIndex % PRO_STUDIO_TIPS.length].category}
+            </span>
+            <span className="text-[9px] font-bold text-foreground bg-muted border border-border px-2 py-0.5 rounded">
+              {PRO_STUDIO_TIPS[msgIndex % PRO_STUDIO_TIPS.length].stat}
+            </span>
           </div>
+          <p className="text-xs text-foreground/90 leading-relaxed font-serif italic">
+            "{PRO_STUDIO_TIPS[msgIndex % PRO_STUDIO_TIPS.length].tip}"
+          </p>
         </div>
       </div>
     </div>
@@ -1306,20 +1311,9 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, 
 
   const [activeTab, setActiveTab] = useState<'visual' | 'copywriting' | 'prompt'>('visual');
 
-  if (generating) {
-    return <GeneratingScreen jobStatus={jobStatus} brandDna={brandDna} appointment={appointment} estimatedSeconds={estimatedSeconds} />;
-  }
 
-  if (!backendVariants || backendVariants.length === 0) {
-    return (
-      <div className="artifact p-12 text-center">
-        <p className="eyebrow mb-3">No content generated</p>
-        <p className="text-sm text-taupe">The job completed but returned no content. Try again.</p>
-      </div>
-    );
-  }
 
-  const contentItem = backendVariants[0];
+  const contentItem = backendVariants?.[0] || {};
   const variants: any[] = Array.isArray(contentItem.generationOptions) && contentItem.generationOptions.length > 0
     ? contentItem.generationOptions
     : [{ caption: contentItem.caption, hashtags: contentItem.hashtags, hookSentence: contentItem.hookSentence, callToAction: contentItem.callToAction }];
@@ -1335,6 +1329,41 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, 
   const reelHookOverlay: string = isReel ? (contentItem.platformVariants?.hookOverlayText ?? '') : '';
   const safeSlide = Math.min(activeSlide, Math.max(0, carouselSlides.length - 1));
   const safeFrame = Math.min(activeSlide, Math.max(0, storyFrames.length - 1));
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't change slide if user is typing in an input or textarea
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        setActiveSlide(prev => Math.max(0, prev - 1));
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        setActiveSlide(prev => {
+          const maxIdx = isCarousel ? carouselSlides.length - 1 : isStory ? storyFrames.length - 1 : 0;
+          return Math.min(maxIdx, prev + 1);
+        });
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isCarousel, isStory, carouselSlides.length, storyFrames.length]);
+
+  if (generating) {
+    return <GeneratingScreen jobStatus={jobStatus} brandDna={brandDna} appointment={appointment} estimatedSeconds={estimatedSeconds} />;
+  }
+
+  if (!backendVariants || backendVariants.length === 0) {
+    return (
+      <div className="artifact p-12 text-center">
+        <p className="eyebrow mb-3">No content generated</p>
+        <p className="text-sm text-taupe">The job completed but returned no content. Try again.</p>
+      </div>
+    );
+  }
+
 
   // Determine active image URL based on selected text variant
   const getVariantUrl = (slideData: any) => {

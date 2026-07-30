@@ -11,6 +11,9 @@ export interface StoryFrameConcept {
   index: number;
   title: string;       // e.g. "Frame 1 · The chair, empty"
   overlayText: string; // Short text rendered on the frame (max 50 chars)
+  headline?: string;
+  subheadline?: string;
+  cta?: string;
 }
 
 export interface StoryFrameResult {
@@ -62,15 +65,18 @@ Frame structure:
 
 Rules:
 - title: "Frame N · Concept" (max 35 chars)
-- overlayText: text shown on frame (max 50 chars, evocative)
+- overlayText: legacy string (can just combine headline and subheadline)
+- headline: Massive punchy hook/title for this specific slide (max 30 chars)
+- subheadline: Smaller supporting text (max 60 chars)
+- cta: Call to action text (usually on last frame)
 
 Return exactly:
 {
   "frames": [
-    { "index": 1, "title": "Frame 1 · The chair, empty", "overlayText": "..." },
-    { "index": 2, "title": "Frame 2 · Hands at work", "overlayText": "..." },
-    { "index": 3, "title": "Frame 3 · The reveal", "overlayText": "..." },
-    { "index": 4, "title": "Frame 4 · Tap for a consult", "overlayText": "..." }
+    { "index": 1, "title": "Frame 1 · The chair, empty", "overlayText": "...", "headline": "...", "subheadline": "..." },
+    { "index": 2, "title": "Frame 2 · Hands at work", "overlayText": "...", "headline": "...", "subheadline": "..." },
+    { "index": 3, "title": "Frame 3 · The reveal", "overlayText": "...", "headline": "...", "subheadline": "..." },
+    { "index": 4, "title": "Frame 4 · Tap for a consult", "overlayText": "...", "headline": "...", "subheadline": "...", "cta": "..." }
   ]
 }`;
 
@@ -90,10 +96,10 @@ Return exactly:
 
     return {
       frames: [
-        { index: 1, title: 'Frame 1 · The chair, empty', overlayText: 'Before it all begins' },
-        { index: 2, title: 'Frame 2 · Mid-process, hands only', overlayText: serviceName.slice(0, 50) },
-        { index: 3, title: 'Frame 3 · The reveal', overlayText: hookSentence.slice(0, 50) },
-        { index: 4, title: 'Frame 4 · Tap for a consult', overlayText: callToAction.slice(0, 50) },
+        { index: 1, title: 'Frame 1 · The chair, empty', overlayText: 'Before it all begins', headline: 'Before', subheadline: 'The anticipation' },
+        { index: 2, title: 'Frame 2 · Mid-process, hands only', overlayText: serviceName.slice(0, 50), headline: serviceName.slice(0, 30), subheadline: 'Trust the process' },
+        { index: 3, title: 'Frame 3 · The reveal', overlayText: hookSentence.slice(0, 50), headline: 'The Reveal', subheadline: hookSentence.slice(0, 60) },
+        { index: 4, title: 'Frame 4 · Tap for a consult', overlayText: callToAction.slice(0, 50), headline: 'Ready?', subheadline: 'Book your appointment', cta: callToAction.slice(0, 50) },
       ],
     };
   }

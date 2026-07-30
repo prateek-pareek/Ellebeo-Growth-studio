@@ -16,12 +16,15 @@ import { PrismaService } from './prisma/prisma.service';
 import { startNotificationsWorker } from './notifications/notifications.worker';
 import { startPublishWorker } from './schedule/publish.worker';
 import { getAllowedOrigins, isOriginAllowed } from './config/cors';
+import { closeRedisClient } from './config/redis.client';
 
 async function bootstrap() {
   // Body parser disabled globally so the Stripe webhook route can access the
   // raw request body (required for signature verification). Re-applied below
   // for every other route.
   const app = await NestFactory.create(AppModule, { bodyParser: false });
+  
+  app.enableShutdownHooks();
 
   app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (req.originalUrl === '/api/v1/billing/webhook') {
@@ -80,11 +83,11 @@ async function bootstrap() {
     await notificationsService.send(dto);
   };
 
-  startContentGenerationWorker(generationGateway.server, notifyFn);
+  const prismaService = app.get(PrismaService);
+  startContentGenerationWorker(prismaService, generationGateway.server, notifyFn);
 
   const notificationsGateway = app.get(NotificationsGateway);
   const smsService = app.get(SmsService);
-  const prismaService = app.get(PrismaService);
   startNotificationsWorker(prismaService, notificationsGateway, smsService);
   startPublishWorker(prismaService);
   console.log("Server is running on port", port);
@@ -92,6 +95,12 @@ async function bootstrap() {
   console.log("Front end url: ", process.env.FRONTEND_URL);
   console.log("Admin portal url: ", process.env.ADMIN_PORTAL_URL);
   console.log("CORS allowed origins:", getAllowedOrigins());
+  
+  const originalClose = app.close.bind(app);
+  app.close = async () => {
+    await closeRedisClient();
+    return originalClose();
+  };
 }
 
 bootstrap();

@@ -22,6 +22,11 @@ export interface VisionAnalysisResult {
     eyesYPercent: number;
     mouthYPercent: number;
   };
+  suitabilityScores: {
+    technicalQuality: number;
+    brandCompatibility: number;
+    composition: number;
+  };
 }
 
 // ---------------------------------------------------------------------------
