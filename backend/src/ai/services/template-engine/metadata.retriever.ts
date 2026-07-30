@@ -34,6 +34,15 @@ export class MetadataRetriever implements ITemplateRetriever {
       } else if (id.includes('clinical_hero')) {
         category = 'Clinical Hero';
         concept = 'Structured layout suited for professional or before/after visual evidence.';
+      } else if (id.includes('countdown_promo')) {
+        category = 'Countdown Promo';
+        concept = 'Urgency-driven promotional layout pairing a bold offer headline with product/photo focus.';
+      } else if (id.includes('product_showcase')) {
+        category = 'Product Showcase';
+        concept = 'Product- or result-hero layout built around a centered or full-bleed focal image.';
+      } else if (id.includes('split')) {
+        category = 'Split';
+        concept = 'Two-region layout dividing the canvas between a photo area and a dedicated text area.';
       }
 
       const isSplit = id.includes('split') || id.includes('clinical_hero');

@@ -597,7 +597,7 @@ export class CompositionEngine {
         id: 'promo_circle_accent',
         type: 'decoration',
         zIndex: 5,
-        component: 'gold_accents',
+        component: 'product_halo_ring',
         anchor: 'center',
         offsetPercent: 0
       } as IDSLDecorationLayer);
@@ -652,7 +652,7 @@ export class CompositionEngine {
         id: 'showcase_halo_ring',
         type: 'decoration',
         zIndex: 5,
-        component: 'gold_accents',
+        component: 'product_halo_ring',
         anchor: 'center',
         offsetPercent: 0
       } as IDSLDecorationLayer);

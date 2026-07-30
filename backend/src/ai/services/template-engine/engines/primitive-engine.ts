@@ -1032,6 +1032,45 @@ export class PrimitiveEngine {
         "
       </text>`;
     }};
+
+    // ─── SPLIT / COUNTDOWN PROMO / PRODUCT SHOWCASE PRIMITIVES ───
+
+    this.registry['split_seam_line'] = { category: 'layout', render: (ctx, layer) => {
+      // Thin accent line marking the seam between the photo band and the text block
+      const offsetPercent = layer && (layer as IDSLDecorationLayer).offsetPercent != null ? (layer as IDSLDecorationLayer).offsetPercent : 40;
+      const y = Math.round((offsetPercent / 100) * ctx.h);
+      return `
+      <!-- Split Family Seam Line -->
+      <g transform="translate(0, ${y})">
+        <line x1="${ctx.constraints.safeX}" y1="0" x2="${ctx.w - ctx.constraints.safeX}" y2="0" stroke="${ctx.validBrandColor}" stroke-width="1.5" opacity="0.4" />
+      </g>`;
+    }};
+
+    this.registry['countdown_urgency_badge'] = { category: 'geometry', render: (ctx, layer) => {
+      // Small rounded urgency/CTA badge, anchored near the layer's declared corner
+      const attachX = layer && layer.anchor && layer.anchor.includes('right') ? ctx.w - ctx.constraints.safeX - 130 : ctx.constraints.safeX;
+      const attachY = layer && layer.anchor && layer.anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - 40 : ctx.constraints.safeY;
+      return `
+      <!-- Countdown Promo Urgency Badge -->
+      <g transform="translate(${attachX}, ${attachY})">
+        <rect x="0" y="0" width="130" height="40" rx="20" fill="${ctx.validAccentColor || ctx.validBrandColor}" filter="drop-shadow(0 4px 8px rgba(0,0,0,0.2))" />
+        <text x="65" y="25" font-family="sans-serif" font-size="13" font-weight="800" fill="${ctx.validBackgroundColor}" text-anchor="middle" letter-spacing="1.5px">LIMITED TIME</text>
+      </g>`;
+    }};
+
+    this.registry['product_halo_ring'] = { category: 'geometry', render: (ctx, layer) => {
+      // Two concentric decorative rings behind a centered circle-masked product photo
+      const cx = ctx.w / 2;
+      const cy = ctx.h / 2;
+      const outerR = Math.round(Math.min(ctx.w, ctx.h) * 0.38);
+      const innerR = Math.round(Math.min(ctx.w, ctx.h) * 0.34);
+      return `
+      <!-- Product Showcase Halo Ring -->
+      <g opacity="0.9">
+        <circle cx="${cx}" cy="${cy}" r="${outerR}" fill="none" stroke="${ctx.validSecondaryColor}" stroke-width="2" />
+        <circle cx="${cx}" cy="${cy}" r="${innerR}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1" stroke-dasharray="3 6" opacity="0.6" />
+      </g>`;
+    }};
   }
 
 
