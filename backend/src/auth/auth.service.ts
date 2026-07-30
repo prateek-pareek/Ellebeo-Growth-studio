@@ -23,7 +23,28 @@ export class AuthService {
     this.refreshTokenPepper = this.configService.getOrThrow<string>('JWT_REFRESH_SECRET');
   }
 
+  /**
+   * Sign in with an existing technician account only. Does NOT provision a new
+   * account for an unrecognised Google/Apple email — that would let any
+   * outside user (e.g. a client of the wider Elle.Be.O app) land on the login
+   * page and silently get a brand-new technician + Growth Studio tenant.
+   * Account creation only happens through firebaseSignup().
+   */
   async firebaseLogin(firebaseIdToken: string, ipAddress?: string, userAgent?: string) {
+    return this.firebaseAuthenticate(firebaseIdToken, ipAddress, userAgent, false);
+  }
+
+  /** Sign in, provisioning a new technician + tenant if this email has never signed in before. */
+  async firebaseSignup(firebaseIdToken: string, ipAddress?: string, userAgent?: string) {
+    return this.firebaseAuthenticate(firebaseIdToken, ipAddress, userAgent, true);
+  }
+
+  private async firebaseAuthenticate(
+    firebaseIdToken: string,
+    ipAddress: string | undefined,
+    userAgent: string | undefined,
+    allowAccountCreation: boolean,
+  ) {
     if (!firebaseAuth) throw new UnauthorizedException('Firebase auth not configured');
 
     let decoded: Awaited<ReturnType<typeof firebaseAuth.verifyIdToken>>;
@@ -40,8 +61,21 @@ export class AuthService {
     let user = await this.prisma.user.findUnique({ where: { email }, include: { tenant: true } });
 
     if (!user) {
+      if (!allowAccountCreation) {
+        throw new UnauthorizedException(
+          'No technician account found for this Google account. Please sign up first.',
+        );
+      }
+
+      const crmStatus = await this.getCrmOnboardingStatus(email);
+      if (!crmStatus?.completed) {
+        throw new UnauthorizedException(
+          'Please complete your technician profile setup before accessing Growth Studio.',
+        );
+      }
+
       const randomHash = await bcrypt.hash(uuidv4(), this.saltRounds);
-      const displayName = (decoded.name as string | undefined) || email.split('@')[0];
+      const displayName = crmStatus.fullName || (decoded.name as string | undefined) || email.split('@')[0];
 
       user = await this.prisma.$transaction(async (tx) => {
         const newUser = await tx.user.create({
@@ -80,6 +114,14 @@ export class AuthService {
     const existingUser = await this.prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       throw new HttpException('Email is already registered', HttpStatus.CONFLICT);
+    }
+
+    const crmStatus = await this.getCrmOnboardingStatus(email);
+    if (!crmStatus?.completed) {
+      throw new HttpException(
+        'Please complete your technician profile setup before creating a Growth Studio account.',
+        HttpStatus.FORBIDDEN,
+      );
     }
 
     const passwordHash = await bcrypt.hash(password, this.saltRounds);
@@ -387,10 +429,12 @@ export class AuthService {
       await client.connect();
       const { rows } = await client.query<{
         id: string; email: string | null; fullName: string | null; passwordHash: string | null;
+        onboardingCompletedAt: Date | null;
       }>(
-        `SELECT u.id, u.email, u."fullName", ai."passwordHash"
+        `SELECT u.id, u.email, u."fullName", ai."passwordHash", tp."onboardingCompletedAt"
          FROM public."User" u
          JOIN public."AuthIdentity" ai ON ai."userId" = u.id
+         LEFT JOIN public."TechnicianProfile" tp ON tp."userId" = u.id
          WHERE lower(u.email) = lower($1)
            AND ai.provider::text = 'EMAIL'
          LIMIT 1`,
@@ -402,6 +446,12 @@ export class AuthService {
 
       const valid = await bcrypt.compare(password, crm.passwordHash);
       if (!valid) return null;
+
+      if (!crm.onboardingCompletedAt) {
+        throw new UnauthorizedException(
+          'Please complete your technician profile setup before accessing Growth Studio.',
+        );
+      }
 
       return this.prisma.$transaction(async (tx) => {
         const newUser = await tx.user.create({
@@ -423,6 +473,31 @@ export class AuthService {
         });
         return tx.user.findUnique({ where: { id: newUser.id }, include: { tenant: true } });
       });
+    } catch (err) {
+      if (err instanceof UnauthorizedException) throw err;
+      return null;
+    } finally {
+      await client.end();
+    }
+  }
+
+  /** Look up a technician's CRM onboarding status by email (separate Postgres schema, no shared FK). */
+  private async getCrmOnboardingStatus(email: string): Promise<{ completed: boolean; fullName: string | null } | null> {
+    const { Client } = await import('pg');
+    const client = new Client({ connectionString: process.env['DATABASE_URL'] });
+    try {
+      await client.connect();
+      const { rows } = await client.query<{ fullName: string | null; onboardingCompletedAt: Date | null }>(
+        `SELECT u."fullName", tp."onboardingCompletedAt"
+         FROM public."User" u
+         LEFT JOIN public."TechnicianProfile" tp ON tp."userId" = u.id
+         WHERE lower(u.email) = lower($1)
+         LIMIT 1`,
+        [email],
+      );
+      const row = rows[0];
+      if (!row) return null;
+      return { completed: !!row.onboardingCompletedAt, fullName: row.fullName };
     } catch {
       return null;
     } finally {

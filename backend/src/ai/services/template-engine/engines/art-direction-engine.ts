@@ -93,11 +93,29 @@ export class ArtDirectionEngine {
       balance = 'symmetrical';
       readingFlow = 'center_anchored';
       foundKnowledge = true;
-    } else if (baseId === 'premium_text_only') {
+    } else if (baseId === 'premium_text_only' || baseId.startsWith('premium')) {
       family = 'premium';
       energy = 'bold';
       balance = 'symmetrical';
       readingFlow = 'center_anchored';
+      foundKnowledge = true;
+    } else if (baseId.startsWith('split')) {
+      family = 'split';
+      energy = 'structured';
+      balance = 'asymmetrical';
+      readingFlow = 'z_pattern'; // photo and text occupy distinct halves/bands, eye moves between them
+      foundKnowledge = true;
+    } else if (baseId.startsWith('countdown_promo')) {
+      family = 'countdown_promo';
+      energy = 'bold';
+      balance = 'asymmetrical';
+      readingFlow = 'z_pattern'; // urgency-driven layouts favor a punchy, directional read
+      foundKnowledge = true;
+    } else if (baseId.startsWith('product_showcase')) {
+      family = 'product_showcase';
+      energy = 'calm';
+      balance = 'symmetrical'; // product-hero layouts are centered/balanced around the subject
+      readingFlow = 'center_down';
       foundKnowledge = true;
     } else if (baseId.startsWith('clinical')) {
       family = 'clinical';

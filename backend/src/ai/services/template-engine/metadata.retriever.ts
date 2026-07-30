@@ -18,7 +18,7 @@ export class MetadataRetriever implements ITemplateRetriever {
     for (const [id, raw] of Object.entries(this.library)) {
       let category = 'Procedural V2 Layout';
       let concept = 'A dynamically generated procedural layout';
-      
+
       if (id.includes('editorial')) {
         category = 'Editorial';
         concept = 'High-end fashion and beauty layout with striking visual structure.';
@@ -34,6 +34,15 @@ export class MetadataRetriever implements ITemplateRetriever {
       } else if (id.includes('clinical_hero')) {
         category = 'Clinical Hero';
         concept = 'Structured layout suited for professional or before/after visual evidence.';
+      } else if (id.includes('countdown_promo')) {
+        category = 'Countdown Promo';
+        concept = 'Urgency-driven promotional layout pairing a bold offer headline with product/photo focus.';
+      } else if (id.includes('product_showcase')) {
+        category = 'Product Showcase';
+        concept = 'Product- or result-hero layout built around a centered or full-bleed focal image.';
+      } else if (id.includes('split')) {
+        category = 'Split';
+        concept = 'Two-region layout dividing the canvas between a photo area and a dedicated text area.';
       }
 
       const isSplit = id.includes('split') || id.includes('clinical_hero');
@@ -75,31 +84,47 @@ export class MetadataRetriever implements ITemplateRetriever {
       { id: 'editorial_split', concept: 'Two equal zones (left image, right text), medium typography, minimal texture.', type: 'procedural' },
       { id: 'editorial_full_bleed', concept: 'Image covers entire canvas. High-end fashion typography.', type: 'procedural' },
       { id: 'editorial_feature_story', concept: 'Deep negative space, massive hero headline, vertical caption.', type: 'procedural' },
-      
+
       // Clinical Family
       { id: 'clinical_hero', concept: 'Structured, highly aligned, professional focus.', type: 'procedural' },
       { id: 'clinical_procedure_steps', concept: 'Step-by-step procedure layout with strict grid and precision lines.', type: 'procedural' },
       { id: 'clinical_benefits_grid', concept: 'Data-driven grid layout for highlighting multiple benefits.', type: 'procedural' },
       { id: 'clinical_ingredient_focus', concept: 'Offset image cutout focusing on raw ingredients or microscopic details.', type: 'procedural' },
       { id: 'clinical_before_after', concept: 'Split view layout designed for dramatic before and after results.', type: 'procedural' },
-      
+
       // Minimalist Family
       { id: 'minimalist_centered_quote', concept: 'Ultra clean minimalist quote layout centered perfectly with massive whitespace. No image.', type: 'procedural' },
       { id: 'minimalist_offset_quote', concept: 'Quote pushed hard to the side, creating extreme asymmetrical balance.', type: 'procedural' },
       { id: 'minimalist_quote_image', concept: 'Clean split text quote and subtle image, huge whitespace.', type: 'procedural' },
       { id: 'minimalist_bottom_caption', concept: 'Image pushed to the top, small delicate caption at the absolute bottom.', type: 'procedural' },
       { id: 'minimalist_floating_card', concept: 'Text floats in a distinct card over a blurred or textured background.', type: 'procedural' },
-      
+
       // Premium Text Only Family
       { id: 'premium_hero_statement', concept: 'Massive singular statement taking up the entire canvas. No image required.', type: 'procedural' },
       { id: 'premium_stacked_typography', concept: 'Bold, tight typography stacked vertically. Extremely modern.', type: 'procedural' },
       { id: 'premium_manifesto', concept: 'Text-heavy manifesto layout for deep reading. Excellent for brand values.', type: 'procedural' },
       { id: 'premium_quote_poster', concept: 'Premium text-only quote slide with exquisite SVG deco elements (stars, meteors).', type: 'procedural' },
-      { id: 'premium_cta_poster', concept: 'High-contrast text poster designed strictly to drive conversions and taps.', type: 'procedural' }
+      { id: 'premium_cta_poster', concept: 'High-contrast text poster designed strictly to drive conversions and taps.', type: 'procedural' },
+      { id: 'premium_text_only', concept: 'Premium text-only slide with exquisite SVG deco elements (stars, meteors, rings). No image required. Pure brand DNA.', type: 'procedural' },
+
+      // Split Family
+      { id: 'split_vertical_stack', concept: 'Heading block on top, circle-masked photo filling the bottom, divider at the seam.', type: 'procedural' },
+      { id: 'split_horizontal_band', concept: 'Full-width photo band on top, solid-color text block below, divider at the seam.', type: 'procedural' },
+      { id: 'split_left_right', concept: 'Circle photo on one side, heading and tagline anchored opposite, textured background.', type: 'procedural' },
+
+      // Countdown Promo Family
+      { id: 'countdown_promo_frames', concept: 'Text stack on one side, overlapping polaroid-style photo frames on the other, CTA accent chip.', type: 'procedural' },
+      { id: 'countdown_promo_headline', concept: 'Full-bleed photo on one half, single large centered headline on the other, minimal decoration.', type: 'procedural' },
+      { id: 'countdown_promo_circle', concept: 'Circle-cropped photo centered on a flat background, tight negative space, minimal decoration.', type: 'procedural' },
+
+      // Product Showcase Family
+      { id: 'product_showcase_overlay', concept: 'Full-bleed background photo with headline and tagline text overlaid directly on top.', type: 'procedural' },
+      { id: 'product_showcase_halo', concept: 'Circle-cropped product photo with a larger decorative halo ring behind it.', type: 'procedural' },
+      { id: 'product_showcase_band', concept: 'Heading and tagline band over a photo starting mid-canvas, divider at the seam, CTA chip at the bottom.', type: 'procedural' }
     ];
 
     for (const recipe of compositionRecipes) {
-      
+
       candidates.push({
         id: recipe.id,
         category: 'Procedural Composition',

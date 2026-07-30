@@ -4,6 +4,7 @@ import { useAppointments, type Appointment } from "@/lib/providers/appointments-
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { Send } from "lucide-react";
+import { Pagination } from "@/components/Pagination";
 
 export const Route = createFileRoute("/appointments")({
   head: () => ({
@@ -26,6 +27,14 @@ type AssetLibraryItem = {
 const EXCLUDED_USAGE = new Set(["do_not_generate", "do_not_use_publicly", "private_ref"]);
 const EXCLUDED_CONSENT = new Set(["no_consent", "pending"]);
 
+const PAGE_SIZE = 10;
+
+// E.164-ish: a leading "+", a non-zero country code digit, then 7-14 more digits.
+const PHONE_REGEX = /^\+[1-9]\d{7,14}$/;
+function isValidPhone(value: string): boolean {
+  return PHONE_REGEX.test(value.trim());
+}
+
 const CATEGORIES = [
   { value: "hair_colour",            label: "Colour" },
   { value: "hair_cut_style",         label: "Cut & Style" },
@@ -42,11 +51,13 @@ const CATEGORIES = [
 
 function AppointmentsPage() {
   const [filter, setFilter] = useState<"all" | "consent" | "ready">("all");
+  const [page, setPage] = useState(1);
   const { data: appointments, isEmpty, error, loading, refresh } = useAppointments();
 
   // Form state
   const [clientName, setClientName]   = useState("");
   const [clientPhone, setClientPhone] = useState("");
+  const [phoneError, setPhoneError]   = useState("");
   const [serviceName, setServiceName] = useState("");
   const [category, setCategory]       = useState("hair_cut_style");
   const [isAdding, setIsAdding]       = useState(false);
@@ -101,6 +112,14 @@ function AppointmentsPage() {
 
   const handleAddAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (clientPhone.trim() && !isValidPhone(clientPhone)) {
+      setPhoneError("Include the country code, e.g. +919876543210 — no spaces or dashes.");
+      toast.error("Enter the client phone number with its country code.");
+      return;
+    }
+    setPhoneError("");
+
     setIsAdding(true);
     const isMedicalForm = isMedicalAesthetics && category === "injectables_cosmetic";
     try {
@@ -223,6 +242,13 @@ function AppointmentsPage() {
     return true;
   });
 
+  // Reset to page 1 whenever the result set changes shape
+  useEffect(() => { setPage(1); }, [filter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
+  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   return (
     <div>
       {/* ── Page header ──────────────────────────────────────────────────── */}
@@ -279,11 +305,18 @@ function AppointmentsPage() {
               </label>
               <input
                 value={clientPhone}
-                onChange={(e) => setClientPhone(e.target.value)}
+                onChange={(e) => { setClientPhone(e.target.value); if (phoneError) setPhoneError(""); }}
                 placeholder="e.g. +919876543210"
                 type="tel"
-                className="block w-full border border-border bg-muted/30 px-3 py-2.5 text-sm text-foreground placeholder:text-taupe/60 outline-none focus:border-taupe focus:ring-2 focus:ring-taupe/10 transition-all"
+                className={`block w-full border bg-muted/30 px-3 py-2.5 text-sm text-foreground placeholder:text-taupe/60 outline-none focus:ring-2 transition-all ${
+                  phoneError ? "border-destructive focus:border-destructive focus:ring-destructive/10" : "border-border focus:border-taupe focus:ring-taupe/10"
+                }`}
               />
+              {phoneError ? (
+                <p className="text-[11px] text-destructive">{phoneError}</p>
+              ) : (
+                <p className="text-[11px] text-taupe/60">Please add the country code first (e.g. +91, +61), then the number.</p>
+              )}
             </div>
 
             {/* Service */}
@@ -484,7 +517,7 @@ function AppointmentsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {filtered.map((a) => (
+                {pageItems.map((a) => (
                   <AppointmentRow key={a.id} a={a} onReminderSent={refresh} isMedicalAesthetics={isMedicalAesthetics} />
                 ))}
                 {filtered.length === 0 && (
@@ -496,6 +529,17 @@ function AppointmentsPage() {
                 )}
               </tbody>
             </table>
+          </div>
+        )}
+        {filtered.length > PAGE_SIZE && (
+          <div className="px-5 pb-5">
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              total={filtered.length}
+              pageSize={PAGE_SIZE}
+              onChange={setPage}
+            />
           </div>
         )}
       </div>

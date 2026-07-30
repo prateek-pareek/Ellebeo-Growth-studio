@@ -129,7 +129,7 @@ function CalendarPage() {
       </div>
 
       {/* Calendar grid */}
-      <div className="grid grid-cols-7 gap-px bg-border border hairline mb-8">
+      <div className="grid grid-cols-7 gap-px bg-taupe/25 border border-taupe/25 mb-8">
         {Array.from({ length: totalCells }, (_, i) => {
           const day = i - startOffset + 1;
           const inMonth = day >= 1 && day <= daysInMonth;
@@ -160,11 +160,11 @@ function CalendarPage() {
               }
             >
               <div className="flex items-baseline justify-between">
-                <span className="text-[10px] tabular-nums text-taupe">
+                <span className="text-[11px] font-semibold tabular-nums text-foreground/75">
                   {String(day).padStart(2, "0")}
                 </span>
                 {isQuiet ? (
-                  <span className="text-[8px] uppercase tracking-widest text-taupe/50">Quiet</span>
+                  <span className="text-[8px] uppercase tracking-widest text-taupe font-medium">Quiet</span>
                 ) : primary?.status && primary.status !== "rest" ? (
                   <span className={"size-1.5 rounded-full " + STATUS_DOT[primary.status]} />
                 ) : null}
@@ -188,7 +188,7 @@ function CalendarPage() {
                     <button
                       type="button"
                       onClick={(ev) => { ev.stopPropagation(); setSelectedEntry(dayEntries[2]); }}
-                      className="text-[9px] text-taupe/70 hover:text-foreground transition-colors"
+                      className="text-[9px] font-medium text-taupe hover:text-foreground transition-colors"
                     >
                       +{dayEntries.length - 2} more
                     </button>
@@ -197,7 +197,7 @@ function CalendarPage() {
               ) : (
                 <p className={
                   "text-[10px] italic mt-auto " +
-                  (isQuiet ? "text-taupe/60" : "text-taupe/40")
+                  (isQuiet ? "text-taupe" : "text-taupe/80")
                 }>
                   {isQuiet ? "Fill with a post" : "Open slot"}
                 </p>
@@ -483,7 +483,10 @@ function EntryDetailModal({ entry, dayEntries, contentItems, onClose, onMutated 
         )}
 
         {/* ── Active entry detail ── */}
-        <DialogHeader className="px-6 pt-5 pb-0 shrink-0">
+        {/* pr-12 (not pr-6) — the Dialog's own close button is absolutely
+            positioned at top-4/right-4, so the header needs extra right
+            clearance or the status badge sits directly under it. */}
+        <DialogHeader className="pl-6 pr-12 pt-5 pb-0 shrink-0">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">

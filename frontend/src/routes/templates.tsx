@@ -3,6 +3,7 @@ import { useTemplates, type Template } from "@/lib/providers/template-provider";
 import { useState, useEffect, useRef } from "react";
 import { useAppointments } from "@/lib/providers/appointments-provider";
 import { Layers, Play, Zap, Image, Music } from "lucide-react";
+import { Pagination } from "@/components/Pagination";
 
 export const Route = createFileRoute("/templates")({
   head: () => ({
@@ -55,12 +56,15 @@ const FORMAT_META: Record<string, {
 
 const FORMAT_FILTERS = ["All", "Carousel", "Reel", "Story", "Caption", "TikTok"];
 
+const PAGE_SIZE = 12;
+
 function TemplatesPage() {
   const { templates, categories } = useTemplates();
   const { data: appointments, loading: apptLoading } = useAppointments();
   const [pillar,   setPillar]   = useState("All");
   const [category, setCategory] = useState("All");
   const [format,   setFormat]   = useState("All");
+  const [page,     setPage]     = useState(1);
 
   // Auto-select the tenant's primary service category on first load
   const initialized = useRef(false);
@@ -77,6 +81,13 @@ function TemplatesPage() {
     if (format   !== "All" && t.type !== format)                               return false;
     return true;
   });
+
+  // Reset to page 1 whenever the result set changes shape
+  useEffect(() => { setPage(1); }, [pillar, category, format]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
+  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <div>
@@ -126,18 +137,18 @@ function TemplatesPage() {
       </div>
 
       {/* ── Category filter ──────────────────────────────────────────────── */}
-      <div className="mb-5">
+      <div className="mb-6">
         <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-taupe mb-3">Category</p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2.5">
           {["All", ...categories].map((c) => (
             <button
               key={c}
               onClick={() => setCategory(c)}
               className={
-                "text-[10px] uppercase tracking-widest px-3 py-1.5 rounded-full border transition-colors " +
+                "text-[10px] font-semibold uppercase tracking-widest px-3 py-1.5 rounded-full border-2 transition-all " +
                 (category === c
                   ? "bg-foreground text-offwhite border-foreground"
-                  : "border-border text-taupe hover:text-foreground hover:border-foreground/30")
+                  : "bg-card text-taupe border-border hover:border-foreground/30 hover:bg-nude/20 hover:text-foreground")
               }
             >
               {c}
@@ -174,11 +185,22 @@ function TemplatesPage() {
           <p className="text-sm text-taupe">No templates match this filter combination.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filtered.map((t) => (
-            <TemplateCard key={t.id} template={t} />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {pageItems.map((t) => (
+              <TemplateCard key={t.id} template={t} />
+            ))}
+          </div>
+          {filtered.length > PAGE_SIZE && (
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              total={filtered.length}
+              pageSize={PAGE_SIZE}
+              onChange={setPage}
+            />
+          )}
+        </>
       )}
     </div>
   );

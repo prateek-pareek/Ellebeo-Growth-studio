@@ -189,6 +189,23 @@ export class TypographyEngine {
       } else if (!isValid && attempt === MAX_ATTEMPTS) {
         console.error(`[TypographyEngine] Validation failed after ${MAX_ATTEMPTS} attempts for layer ${layer.id}. Protecting typographic integrity over layout boundaries.`);
         if (y + textHeight > ctx.h - 40) y = ctx.h - textHeight - 40;
+
+        // The vertical clamp above never fixed horizontal overflow (boxX off the left/right edge),
+        // which is why text like "FLAWLESS GLOW" was rendering cut off at the canvas edge instead
+        // of being pulled back in bounds. Clamp x (and therefore boxX) to the safe area too, based
+        // on which text-anchor mode is in effect, same logic used to compute boxX above.
+        const minX = ctx.constraints.safeX;
+        const maxX = ctx.w - ctx.constraints.safeX;
+        if (anchor === 'middle') {
+          x = Math.max(minX + effectiveMaxW / 2, Math.min(x, maxX - effectiveMaxW / 2));
+        } else if (anchor === 'end') {
+          x = Math.max(x, minX + effectiveMaxW);
+          x = Math.min(x, maxX);
+        } else {
+          x = Math.min(x, maxX - effectiveMaxW);
+          x = Math.max(x, minX);
+        }
+        boxX = anchor === 'middle' ? x - effectiveMaxW / 2 : anchor === 'end' ? x - effectiveMaxW : x;
       }
 
       // Geometry locked. Get Font metrics for baseline.
