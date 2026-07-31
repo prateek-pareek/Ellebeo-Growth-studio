@@ -8,7 +8,7 @@ import { LayoutEngine } from '../src/ai/services/template-engine/engines/layout-
 import { CompositionOptimizer } from '../src/ai/services/template-engine/engines/composition-optimizer';
 import { PrimitiveEngine, PrimitiveContext } from '../src/ai/services/template-engine/engines/primitive-engine';
 import { MetadataRetriever } from '../src/ai/services/template-engine/metadata.retriever';
-import { BASE_TREATMENTS, registerDynamicLayout } from '../src/ai/config/layout-renderers';
+import { BASE_TREATMENTS, registerDynamicLayout, COMPILED_LAYOUTS } from '../src/ai/config/layout-renderers';
 
 // Throwaway verification for the 4 new families (before_after, testimonial,
 // scrapbook, quadrant): runs each recipe through the exact engine chain
@@ -101,6 +101,21 @@ async function checkRetriever() {
     console.log(`[${found ? 'OK' : 'FAIL'}] retriever candidate '${id}' present`);
     if (!found) failures++;
   }
+
+  // Phase 2: the newly-compiled RIGID (mined) entries in compiled-layouts.v2.json, same check
+  // yesterday's verify-new-primitives-and-knowledge.ts did for split/countdown_promo/product_showcase.
+  for (const family of ['before_after', 'testimonial', 'scrapbook', 'quadrant']) {
+    const matches = candidates.filter((c) => c.id.includes(`layout_v2_${family}`));
+    const sample = matches[0];
+    console.log(`\n${family}: ${matches.length} compiled candidates found`);
+    if (sample) {
+      console.log(`  sample: ${sample.id} -> category="${sample.category}", macroFaceSafe=${sample.macroFaceSafe}`);
+    } else {
+      failures++;
+      console.log(`  [FAIL] no compiled candidates found for ${family}`);
+    }
+  }
+  console.log(`\nTotal candidates from retriever (rigid + procedural): ${candidates.length}`);
 }
 
 // ── 4. The real risk: genuine two-photo Sharp compositing for before_after ─
@@ -163,9 +178,45 @@ async function checkBeforeAfterCompositing() {
   }
 }
 
+// A real MINED before_after entry (from compileBeforeAfter in design-compiler.ts, not a
+// procedural recipe) also needs to trigger genuine two-photo compositing — same primitive engine
+// dispatch, but reached via COMPILED_LAYOUTS directly rather than LayoutAssemblerService.
+async function checkMinedBeforeAfterEntry() {
+  const rigidId = Object.keys(COMPILED_LAYOUTS).find((id) => id.startsWith('layout_v2_before_after'));
+  if (!rigidId) {
+    failures++;
+    console.log('[FAIL] no mined layout_v2_before_after_* entry found in COMPILED_LAYOUTS');
+    return;
+  }
+  const dsl = COMPILED_LAYOUTS[rigidId];
+  const usesSplitMask = dsl.layers.some((l: any) => l.mask === 'before_after_split');
+  try {
+    const afterBuffer = await makeFakeImage('#3366ff');
+    const beforeBuffer = await makeFakeImage('#ff3366');
+    const result = await BASE_TREATMENTS['universal_dynamic_base']({
+      layoutType: rigidId,
+      imageBuffer: afterBuffer,
+      beforePhotoUrl: 'fake://before-photo',
+      w: 1080, h: 1080,
+      paddingX: 60, paddingTop: 80, paddingBottom: 160,
+      innerW: 960, innerH: 840,
+      validBrandColor: '#111111', validSecondaryColor: '#888888', validBackgroundColor: '#ffffff',
+      downloadImageAsBuffer: async (_url: string) => beforeBuffer,
+    } as any);
+    const meta = await result.baseImage.metadata();
+    const ok = !!(meta.width && meta.height);
+    console.log(`[${ok ? 'OK' : 'FAIL'}] mined entry '${rigidId}' (usesSplitMask=${usesSplitMask}) -> ${meta.width}x${meta.height} ${meta.format}`);
+    if (!ok) failures++;
+  } catch (err: any) {
+    failures++;
+    console.error(`[FAIL] mined entry '${rigidId}' threw:`, err?.message || err);
+  }
+}
+
 (async () => {
   await checkRetriever();
   await checkBeforeAfterCompositing();
+  await checkMinedBeforeAfterEntry();
 
   console.log(`\n${failures === 0 ? 'All checks passed.' : `${failures} check(s) failed.`}`);
   if (failures > 0) process.exit(1);
