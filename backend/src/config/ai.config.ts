@@ -11,7 +11,7 @@ export const AI_CONFIG = {
   models: {
     standardText: {
       provider: 'openai' as const,
-      modelId: 'gpt-4o-mini',
+      modelId: 'gemini-flash-latest',
       temperature: 0.75,
       maxTokens: 1024,
       timeoutMs: 30_000,
@@ -25,14 +25,14 @@ export const AI_CONFIG = {
     },
     vision: {
       provider: 'openai' as const,
-      modelId: 'gpt-4o',
+      modelId: 'gemini-pro-latest',
       temperature: 0.2,       // low — vision output should be factual
       maxTokens: 512,
       timeoutMs: 45_000,
     },
     reelScript: {
       provider: 'openai' as const,
-      modelId: 'gpt-4o-mini',
+      modelId: 'gemini-flash-latest',
       temperature: 0.8,
       maxTokens: 256,
       timeoutMs: 30_000,
@@ -328,8 +328,8 @@ export const AI_CONFIG = {
   // Cost Estimation (USD per 1K tokens — update when pricing changes)
   // --------------------------------------------------------------------------
   pricing: {
-    'gpt-4o-mini': { inputPer1k: 0.00015, outputPer1k: 0.0006 },
-    'gpt-4o': { inputPer1k: 0.005, outputPer1k: 0.015 },
+    'gemini-flash-latest': { inputPer1k: 0.00015, outputPer1k: 0.0006 },
+    'gemini-pro-latest': { inputPer1k: 0.005, outputPer1k: 0.015 },
     'claude-3-5-sonnet-20241022': { inputPer1k: 0.003, outputPer1k: 0.015 },
   },
 

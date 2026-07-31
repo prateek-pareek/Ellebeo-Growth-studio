@@ -123,8 +123,10 @@ export function useAppointments(): UseAppointmentsResult {
   });
   const reqId = useRef(0);
 
-  const fetch = (id: number) => {
-    setState((prev) => ({ ...prev, loading: true }));
+  const fetch = (id: number, isBackground = false) => {
+    if (!isBackground) {
+      setState((prev) => ({ ...prev, loading: true }));
+    }
     fetchCloudAppointments()
       .then((res) => {
         if (id !== reqId.current) return;
@@ -153,7 +155,7 @@ export function useAppointments(): UseAppointmentsResult {
   useEffect(() => {
     const timer = setInterval(() => {
       const id = ++reqId.current;
-      fetch(id);
+      fetch(id, true);
     }, 30_000);
     return () => clearInterval(timer);
   }, []);

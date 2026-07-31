@@ -4,7 +4,9 @@
 // Instagram is the primary — this chain adapts it for Facebook and TikTok
 // ============================================================================
 
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
+
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import type { PlatformVariantResult } from '../types/chain-output.types';
 import type { CaptionGenerationResult } from '../types/chain-output.types';
@@ -54,21 +56,26 @@ function parsePlatformVariantOutput(
 }
 
 export class PlatformVariantChain {
-  private model: ChatOpenAI | null = null;
+  private model: ChatGoogleGenerativeAI | null = null;
   private readonly cfg: ReturnType<ModelRouter['selectReelScriptModel']>;
 
   constructor(modelRouter: ModelRouter) {
     this.cfg = modelRouter.selectReelScriptModel();
   }
 
-  private getModel(): ChatOpenAI {
+  private getModel(): ChatGoogleGenerativeAI {
     if (!this.model) {
-      this.model = new ChatOpenAI({
-        modelName: this.cfg.modelId,
+      this.model = new ChatGoogleGenerativeAI({
+        model: this.cfg.modelId,
         temperature: this.cfg.temperature,
-        maxTokens: 800,
-        timeout: this.cfg.timeoutMs,
-        openAIApiKey: process.env['OPENAI_API_KEY'] ?? '',
+        maxOutputTokens: 8192,
+        apiKey: process.env['GEMINI_API_KEY'] ?? '',
+      safetySettings: [
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      ],
       });
     }
     return this.model;
