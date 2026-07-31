@@ -3,6 +3,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GenerateContentDto, TweakContentDto } from './dto/generation.dto';
 import { GenerationGateway } from './generation.gateway';
 import { contentGenerationQueue } from '../ai/queues/queue.definitions';
+import { GenerationProgressTracker } from '../ai/services/generation-progress.tracker';
+import { AI_CONFIG, estimateTotalJobSeconds } from '../config/ai.config';
 
 @Injectable()
 export class GenerationService {
@@ -206,7 +208,9 @@ export class GenerationService {
       { jobId: job.id },
     );
 
-    const estimatedSeconds = isReel ? 120 : 30;
+    // Calibrated per output format — carousel/story do multiple AI image
+    // generations after the caption, reel adds storyboard + voiceover on top.
+    const estimatedSeconds = estimateTotalJobSeconds(dto.outputFormats as string[]);
 
     this.generationGateway.emitJobUpdate(job.id, job.state as any);
 
@@ -227,7 +231,25 @@ export class GenerationService {
     const job = await this.prisma.generationJob.findUnique({ where: { id: jobId } });
     if (!job || job.tenantId !== tenantId) throw new NotFoundException('Job not found');
     this.generationGateway.emitJobUpdate(job.id, job.state as any);
-    return job;
+
+    // Live sub-progress (set by the orchestrator/JobProgressEmitter during this
+    // run) takes priority — it's more granular than the coarse persisted state.
+    // Falls back to the state-based map (e.g. after a server restart clears the
+    // in-memory tracker, or for tweak jobs which never call tracker.init()).
+    const isTerminal = job.state === 'completed' || job.state === 'failed' || job.state === 'blocked' || job.state === 'dead_letter';
+    const live = GenerationProgressTracker.getLive(jobId);
+    const fallback = AI_CONFIG.progressMap[job.state as keyof typeof AI_CONFIG.progressMap];
+
+    return {
+      ...job,
+      // Once the job has actually reached a terminal DB state, that's ground
+      // truth — never let a stale/missing tracker entry show anything but
+      // "done" (100 for completed; the async work is equally "over" for
+      // failed/blocked, so 100 there too — there's no more time left to wait).
+      progressPercent: isTerminal ? 100 : (live?.percent ?? fallback?.percent ?? 0),
+      currentStep: live?.step ?? fallback?.step ?? 'Processing your content...',
+      estimatedSecondsRemaining: isTerminal ? 0 : (live?.estimatedSecondsRemaining ?? AI_CONFIG.stateEtaSeconds[job.state] ?? 30),
+    };
   }
 
   async tweakContent(tenantId: string, dto: TweakContentDto) {

@@ -123,8 +123,13 @@ export function useAppointments(): UseAppointmentsResult {
   });
   const reqId = useRef(0);
 
-  const fetch = (id: number) => {
-    setState((prev) => ({ ...prev, loading: true }));
+  // background=true is used by the silent 30s poll below — it must never
+  // flip `loading` back to true, or every consumer that gates its whole page
+  // behind `if (loading) return <Loading/>` (e.g. /generate, mid-generation)
+  // gets unmounted and remounted from scratch every 30s, which reads as an
+  // unwanted "page refresh" that resets scroll position and in-flight UI state.
+  const fetch = (id: number, background = false) => {
+    if (!background) setState((prev) => ({ ...prev, loading: true }));
     fetchCloudAppointments()
       .then((res) => {
         if (id !== reqId.current) return;
@@ -138,7 +143,10 @@ export function useAppointments(): UseAppointmentsResult {
       })
       .catch(() => {
         if (id !== reqId.current) return;
-        setState({ data: [], loading: false, source: "cloud", isEmpty: true, error: true });
+        if (!background) setState({ data: [], loading: false, source: "cloud", isEmpty: true, error: true });
+        // Background refreshes fail silently — keep showing the last good data
+        // rather than clobbering the screen with an error state over a
+        // transient network hiccup during a periodic sync.
       });
   };
 
@@ -149,20 +157,20 @@ export function useAppointments(): UseAppointmentsResult {
 
   // Poll every 30s so widgets like "Bookings This Week" on Home stay in sync
   // with bookings created elsewhere (CRM import, another open tab, etc.)
-  // without requiring a manual page reload.
+  // without requiring a manual page reload. Silent — see `background` above.
   useEffect(() => {
     const timer = setInterval(() => {
       const id = ++reqId.current;
-      fetch(id);
+      fetch(id, true);
     }, 30_000);
     return () => clearInterval(timer);
   }, []);
 
   return {
-    ...state, 
+    ...state,
     refresh: () => {
       const id = ++reqId.current;
       fetch(id);
-    } 
+    }
   };
 }

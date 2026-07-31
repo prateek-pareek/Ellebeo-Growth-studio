@@ -306,6 +306,53 @@ export const AI_CONFIG = {
   },
 
   // --------------------------------------------------------------------------
+  // Per-state ETA (seconds remaining), shared by JobProgressEmitter (websocket)
+  // and GenerationService (REST polling fallback) so both surfaces agree.
+  // --------------------------------------------------------------------------
+  stateEtaSeconds: {
+    created: 45,
+    queued: 45,
+    processing_image: 35,
+    processing_vision: 25,
+    building_prompt: 20,
+    generating_text: 12,
+    generating_reel: 90,
+    completed: 0,
+    failed: 0,
+    retrying: 30,
+    blocked: 0,
+    dead_letter: 0,
+  } as Record<string, number>,
+
+  // --------------------------------------------------------------------------
+  // Live progress floors (percent), used by GenerationProgressTracker.
+  // Deliberately conservative — real pacing comes from elapsed-time-vs-total-
+  // estimate (recomputed every read), these just (a) guarantee the number
+  // never regresses below a real structural signal, and (b) keep the very
+  // early/late edges honest. Making these too generous (e.g. the old
+  // 20/35/50/70 step-count-based scheme) is exactly what made the bar race
+  // ahead of real backend completion — caption generation finishes a small
+  // fraction of the way into a carousel/story job's true wall-clock time, so
+  // jumping straight to 70% there was a lie the moment the slow image work
+  // started. Terminal states are 100 — once the async work is over, "percent
+  // remaining" is meaningless regardless of pass/fail outcome.
+  // --------------------------------------------------------------------------
+  stateFloorPercent: {
+    created: 0,
+    queued: 2,
+    processing_image: 4,
+    processing_vision: 8,
+    building_prompt: 12,
+    generating_text: 16,
+    generating_reel: 16,
+    completed: 100,
+    failed: 100,
+    retrying: 0,
+    blocked: 100,
+    dead_letter: 100,
+  } as Record<string, number>,
+
+  // --------------------------------------------------------------------------
   // OpenTelemetry
   // --------------------------------------------------------------------------
   otel: {
@@ -342,3 +389,18 @@ export const AI_CONFIG = {
 } as const;
 
 export type AIConfig = typeof AI_CONFIG;
+
+// ----------------------------------------------------------------------------
+// Total job duration estimate, by requested output formats. Shared by
+// GenerationService (seeds the frontend's initial countdown at job creation)
+// and GenerationOrchestrator (anchors every in-flight progress checkpoint's
+// "seconds remaining" to total elapsed vs. this total, instead of a per-step
+// guess) so the countdown always reflects the whole job, not just the current
+// internal stage.
+// ----------------------------------------------------------------------------
+export function estimateTotalJobSeconds(outputFormats: string[]): number {
+  if (outputFormats.includes('reel')) return 140;
+  if (outputFormats.includes('carousel')) return 75;
+  if (outputFormats.includes('story')) return 65;
+  return 35;
+}
