@@ -163,3 +163,53 @@ export interface ILayoutState {
   occupiedRegions: ILayoutRegion[];
 }
 
+// ============================================================================
+// PHASE 3: DESIGN RECIPE & TOKEN ARCHITECTURE
+// ============================================================================
+
+export interface TypographyTokens {
+  headlineWeight: 'light' | 'medium' | 'heavy' | 'hero';
+  bodyWeight: 'light' | 'medium' | 'heavy';
+  tracking: 'tight' | 'standard' | 'airy' | 'wide';
+  casing: 'force_uppercase' | 'force_lowercase' | 'sentence' | 'natural';
+  contrast: 'low' | 'medium' | 'high';
+}
+
+export interface VisualTokens {
+  texture: 'paper' | 'noise' | 'grain' | 'none';
+  decorationDensity: 'minimal' | 'medium' | 'heavy';
+}
+
+export interface CompositionTokens {
+  imageDominance: number; // 0.0 to 1.0
+  whitespace: 'minimal' | 'medium' | 'high' | 'massive';
+  alignment: 'center' | 'offset' | 'dynamic';
+}
+
+export interface ReadingFlowTokens {
+  type: 'center_down' | 'z_pattern' | 'circular' | 'left_right';
+}
+
+export interface PrimitiveTokens {
+  rings: boolean;
+  stars: boolean;
+  borders: boolean;
+  ghostHeadline: boolean;
+  cornerBadges: boolean;
+}
+
+export interface ImageTreatmentTokens {
+  crop: 'portrait' | 'landscape' | 'square' | 'circle';
+  mask: 'soft_edge' | 'hard_edge' | 'polaroid';
+  protectFace: boolean;
+}
+
+export interface DesignRecipe {
+  layoutId: string;
+  typography: TypographyTokens;
+  visual: VisualTokens;
+  composition: CompositionTokens;
+  readingFlow: ReadingFlowTokens;
+  primitives: PrimitiveTokens;
+  imageTreatment: ImageTreatmentTokens;
+}

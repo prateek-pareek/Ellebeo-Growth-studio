@@ -1,4 +1,4 @@
-import { IDSLTextLayer } from '../interfaces';
+import { IDSLTextLayer, TypographyTokens } from '../interfaces';
 import { LayoutConstraints, LayoutEngine } from './layout-engine';
 import { DesignTokens } from './theme-engine';
 import { FontRegistry } from '../font-registry';
@@ -18,6 +18,7 @@ export interface TypographyContext {
   constraints: LayoutConstraints;
   layoutEngine: LayoutEngine;
   designTokens?: DesignTokens;
+  typographyTokens?: TypographyTokens; // NEW ARCHITECTURE
   layoutState?: import('../interfaces').ILayoutState;
   typographyMetrics?: {
     heroSize: number;
@@ -32,8 +33,6 @@ export interface TypographyContext {
   };
 }
 
-export type TypographySystem = 'editorial' | 'clinical' | 'minimalist' | 'premium';
-
 export class TypographyEngine {
   private fontRegistry: FontRegistry;
 
@@ -44,7 +43,7 @@ export class TypographyEngine {
   /**
    * Main text rendering entry point that handles wrapping, styling, and safe-zone collision
    */
-  public renderTextLayer(ctx: TypographyContext, layer: IDSLTextLayer, system: TypographySystem = 'minimalist'): string {
+  public renderTextLayer(ctx: TypographyContext, layer: IDSLTextLayer): string {
     // 1. Map text layer ID to structured text fields if available
     let rawText = ctx.overlayText || '';
 
@@ -79,7 +78,7 @@ export class TypographyEngine {
       attempt++;
 
       // 2. Resolve Base Style
-      const style = this.resolveStyle(layer, system, ctx, textToWrap);
+      const style = this.resolveStyle(layer, ctx, textToWrap);
       // Apply retry scaling down
       style.fontSize = Math.round(style.fontSize * currentScaleMultiplier);
 
@@ -130,7 +129,7 @@ export class TypographyEngine {
       }
 
       // Wrap text to determine actual lines and height BEFORE Y calculation
-      const escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, system, effectiveMaxW);
+      const escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, effectiveMaxW);
       let textHeight = escapedLines.length * lineHeight;
 
       let x = ctx.w / 2;
@@ -262,7 +261,7 @@ export class TypographyEngine {
   /**
    * Resolves the font properties depending on the typographical system, layer role, and DSL properties.
    */
-  private resolveStyle(layer: IDSLTextLayer, system: TypographySystem, ctx: TypographyContext, text: string) {
+  private resolveStyle(layer: IDSLTextLayer, ctx: TypographyContext, text: string) {
     const role = layer.role;
     let fontSize = ctx.dynamicFontSize;
     let fontWeight = 'normal';
@@ -282,75 +281,62 @@ export class TypographyEngine {
     if (layerObj.tracking !== undefined) {
       letterSpacing = `${layerObj.tracking}em`;
     }
-    
+
+    // Default legacy sizes if not provided
     if (!layerObj.fontSize) {
       if (role === 'heading') {
         fontSize = ctx.typographyMetrics ? ctx.typographyMetrics.heroSize : 72;
-        fontWeight = Math.min(800, fontBehavior.maxWeight).toString();
-        letterSpacing = ctx.typographyMetrics ? ctx.typographyMetrics.heroTracking : `${fontBehavior.headlineTracking}em`;
       } else if (role === 'tagline' || role === 'footnote') {
         fontSize = ctx.typographyMetrics ? ctx.typographyMetrics.metadataSize : 16;
-        letterSpacing = ctx.typographyMetrics ? ctx.typographyMetrics.metadataTracking : `${fontBehavior.taglineTracking}em`; 
-        fill = ctx.validSecondaryColor || ctx.dynamicTextColor;
       } else if (role === 'body') {
         fontSize = ctx.typographyMetrics ? ctx.typographyMetrics.bodySize : 18;
-        fontWeight = '400';
       }
     }
 
-    if (system === 'editorial') {
+    // NEW ARCHITECTURE: Configuration-Driven Design Recipe
+    // Safe default if tokens are missing
+    const tokens = ctx.typographyTokens || {
+      headlineWeight: 'medium',
+      bodyWeight: 'medium',
+      tracking: 'standard',
+      casing: 'natural',
+      contrast: 'medium'
+    } as TypographyTokens;
+
+    const weightMap: Record<string, string> = {
+      'light': '300',
+      'medium': '500',
+      'heavy': '700',
+      'hero': '900'
+    };
+
+    const trackingMap: Record<string, string> = {
+      'tight': '-0.04em',
+      'standard': '0em',
+      'airy': '0.03em',
+      'wide': '0.08em'
+    };
+
+    if (role === 'heading') {
+      fontWeight = weightMap[tokens.headlineWeight] || '700';
+      letterSpacing = trackingMap[tokens.tracking] || '0em';
+      layerObj.capitalizationRule = tokens.casing;
+      fill = ctx.dynamicTextColor; // Could map contrast here
+    } else if (role === 'body') {
+      fontWeight = weightMap[tokens.bodyWeight] || '400';
+      fill = ctx.dynamicTextColor;
+    } else if (role === 'tagline' || role === 'footnote') {
+      // Metadata is usually slightly bolder and wider than body, but smaller
+      fontWeight = weightMap[tokens.bodyWeight] === 'light' ? '400' : '600';
+      letterSpacing = trackingMap['wide'];
+      layerObj.capitalizationRule = tokens.casing;
+      fill = ctx.validSecondaryColor || ctx.dynamicTextColor;
+    }
+
+    // Inject serif font if the brand font is an editorial serif and it requires support
+    if (tokens.headlineWeight === 'light' && tokens.tracking === 'wide') {
+      // Very crude heuristic to add elegant fallbacks if it's an editorial recipe
       fontFamily = `'${ctx.brandFont}', 'Playfair Display', 'Georgia', 'Times New Roman', serif`;
-      if (role === 'heading') {
-        // Editorial Weight Range [300, 400, 700]
-        fontWeight = ctx.designTokens?.headlinePresence === 'hero' ? '700' : (ctx.designTokens?.headlinePresence === 'subtle' ? '300' : '400');
-        letterSpacing = '0.05em'; // Elegant wide tracking
-        (layer as any).capitalizationRule = 'force_uppercase';
-        fill = ctx.dynamicTextColor;
-      } else if (role === 'body') {
-        fontWeight = '400';
-      } else if (role === 'tagline' || role === 'footnote') {
-        fontWeight = '300';
-        letterSpacing = '0.3em'; // Very wide tracking for small captions
-        (layer as any).capitalizationRule = 'force_uppercase';
-        fill = ctx.validSecondaryColor || ctx.dynamicTextColor;
-      }
-    } else if (system === 'clinical') {
-      fontFamily = `'${ctx.brandFont}', 'Inter', 'Helvetica Neue', 'Arial', sans-serif`;
-      if (role === 'heading') {
-        // Clinical Weight Range [600, 700, 800]
-        fontWeight = ctx.designTokens?.headlinePresence === 'hero' ? '800' : (ctx.designTokens?.headlinePresence === 'subtle' ? '600' : '700');
-        letterSpacing = '-0.02em'; // Tight tracking for precision
-        (layer as any).capitalizationRule = 'force_sentence';
-      } else if (role === 'body') {
-        fontWeight = '400';
-      } else if (role === 'tagline' || role === 'footnote') {
-        fontWeight = '600';
-        letterSpacing = '0.1em';
-      }
-    } else if (system === 'minimalist') {
-      fontFamily = `'${ctx.brandFont}', 'Optima', 'Futura', 'Trebuchet MS', sans-serif`;
-      if (role === 'heading') {
-        // Minimalist Weight Range [300, 400, 500]
-        fontWeight = ctx.designTokens?.headlinePresence === 'hero' ? '500' : (ctx.designTokens?.headlinePresence === 'subtle' ? '300' : '400');
-        letterSpacing = '0.02em'; // Generous breathing room
-      } else if (role === 'body') {
-        fontWeight = '300';
-      } else if (role === 'tagline' || role === 'footnote') {
-        fontWeight = '400';
-        letterSpacing = '0.2em';
-      }
-    } else if (system === 'premium') {
-      fontFamily = `'${ctx.brandFont}', 'Helvetica Neue', 'Arial', sans-serif`;
-      if (role === 'heading') {
-        // Premium Text Weight Range [700, 800, 900]
-        fontWeight = ctx.designTokens?.headlinePresence === 'subtle' ? '700' : (ctx.designTokens?.headlinePresence === 'hero' ? '900' : '800');
-        letterSpacing = '-0.04em'; // Very tight negative tracking for modern chunky look
-      } else if (role === 'body') {
-        fontWeight = '500';
-      } else if (role === 'tagline' || role === 'footnote') {
-        fontWeight = '700';
-        letterSpacing = '0.05em';
-      }
     }
 
     // DYNAMIC CLAMPING: Prevent single long words from bleeding off the canvas
@@ -372,7 +358,7 @@ export class TypographyEngine {
   /**
    * Handles text wrapping based on layout constraints and DSL layer bounds.
    */
-  private wrapText(text: string, fontSize: number, layer: IDSLTextLayer, ctx: TypographyContext, system: TypographySystem, resolvedMaxWidth?: number): string[] {
+  private wrapText(text: string, fontSize: number, layer: IDSLTextLayer, ctx: TypographyContext, resolvedMaxWidth?: number): string[] {
     const estimatedCharWidth = fontSize * 0.52;
     
     let layerMaxWidth = resolvedMaxWidth || ctx.constraints.contentMaxWidth;
@@ -386,7 +372,7 @@ export class TypographyEngine {
     // BEHAVIORAL DESIGN: Dominance Stacking
     // Premium editorial design forces massive headlines to stack vertically rather than stretch wide.
     if (layer.role === 'heading') {
-      if (system === 'editorial') {
+      if (ctx.typographyTokens?.headlineWeight === 'light' && ctx.typographyTokens?.tracking === 'wide') {
         maxCharsPerLine = Math.min(maxCharsPerLine, 12); // Extremely tight word wrap for tall, blocky editorial text
       } else if (fontSize >= 80) {
         maxCharsPerLine = Math.min(maxCharsPerLine, 18);
@@ -449,8 +435,8 @@ export class TypographyEngine {
         transformed = line.toUpperCase();
       } else if ((layer as any).capitalizationRule === 'force_lowercase') {
         transformed = line.toLowerCase();
-      } else if (system !== 'editorial') {
-        // legacy behavior
+      } else if (ctx.typographyTokens?.casing !== 'force_uppercase') {
+        // legacy behavior fallback
         transformed = line.toUpperCase() !== line ? line.toUpperCase() : line;
       }
       return esc(transformed);

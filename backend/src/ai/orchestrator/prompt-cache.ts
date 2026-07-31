@@ -14,7 +14,7 @@ export interface CachedFragment {
 }
 
 export class PromptCache {
-  constructor(private readonly redis: Redis) {}
+  constructor(private readonly redis: Redis) { }
 
   // --------------------------------------------------------------------------
   // Brand DNA Fragment

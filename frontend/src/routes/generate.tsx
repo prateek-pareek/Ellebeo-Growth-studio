@@ -72,7 +72,7 @@ function GeneratePage() {
   const [step, setStep] = useState<Step>(requestedMatch ? "consent" : "select");
   const [goal, setGoal] = useState<Goal>(initialGoal);
   const [format, setFormat] = useState<Format>(initialFormat);
-  
+
   const [showPaywall, setShowPaywall] = useState(false);
   const [showTrialPaywall, setShowTrialPaywall] = useState(false);
   const [paywallReason, setPaywallReason] = useState<"TRIAL_EXHAUSTED" | "PLAN_EXHAUSTED">("TRIAL_EXHAUSTED");
@@ -83,14 +83,14 @@ function GeneratePage() {
       setShowPaywall(true);
     }
   }, [profileLoading, technician.hasGrowthStudioAccess]);
-  
+
   const [generating, setGenerating] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<string | null>(null);
   const [estimatedSeconds, setEstimatedSeconds] = useState<number>(45);
   const [backendVariants, setBackendVariants] = useState<any[] | null>(null);
   const pollRef = useRef<number | null>(null);
-  
+
   const [promptPreview, setPromptPreview] = useState<{ systemPrompt: string; userPrompt: string } | null>(null);
 
   useEffect(() => {
@@ -129,8 +129,8 @@ function GeneratePage() {
 
   useEffect(() => {
     if (requestedMatch && !appointment) {
-        setAppointment(requestedMatch);
-        setStep("consent");
+      setAppointment(requestedMatch);
+      setStep("consent");
     }
   }, [requestedMatch]);
 
@@ -542,10 +542,10 @@ function Stepper({
 }) {
   const steps: { id: Step; label: string; sub: string }[] = [
     { id: "select", label: "Appointment", sub: "Pick the visit" },
-    { id: "consent", label: "Consent",     sub: "Confirm permissions" },
-    { id: "goal",   label: "Goal",         sub: "Choose the angle" },
-    { id: "format", label: "Format",       sub: "Pick the surface" },
-    { id: "review", label: "Review",       sub: "Refine & schedule" },
+    { id: "consent", label: "Consent", sub: "Confirm permissions" },
+    { id: "goal", label: "Goal", sub: "Choose the angle" },
+    { id: "format", label: "Format", sub: "Pick the surface" },
+    { id: "review", label: "Review", sub: "Refine & schedule" },
   ];
   const idx = steps.findIndex((s) => s.id === step);
 
@@ -574,8 +574,8 @@ function Stepper({
         />
 
         {steps.map((s, i) => {
-          const active    = i === idx;
-          const done      = i < idx;
+          const active = i === idx;
+          const done = i < idx;
           const clickable = hasAppointment || s.id === "select";
 
           return (
@@ -597,7 +597,7 @@ function Stepper({
               }>
                 {done ? (
                   <svg width="9" height="7" viewBox="0 0 10 8" fill="none">
-                    <path d="M1 4l3 3 5-6" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M1 4l3 3 5-6" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 ) : (
                   <span className={
@@ -699,14 +699,14 @@ function SelectAppointment({
           const matches = appointmentMatchesCategories(a.category, templateCategories);
           const initials = a.clientName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
           const consentColor =
-            a.consent === "granted"  ? "bg-sage/10 text-sage border-sage/20" :
-            a.consent === "declined" ? "bg-destructive/10 text-destructive border-destructive/20" :
-            a.consent === "pending"  ? "bg-taupe/10 text-taupe border-taupe/20" :
-                                       "bg-border text-taupe/50 border-border";
+            a.consent === "granted" ? "bg-sage/10 text-sage border-sage/20" :
+              a.consent === "declined" ? "bg-destructive/10 text-destructive border-destructive/20" :
+                a.consent === "pending" ? "bg-taupe/10 text-taupe border-taupe/20" :
+                  "bg-border text-taupe/50 border-border";
           const consentLabel =
-            a.consent === "granted"  ? "Consent granted" :
-            a.consent === "declined" ? "Declined" :
-            a.consent === "pending"  ? "Pending" : "No consent";
+            a.consent === "granted" ? "Consent granted" :
+              a.consent === "declined" ? "Declined" :
+                a.consent === "pending" ? "Pending" : "No consent";
 
           return (
             <button
@@ -767,11 +767,11 @@ function SelectAppointment({
 
 const CONSENT_PERMISSIONS = [
   { key: "allowMarketingContent", label: "Use photos in posts" },
-  { key: "allowShowFace",         label: "Show client's face" },
-  { key: "allowTagSocial",        label: "Tag client account" },
-  { key: "allowUseName",          label: "Use first name in caption" },
-  { key: "allowPlatformPromotion",label: "Allow Elle.Be.O to feature this content" },
-  { key: "allowInternalUse",      label: "Internal use (AI training)" },
+  { key: "allowShowFace", label: "Show client's face" },
+  { key: "allowTagSocial", label: "Tag client account" },
+  { key: "allowUseName", label: "Use first name in caption" },
+  { key: "allowPlatformPromotion", label: "Allow Elle.Be.O to feature this content" },
+  { key: "allowInternalUse", label: "Internal use (AI training)" },
 ] as const;
 
 function ConsentStep({
@@ -916,11 +916,11 @@ function ConsentStep({
 }
 
 const GOAL_ICONS: Record<Goal, React.ComponentType<{ className?: string }>> = {
-  showcase:     Sparkles,
-  educate:      BookOpen,
-  convert:      TrendingUp,
+  showcase: Sparkles,
+  educate: BookOpen,
+  convert: TrendingUp,
   availability: Clock,
-  trust:        Heart,
+  trust: Heart,
 };
 
 function GoalStep({
@@ -967,7 +967,7 @@ function GoalStep({
                 (selected ? "bg-white/20 opacity-100" : "opacity-0")
               }>
                 <svg width="8" height="7" viewBox="0 0 10 8" fill="none">
-                  <path d="M1 4l3 3 5-6" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M1 4l3 3 5-6" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </span>
 
@@ -1007,9 +1007,9 @@ function GoalStep({
 
 const FORMAT_ICONS: Record<Format, React.ComponentType<{ className?: string }>> = {
   Carousel: Layers,
-  Reel:     Play,
-  Story:    Zap,
-  Caption:  Image,
+  Reel: Play,
+  Story: Zap,
+  Caption: Image,
 };
 
 function FormatStep({
@@ -1056,7 +1056,7 @@ function FormatStep({
                 (selected ? "bg-white/20 opacity-100" : "opacity-0")
               }>
                 <svg width="8" height="7" viewBox="0 0 10 8" fill="none">
-                  <path d="M1 4l3 3 5-6" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M1 4l3 3 5-6" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </span>
 
@@ -1241,22 +1241,22 @@ function GeneratingScreen({ jobStatus, brandDna, appointment }: { jobStatus: str
       <div className="absolute top-0 left-0 w-full overflow-hidden bg-foreground text-background py-2.5 z-20 border-b border-border shadow-md">
         <div className="whitespace-nowrap flex animate-ticker items-center opacity-90 min-w-[200%]">
           {[...Array(4)].map((_, i) => (
-             <span key={i} className="text-[9px] tracking-[0.3em] uppercase font-bold px-4">
-               CURATING VISUAL ASSETS ✦ COMPOSING EDITORIAL COPY ✦ ALIGNING BRAND DNA ✦ REFINING STUDIO LAYOUTS ✦ 
-             </span>
+            <span key={i} className="text-[9px] tracking-[0.3em] uppercase font-bold px-4">
+              CURATING VISUAL ASSETS ✦ COMPOSING EDITORIAL COPY ✦ ALIGNING BRAND DNA ✦ REFINING STUDIO LAYOUTS ✦
+            </span>
           ))}
         </div>
       </div>
 
       {/* Subtle Shimmer Background */}
       <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-card to-transparent opacity-40 animate-pulse pointer-events-none" />
-      
+
       {/* Main Content Area */}
       <div className="z-10 w-full max-w-md text-center flex flex-col items-center mt-12 mb-12">
         <h2 className="font-serif text-4xl italic mb-4 bg-gradient-to-r from-foreground to-taupe bg-clip-text text-transparent">
           Composing
         </h2>
-        <p 
+        <p
           className="text-[10px] uppercase tracking-[0.2em] text-taupe font-semibold mb-10 transition-opacity duration-500"
           style={{ opacity: fade ? 1 : 0 }}
         >
@@ -1270,8 +1270,8 @@ function GeneratingScreen({ jobStatus, brandDna, appointment }: { jobStatus: str
             <span>{jobStatus === 'completed' ? 'Done' : fuzzyEta}</span>
           </div>
           <div className="relative w-full h-1 bg-border/50 overflow-hidden rounded-full shadow-inner">
-            <div 
-              className="absolute top-0 left-0 h-full bg-foreground" 
+            <div
+              className="absolute top-0 left-0 h-full bg-foreground"
               style={{ width: `${displayProgress}%` }}
             />
           </div>
@@ -1368,7 +1368,7 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, 
   // Determine active image URL based on selected text variant
   const getVariantUrl = (slideData: any) => {
     if (!slideData) return null;
-    
+
     // Caption options never say "gemini" — both angles come from the same text
     // model (see brand-strategist.chain.ts). The pairing is by angle: the
     // Empathetic option is paired with the Gemini-generated image, Technical
@@ -1381,7 +1381,7 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, 
       if (isEmpatheticOption && slideData.variants.gemini) return slideData.variants.gemini;
       if (!isEmpatheticOption && slideData.variants.dalle) return slideData.variants.dalle;
     }
-    
+
     // Fallback if variants are missing or specific model image is missing
     return slideData.url;
   };
@@ -1596,11 +1596,10 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, 
           <div className="flex items-center gap-1.5 overflow-x-auto">
             <button
               onClick={() => setActiveTab('visual')}
-              className={`px-3 py-1.5 text-[10px] uppercase tracking-widest font-semibold border-b-2 transition-all ${
-                activeTab === 'visual'
+              className={`px-3 py-1.5 text-[10px] uppercase tracking-widest font-semibold border-b-2 transition-all ${activeTab === 'visual'
                   ? 'border-foreground text-foreground'
                   : 'border-transparent text-taupe hover:text-foreground'
-              }`}
+                }`}
             >
               Visual Presentation
             </button>
@@ -1613,476 +1612,476 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, 
         {activeTab === 'visual' ? (
           <>
             {isStory && storyFrames.length > 0 ? (
-          /* ── STORY LAYOUT ────────────────────────────────────────────── */
-          <div className="grid grid-cols-1 lg:grid-cols-2">
+              /* ── STORY LAYOUT ────────────────────────────────────────────── */
+              <div className="grid grid-cols-1 lg:grid-cols-2">
 
-            {/* LEFT — story preview */}
-            <div className="flex flex-col bg-card">
+                {/* LEFT — story preview */}
+                <div className="flex flex-col bg-card">
 
-              {/* Thumbnail strip */}
-              <div className="grid grid-cols-4 gap-1.5 p-3 border-b hairline">
-                {storyFrames.map((frame: any, i: number) => (
-                  <button
-                    key={i}
-                    onClick={() => setActiveSlide(i)}
-                    className={"overflow-hidden border transition-all " +
-                      (i === safeFrame ? "border-foreground" : "border-transparent opacity-50 hover:opacity-80")}
-                  >
-                    <img src={frame.url} alt={frame.title || frame.label} className="w-full aspect-[9/16] object-cover" />
-                  </button>
-                ))}
-              </div>
-
-              {/* Main image — 9:16 story ratio, styled as an actual phone/story mockup */}
-              <div className="relative flex-1 flex items-center justify-center bg-nude/10 p-6">
-                <div
-                  className="relative overflow-hidden rounded-[22px] shadow-lg"
-                  style={{ maxWidth: '220px', width: '100%', border: '6px solid var(--foreground)' }}
-                >
-                  <div className="aspect-[9/16] relative overflow-hidden bg-foreground">
-                    <img
-                      src={getVariantUrl(storyFrames[safeFrame])}
-                      alt={storyFrames[safeFrame]?.label}
-                      className="absolute inset-0 w-full h-full object-cover"
-                    />
-
-                    {/* Instagram-style segmented progress bar */}
-                    <div className="absolute top-2 left-2 right-2 flex gap-1 z-10">
-                      {storyFrames.map((_: any, i: number) => (
-                        <span key={i} className="flex-1 h-[2.5px] rounded-full bg-white/35 overflow-hidden">
-                          <span
-                            className="block h-full bg-white transition-all duration-300"
-                            style={{ width: i <= safeFrame ? '100%' : '0%' }}
-                          />
-                        </span>
-                      ))}
-                    </div>
-
-                    {/* Bottom scrim + frame label, like a story caption sticker */}
-                    <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-black/70 to-transparent" />
-                    <div className="absolute bottom-3 left-3 right-3">
-                      <p className="text-[8px] uppercase tracking-widest text-nude/80 mb-0.5">
-                        Frame {safeFrame + 1} of {storyFrames.length}
-                      </p>
-                      <p className="text-xs font-medium text-offwhite leading-snug">
-                        {storyFrames[safeFrame]?.title || storyFrames[safeFrame]?.label || `FRAME 0${safeFrame + 1}`}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Nav + download */}
-              <div className="flex items-center justify-between px-4 py-3 border-t hairline">
-                <div className="flex items-center gap-3">
-                  <button onClick={() => setActiveSlide(Math.max(0, safeFrame - 1))} disabled={safeFrame === 0} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground disabled:opacity-30">← Prev</button>
-                  <button onClick={() => setActiveSlide(Math.min(storyFrames.length - 1, safeFrame + 1))} disabled={safeFrame === storyFrames.length - 1} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground disabled:opacity-30">Next →</button>
-                </div>
-                <button onClick={downloadImage} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground flex items-center gap-1.5">
-                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 1v6M2 7l3 2 3-2M1 9h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  Download frame
-                </button>
-              </div>
-            </div>
-
-            {/* RIGHT — story sequence + caption */}
-            <div className="flex flex-col divide-y divide-border">
-
-              {/* Story sequence */}
-              <div className="p-5">
-                <p className="text-[10px] uppercase tracking-widest text-taupe mb-3">Story sequence</p>
-                <div className="space-y-px bg-border">
-                  {storyFrames.map((frame: any, i: number) => (
-                    <button
-                      key={i}
-                      onClick={() => setActiveSlide(i)}
-                      className={"w-full text-left px-4 py-3 flex items-center gap-3 transition-colors " + (i === safeFrame ? "bg-foreground text-offwhite" : "bg-card hover:bg-nude/20")}
-                    >
-                      <span className={"text-[9px] tabular-nums shrink-0 " + (i === safeFrame ? "text-nude" : "text-taupe")}>
-                        {String(i + 1).padStart(2, '0')}
-                      </span>
-                      <span className="text-xs font-medium truncate">
-                        {frame.title || frame.label || `Frame ${i + 1}`}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Caption */}
-              <div className="p-5 flex-1">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[10px] uppercase tracking-widest text-taupe">Caption</p>
-                  <div className="flex items-center gap-3">
-                    <span className="text-[9px] text-taupe">{charCount} chars · {tagCount} tags</span>
-                    <button onClick={copyCaption} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
-                      {captionCopied ? "Copied!" : "Copy"}
-                    </button>
-                  </div>
-                </div>
-                <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{opt.caption}</p>
-              </div>
-
-              {/* CTA */}
-              {opt.callToAction && (
-                <div className="px-5 py-4">
-                  <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Call to action</p>
-                  <p className="text-sm text-foreground">{opt.callToAction}</p>
-                </div>
-              )}
-
-              {/* Hashtags */}
-              {opt.hashtags?.length > 0 && (
-                <div className="px-5 py-4">
-                  <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Suggested hashtags</p>
-                  <div className="flex flex-wrap gap-2">
-                    {opt.hashtags.map((h: string) => (
-                      <span key={h} className="text-[10px] uppercase tracking-widest border hairline px-2 py-1 text-taupe">#{h}</span>
+                  {/* Thumbnail strip */}
+                  <div className="grid grid-cols-4 gap-1.5 p-3 border-b hairline">
+                    {storyFrames.map((frame: any, i: number) => (
+                      <button
+                        key={i}
+                        onClick={() => setActiveSlide(i)}
+                        className={"overflow-hidden border transition-all " +
+                          (i === safeFrame ? "border-foreground" : "border-transparent opacity-50 hover:opacity-80")}
+                      >
+                        <img src={frame.url} alt={frame.title || frame.label} className="w-full aspect-[9/16] object-cover" />
+                      </button>
                     ))}
                   </div>
-                </div>
-              )}
-            </div>
-          </div>
-        ) : isReel && reelShots.length > 0 ? (
-          /* ── REEL / TIKTOK LAYOUT ────────────────────────────────────── */
-          <div className="grid grid-cols-1 lg:grid-cols-2">
 
-            {/* LEFT — full-width image preview + storyboard strip */}
-            <div className="bg-[#0d0d0d] flex flex-col">
+                  {/* Main image — 9:16 story ratio, styled as an actual phone/story mockup */}
+                  <div className="relative flex-1 flex items-center justify-center bg-nude/10 p-6">
+                    <div
+                      className="relative overflow-hidden rounded-[22px] shadow-lg"
+                      style={{ maxWidth: '220px', width: '100%', border: '6px solid var(--foreground)' }}
+                    >
+                      <div className="aspect-[9/16] relative overflow-hidden bg-foreground">
+                        <img
+                          src={getVariantUrl(storyFrames[safeFrame])}
+                          alt={storyFrames[safeFrame]?.label}
+                          className="absolute inset-0 w-full h-full object-cover"
+                        />
 
-              {/* Main image — 9:16 reel ratio */}
-              <div className="relative aspect-[9/16] max-h-[480px] overflow-hidden">
-                {singleImageUrl ? (
-                  <img src={singleImageUrl} alt="Reel preview" className="absolute inset-0 w-full h-full object-cover object-center" />
-                ) : (
-                  <div className="absolute inset-0 bg-gradient-to-b from-[#1a1a1a] to-[#0a0a0a]" />
-                )}
+                        {/* Instagram-style segmented progress bar */}
+                        <div className="absolute top-2 left-2 right-2 flex gap-1 z-10">
+                          {storyFrames.map((_: any, i: number) => (
+                            <span key={i} className="flex-1 h-[2.5px] rounded-full bg-white/35 overflow-hidden">
+                              <span
+                                className="block h-full bg-white transition-all duration-300"
+                                style={{ width: i <= safeFrame ? '100%' : '0%' }}
+                              />
+                            </span>
+                          ))}
+                        </div>
 
-                {/* Dark overlay */}
-                <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60" />
+                        {/* Bottom scrim + frame label, like a story caption sticker */}
+                        <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-black/70 to-transparent" />
+                        <div className="absolute bottom-3 left-3 right-3">
+                          <p className="text-[8px] uppercase tracking-widest text-nude/80 mb-0.5">
+                            Frame {safeFrame + 1} of {storyFrames.length}
+                          </p>
+                          <p className="text-xs font-medium text-offwhite leading-snug">
+                            {storyFrames[safeFrame]?.title || storyFrames[safeFrame]?.label || `FRAME 0${safeFrame + 1}`}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
 
-                {/* SIMULATED badge — top right */}
-                <div className="absolute top-3 right-3 bg-black/70 border border-white/20 px-2 py-0.5">
-                  <p className="text-[8px] uppercase tracking-widest text-white/70">Simulated</p>
-                </div>
-
-                {/* Play button — centre */}
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="size-12 rounded-full bg-white/15 border border-white/40 flex items-center justify-center backdrop-blur-sm">
-                    <svg width="14" height="16" viewBox="0 0 18 20" fill="none">
-                      <path d="M2 2l14 8-14 8V2z" fill="white" fillOpacity="0.9"/>
-                    </svg>
+                  {/* Nav + download */}
+                  <div className="flex items-center justify-between px-4 py-3 border-t hairline">
+                    <div className="flex items-center gap-3">
+                      <button onClick={() => setActiveSlide(Math.max(0, safeFrame - 1))} disabled={safeFrame === 0} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground disabled:opacity-30">← Prev</button>
+                      <button onClick={() => setActiveSlide(Math.min(storyFrames.length - 1, safeFrame + 1))} disabled={safeFrame === storyFrames.length - 1} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground disabled:opacity-30">Next →</button>
+                    </div>
+                    <button onClick={downloadImage} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground flex items-center gap-1.5">
+                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 1v6M2 7l3 2 3-2M1 9h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                      Download frame
+                    </button>
                   </div>
                 </div>
 
-                {/* Hook overlay — bottom */}
-                <div className="absolute bottom-0 left-0 right-0 px-4 pb-4">
-                  <p className="text-[8px] uppercase tracking-widest text-white/50 mb-1">Hook · Shot 1</p>
-                  {reelHookOverlay && (
-                    <p className="text-xs font-medium text-white leading-snug italic">"{reelHookOverlay}"</p>
+                {/* RIGHT — story sequence + caption */}
+                <div className="flex flex-col divide-y divide-border">
+
+                  {/* Story sequence */}
+                  <div className="p-5">
+                    <p className="text-[10px] uppercase tracking-widest text-taupe mb-3">Story sequence</p>
+                    <div className="space-y-px bg-border">
+                      {storyFrames.map((frame: any, i: number) => (
+                        <button
+                          key={i}
+                          onClick={() => setActiveSlide(i)}
+                          className={"w-full text-left px-4 py-3 flex items-center gap-3 transition-colors " + (i === safeFrame ? "bg-foreground text-offwhite" : "bg-card hover:bg-nude/20")}
+                        >
+                          <span className={"text-[9px] tabular-nums shrink-0 " + (i === safeFrame ? "text-nude" : "text-taupe")}>
+                            {String(i + 1).padStart(2, '0')}
+                          </span>
+                          <span className="text-xs font-medium truncate">
+                            {frame.title || frame.label || `Frame ${i + 1}`}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Caption */}
+                  <div className="p-5 flex-1">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[10px] uppercase tracking-widest text-taupe">Caption</p>
+                      <div className="flex items-center gap-3">
+                        <span className="text-[9px] text-taupe">{charCount} chars · {tagCount} tags</span>
+                        <button onClick={copyCaption} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
+                          {captionCopied ? "Copied!" : "Copy"}
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{opt.caption}</p>
+                  </div>
+
+                  {/* CTA */}
+                  {opt.callToAction && (
+                    <div className="px-5 py-4">
+                      <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Call to action</p>
+                      <p className="text-sm text-foreground">{opt.callToAction}</p>
+                    </div>
+                  )}
+
+                  {/* Hashtags */}
+                  {opt.hashtags?.length > 0 && (
+                    <div className="px-5 py-4">
+                      <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Suggested hashtags</p>
+                      <div className="flex flex-wrap gap-2">
+                        {opt.hashtags.map((h: string) => (
+                          <span key={h} className="text-[10px] uppercase tracking-widest border hairline px-2 py-1 text-taupe">#{h}</span>
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
+            ) : isReel && reelShots.length > 0 ? (
+              /* ── REEL / TIKTOK LAYOUT ────────────────────────────────────── */
+              <div className="grid grid-cols-1 lg:grid-cols-2">
 
-              {/* Storyboard strip */}
-              <div className="px-3 pt-3 pb-1">
-                <p className="text-[8px] uppercase tracking-widest text-white/30 mb-2">Storyboard · {reelShots.length} shots</p>
-                <div className="flex gap-1.5 overflow-x-auto pb-2">
-                  {reelShots.map((shot: any, i: number) => (
-                    <div key={i} className="shrink-0 flex flex-col gap-1" style={{ width: 60 }}>
-                      <div className="relative bg-[#1c1c1c] border border-white/10 flex flex-col items-center justify-center gap-0.5 px-1 py-2">
-                        <p className="text-[9px] text-white/60 tabular-nums font-mono">{shot.timestamp}</p>
-                        {i === 0 && <div className="absolute top-1 right-1 size-1.5 rounded-full bg-white/50" />}
+                {/* LEFT — full-width image preview + storyboard strip */}
+                <div className="bg-[#0d0d0d] flex flex-col">
+
+                  {/* Main image — 9:16 reel ratio */}
+                  <div className="relative aspect-[9/16] max-h-[480px] overflow-hidden">
+                    {singleImageUrl ? (
+                      <img src={singleImageUrl} alt="Reel preview" className="absolute inset-0 w-full h-full object-cover object-center" />
+                    ) : (
+                      <div className="absolute inset-0 bg-gradient-to-b from-[#1a1a1a] to-[#0a0a0a]" />
+                    )}
+
+                    {/* Dark overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60" />
+
+                    {/* SIMULATED badge — top right */}
+                    <div className="absolute top-3 right-3 bg-black/70 border border-white/20 px-2 py-0.5">
+                      <p className="text-[8px] uppercase tracking-widest text-white/70">Simulated</p>
+                    </div>
+
+                    {/* Play button — centre */}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="size-12 rounded-full bg-white/15 border border-white/40 flex items-center justify-center backdrop-blur-sm">
+                        <svg width="14" height="16" viewBox="0 0 18 20" fill="none">
+                          <path d="M2 2l14 8-14 8V2z" fill="white" fillOpacity="0.9" />
+                        </svg>
                       </div>
-                      <p className="text-[7px] text-white/40 leading-tight truncate" title={shot.description}>
-                        {shot.description}
+                    </div>
+
+                    {/* Hook overlay — bottom */}
+                    <div className="absolute bottom-0 left-0 right-0 px-4 pb-4">
+                      <p className="text-[8px] uppercase tracking-widest text-white/50 mb-1">Hook · Shot 1</p>
+                      {reelHookOverlay && (
+                        <p className="text-xs font-medium text-white leading-snug italic">"{reelHookOverlay}"</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Storyboard strip */}
+                  <div className="px-3 pt-3 pb-1">
+                    <p className="text-[8px] uppercase tracking-widest text-white/30 mb-2">Storyboard · {reelShots.length} shots</p>
+                    <div className="flex gap-1.5 overflow-x-auto pb-2">
+                      {reelShots.map((shot: any, i: number) => (
+                        <div key={i} className="shrink-0 flex flex-col gap-1" style={{ width: 60 }}>
+                          <div className="relative bg-[#1c1c1c] border border-white/10 flex flex-col items-center justify-center gap-0.5 px-1 py-2">
+                            <p className="text-[9px] text-white/60 tabular-nums font-mono">{shot.timestamp}</p>
+                            {i === 0 && <div className="absolute top-1 right-1 size-1.5 rounded-full bg-white/50" />}
+                          </div>
+                          <p className="text-[7px] text-white/40 leading-tight truncate" title={shot.description}>
+                            {shot.description}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Bottom bar */}
+                  <div className="flex items-center justify-between px-3 py-2 border-t border-white/10 mt-1">
+                    <p className="text-[8px] uppercase tracking-widest text-white/30">TikTok · Reel</p>
+                    <button onClick={downloadImage} className="text-[8px] uppercase tracking-widest text-white/30 hover:text-white/70 flex items-center gap-1 transition-colors">
+                      <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M5 1v6M2 7l3 2 3-2M1 9h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                      Download
+                    </button>
+                  </div>
+                </div>
+
+                {/* RIGHT — reel script + metadata */}
+                <div className="flex flex-col divide-y divide-border">
+
+                  {/* Caption */}
+                  <div className="p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[10px] uppercase tracking-widest text-taupe">Caption</p>
+                      <div className="flex items-center gap-3">
+                        <span className="text-[9px] text-taupe">{charCount} chars · {tagCount} tags</span>
+                        <button onClick={copyCaption} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
+                          {captionCopied ? "Copied!" : "Copy"}
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{opt.caption}</p>
+                  </div>
+
+                  {/* Reel script */}
+                  <div className="p-5">
+                    <p className="text-[10px] uppercase tracking-widest text-taupe mb-3">Reel script</p>
+                    <div className="space-y-px bg-border">
+                      {reelShots.map((shot: any, i: number) => (
+                        <div key={i} className="flex items-start gap-3 bg-card px-4 py-3">
+                          <span className="text-[9px] tabular-nums font-mono text-taupe shrink-0 mt-px">{shot.timestamp}</span>
+                          <span className="text-xs text-foreground leading-snug">{shot.description}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* CTA */}
+                  {opt.callToAction && (
+                    <div className="px-5 py-4">
+                      <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Call to action</p>
+                      <p className="text-sm text-foreground">{opt.callToAction}</p>
+                    </div>
+                  )}
+
+                  {/* Suggested posting time */}
+                  {reelPostingTime && (
+                    <div className="px-5 py-4">
+                      <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Suggested posting time</p>
+                      <p className="text-sm text-foreground">{reelPostingTime}</p>
+                    </div>
+                  )}
+
+                  {/* Hashtags as pills */}
+                  {opt.hashtags?.length > 0 && (
+                    <div className="px-5 py-4">
+                      <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Suggested hashtags</p>
+                      <div className="flex flex-wrap gap-2">
+                        {opt.hashtags.map((h: string) => (
+                          <span key={h} className="text-[10px] uppercase tracking-widest border hairline px-2 py-1 text-taupe">#{h}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : isCarousel && carouselSlides.length > 0 ? (
+              /* ── CAROUSEL LAYOUT ─────────────────────────────────────────── */
+              <div className="grid grid-cols-1 lg:grid-cols-2">
+
+                {/* LEFT — main slide viewer + thumbnail strip */}
+                <div className="bg-nude/10 flex flex-col">
+
+                  {/* Main slide — 1:1 square carousel ratio */}
+                  <div className="relative aspect-square overflow-hidden">
+                    <img
+                      src={getVariantUrl(carouselSlides[safeSlide])}
+                      alt={carouselSlides[safeSlide]?.title || carouselSlides[safeSlide]?.label || `Slide ${safeSlide + 1}`}
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
+
+                    {/* Slide counter badge */}
+                    <div className="absolute top-3 left-3 bg-foreground/80 px-2 py-1">
+                      <p className="text-[9px] uppercase tracking-widest text-offwhite tabular-nums">
+                        {safeSlide + 1}/{carouselSlides.length}
                       </p>
                     </div>
-                  ))}
-                </div>
-              </div>
 
-              {/* Bottom bar */}
-              <div className="flex items-center justify-between px-3 py-2 border-t border-white/10 mt-1">
-                <p className="text-[8px] uppercase tracking-widest text-white/30">TikTok · Reel</p>
-                <button onClick={downloadImage} className="text-[8px] uppercase tracking-widest text-white/30 hover:text-white/70 flex items-center gap-1 transition-colors">
-                  <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M5 1v6M2 7l3 2 3-2M1 9h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  Download
-                </button>
-              </div>
-            </div>
-
-            {/* RIGHT — reel script + metadata */}
-            <div className="flex flex-col divide-y divide-border">
-
-              {/* Caption */}
-              <div className="p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[10px] uppercase tracking-widest text-taupe">Caption</p>
-                  <div className="flex items-center gap-3">
-                    <span className="text-[9px] text-taupe">{charCount} chars · {tagCount} tags</span>
-                    <button onClick={copyCaption} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
-                      {captionCopied ? "Copied!" : "Copy"}
-                    </button>
-                  </div>
-                </div>
-                <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{opt.caption}</p>
-              </div>
-
-              {/* Reel script */}
-              <div className="p-5">
-                <p className="text-[10px] uppercase tracking-widest text-taupe mb-3">Reel script</p>
-                <div className="space-y-px bg-border">
-                  {reelShots.map((shot: any, i: number) => (
-                    <div key={i} className="flex items-start gap-3 bg-card px-4 py-3">
-                      <span className="text-[9px] tabular-nums font-mono text-taupe shrink-0 mt-px">{shot.timestamp}</span>
-                      <span className="text-xs text-foreground leading-snug">{shot.description}</span>
+                    {/* Slide name badge — AI-generated concept name, not a hardcoded counter */}
+                    <div className="absolute top-3 right-3 bg-foreground/80 px-2 py-1 max-w-[65%]">
+                      <p className="text-[9px] uppercase tracking-widest text-nude truncate">
+                        {carouselSlides[safeSlide]?.title || carouselSlides[safeSlide]?.label || `Slide ${safeSlide + 1}`}
+                      </p>
                     </div>
-                  ))}
-                </div>
-              </div>
 
-              {/* CTA */}
-              {opt.callToAction && (
-                <div className="px-5 py-4">
-                  <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Call to action</p>
-                  <p className="text-sm text-foreground">{opt.callToAction}</p>
-                </div>
-              )}
-
-              {/* Suggested posting time */}
-              {reelPostingTime && (
-                <div className="px-5 py-4">
-                  <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Suggested posting time</p>
-                  <p className="text-sm text-foreground">{reelPostingTime}</p>
-                </div>
-              )}
-
-              {/* Hashtags as pills */}
-              {opt.hashtags?.length > 0 && (
-                <div className="px-5 py-4">
-                  <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Suggested hashtags</p>
-                  <div className="flex flex-wrap gap-2">
-                    {opt.hashtags.map((h: string) => (
-                      <span key={h} className="text-[10px] uppercase tracking-widest border hairline px-2 py-1 text-taupe">#{h}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        ) : isCarousel && carouselSlides.length > 0 ? (
-          /* ── CAROUSEL LAYOUT ─────────────────────────────────────────── */
-          <div className="grid grid-cols-1 lg:grid-cols-2">
-
-            {/* LEFT — main slide viewer + thumbnail strip */}
-            <div className="bg-nude/10 flex flex-col">
-
-              {/* Main slide — 1:1 square carousel ratio */}
-              <div className="relative aspect-square overflow-hidden">
-                <img
-                  src={getVariantUrl(carouselSlides[safeSlide])}
-                  alt={carouselSlides[safeSlide]?.title || carouselSlides[safeSlide]?.label || `Slide ${safeSlide + 1}`}
-                  className="absolute inset-0 w-full h-full object-cover"
-                />
-
-                {/* Slide counter badge */}
-                <div className="absolute top-3 left-3 bg-foreground/80 px-2 py-1">
-                  <p className="text-[9px] uppercase tracking-widest text-offwhite tabular-nums">
-                    {safeSlide + 1}/{carouselSlides.length}
-                  </p>
-                </div>
-
-                {/* Slide name badge — AI-generated concept name, not a hardcoded counter */}
-                <div className="absolute top-3 right-3 bg-foreground/80 px-2 py-1 max-w-[65%]">
-                  <p className="text-[9px] uppercase tracking-widest text-nude truncate">
-                    {carouselSlides[safeSlide]?.title || carouselSlides[safeSlide]?.label || `Slide ${safeSlide + 1}`}
-                  </p>
-                </div>
-
-                {/* Prev / Next arrows */}
-                {safeSlide > 0 && (
-                  <button
-                    onClick={() => setActiveSlide(safeSlide - 1)}
-                    className="absolute left-2 top-1/2 -translate-y-1/2 size-8 flex items-center justify-center bg-foreground/70 hover:bg-foreground transition-colors"
-                  >
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                      <path d="M6.5 2L3.5 5l3 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </button>
-                )}
-                {safeSlide < carouselSlides.length - 1 && (
-                  <button
-                    onClick={() => setActiveSlide(safeSlide + 1)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 size-8 flex items-center justify-center bg-foreground/70 hover:bg-foreground transition-colors"
-                  >
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                      <path d="M3.5 2L6.5 5l-3 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </button>
-                )}
-              </div>
-
-              {/* Thumbnail strip */}
-              <div className="flex gap-1.5 overflow-x-auto p-3 bg-card border-t hairline">
-                {carouselSlides.map((slide: any, i: number) => (
-                  <button
-                    key={i}
-                    onClick={() => setActiveSlide(i)}
-                    className={"shrink-0 relative overflow-hidden transition-all " + (i === safeSlide ? "ring-2 ring-foreground" : "opacity-60 hover:opacity-90")}
-                  >
-                    <img
-                      src={slide.url}
-                      alt={slide.title || slide.label || `Slide ${i + 1}`}
-                      className="w-14 h-14 object-cover"
-                    />
-                    <p className="text-[7px] uppercase tracking-widest text-center py-0.5 bg-card text-taupe">
-                      {String(i + 1).padStart(2, '0')}
-                    </p>
-                  </button>
-                ))}
-              </div>
-
-              {/* Image actions */}
-              <div className="flex items-center justify-between px-4 py-3 border-t hairline bg-card">
-                <p className="text-[9px] uppercase tracking-widest text-taupe">
-                  Carousel · {carouselSlides.length} slides
-                </p>
-                <button
-                  onClick={downloadImage}
-                  className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground flex items-center gap-1.5 transition-colors"
-                >
-                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                    <path d="M5 1v6M2 7l3 2 3-2M1 9h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  Download slide
-                </button>
-              </div>
-            </div>
-
-            {/* RIGHT — slide list + caption */}
-            <div className="flex flex-col divide-y divide-border">
-
-              {/* Carousel slide list */}
-              <div className="p-5">
-                <p className="text-[10px] uppercase tracking-widest text-taupe mb-3">Carousel slides</p>
-                <div className="space-y-px bg-border">
-                  {carouselSlides.map((slide: any, i: number) => (
-                    <button
-                      key={i}
-                      onClick={() => setActiveSlide(i)}
-                      className={"w-full text-left px-4 py-3 flex items-center gap-3 transition-colors " + (i === safeSlide ? "bg-foreground text-offwhite" : "bg-card hover:bg-nude/20")}
-                    >
-                      <span className={"text-[9px] tabular-nums shrink-0 " + (i === safeSlide ? "text-nude" : "text-taupe")}>
-                        {String(i + 1).padStart(2, '0')}
-                      </span>
-                      <span className="text-xs font-medium truncate">
-                        {slide.title ?? slide.label ?? `Slide ${i + 1}`}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Caption */}
-              <div className="p-5 flex-1">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[10px] uppercase tracking-widest text-taupe">Caption</p>
-                  <div className="flex items-center gap-3">
-                    <span className="text-[9px] text-taupe">{charCount} chars · {tagCount} tags</span>
-                    <button onClick={copyCaption} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
-                      {captionCopied ? "Copied!" : "Copy"}
-                    </button>
-                  </div>
-                </div>
-                <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{opt.caption}</p>
-              </div>
-
-              {/* Hashtags */}
-              {opt.hashtags && opt.hashtags.length > 0 && (
-                <div className="px-5 py-4">
-                  <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Suggested hashtags</p>
-                  <p className="text-xs text-taupe leading-relaxed">
-                    {opt.hashtags.map((h: string) => `#${h}`).join("  ")}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          /* ── SINGLE IMAGE LAYOUT ─────────────────────────────────────── */
-          <div className="grid grid-cols-1 lg:grid-cols-2">
-
-            {/* LEFT — image */}
-            <div className="relative bg-nude/10 flex flex-col">
-              {singleImageUrl ? (
-                <>
-                  <div className="relative">
-                    <img
-                      src={singleImageUrl}
-                      alt="Generated content"
-                      className="w-full object-cover max-h-[400px]"
-                    />
-                    {opt.hookSentence && (
-                      <div className="absolute bottom-0 left-0 right-0 bg-foreground/80 px-4 py-3">
-                        <p className="text-[9px] uppercase tracking-widest text-nude mb-1">On-image text</p>
-                        <p className="text-xs text-offwhite italic leading-snug">"{opt.hookSentence}"</p>
-                      </div>
+                    {/* Prev / Next arrows */}
+                    {safeSlide > 0 && (
+                      <button
+                        onClick={() => setActiveSlide(safeSlide - 1)}
+                        className="absolute left-2 top-1/2 -translate-y-1/2 size-8 flex items-center justify-center bg-foreground/70 hover:bg-foreground transition-colors"
+                      >
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                          <path d="M6.5 2L3.5 5l3 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </button>
+                    )}
+                    {safeSlide < carouselSlides.length - 1 && (
+                      <button
+                        onClick={() => setActiveSlide(safeSlide + 1)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 size-8 flex items-center justify-center bg-foreground/70 hover:bg-foreground transition-colors"
+                      >
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                          <path d="M3.5 2L6.5 5l-3 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </button>
                     )}
                   </div>
+
+                  {/* Thumbnail strip */}
+                  <div className="flex gap-1.5 overflow-x-auto p-3 bg-card border-t hairline">
+                    {carouselSlides.map((slide: any, i: number) => (
+                      <button
+                        key={i}
+                        onClick={() => setActiveSlide(i)}
+                        className={"shrink-0 relative overflow-hidden transition-all " + (i === safeSlide ? "ring-2 ring-foreground" : "opacity-60 hover:opacity-90")}
+                      >
+                        <img
+                          src={slide.url}
+                          alt={slide.title || slide.label || `Slide ${i + 1}`}
+                          className="w-14 h-14 object-cover"
+                        />
+                        <p className="text-[7px] uppercase tracking-widest text-center py-0.5 bg-card text-taupe">
+                          {String(i + 1).padStart(2, '0')}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Image actions */}
                   <div className="flex items-center justify-between px-4 py-3 border-t hairline bg-card">
                     <p className="text-[9px] uppercase tracking-widest text-taupe">
-                      Caption · {contentItem.serviceCategory ?? "Post"}
+                      Carousel · {carouselSlides.length} slides
                     </p>
                     <button
                       onClick={downloadImage}
                       className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground flex items-center gap-1.5 transition-colors"
                     >
                       <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                        <path d="M5 1v6M2 7l3 2 3-2M1 9h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M5 1v6M2 7l3 2 3-2M1 9h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
-                      Download image
+                      Download slide
                     </button>
                   </div>
-                </>
-              ) : (
-                <div className="flex-1 flex items-center justify-center min-h-[200px]">
-                  <p className="text-xs text-taupe italic">No image generated</p>
                 </div>
-              )}
-            </div>
 
-            {/* RIGHT — caption details */}
-            <div className="flex flex-col divide-y divide-border">
-              <div className="p-5 flex-1">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[10px] uppercase tracking-widest text-taupe">Caption</p>
-                  <div className="flex items-center gap-3">
-                    <span className="text-[9px] text-taupe">{charCount} chars · {tagCount} tags</span>
-                    <button onClick={copyCaption} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
-                      {captionCopied ? "Copied!" : "Copy"}
-                    </button>
+                {/* RIGHT — slide list + caption */}
+                <div className="flex flex-col divide-y divide-border">
+
+                  {/* Carousel slide list */}
+                  <div className="p-5">
+                    <p className="text-[10px] uppercase tracking-widest text-taupe mb-3">Carousel slides</p>
+                    <div className="space-y-px bg-border">
+                      {carouselSlides.map((slide: any, i: number) => (
+                        <button
+                          key={i}
+                          onClick={() => setActiveSlide(i)}
+                          className={"w-full text-left px-4 py-3 flex items-center gap-3 transition-colors " + (i === safeSlide ? "bg-foreground text-offwhite" : "bg-card hover:bg-nude/20")}
+                        >
+                          <span className={"text-[9px] tabular-nums shrink-0 " + (i === safeSlide ? "text-nude" : "text-taupe")}>
+                            {String(i + 1).padStart(2, '0')}
+                          </span>
+                          <span className="text-xs font-medium truncate">
+                            {slide.title ?? slide.label ?? `Slide ${i + 1}`}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
+
+                  {/* Caption */}
+                  <div className="p-5 flex-1">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[10px] uppercase tracking-widest text-taupe">Caption</p>
+                      <div className="flex items-center gap-3">
+                        <span className="text-[9px] text-taupe">{charCount} chars · {tagCount} tags</span>
+                        <button onClick={copyCaption} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
+                          {captionCopied ? "Copied!" : "Copy"}
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{opt.caption}</p>
+                  </div>
+
+                  {/* Hashtags */}
+                  {opt.hashtags && opt.hashtags.length > 0 && (
+                    <div className="px-5 py-4">
+                      <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Suggested hashtags</p>
+                      <p className="text-xs text-taupe leading-relaxed">
+                        {opt.hashtags.map((h: string) => `#${h}`).join("  ")}
+                      </p>
+                    </div>
+                  )}
                 </div>
-                <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{opt.caption}</p>
               </div>
-              {opt.callToAction && (
-                <div className="px-5 py-4">
-                  <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Call to action</p>
-                  <p className="text-sm text-foreground">{opt.callToAction}</p>
+            ) : (
+              /* ── SINGLE IMAGE LAYOUT ─────────────────────────────────────── */
+              <div className="grid grid-cols-1 lg:grid-cols-2">
+
+                {/* LEFT — image */}
+                <div className="relative bg-nude/10 flex flex-col">
+                  {singleImageUrl ? (
+                    <>
+                      <div className="relative">
+                        <img
+                          src={singleImageUrl}
+                          alt="Generated content"
+                          className="w-full object-cover max-h-[400px]"
+                        />
+                        {opt.hookSentence && (
+                          <div className="absolute bottom-0 left-0 right-0 bg-foreground/80 px-4 py-3">
+                            <p className="text-[9px] uppercase tracking-widest text-nude mb-1">On-image text</p>
+                            <p className="text-xs text-offwhite italic leading-snug">"{opt.hookSentence}"</p>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between px-4 py-3 border-t hairline bg-card">
+                        <p className="text-[9px] uppercase tracking-widest text-taupe">
+                          Caption · {contentItem.serviceCategory ?? "Post"}
+                        </p>
+                        <button
+                          onClick={downloadImage}
+                          className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground flex items-center gap-1.5 transition-colors"
+                        >
+                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                            <path d="M5 1v6M2 7l3 2 3-2M1 9h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                          Download image
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex-1 flex items-center justify-center min-h-[200px]">
+                      <p className="text-xs text-taupe italic">No image generated</p>
+                    </div>
+                  )}
                 </div>
-              )}
-              {opt.hashtags && opt.hashtags.length > 0 && (
-                <div className="px-5 py-4">
-                  <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Suggested hashtags</p>
-                  <p className="text-xs text-taupe leading-relaxed">
-                    {opt.hashtags.map((h: string) => `#${h}`).join("  ")}
-                  </p>
+
+                {/* RIGHT — caption details */}
+                <div className="flex flex-col divide-y divide-border">
+                  <div className="p-5 flex-1">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[10px] uppercase tracking-widest text-taupe">Caption</p>
+                      <div className="flex items-center gap-3">
+                        <span className="text-[9px] text-taupe">{charCount} chars · {tagCount} tags</span>
+                        <button onClick={copyCaption} className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">
+                          {captionCopied ? "Copied!" : "Copy"}
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{opt.caption}</p>
+                  </div>
+                  {opt.callToAction && (
+                    <div className="px-5 py-4">
+                      <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">Call to action</p>
+                      <p className="text-sm text-foreground">{opt.callToAction}</p>
+                    </div>
+                  )}
+                  {opt.hashtags && opt.hashtags.length > 0 && (
+                    <div className="px-5 py-4">
+                      <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Suggested hashtags</p>
+                      <p className="text-xs text-taupe leading-relaxed">
+                        {opt.hashtags.map((h: string) => `#${h}`).join("  ")}
+                      </p>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
             )}
           </>
         ) : null}
