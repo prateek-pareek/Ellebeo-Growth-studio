@@ -18,7 +18,7 @@ export class MetadataRetriever implements ITemplateRetriever {
     for (const [id, raw] of Object.entries(this.library)) {
       let category = 'Procedural V2 Layout';
       let concept = 'A dynamically generated procedural layout';
-      
+
       if (id.includes('editorial')) {
         category = 'Editorial';
         concept = 'High-end fashion and beauty layout with striking visual structure.';
@@ -43,9 +43,18 @@ export class MetadataRetriever implements ITemplateRetriever {
       } else if (id.includes('split')) {
         category = 'Split';
         concept = 'Two-region layout dividing the canvas between a photo area and a dedicated text area.';
+      } else if (id.includes('before_after')) {
+        category = 'Before & After';
+        concept = 'Two real photos (before and after) genuinely stitched side by side or stacked to show a transformation.';
+      } else if (id.includes('scrapbook')) {
+        category = 'Scrapbook';
+        concept = 'Taped or torn-paper photo card with a personal, handmade collage feel.';
+      } else if (id.includes('quadrant')) {
+        category = 'Quadrant';
+        concept = 'Grid- or badge-structured layout evoking a multi-panel composition on a single hero image.';
       }
 
-      const isSplit = id.includes('split') || id.includes('clinical_hero');
+      const isSplit = id.includes('split') || id.includes('clinical_hero') || id.includes('before_after');
       const macroFaceSafe = !isSplit;
 
       const requiresText = id.includes('text_only') || id.includes('quote') || id.includes('testimonial');
@@ -75,27 +84,36 @@ export class MetadataRetriever implements ITemplateRetriever {
       });
     }
 
-    // PHASE 3A: Inject Semantic Composition Recipes (Procedural)
-    // These tell the Art Director that instead of a rigid layout, it can select a dynamic Composition Recipe
+    // PHASE 3A: The Core 20 Semantic Variant Library
+    // These replace random procedural numeric suffixes with intentional, highly distinct geometries.
     let compositionRecipes = [
-      { id: 'editorial_hero', concept: 'Massive hero headline, vertical caption, deep negative space.', type: 'procedural' },
-      { id: 'editorial_quote', concept: 'Clean split text quote, subtle grain, huge whitespace.', type: 'procedural' },
-      { id: 'editorial_informational', concept: 'Educational layout with offset image cutouts and structural grid lines.', type: 'procedural' },
-      { id: 'editorial_breather', concept: 'Text-only composition with rich paper textures and bold ghost typography, no image required.', type: 'procedural' },
-      
-      // Minimalist Family
-      { id: 'minimalist_quote', concept: 'Ultra clean minimalist quote layout with massive whitespace.', type: 'procedural' },
-      
+      // Editorial Family
+      { id: 'editorial_magazine_cover', concept: 'Ghost headline, large masthead, paper texture. Elite and warm.', type: 'procedural' },
+      { id: 'editorial_portrait_hero', concept: 'Large portrait image on top, small caption below, soft texture.', type: 'procedural' },
+      { id: 'editorial_split', concept: 'Two equal zones (left image, right text), medium typography, minimal texture.', type: 'procedural' },
+      { id: 'editorial_full_bleed', concept: 'Image covers entire canvas. High-end fashion typography.', type: 'procedural' },
+      { id: 'editorial_feature_story', concept: 'Deep negative space, massive hero headline, vertical caption.', type: 'procedural' },
+
       // Clinical Family
-      { id: 'clinical_step_routine', concept: 'Structured, highly aligned step-by-step clinical routine.', type: 'procedural' },
-      { id: 'clinical_analysis_card', concept: 'Data-driven clinical analysis layout with metric labels.', type: 'procedural' },
-      
-      // Educational Family
-      { id: 'educational_numbered_list', concept: 'Bold numbered educational list focusing purely on typography.', type: 'procedural' },
-      { id: 'educational_myth_vs_fact', concept: 'Text-heavy myth vs fact layout with floating badge.', type: 'procedural' },
-      { id: 'educational_quote_hero', concept: 'Educational quote emphasis with massive typographic accents.', type: 'procedural' },
-      
+      { id: 'clinical_hero', concept: 'Structured, highly aligned, professional focus.', type: 'procedural' },
+      { id: 'clinical_procedure_steps', concept: 'Step-by-step procedure layout with strict grid and precision lines.', type: 'procedural' },
+      { id: 'clinical_benefits_grid', concept: 'Data-driven grid layout for highlighting multiple benefits.', type: 'procedural' },
+      { id: 'clinical_ingredient_focus', concept: 'Offset image cutout focusing on raw ingredients or microscopic details.', type: 'procedural' },
+      { id: 'clinical_before_after', concept: 'Split view layout designed for dramatic before and after results.', type: 'procedural' },
+
+      // Minimalist Family
+      { id: 'minimalist_centered_quote', concept: 'Ultra clean minimalist quote layout centered perfectly with massive whitespace. No image.', type: 'procedural' },
+      { id: 'minimalist_offset_quote', concept: 'Quote pushed hard to the side, creating extreme asymmetrical balance.', type: 'procedural' },
+      { id: 'minimalist_quote_image', concept: 'Clean split text quote and subtle image, huge whitespace.', type: 'procedural' },
+      { id: 'minimalist_bottom_caption', concept: 'Image pushed to the top, small delicate caption at the absolute bottom.', type: 'procedural' },
+      { id: 'minimalist_floating_card', concept: 'Text floats in a distinct card over a blurred or textured background.', type: 'procedural' },
+
       // Premium Text Only Family
+      { id: 'premium_hero_statement', concept: 'Massive singular statement taking up the entire canvas. No image required.', type: 'procedural' },
+      { id: 'premium_stacked_typography', concept: 'Bold, tight typography stacked vertically. Extremely modern.', type: 'procedural' },
+      { id: 'premium_manifesto', concept: 'Text-heavy manifesto layout for deep reading. Excellent for brand values.', type: 'procedural' },
+      { id: 'premium_quote_poster', concept: 'Premium text-only quote slide with exquisite SVG deco elements (stars, meteors).', type: 'procedural' },
+      { id: 'premium_cta_poster', concept: 'High-contrast text poster designed strictly to drive conversions and taps.', type: 'procedural' },
       { id: 'premium_text_only', concept: 'Premium text-only slide with exquisite SVG deco elements (stars, meteors, rings). No image required. Pure brand DNA.', type: 'procedural' },
 
       // Split Family
@@ -111,11 +129,29 @@ export class MetadataRetriever implements ITemplateRetriever {
       // Product Showcase Family
       { id: 'product_showcase_overlay', concept: 'Full-bleed background photo with headline and tagline text overlaid directly on top.', type: 'procedural' },
       { id: 'product_showcase_halo', concept: 'Circle-cropped product photo with a larger decorative halo ring behind it.', type: 'procedural' },
-      { id: 'product_showcase_band', concept: 'Heading and tagline band over a photo starting mid-canvas, divider at the seam, CTA chip at the bottom.', type: 'procedural' }
+      { id: 'product_showcase_band', concept: 'Heading and tagline band over a photo starting mid-canvas, divider at the seam, CTA chip at the bottom.', type: 'procedural' },
+
+      // Before & After Family
+      { id: 'before_after_side_by_side', concept: 'Real before-photo and after-photo genuinely stitched side by side, arrow marking the transformation, heading below.', type: 'procedural' },
+      { id: 'before_after_stacked', concept: 'Real before-photo and after-photo stitched top and bottom, arrow marking the seam, heading at the bottom.', type: 'procedural' },
+      { id: 'before_after_labeled', concept: 'Side-by-side before/after split with a masking-tape accent, heading and tagline stacked, pinned-up card feel.', type: 'procedural' },
+
+      // Testimonial Family
+      { id: 'testimonial_quote_portrait', concept: 'Circle-masked client portrait with a quote-marks accent, heading carries the quote, tagline carries attribution.', type: 'procedural' },
+      { id: 'testimonial_star_card', concept: 'Glass-card treatment with a 5-star rating row, quote heading, client name as tagline.', type: 'procedural' },
+      { id: 'testimonial_minimal_quote', concept: 'Pure typography quote with a small star rating row, no image required.', type: 'procedural' },
+
+      // Scrapbook Family
+      { id: 'scrapbook_collage', concept: 'Polaroid-masked photo pinned with a masking-tape accent and torn-paper texture, caption-card heading below.', type: 'procedural' },
+      { id: 'scrapbook_journal_entry', concept: 'Inset rectangle photo beside handwritten-feel margin notes and a divider, personal journal-spread feel.', type: 'procedural' },
+
+      // Quadrant Family
+      { id: 'quadrant_grid', concept: 'Full photo with a subtle quadrant grid overlay and a corner badge, evoking a 4-panel structure on one hero image.', type: 'procedural' },
+      { id: 'quadrant_badge_focus', concept: 'Arch-masked photo with a prominent geometric badge and grain texture, heading and tagline stacked below.', type: 'procedural' }
     ];
 
     for (const recipe of compositionRecipes) {
-      
+
       candidates.push({
         id: recipe.id,
         category: 'Procedural Composition',

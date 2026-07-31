@@ -644,42 +644,90 @@ export class PrimitiveEngine {
     // ==========================================
     
     this.registry['meteor_shower'] = { category: 'effects', render: (ctx) => {
+      // Find the CTA or Headline to point towards to guide reading flow
+      const targetRegion = ctx.layoutState?.occupiedRegions?.find(r => r.role === 'cta') || ctx.layoutState?.occupiedRegions?.find(r => r.role === 'heading');
+      
+      let tx = ctx.w - 150;
+      let ty = ctx.h * 0.7; // default
+      
+      if (targetRegion) {
+         tx = targetRegion.x + targetRegion.width;
+         ty = targetRegion.y + (targetRegion.height / 2);
+      }
+      
       return `
-      <!-- Premium Meteor Shower Accent -->
-      <g stroke="${ctx.validAccentColor || ctx.validBrandColor}" stroke-width="1.5" stroke-linecap="round" opacity="0.4">
-        <line x1="${ctx.w - 100}" y1="-50" x2="${ctx.w - 300}" y2="150" />
-        <line x1="${ctx.w - 50}" y1="20" x2="${ctx.w - 200}" y2="170" opacity="0.2" />
-        <line x1="${ctx.w - 180}" y1="-20" x2="${ctx.w - 350}" y2="150" opacity="0.6" stroke-width="2" />
-        <!-- Glowing head -->
-        <circle cx="${ctx.w - 300}" cy="150" r="2" fill="${ctx.validAccentColor || ctx.validBrandColor}" />
-        <circle cx="${ctx.w - 200}" cy="170" r="1.5" fill="${ctx.validAccentColor || ctx.validBrandColor}" />
-        <circle cx="${ctx.w - 350}" cy="150" r="3" fill="${ctx.validAccentColor || ctx.validBrandColor}" />
+      <!-- Premium Meteor Shower Accent (Anchored for Reading Flow) -->
+      <g stroke="${ctx.validAccentColor || ctx.validBrandColor}" stroke-linecap="round" opacity="0.95">
+        <line x1="${tx + 100}" y1="${ty - 200}" x2="${tx}" y2="${ty - 100}" opacity="0.6" stroke-width="2" />
+        <line x1="${tx + 180}" y1="${ty - 150}" x2="${tx + 30}" y2="${ty}" opacity="1.0" stroke-width="3" />
+        <line x1="${tx + 220}" y1="${ty - 60}" x2="${tx + 120}" y2="${ty + 40}" opacity="0.4" stroke-width="1.5" />
+        <!-- Glowing heads -->
+        <circle cx="${tx}" cy="${ty - 100}" r="2.5" fill="${ctx.validAccentColor || ctx.validBrandColor}" opacity="0.8" />
+        <circle cx="${tx + 30}" cy="${ty}" r="4" fill="${ctx.validAccentColor || ctx.validBrandColor}" />
+        <circle cx="${tx + 120}" cy="${ty + 40}" r="2" fill="${ctx.validAccentColor || ctx.validBrandColor}" opacity="0.6" />
       </g>`;
     }};
 
     this.registry['elegant_line_art'] = { category: 'geometry', render: (ctx) => {
       return `
       <!-- Elegant Wavy Line Art -->
-      <path d="M -50 ${ctx.h * 0.8} C ${ctx.w * 0.2} ${ctx.h * 0.9}, ${ctx.w * 0.3} ${ctx.h * 0.6}, ${ctx.w * 0.5} ${ctx.h * 0.7} S ${ctx.w * 0.8} ${ctx.h * 0.9}, ${ctx.w + 50} ${ctx.h * 0.85}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1" opacity="0.3" />
-      <path d="M -50 ${ctx.h * 0.82} C ${ctx.w * 0.25} ${ctx.h * 0.95}, ${ctx.w * 0.35} ${ctx.h * 0.65}, ${ctx.w * 0.55} ${ctx.h * 0.75} S ${ctx.w * 0.85} ${ctx.h * 0.95}, ${ctx.w + 50} ${ctx.h * 0.87}" fill="none" stroke="${ctx.validAccentColor || ctx.validBrandColor}" stroke-width="0.5" opacity="0.5" />`;
+      <path d="M -50 ${ctx.h * 0.8} C ${ctx.w * 0.2} ${ctx.h * 0.9}, ${ctx.w * 0.3} ${ctx.h * 0.6}, ${ctx.w * 0.5} ${ctx.h * 0.7} S ${ctx.w * 0.8} ${ctx.h * 0.9}, ${ctx.w + 50} ${ctx.h * 0.85}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1.5" opacity="0.7" />
+      <path d="M -50 ${ctx.h * 0.82} C ${ctx.w * 0.25} ${ctx.h * 0.95}, ${ctx.w * 0.35} ${ctx.h * 0.65}, ${ctx.w * 0.55} ${ctx.h * 0.75} S ${ctx.w * 0.85} ${ctx.h * 0.95}, ${ctx.w + 50} ${ctx.h * 0.87}" fill="none" stroke="${ctx.validAccentColor || ctx.validBrandColor}" stroke-width="1" opacity="0.9" />`;
     }};
 
     this.registry['premium_stars'] = { category: 'effects', render: (ctx) => {
+      const headlineRegion = ctx.layoutState?.occupiedRegions?.find(r => r.role === 'heading');
+      let sx1 = ctx.constraints.safeX + 50;
+      let sy1 = ctx.constraints.safeY + 80;
+      let sx2 = ctx.w - ctx.constraints.safeX - 80;
+      let sy2 = ctx.h * 0.6;
+      
+      if (headlineRegion) {
+          // Anchor strategically around the headline bounding box
+          sx1 = Math.max(ctx.constraints.safeX, headlineRegion.x - 40);
+          sy1 = Math.max(ctx.constraints.safeY, headlineRegion.y - 40);
+          sx2 = Math.min(ctx.w - ctx.constraints.safeX, headlineRegion.x + headlineRegion.width + 40);
+          sy2 = Math.min(ctx.h - ctx.constraints.safeY, headlineRegion.y + headlineRegion.height + 40);
+      }
+
+      const drawStar = (x: number, y: number, r: number) => {
+         return `<path d="M ${x} ${y-r} Q ${x} ${y} ${x+r} ${y} Q ${x} ${y} ${x} ${y+r} Q ${x} ${y} ${x-r} ${y} Q ${x} ${y} ${x} ${y-r} Z" />`;
+      };
+
       return `
-      <!-- Premium Four-Point Stars -->
-      <g fill="${ctx.validAccentColor || ctx.validBrandColor}" opacity="0.8">
-        <path d="M ${ctx.constraints.safeX + 50} ${ctx.constraints.safeY + 80} Q ${ctx.constraints.safeX + 60} ${ctx.constraints.safeY + 80} ${ctx.constraints.safeX + 60} ${ctx.constraints.safeY + 70} Q ${ctx.constraints.safeX + 60} ${ctx.constraints.safeY + 80} ${ctx.constraints.safeX + 70} ${ctx.constraints.safeY + 80} Q ${ctx.constraints.safeX + 60} ${ctx.constraints.safeY + 80} ${ctx.constraints.safeX + 60} ${ctx.constraints.safeY + 90} Q ${ctx.constraints.safeX + 60} ${ctx.constraints.safeY + 80} ${ctx.constraints.safeX + 50} ${ctx.constraints.safeY + 80} Z" />
-        <path d="M ${ctx.w - ctx.constraints.safeX - 80} ${ctx.h * 0.6} Q ${ctx.w - ctx.constraints.safeX - 65} ${ctx.h * 0.6} ${ctx.w - ctx.constraints.safeX - 65} ${ctx.h * 0.6 - 15} Q ${ctx.w - ctx.constraints.safeX - 65} ${ctx.h * 0.6} ${ctx.w - ctx.constraints.safeX - 50} ${ctx.h * 0.6} Q ${ctx.w - ctx.constraints.safeX - 65} ${ctx.h * 0.6} ${ctx.w - ctx.constraints.safeX - 65} ${ctx.h * 0.6 + 15} Q ${ctx.w - ctx.constraints.safeX - 65} ${ctx.h * 0.6} ${ctx.w - ctx.constraints.safeX - 80} ${ctx.h * 0.6} Z" opacity="0.5" transform="scale(0.6) translate(${ctx.w * 0.4}, ${ctx.h * 0.4})" />
+      <!-- Premium Four-Point Stars (Anchored to Focal Point) -->
+      <g fill="${ctx.validAccentColor || ctx.validBrandColor}" opacity="1.0">
+        ${drawStar(sx1, sy1, 24)}
+        <g opacity="0.8">
+           ${drawStar(sx2, sy2, 16)}
+        </g>
       </g>`;
     }};
 
     this.registry['abstract_rings'] = { category: 'geometry', render: (ctx) => {
+      // Find the headline region to anchor to
+      const headlineRegion = ctx.layoutState?.occupiedRegions?.find(r => r.role === 'heading' || r.role === 'ghost_headline');
+      
+      let cx = ctx.w / 2;
+      let cy = ctx.h / 2;
+      
+      if (headlineRegion && headlineRegion.opticalCenter) {
+         cx = headlineRegion.opticalCenter.x;
+         cy = headlineRegion.opticalCenter.y;
+      } else if (headlineRegion) {
+         cx = headlineRegion.x + (headlineRegion.width / 2);
+         cy = headlineRegion.y + (headlineRegion.height / 2);
+      } else {
+         cx = ctx.w - 100;
+         cy = ctx.h / 2;
+      }
+
       return `
-      <!-- Abstract Concentric Rings -->
-      <g transform="translate(${ctx.w}, 0)" opacity="0.15">
-        <circle cx="0" cy="0" r="200" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1" />
-        <circle cx="0" cy="0" r="280" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1.5" stroke-dasharray="4 8" />
-        <circle cx="0" cy="0" r="360" fill="none" stroke="${ctx.validBrandColor}" stroke-width="0.5" />
+      <!-- Abstract Concentric Rings (Anchored as Compositional Base) -->
+      <g transform="translate(${cx}, ${cy})" opacity="0.3">
+        <circle cx="0" cy="0" r="${ctx.w * 0.45}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="2.5" />
+        <circle cx="0" cy="0" r="${ctx.w * 0.6}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="3.5" stroke-dasharray="8 16" opacity="0.75" />
+        <circle cx="0" cy="0" r="${ctx.w * 0.75}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1.5" opacity="0.5" />
       </g>`;
     }};
 
@@ -1070,6 +1118,50 @@ export class PrimitiveEngine {
         <circle cx="${cx}" cy="${cy}" r="${outerR}" fill="none" stroke="${ctx.validSecondaryColor}" stroke-width="2" />
         <circle cx="${cx}" cy="${cy}" r="${innerR}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1" stroke-dasharray="3 6" opacity="0.6" />
       </g>`;
+    }};
+
+    this.registry['transformation_arrow'] = { category: 'geometry', render: (ctx, layer) => {
+      // Bold directional arrow marking the seam between a before-photo and an
+      // after-photo, with small "BEFORE"/"AFTER" labels either side. Grounded
+      // in the "arrow" decoration tag seen across real mined before/after
+      // templates. Defaults to a vertical seam (side-by-side photos); pass
+      // offsetPercent near 50 to sit on a horizontal seam (stacked photos).
+      const orientation = layer?.orientation === 'horizontal' ? 'horizontal' : 'vertical';
+      const cx = ctx.w / 2;
+      const cy = ctx.h / 2;
+      if (orientation === 'horizontal') {
+        return `
+        <!-- Before/After Transformation Arrow (horizontal seam) -->
+        <g transform="translate(${cx}, ${cy})">
+          <circle cx="0" cy="0" r="26" fill="${ctx.validBackgroundColor}" filter="drop-shadow(0 3px 6px rgba(0,0,0,0.25))" />
+          <path d="M -8 -6 L 8 0 L -8 6 Z" fill="${ctx.validBrandColor}" />
+        </g>
+        <text x="${ctx.constraints.safeX}" y="${cy - 34}" font-family="sans-serif" font-size="11" font-weight="800" letter-spacing="2px" fill="${ctx.validBrandColor}" opacity="0.85">BEFORE</text>
+        <text x="${ctx.w - ctx.constraints.safeX}" y="${cy + 46}" text-anchor="end" font-family="sans-serif" font-size="11" font-weight="800" letter-spacing="2px" fill="${ctx.validBrandColor}" opacity="0.85">AFTER</text>`;
+      }
+      return `
+      <!-- Before/After Transformation Arrow (vertical seam) -->
+      <g transform="translate(${cx}, ${cy})">
+        <circle cx="0" cy="0" r="26" fill="${ctx.validBackgroundColor}" filter="drop-shadow(0 3px 6px rgba(0,0,0,0.25))" />
+        <path d="M -6 -8 L 0 8 L 6 -8 Z" fill="${ctx.validBrandColor}" transform="rotate(90)" />
+      </g>
+      <text x="${cx - 40}" y="${ctx.constraints.safeY + 6}" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="800" letter-spacing="2px" fill="${ctx.validBrandColor}" opacity="0.85">BEFORE</text>
+      <text x="${cx + 40}" y="${ctx.constraints.safeY + 6}" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="800" letter-spacing="2px" fill="${ctx.validBrandColor}" opacity="0.85">AFTER</text>`;
+    }};
+
+    this.registry['star_rating_row'] = { category: 'effects', render: (ctx, layer) => {
+      // Row of 5 filled stars, anchored near the layer's declared position.
+      // Grounded in the "star_rating" decoration tag seen across real mined
+      // testimonial templates.
+      const anchor = layer?.anchor || 'top_center';
+      const startX = anchor.includes('left') ? ctx.constraints.safeX : anchor.includes('right') ? ctx.w - ctx.constraints.safeX - 130 : ctx.w / 2 - 65;
+      const y = anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - 30 : ctx.constraints.safeY + 10;
+      const starPath = "M12 1 L15 8 L23 9 L17 15 L18 23 L12 19 L6 23 L7 15 L1 9 L9 8 Z";
+      let stars = '';
+      for (let i = 0; i < 5; i++) {
+        stars += `<g transform="translate(${startX + i * 26}, ${y}) scale(1.1)"><path d="${starPath}" fill="${ctx.validAccentColor || ctx.validBrandColor}" /></g>`;
+      }
+      return `<!-- Testimonial Star Rating -->\n${stars}`;
     }};
   }
 

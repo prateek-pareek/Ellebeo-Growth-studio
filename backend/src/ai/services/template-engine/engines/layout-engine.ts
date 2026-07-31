@@ -26,16 +26,18 @@ export class LayoutEngine {
   private canvasWidth: number;
   private canvasHeight: number;
   private faceBox?: BoundingBox;
+  private isStory: boolean;
 
   constructor(canvasWidth: number, canvasHeight: number, faceBox?: BoundingBox) {
     this.canvasWidth = canvasWidth;
     this.canvasHeight = canvasHeight;
     this.faceBox = faceBox;
+    this.isStory = (canvasHeight / canvasWidth) > 1.3; // Detect 9:16 or similar vertical layouts
   }
 
   public calculateConstraints(family: LayoutFamily, negativeSpace: NegativeSpace, tension: boolean = false, behavior?: any): LayoutConstraints {
     let baseMarginX = 60;
-    let baseMarginY = 100;
+    let baseMarginY = this.isStory ? 220 : 100; // Instagram story UI needs heavy vertical padding
 
     let multiplier = 1.0;
     if (behavior && behavior.negativeSpaceMultiplier) {
@@ -51,7 +53,7 @@ export class LayoutEngine {
     }
 
     if (family === 'editorial') {
-      baseMarginY = 140; 
+      baseMarginY = this.isStory ? 240 : 140; 
     } else if (family === 'architectural') {
       baseMarginX = 40; 
       baseMarginY = 80;

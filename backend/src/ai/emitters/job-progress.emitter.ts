@@ -1,12 +1,16 @@
 // ============================================================================
 // job-progress.emitter.ts — Real-Time WebSocket Progress via Socket.io
 // Every job state transition emits to the technician's authenticated room.
+// Percent/ETA are always sourced from GenerationProgressTracker so the
+// websocket event and the REST polling endpoint (GenerationService.
+// getJobStatus) never disagree — one live-computed number, two transports.
 // ============================================================================
 
 import type { Server as SocketServer } from 'socket.io';
 import { AI_CONFIG } from '../../config/ai.config';
 import type { JobProgressEvent } from '../types/generation-result.types';
 import type { JobState } from '../types/job-payload.types';
+import { GenerationProgressTracker } from '../services/generation-progress.tracker';
 
 export class JobProgressEmitter {
   constructor(private readonly io: SocketServer) {}
@@ -18,14 +22,18 @@ export class JobProgressEmitter {
   async emit(jobId: string, tenantId: string, state: JobState): Promise<void> {
     const progressConfig = AI_CONFIG.progressMap[state];
     const room = AI_CONFIG.redisKeys.socketRoom(tenantId);
+    const floor = AI_CONFIG.stateFloorPercent[state] ?? progressConfig.percent;
+
+    GenerationProgressTracker.setStep(jobId, progressConfig.step, floor);
+    const live = GenerationProgressTracker.getLive(jobId);
 
     const event: JobProgressEvent = {
       jobId,
       tenantId,
       state,
-      progressPercent: progressConfig.percent,
+      progressPercent: live?.percent ?? progressConfig.percent,
       currentStep: progressConfig.step,
-      estimatedSecondsRemaining: this.estimateRemaining(state),
+      estimatedSecondsRemaining: live?.estimatedSecondsRemaining ?? AI_CONFIG.stateEtaSeconds[state] ?? 30,
     };
 
     this.io.to(room).emit('job:progress', event);
@@ -41,15 +49,50 @@ export class JobProgressEmitter {
     partialResult: { caption?: string; hashtags?: string[] }
   ): Promise<void> {
     const room = AI_CONFIG.redisKeys.socketRoom(tenantId);
+    const step = 'Your caption is ready — processing your photo...';
+
+    GenerationProgressTracker.setStep(jobId, step, AI_CONFIG.stateFloorPercent['generating_text'] ?? 16);
+    const live = GenerationProgressTracker.getLive(jobId);
 
     const event: Partial<JobProgressEvent> = {
       jobId,
       tenantId,
       state: 'generating_text',
-      progressPercent: 70,
-      currentStep: 'Your caption is ready — processing your photo...',
-      estimatedSecondsRemaining: this.estimateRemaining('generating_text'),
+      progressPercent: live?.percent ?? 70,
+      currentStep: step,
+      estimatedSecondsRemaining: live?.estimatedSecondsRemaining ?? 12,
       partialResult,
+    };
+
+    this.io.to(room).emit('job:progress', event);
+  }
+
+  // --------------------------------------------------------------------------
+  // Emit fine-grained sub-progress within a single JobState (e.g. inside
+  // 'generating_text' while the orchestrator is actually doing image/carousel/
+  // story/reel work). Presentation-only — never touches the persisted JobState
+  // or its transition table, just raises the tracker's structural floor.
+  // --------------------------------------------------------------------------
+
+  async emitSubProgress(
+    jobId: string,
+    tenantId: string,
+    state: JobState,
+    floorPercent: number,
+    step: string
+  ): Promise<void> {
+    const room = AI_CONFIG.redisKeys.socketRoom(tenantId);
+
+    GenerationProgressTracker.setStep(jobId, step, floorPercent);
+    const live = GenerationProgressTracker.getLive(jobId);
+
+    const event: JobProgressEvent = {
+      jobId,
+      tenantId,
+      state,
+      progressPercent: live?.percent ?? floorPercent,
+      currentStep: step,
+      estimatedSecondsRemaining: live?.estimatedSecondsRemaining ?? 10,
     };
 
     this.io.to(room).emit('job:progress', event);
@@ -66,6 +109,8 @@ export class JobProgressEmitter {
     userMessage: string
   ): Promise<void> {
     const room = AI_CONFIG.redisKeys.socketRoom(tenantId);
+
+    GenerationProgressTracker.clear(jobId);
 
     const event: JobProgressEvent = {
       jobId,
@@ -87,6 +132,8 @@ export class JobProgressEmitter {
   async emitBlocked(jobId: string, tenantId: string): Promise<void> {
     const room = AI_CONFIG.redisKeys.socketRoom(tenantId);
 
+    GenerationProgressTracker.clear(jobId);
+
     const event: JobProgressEvent = {
       jobId,
       tenantId,
@@ -97,25 +144,5 @@ export class JobProgressEmitter {
     };
 
     this.io.to(room).emit('job:progress', event);
-  }
-
-  // --------------------------------------------------------------------------
-  // Estimate remaining seconds per state
-  // --------------------------------------------------------------------------
-
-  private estimateRemaining(state: JobState): number {
-    const estimates: Partial<Record<JobState, number>> = {
-      queued: 45,
-      processing_image: 35,
-      processing_vision: 25,
-      building_prompt: 20,
-      generating_text: 12,
-      generating_reel: 90,
-      completed: 0,
-      failed: 0,
-      blocked: 0,
-      dead_letter: 0,
-    };
-    return estimates[state] ?? 30;
   }
 }

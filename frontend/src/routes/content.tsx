@@ -5,7 +5,7 @@ import { useAppointments } from "@/lib/providers/appointments-provider";
 import { useTemplates } from "@/lib/providers/template-provider";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
-import { ImageOff } from "lucide-react";
+import { Images, Play, AlignLeft, Smartphone, Music2, Clock, CalendarCheck, Trash2, type LucideIcon } from "lucide-react";
 import { Pagination } from "@/components/Pagination";
 
 export const Route = createFileRoute("/content")({
@@ -35,12 +35,15 @@ const STATE_FILTERS: Array<{ id: StateFilter; label: string }> = [
 
 const FORMAT_FILTERS: Array<string> = ["Carousel", "Reel", "Story", "Caption", "TikTok"];
 
-const FORMAT_ICONS: Record<string, string> = {
-  Carousel: "⊞",
-  Reel: "▶",
-  Story: "◻",
-  Caption: "≡",
-  TikTok: "♪",
+// One consistent icon language for format, reused in the filter chips, the
+// active-filter pill, and the card badge — so a glance at any of the three
+// tells you the same thing the same way.
+const FORMAT_ICON: Record<string, LucideIcon> = {
+  Carousel: Images,
+  Reel: Play,
+  Story: Smartphone,
+  Caption: AlignLeft,
+  TikTok: Music2,
 };
 
 const PAGE_SIZE = 10;
@@ -282,21 +285,24 @@ function ContentPage() {
                     <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Format</p>
                   </div>
                   <div className="px-4 py-3 flex flex-wrap gap-1.5">
-                    {FORMAT_FILTERS.map((f) => (
-                      <button
-                        key={f}
-                        onClick={() => setFormatFilter(formatFilter === f ? null : f)}
-                        className={
-                          "flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest px-2.5 py-1 border-2 transition-all duration-150 " +
-                          (formatFilter === f
-                            ? "bg-foreground text-offwhite border-foreground"
-                            : "text-foreground/70 border-taupe/40 hover:text-foreground hover:border-foreground/50")
-                        }
-                      >
-                        <span className="leading-none opacity-80">{FORMAT_ICONS[f]}</span>
-                        {f}
-                      </button>
-                    ))}
+                    {FORMAT_FILTERS.map((f) => {
+                      const Icon = FORMAT_ICON[f];
+                      return (
+                        <button
+                          key={f}
+                          onClick={() => setFormatFilter(formatFilter === f ? null : f)}
+                          className={
+                            "flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest px-2.5 py-1 border-2 transition-all duration-150 " +
+                            (formatFilter === f
+                              ? "bg-foreground text-offwhite border-foreground"
+                              : "text-foreground/70 border-taupe/40 hover:text-foreground hover:border-foreground/50")
+                          }
+                        >
+                          <Icon size={11} strokeWidth={2} className="opacity-80" />
+                          {f}
+                        </button>
+                      );
+                    })}
                   </div>
 
                   <div className="border-t border-border" />
@@ -353,7 +359,7 @@ function ContentPage() {
         {(formatFilter || goalFilter) && (
           <div className="flex flex-wrap items-center gap-2 px-5 py-2.5 border-b border-border bg-nude/10">
             {formatFilter && (
-              <ActivePill label={`${FORMAT_ICONS[formatFilter]} ${formatFilter}`} onRemove={() => setFormatFilter(null)} />
+              <ActivePill label={formatFilter} onRemove={() => setFormatFilter(null)} />
             )}
             {goalFilter && (
               <ActivePill
@@ -373,7 +379,7 @@ function ContentPage() {
             <EmptyState onClear={clearFilters} hasFilters={hasActiveFilters} />
           ) : (
             <>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
                 {pageItems.map((c) => (
                   <ContentCard
                     key={c.id}
@@ -479,82 +485,91 @@ function ContentCard({
   const isCarousel = platformVariants?.type === "carousel";
   const isStory = platformVariants?.type === "story";
   const slides = isCarousel ? (platformVariants?.slides ?? []) : isStory ? (platformVariants?.frames ?? []) : [];
-  const [cardSlideIndex, setCardSlideIndex] = useState(0);
-
-  // Auto-scroll removed to allow users to inspect each slide manually.
-  useEffect(() => {
-    // Keeps hook structure without the setInterval logic.
-    return () => {};
-  }, [slides]);
+  const thumbnailUrl = slides.length > 0 ? slides[0]?.url : item.image;
 
   const state   = item.state.toLowerCase();
   const blocked = state === "blocked";
   const isDraft = state === "draft" || state === "needs review";
 
+  const FormatIcon = FORMAT_ICON[item.type] ?? AlignLeft;
+
   return (
-    <article className="group flex flex-col border border-border bg-card shadow-sm hover:shadow-md transition-shadow overflow-hidden">
-      {/* Image Container — aspect-square for Carousel/Feed vs aspect-[9/16] for Story */}
-      <div className={`overflow-hidden bg-nude/30 relative border-b border-border hover:cursor-pointer transition-all duration-300 ${isStory ? 'aspect-[9/16]' : 'aspect-square'}`} onClick={onReview}>
-        <img
-          src={slides.length > 0 ? slides[cardSlideIndex]?.url : item.image}
-          alt={item.title}
-          loading="lazy"
-          className={
-            "w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.01] " +
-            (blocked ? "opacity-40 grayscale" : "")
-          }
-        />
-        
-        {/* Navigation arrows directly on the grid card removed as requested */}
+    <article className="group flex flex-col border border-border/70 bg-card shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-border transition-all duration-300 overflow-hidden">
+      {/* Media — fixed height across every format so the grid stays level;
+          format identity comes from the badge + the story "phone" inset +
+          the carousel stacked-card effect below, not from a wobbly aspect ratio. */}
+      <div
+        className="relative h-72 bg-muted overflow-hidden cursor-pointer"
+        onClick={onReview}
+      >
+        {isCarousel ? (
+          <>
+            {/* Stacked-deck effect: two offset cards peeking out behind the top image */}
+            <div className="absolute inset-x-5 top-3 bottom-0 bg-card border border-border rotate-[-2deg] rounded-xl" />
+            <div className="absolute inset-x-4 top-1.5 bottom-0 bg-card border border-border rotate-[1.5deg] rounded-xl" />
+            <div className="absolute inset-1.5 overflow-hidden rounded-xl">
+              <img
+                src={thumbnailUrl}
+                alt={item.title}
+                loading="lazy"
+                className={"w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.03] " + (blocked ? "opacity-40 grayscale" : "")}
+              />
+            </div>
+            {slides.length > 1 && (
+              <span className="absolute bottom-3 right-3 z-10 inline-flex items-center gap-1 bg-foreground/80 backdrop-blur text-offwhite text-[9px] font-semibold px-2 py-1 rounded-full shadow-sm">
+                <Images size={10} strokeWidth={2.25} />
+                {slides.length}
+              </span>
+            )}
+          </>
+        ) : isStory ? (
+          // Letterboxed vertical "phone screen" — immediately reads as Story
+          // without needing a label, and keeps the row height uniform.
+          <div className="h-full flex items-center justify-center bg-gradient-to-b from-muted to-nude/20">
+            <div className="h-full aspect-[9/16] overflow-hidden shadow-lg ring-1 ring-border/60 rounded-xl">
+              <img
+                src={thumbnailUrl}
+                alt={item.title}
+                loading="lazy"
+                className={"w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.03] " + (blocked ? "opacity-40 grayscale" : "")}
+              />
+            </div>
+          </div>
+        ) : (
+          <img
+            src={thumbnailUrl}
+            alt={item.title}
+            loading="lazy"
+            className={"w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.03] " + (blocked ? "opacity-40 grayscale" : "")}
+          />
+        )}
+
+        {/* Soft scrim so the top-corner badges stay legible over any photo */}
+        <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/25 to-transparent pointer-events-none" />
 
         <div className="absolute top-3 left-3 z-10">
           <StatePill state={state} />
         </div>
+        <div className="absolute top-3 right-3 z-10 inline-flex items-center gap-1.5 bg-foreground/70 backdrop-blur text-offwhite text-[9px] font-semibold uppercase tracking-widest px-2.5 py-1.5 rounded-full shadow-sm">
+          <FormatIcon size={11} strokeWidth={2.25} />
+          {item.type}
+        </div>
       </div>
 
       {/* Body */}
-      <div className="flex flex-col flex-1 p-3">
-        <p className="eyebrow mb-1">{item.type} · {item.pillar}</p>
-        <h3 className="font-serif text-base mb-1.5 leading-snug">{item.title}</h3>
-        
-        {item.designDetails && !blocked && (() => {
-          const base = item.designDetails.base?.replace(/_/g, ' ') || 'Standard';
-          const text = item.designDetails.text?.replace(/_/g, ' ') || 'Standard';
-          const deco = item.designDetails.deco?.replace(/_/g, ' ') || 'None';
-          // Legacy templates give short slugs ("full_bleed_photo") that fit a
-          // chip; newer templates give a full sentence via `concept` — that
-          // needs its own readable block instead of being crammed into the
-          // same tiny pill, which is what caused the overlapping text.
-          const baseIsLong = base.length > 40;
+      <div className="flex flex-col flex-1 p-5">
+        {item.pillar && (
+          <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-taupe/70 mb-2">
+            {String(item.pillar).replace(/_/g, " ")}
+          </p>
+        )}
+        {/* No separate caption preview here — item.title is already derived
+            from the caption's opening line (see content-provider.ts), so
+            showing the full caption underneath just repeated the same text
+            twice on the card. */}
+        <h3 className="font-serif text-lg mb-3 leading-snug line-clamp-2">{item.title}</h3>
 
-          return (
-            <div className="mb-2.5 mt-1 space-y-1.5">
-              {baseIsLong && (
-                <p className="bg-nude/40 text-foreground/70 text-[10px] leading-relaxed px-2 py-1.5 rounded border border-border line-clamp-3">
-                  <span className="opacity-50 uppercase tracking-widest text-[8px] mr-1 align-middle">Base</span>
-                  {base}
-                </p>
-              )}
-              <div className="flex flex-wrap gap-1.5">
-                {!baseIsLong && (
-                  <span className="inline-flex items-center gap-1 bg-nude/40 text-foreground/70 text-[8px] uppercase tracking-widest px-1.5 py-0.5 rounded border border-border">
-                    <span className="opacity-50">Base:</span> {base}
-                  </span>
-                )}
-                <span className="inline-flex items-center gap-1 bg-nude/40 text-foreground/70 text-[8px] uppercase tracking-widest px-1.5 py-0.5 rounded border border-border">
-                  <span className="opacity-50">Text:</span> {text}
-                </span>
-                <span className="inline-flex items-center gap-1 bg-nude/40 text-foreground/70 text-[8px] uppercase tracking-widest px-1.5 py-0.5 rounded border border-border">
-                  <span className="opacity-50">Deco:</span> {deco}
-                </span>
-              </div>
-            </div>
-          );
-        })()}
-
-        {!blocked ? (
-          <p className="text-xs text-taupe leading-relaxed line-clamp-3 mb-3">{item.caption}</p>
-        ) : (
+        {blocked && (
           <p className="text-xs text-taupe leading-relaxed mb-3">
             {item.blockedReason || "This draft didn't meet brand quality standards and needs another pass before it can be scheduled."}
           </p>
@@ -562,29 +577,38 @@ function ContentCard({
       </div>
 
       {/* Meta strip */}
-      <div className="bg-muted border-t border-border px-3 py-2.5">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] uppercase tracking-widest text-taupe mb-2">
-          {appointment && (
-            <span>{appointment.clientName.split(" ")[0]} · {appointment.category}</span>
-          )}
-          {item.scheduledFor && (
-            <span>· Scheduled {new Date(item.scheduledFor).toLocaleDateString()}</span>
-          )}
-          {item.postedAt && (
-            <span>· Posted {new Date(item.postedAt).toLocaleDateString()}</span>
-          )}
-        </div>
+      <div className="bg-muted/60 border-t border-border/70 px-5 py-3.5">
+        {(appointment || item.scheduledFor || item.postedAt) && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-taupe mb-2">
+            {appointment && (
+              <span className="inline-flex items-center gap-1 truncate">
+                {appointment.clientName.split(" ")[0]} · {appointment.category}
+              </span>
+            )}
+            {item.scheduledFor && (
+              <span className="inline-flex items-center gap-1">
+                <Clock size={10} /> {new Date(item.scheduledFor).toLocaleDateString()}
+              </span>
+            )}
+            {item.postedAt && (
+              <span className="inline-flex items-center gap-1">
+                <CalendarCheck size={10} /> {new Date(item.postedAt).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+        )}
 
-        {!blocked && (
-          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={onReview}
-                className="inline-flex items-center gap-1.5 border border-border bg-card text-xs font-medium text-foreground px-3 py-1.5 shadow-sm hover:bg-muted hover:shadow-md active:scale-[0.97] transition-all"
-              >
-                Review
-              </button>
-              {isDraft && (
+        <div className="flex flex-nowrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+              {!blocked && (
+                <button
+                  onClick={onReview}
+                  className="inline-flex items-center gap-1.5 border border-border bg-card text-xs font-medium text-foreground px-3 py-1.5 rounded-lg shadow-sm hover:bg-muted hover:shadow-md active:scale-[0.97] transition-all shrink-0"
+                >
+                  Review
+                </button>
+              )}
+              {!blocked && isDraft && (
                 <button
                   onClick={async () => {
                     setApproving(true);
@@ -592,36 +616,43 @@ function ContentCard({
                     setApproving(false);
                   }}
                   disabled={approving}
-                  className="inline-flex items-center bg-foreground text-offwhite text-xs font-medium px-3 py-1.5 shadow-sm hover:opacity-90 hover:shadow-md active:scale-[0.97] transition-all disabled:opacity-50"
+                  className="inline-flex items-center bg-foreground text-offwhite text-xs font-medium px-3 py-1.5 rounded-lg shadow-sm hover:opacity-90 hover:shadow-md active:scale-[0.97] transition-all disabled:opacity-50 shrink-0"
                 >
                   {approving ? "Approving…" : "Approve"}
                 </button>
               )}
-              {(state === "approved" || state === "scheduled") && (
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-offwhite bg-sage px-2 py-0.5">
+              {!blocked && (state === "approved" || state === "scheduled") && (
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-offwhite bg-sage px-2.5 py-1 rounded-full truncate">
                   {state}
                 </span>
               )}
             </div>
 
-            {/* Discard — two-tap confirm */}
+            {/* Discard — icon + label together (so the action is still named,
+                not just an icon), always pinned to the right of Review/Approve
+                — the outer row is nowrap and this button never grows past its
+                content, so it can't get pushed onto its own line. Two-tap
+                confirm. Available for blocked drafts too, so a post that
+                failed quality checks isn't stuck in the library forever. */}
             {state !== "published" && (
               <button
                 onClick={handleDiscard}
                 disabled={discarding}
                 onBlur={() => setConfirm(false)}
                 className={
-                  "shrink-0 text-[10px] uppercase tracking-widest px-2.5 py-1.5 transition-all disabled:opacity-40 " +
+                  "shrink-0 inline-flex items-center gap-1 text-[10px] uppercase tracking-widest px-2.5 py-1.5 rounded-lg transition-all disabled:opacity-40 " +
                   (confirm
-                    ? "bg-destructive/10 text-destructive border border-destructive/30 rounded"
-                    : "text-taupe hover:text-destructive opacity-0 group-hover:opacity-100")
+                    ? "bg-destructive/10 text-destructive border border-destructive/30"
+                    : blocked
+                      ? "text-destructive/70 hover:text-destructive hover:bg-destructive/10"
+                      : "text-taupe hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100")
                 }
               >
+                <Trash2 size={12} strokeWidth={2} />
                 {discarding ? "…" : confirm ? "Confirm?" : "Discard"}
               </button>
             )}
-          </div>
-        )}
+        </div>
       </div>
     </article>
   );
@@ -896,7 +927,7 @@ function StatePill({ state }: { state: string }) {
     blocked:      "bg-destructive text-offwhite",
   };
   return (
-    <span className={`backdrop-blur px-2 py-1 text-[9px] uppercase tracking-[0.18em] ${styles[state] || styles.draft}`}>
+    <span className={`backdrop-blur px-2.5 py-1 rounded-full text-[9px] uppercase tracking-[0.18em] shadow-sm ${styles[state] || styles.draft}`}>
       {state}
     </span>
   );

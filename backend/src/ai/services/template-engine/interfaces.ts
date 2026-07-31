@@ -64,11 +64,12 @@ export interface IDSLBaseLayer {
   attachPosition?: 'top' | 'bottom' | 'left' | 'right' | 'center' | 'overlap';
   attachOffset?: number; // pixel offset from the attached position
   allocatedBox?: { x: number; y: number; width: number; height: number; }; // allocated by CompositionOptimizer
+  orientation?: 'horizontal' | 'vertical'; // Used by before_after_split (image) + transformation_arrow (decoration) to keep the photo seam and the arrow in sync
 }
 
 export interface IDSLImageLayer extends IDSLBaseLayer {
   type: 'image';
-  mask: 'rectangle' | 'circle' | 'arch' | 'die_cut' | 'split' | 'polaroid';
+  mask: 'full_bleed' | 'rectangle' | 'circle' | 'arch' | 'die_cut' | 'split' | 'polaroid' | 'before_after_split';
   paddingPercent: number; // e.g., 0 for full-bleed, 10 for inset
   anchor?: LayoutAnchor; // Used for corner positioning
   component?: string; // Optional device frame component (e.g. desktop_monitor_mockup, tablet_device_mockup)
@@ -76,7 +77,7 @@ export interface IDSLImageLayer extends IDSLBaseLayer {
 
 export interface IDSLDecorationLayer extends IDSLBaseLayer {
   type: 'decoration';
-  component: 'wax_seal' | 'ticket_notches' | 'film_sprockets' | 'gallery_frame' | 'masking_tape' | 'gold_accents' | 'glass_card' | '3d_ribbon' | 'metric_panel' | 'editorial_sidebar' | 'status_chip' | 'divider' | 'chapter_tabs' | 'measurement_lines' | 'blueprint_grid' | 'museum_border' | 'thin_divider' | 'editorial_badge' | 'oversized_index' | 'quote_marks' | 'grain_overlay' | 'minimal_grid' | 'metadata_label' | 'ghost_headline' | 'outline_headline' | 'vertical_label' | 'running_header' | 'pull_quote' | 'organic_blob' | 'torn_paper' | 'pill_tag' | 'double_divider' | 'margin_rule' | 'accent_rule' | 'noise_texture' | 'paper_texture' | 'light_leak' | 'organic_accent' | 'structural_border' | 'handmade_mark' | 'margin_notes' | 'ink_stamp' | 'fold_line' | 'editorial_number_block' | 'corner_frame' | 'clinical_callout_box' | 'step_badge' | 'metric_label' | 'large_numeral_bullet' | 'myth_fact_badge' | 'quote_mark_accent' | 'meteor_shower' | 'elegant_line_art' | 'premium_stars' | 'abstract_rings' | 'split_seam_line' | 'countdown_urgency_badge' | 'product_halo_ring';
+  component: 'wax_seal' | 'ticket_notches' | 'film_sprockets' | 'gallery_frame' | 'masking_tape' | 'gold_accents' | 'glass_card' | '3d_ribbon' | 'metric_panel' | 'editorial_sidebar' | 'status_chip' | 'divider' | 'chapter_tabs' | 'measurement_lines' | 'blueprint_grid' | 'museum_border' | 'thin_divider' | 'editorial_badge' | 'oversized_index' | 'quote_marks' | 'grain_overlay' | 'minimal_grid' | 'metadata_label' | 'ghost_headline' | 'outline_headline' | 'vertical_label' | 'running_header' | 'pull_quote' | 'organic_blob' | 'torn_paper' | 'pill_tag' | 'double_divider' | 'margin_rule' | 'accent_rule' | 'noise_texture' | 'paper_texture' | 'light_leak' | 'organic_accent' | 'structural_border' | 'handmade_mark' | 'margin_notes' | 'ink_stamp' | 'fold_line' | 'editorial_number_block' | 'corner_frame' | 'clinical_callout_box' | 'step_badge' | 'metric_label' | 'large_numeral_bullet' | 'myth_fact_badge' | 'quote_mark_accent' | 'meteor_shower' | 'elegant_line_art' | 'premium_stars' | 'abstract_rings' | 'split_seam_line' | 'countdown_urgency_badge' | 'product_halo_ring' | 'transformation_arrow' | 'star_rating_row' | 'editorial_tape' | 'geometric_badge';
   anchor: LayoutAnchor;
   offsetPercent: number; // distance from the anchor
 }

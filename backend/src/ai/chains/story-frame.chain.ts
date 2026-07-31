@@ -45,23 +45,38 @@ export class StoryFrameChain {
     const voiceBlock = buildBrandVoiceBlock(brandVoice);
 
     const systemPrompt = `You generate Instagram Story frame sequences for beauty and wellness businesses.
-Each story is exactly 4 frames: hook → process → result → CTA.
+Every story is exactly 4 frames.
 Every overlay line must sound like the technician wrote it — on-brand and specific, never generic.
+Stories must be fast-paced, ephemeral, and encourage tapping or interaction.
 Return ONLY valid JSON.`;
+
+    const getStoryNarrativeTemplate = (goal: string): string => {
+      const g = goal.toLowerCase();
+      if (g.includes('showcase')) {
+        return `- Frame 1: The Teaser (e.g. "Wait until you see this...") (Use the hook: "${hookSentence}")\n- Frame 2: The Before (Relatable struggle)\n- Frame 3: The Reveal (Huge result)\n- Frame 4: Tap to Book (Interactive Link Sticker)`;
+      } else if (g.includes('education')) {
+        return `- Frame 1: Question/Poll (e.g. "Did you know?") (Use the hook: "${hookSentence}")\n- Frame 2: The Mistake (What people get wrong)\n- Frame 3: The Fix (Quick tip)\n- Frame 4: Tap for Full Guide / Consult`;
+      } else if (g.includes('promotion')) {
+        return `- Frame 1: Flash Offer Teaser (Use the hook: "${hookSentence}")\n- Frame 2: What's included (Fast visual list)\n- Frame 3: MUST explicitly say: "Check the Ellebeo Client Portal for coupons!"\n- Frame 4: Tap to claim before it's gone`;
+      } else if (g.includes('convert')) {
+        return `- Frame 1: Callout to a specific desire (e.g. "Need a glow up?") (Use the hook: "${hookSentence}")\n- Frame 2: The Treatment happening (Action shot context)\n- Frame 3: MUST explicitly say: "Check out my profile in the Ellebeo client portal for seamless booking."\n- Frame 4: Tap to reserve your spot (Link Sticker)`;
+      } else if (g.includes('trust')) {
+        return `- Frame 1: Client Quote / Testimonial overlay (Use the hook: "${hookSentence}")\n- Frame 2: Their starting point\n- Frame 3: Their transformation\n- Frame 4: Tap to start your journey`;
+      } else {
+        return `- Frame 1: The before / empty chair / anticipation (Use the hook: "${hookSentence}")\n- Frame 2: Mid-process / technique in action\n- Frame 3: The reveal / result\n- Frame 4: Tap for the CTA`;
+      }
+    };
+
+    const narrativeTemplate = getStoryNarrativeTemplate(businessGoal);
 
     const userPrompt = `Create a 4-frame story sequence for this beauty appointment.
 
 Business: ${brandName}
 Service: ${serviceName}${clientFirstName ? `\nClient: ${clientFirstName}` : ''}
-Hook: "${hookSentence}"
-CTA: "${callToAction}"
 Goal: ${businessGoal.replace(/_/g, ' ')}
 ${voiceBlock ? `\n${voiceBlock}\n` : ''}
-Frame structure:
-- Frame 1: The before / empty chair / anticipation
-- Frame 2: Mid-process / technique in action
-- Frame 3: The reveal / result
-- Frame 4: Tap for the CTA
+Frame structure MUST precisely follow this Narrative Template:
+${narrativeTemplate}
 
 Rules:
 - title: "Frame N · Concept" (max 35 chars)

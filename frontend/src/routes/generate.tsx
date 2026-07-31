@@ -88,6 +88,7 @@ function GeneratePage() {
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<string | null>(null);
   const [estimatedSeconds, setEstimatedSeconds] = useState<number>(45);
+  const [jobProgress, setJobProgress] = useState<{ percent: number; step: string; secondsRemaining: number } | null>(null);
   const [backendVariants, setBackendVariants] = useState<any[] | null>(null);
   const pollRef = useRef<number | null>(null);
   
@@ -159,6 +160,7 @@ function GeneratePage() {
     if (!jobId || !generating) return;
     let pollCount = 0;
     let errorCount = 0;
+    let latestSeq = 0;
     const MAX_POLLS = 150; // 5 minutes at 2s intervals
     const MAX_ERRORS = 5;
 
@@ -170,11 +172,24 @@ function GeneratePage() {
         toast.error("Generation timed out. Please try again.");
         return;
       }
+      // Guard against out-of-order responses (a slow poll resolving after a
+      // later one already landed) — without this, a late response could
+      // briefly show older/higher progress than what's already on screen.
+      const seq = ++latestSeq;
       try {
         const res = await api.get(`/generation/jobs/${jobId}`);
-        const status = res.data.data.state;
+        if (seq !== latestSeq) return; // a newer poll already resolved — discard this one
+        const data = res.data.data;
+        const status = data.state;
         errorCount = 0;
         setJobStatus(status);
+        if (typeof data.progressPercent === 'number') {
+          setJobProgress({
+            percent: data.progressPercent,
+            step: data.currentStep || '',
+            secondsRemaining: typeof data.estimatedSecondsRemaining === 'number' ? data.estimatedSecondsRemaining : 0,
+          });
+        }
 
         if (status === 'completed') {
           clearInterval(pollRef.current!);
@@ -208,6 +223,7 @@ function GeneratePage() {
     setGenerating(true);
     setStep("review");
     setJobStatus("Queuing job...");
+    setJobProgress(null);
 
     const formatMap: Record<Format, string> = {
       'Carousel': 'carousel',
@@ -477,6 +493,7 @@ function GeneratePage() {
                   generating={generating}
                   jobStatus={jobStatus}
                   estimatedSeconds={estimatedSeconds}
+                  jobProgress={jobProgress}
                   backendVariants={backendVariants}
                   onChangeStep={(s: Step) => setStep(s)}
                   onRefineComplete={(items: any[]) => setBackendVariants(items)}
@@ -1169,41 +1186,70 @@ const MODEL_LABELS: Record<string, string> = {
   "GPT-4o-Strategist (Empathetic)": "Empathetic Direction",
 };
 
-function GeneratingScreen({ jobStatus, brandDna, appointment }: { jobStatus: string; brandDna: any; appointment: any; estimatedSeconds?: number }) {
+function GeneratingScreen({ jobStatus, brandDna, appointment, estimatedSeconds, jobProgress }: {
+  jobStatus: string;
+  brandDna: any;
+  appointment: any;
+  estimatedSeconds?: number;
+  jobProgress?: { percent: number; step: string; secondsRemaining: number } | null;
+}) {
   const [msgIndex, setMsgIndex] = useState(0);
   const [fade, setFade] = useState(true);
   const [displayProgress, setDisplayProgress] = useState(0);
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(estimatedSeconds ?? null);
+  const isDone = jobStatus === 'completed';
 
-  // Define the target progress for each backend state
+  // Fallback target — only used in the brief window before the first real
+  // poll response arrives, when jobProgress is still null.
   const statusToTargetProgress: Record<string, number> = {
-    initializing: 10,
-    processing_image: 35,
-    processing_vision: 50,
-    building_prompt: 65,
-    generating_text: 85,
-    generating_reel: 85,
+    initializing: 5,
+    processing_image: 8,
+    processing_vision: 15,
+    building_prompt: 20,
+    generating_text: 25,
+    generating_reel: 25,
     completed: 100,
   };
 
-  const targetProgress = statusToTargetProgress[jobStatus] || 15;
+  // The backend computes percent live from real elapsed-time-vs-estimate (see
+  // GenerationProgressTracker) — trust that over the local guess whenever
+  // present. It's guaranteed non-decreasing server-side, but clamp with a ref
+  // too so a stale/out-of-order response can never visibly walk it backwards.
+  const rawTarget = jobProgress?.percent ?? statusToTargetProgress[jobStatus] ?? 3;
+  const maxTargetRef = useRef(0);
+  if (rawTarget > maxTargetRef.current) maxTargetRef.current = rawTarget;
+  const targetProgress = maxTargetRef.current;
 
-  // Optimistic Easing Progress Bar
+  // Ease the fill visually between polls instead of teleporting, but always
+  // converge on the real backend-confirmed number rather than a fake trickle.
   useEffect(() => {
     const interval = setInterval(() => {
       setDisplayProgress(current => {
-        if (targetProgress === 100) return 100; // Snap to 100 if done
-        if (current < targetProgress) {
-          // Move quickly towards the target
-          return Math.min(current + (targetProgress - current) * 0.1 + 0.1, targetProgress);
-        } else if (current < 98) {
-          // Trickle slowly if we hit the target but backend hasn't updated yet
-          return current + 0.05;
-        }
-        return current;
+        if (current >= targetProgress) return current;
+        return Math.min(current + (targetProgress - current) * 0.15 + 0.15, targetProgress);
       });
     }, 100);
     return () => clearInterval(interval);
   }, [targetProgress]);
+
+  // The backend's estimatedSecondsRemaining is itself computed live from real
+  // elapsed time (recomputed fresh on every poll, not stamped once and left
+  // to go stale), so it's already expected to only decrease. Still clamp with
+  // Math.min defensively — network reordering or a rounding edge case must
+  // never be visible as the countdown ticking upward, which is the one
+  // non-negotiable requirement here.
+  useEffect(() => {
+    if (!jobProgress) return;
+    setSecondsLeft(prev => (prev === null ? jobProgress.secondsRemaining : Math.min(prev, jobProgress.secondsRemaining)));
+  }, [jobProgress]);
+
+  // Tick down locally every second so the countdown moves continuously
+  // instead of only updating on the ~2s poll cadence.
+  useEffect(() => {
+    if (isDone) return;
+    const tick = setInterval(() => setSecondsLeft(s => (s === null ? s : Math.max(0, s - 1))), 1000);
+    return () => clearInterval(tick);
+  }, [isDone]);
 
   // Rotate luxury messages
   useEffect(() => {
@@ -1217,10 +1263,26 @@ function GeneratingScreen({ jobStatus, brandDna, appointment }: { jobStatus: str
     return () => clearInterval(msgInterval);
   }, []);
 
-  // Fuzzy ETA Logic
-  let fuzzyEta = "About 1 minute";
-  if (displayProgress > 85) fuzzyEta = "Almost ready...";
-  else if (displayProgress > 50) fuzzyEta = "About 40 seconds";
+  const formatCountdown = (totalSeconds: number): string => {
+    const s = Math.max(0, Math.round(totalSeconds));
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  // Once the countdown hits 0 the job may still be genuinely finishing up
+  // (real work can run a little past the estimate) — show a static label
+  // rather than a frozen "0:00" or, worse, a number that would have to go
+  // negative to stay "accurate".
+  const etaLabel = isDone
+    ? 'Done'
+    : secondsLeft === null
+      ? 'Estimating...'
+      : secondsLeft > 0
+        ? `About ${formatCountdown(secondsLeft)} left`
+        : 'Almost ready...';
+
+  const currentStepLabel = jobProgress?.step;
 
   return (
     <div className="artifact relative flex flex-col items-center justify-center overflow-hidden bg-background border border-border/40 shadow-xl rounded-2xl w-full max-w-4xl mx-auto min-h-[600px]">
@@ -1267,14 +1329,17 @@ function GeneratingScreen({ jobStatus, brandDna, appointment }: { jobStatus: str
         <div className="w-full max-w-sm mx-auto mb-10">
           <div className="flex justify-between items-end text-[10px] uppercase tracking-widest text-taupe font-bold mb-2 px-1">
             <span>{Math.floor(displayProgress)}%</span>
-            <span>{jobStatus === 'completed' ? 'Done' : fuzzyEta}</span>
+            <span>{etaLabel}</span>
           </div>
           <div className="relative w-full h-1 bg-border/50 overflow-hidden rounded-full shadow-inner">
-            <div 
-              className="absolute top-0 left-0 h-full bg-foreground" 
+            <div
+              className="absolute top-0 left-0 h-full bg-foreground transition-[width] duration-300 ease-out"
               style={{ width: `${displayProgress}%` }}
             />
           </div>
+          {currentStepLabel && (
+            <p className="mt-2.5 text-[10px] text-taupe/70 italic text-left px-1">{currentStepLabel}</p>
+          )}
         </div>
 
         {/* Luxury Pro Studio Tip Card */}
@@ -1297,7 +1362,7 @@ function GeneratingScreen({ jobStatus, brandDna, appointment }: { jobStatus: str
   );
 }
 
-function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, onChangeStep, onRefineComplete, promptPreview, brandDna, appointment }: any) {
+function ReviewStep({ generating, jobStatus, estimatedSeconds, jobProgress, backendVariants, onChangeStep, onRefineComplete, promptPreview, brandDna, appointment }: any) {
   const [activeVariant, setActiveVariant] = useState(0);
   const [activeSlide, setActiveSlide] = useState(0);
   const [captionCopied, setCaptionCopied] = useState(false);
@@ -1352,7 +1417,7 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, backendVariants, 
   }, [isCarousel, isStory, carouselSlides.length, storyFrames.length]);
 
   if (generating) {
-    return <GeneratingScreen jobStatus={jobStatus} brandDna={brandDna} appointment={appointment} estimatedSeconds={estimatedSeconds} />;
+    return <GeneratingScreen jobStatus={jobStatus} brandDna={brandDna} appointment={appointment} estimatedSeconds={estimatedSeconds} jobProgress={jobProgress} />;
   }
 
   if (!backendVariants || backendVariants.length === 0) {

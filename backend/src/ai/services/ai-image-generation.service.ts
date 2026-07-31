@@ -900,6 +900,12 @@ CRITICAL IMAGE REQUIREMENTS:
     
     for (let i = 0; i < total; i++) {
       const frame = frames[i];
+      if (i === 0 && params.layoutType) {
+         agentDecisions.push({ selected_layout_id: params.layoutType, reasoning: 'Pre-selected cover layout from orchestrator', designSpec: params.designSpec });
+         uniqueLayoutsForFrames.push(params.layoutType);
+         continue;
+      }
+      
       const decision = await this.templateAgent.selectTemplate({
         brief: frame.overlayText || (i === 0 ? 'Cover frame' : 'Body frame'),
         brandName: params.businessName || 'Brand',
@@ -1278,9 +1284,10 @@ CRITICAL IMAGE REQUIREMENTS:
         validBrandColor,
         validSecondaryColor,
         validBackgroundColor,
-        downloadImageAsBuffer,
+        downloadImageAsBuffer: downloadImageAsBuffer,
         designSpec,
         designLanguage,
+        faceCoordinates: visionResult?.faceCoordinates,
       });
       let baseImage = baseResult.baseImage;
       let compositeTop = baseResult.compositeTop;
@@ -1321,21 +1328,23 @@ CRITICAL IMAGE REQUIREMENTS:
       
       // If the surface is light, always use the Depth color (e.g. charcoal black #393939) for text.
       // Only fall back to Background Color (light) if the surface is dark.
-      const dynamicTextColor = isLightSurface ? depthBrandColor : validBackgroundColor;
+      let dynamicTextColor = isLightSurface ? depthBrandColor : validBackgroundColor;
 
       const footerLuminance = getLuminance(validSecondaryColor);
       const isLightFooter = footerLuminance > 150;
       const dynamicFooterTextColor = isLightFooter ? depthBrandColor : validBackgroundColor;
 
       let posterTextColor = '#FFFFFF';
-      if (template.textTemplate === 'poster_high_contrast') {
-        try {
-          const stats = await sharp(imageBuffer).stats();
-          const meanLuminance = (stats.channels[0].mean + stats.channels[1].mean + stats.channels[2].mean) / 3;
-          posterTextColor = meanLuminance > 127 ? '#1E1E1C' : '#FFFFFF';
-        } catch (contrastErr) {
-          console.error('[Sharp Contrast Detection Error]:', contrastErr);
-        }
+      try {
+        const stats = await sharp(imageBuffer).stats();
+        const meanLuminance = (stats.channels[0].mean + stats.channels[1].mean + stats.channels[2].mean) / 3;
+        posterTextColor = meanLuminance > 127 ? depthBrandColor : '#FFFFFF';
+      } catch (contrastErr) {
+        console.error('[Sharp Contrast Detection Error]:', contrastErr);
+      }
+
+      if (isFullBleed && !layoutType.includes('text_only') && photoDataUri) {
+         dynamicTextColor = posterTextColor;
       }
 
       // Instead of rigid character counting, we now defer to the Art Direction Engine's proportional weighting

@@ -93,27 +93,68 @@ export class ArtDirectionEngine {
       balance = 'symmetrical';
       readingFlow = 'center_anchored';
       foundKnowledge = true;
+    } else if (baseId === 'premium_text_only' || baseId.startsWith('premium')) {
+      family = 'premium';
+      energy = 'bold';
+      balance = 'symmetrical';
+      readingFlow = 'center_anchored';
+      foundKnowledge = true;
     } else if (baseId.startsWith('split')) {
+      family = 'split';
       energy = 'structured';
       balance = 'asymmetrical';
       readingFlow = 'z_pattern'; // photo and text occupy distinct halves/bands, eye moves between them
       foundKnowledge = true;
     } else if (baseId.startsWith('countdown_promo')) {
+      family = 'countdown_promo';
       energy = 'bold';
       balance = 'asymmetrical';
       readingFlow = 'z_pattern'; // urgency-driven layouts favor a punchy, directional read
       foundKnowledge = true;
     } else if (baseId.startsWith('product_showcase')) {
+      family = 'product_showcase';
       energy = 'calm';
       balance = 'symmetrical'; // product-hero layouts are centered/balanced around the subject
       readingFlow = 'center_down';
       foundKnowledge = true;
+    } else if (baseId.startsWith('before_after')) {
+      family = 'before_after';
+      energy = 'bold'; // a transformation reveal is a dramatic moment
+      balance = 'symmetrical'; // two genuinely equal photo halves
+      readingFlow = 'center_down'; // matches the dominant mined readingFlow (31/45 real samples)
+      foundKnowledge = true;
+    } else if (baseId.startsWith('testimonial')) {
+      family = 'testimonial';
+      energy = 'calm'; // warm, personal, not a hard sell
+      balance = 'symmetrical'; // centered quote/portrait
+      readingFlow = 'center_down'; // matches the dominant mined readingFlow (20/24 real samples)
+      foundKnowledge = true;
+    } else if (baseId.startsWith('scrapbook')) {
+      family = 'scrapbook';
+      energy = 'structured'; // neither bold nor quiet -> lands on the playful/layered storytelling style
+      balance = 'symmetrical';
+      readingFlow = 'center_down'; // matches all 5 real mined samples
+      foundKnowledge = true;
+    } else if (baseId.startsWith('quadrant')) {
+      family = 'quadrant';
+      energy = 'structured'; // grid/badge structure reads as deliberate, not loud or minimal
+      balance = 'symmetrical';
+      readingFlow = 'center_down';
+      foundKnowledge = true;
     } else if (baseId.startsWith('clinical')) {
+      family = 'clinical';
       energy = 'structured';
       balance = 'symmetrical'; // Clinical needs high alignment
       readingFlow = 'center_down';
       foundKnowledge = true;
+    } else if (baseId.startsWith('minimalist')) {
+      family = 'minimalist';
+      energy = 'minimal';
+      balance = 'asymmetrical'; // Often uses negative space powerfully
+      readingFlow = 'z_pattern';
+      foundKnowledge = true;
     } else if (baseId.startsWith('educational')) {
+      family = 'educational';
       energy = 'minimal';
       balance = 'symmetrical';
       readingFlow = 'center_down';
