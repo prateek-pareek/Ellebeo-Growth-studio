@@ -8,6 +8,7 @@ import { LayoutEngine } from '../src/ai/services/template-engine/engines/layout-
 import { CompositionOptimizer } from '../src/ai/services/template-engine/engines/composition-optimizer';
 import { PrimitiveEngine, PrimitiveContext } from '../src/ai/services/template-engine/engines/primitive-engine';
 import { MetadataRetriever } from '../src/ai/services/template-engine/metadata.retriever';
+import { DiversityEngine } from '../src/ai/services/template-engine/diversity.engine';
 import { BASE_TREATMENTS, registerDynamicLayout, COMPILED_LAYOUTS } from '../src/ai/config/layout-renderers';
 
 // Throwaway verification for the 4 new families (before_after, testimonial,
@@ -213,10 +214,44 @@ async function checkMinedBeforeAfterEntry() {
   }
 }
 
+// Regression check for the diversity.engine.ts macro-family bucketing fix:
+// 'testimonial_quote_portrait' contains the substring "quote" and used to get
+// misbucketed with the unrelated minimalist_quote/premium_quote families,
+// while 'testimonial_star_card' (no "quote" in its name) correctly bucketed
+// as 'testimonial' — an inconsistent split within the same family.
+function checkDiversityMacroFamilyBucketing() {
+  const diversityEngine = new DiversityEngine();
+  const candidate = (id: string) => ({
+    id, category: '', concept: '', best_use_cases: [], macroFaceSafe: true, requiresText: true,
+    supportsNoText: false, textDensity: 'medium' as const, isCarouselOnly: false, premiumStyleScore: 10,
+    occupiedTextZones: [], type: 'procedural' as const,
+  });
+  const context = { brief: '', brandName: '', aesthetic: '', textLength: 0, slideIndex: 1, totalSlides: 4 };
+
+  // Case 1: an unrelated quote-family slide was just used — testimonial_quote_portrait
+  // must NOT be penalized as if it were the same macro-family.
+  const afterQuote = diversityEngine.applyDiversityPenalties(
+    [candidate('testimonial_quote_portrait')], context as any, ['minimalist_offset_quote_2']
+  );
+  const notFalselyPenalized = (afterQuote[0].diversityPenalty || 0) < 500;
+  console.log(`[${notFalselyPenalized ? 'OK' : 'FAIL'}] testimonial_quote_portrait not misbucketed with minimalist_quote family (penalty=${afterQuote[0].diversityPenalty})`);
+  if (!notFalselyPenalized) failures++;
+
+  // Case 2: a same-family testimonial slide was just used — it SHOULD be penalized,
+  // proving testimonial_quote_portrait and testimonial_star_card now share one bucket.
+  const afterSameFamily = diversityEngine.applyDiversityPenalties(
+    [candidate('testimonial_quote_portrait')], context as any, ['testimonial_star_card_1']
+  );
+  const correctlyPenalized = (afterSameFamily[0].diversityPenalty || 0) >= 500;
+  console.log(`[${correctlyPenalized ? 'OK' : 'FAIL'}] testimonial_quote_portrait correctly bucketed with testimonial_star_card (penalty=${afterSameFamily[0].diversityPenalty})`);
+  if (!correctlyPenalized) failures++;
+}
+
 (async () => {
   await checkRetriever();
   await checkBeforeAfterCompositing();
   await checkMinedBeforeAfterEntry();
+  checkDiversityMacroFamilyBucketing();
 
   console.log(`\n${failures === 0 ? 'All checks passed.' : `${failures} check(s) failed.`}`);
   if (failures > 0) process.exit(1);
