@@ -5,7 +5,7 @@ import { useAppointments } from "@/lib/providers/appointments-provider";
 import { useTemplates } from "@/lib/providers/template-provider";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
-import { Images, Play, AlignLeft, Smartphone, Music2, Clock, CalendarCheck, type LucideIcon } from "lucide-react";
+import { Images, Play, AlignLeft, Smartphone, Music2, Clock, CalendarCheck, Trash2, type LucideIcon } from "lucide-react";
 import { Pagination } from "@/components/Pagination";
 
 export const Route = createFileRoute("/content")({
@@ -379,7 +379,7 @@ function ContentPage() {
             <EmptyState onClear={clearFilters} hasFilters={hasActiveFilters} />
           ) : (
             <>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
                 {pageItems.map((c) => (
                   <ContentCard
                     key={c.id}
@@ -494,29 +494,29 @@ function ContentCard({
   const FormatIcon = FORMAT_ICON[item.type] ?? AlignLeft;
 
   return (
-    <article className="group flex flex-col border border-border bg-card shadow-sm hover:shadow-md transition-shadow overflow-hidden">
+    <article className="group flex flex-col border border-border/70 bg-card shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-border transition-all duration-300 overflow-hidden">
       {/* Media — fixed height across every format so the grid stays level;
           format identity comes from the badge + the story "phone" inset +
           the carousel stacked-card effect below, not from a wobbly aspect ratio. */}
       <div
-        className="relative h-52 bg-muted overflow-hidden border-b border-border cursor-pointer"
+        className="relative h-72 bg-muted overflow-hidden cursor-pointer"
         onClick={onReview}
       >
         {isCarousel ? (
           <>
             {/* Stacked-deck effect: two offset cards peeking out behind the top image */}
-            <div className="absolute inset-x-4 top-2 bottom-0 bg-card border border-border rotate-[-2deg] rounded-sm" />
-            <div className="absolute inset-x-3 top-1 bottom-0 bg-card border border-border rotate-[1.5deg] rounded-sm" />
-            <div className="absolute inset-1 overflow-hidden rounded-sm">
+            <div className="absolute inset-x-5 top-3 bottom-0 bg-card border border-border rotate-[-2deg] rounded-xl" />
+            <div className="absolute inset-x-4 top-1.5 bottom-0 bg-card border border-border rotate-[1.5deg] rounded-xl" />
+            <div className="absolute inset-1.5 overflow-hidden rounded-xl">
               <img
                 src={thumbnailUrl}
                 alt={item.title}
                 loading="lazy"
-                className={"w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.02] " + (blocked ? "opacity-40 grayscale" : "")}
+                className={"w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.03] " + (blocked ? "opacity-40 grayscale" : "")}
               />
             </div>
             {slides.length > 1 && (
-              <span className="absolute bottom-2 right-2 z-10 inline-flex items-center gap-1 bg-foreground/80 backdrop-blur text-offwhite text-[9px] font-semibold px-1.5 py-0.5 rounded">
+              <span className="absolute bottom-3 right-3 z-10 inline-flex items-center gap-1 bg-foreground/80 backdrop-blur text-offwhite text-[9px] font-semibold px-2 py-1 rounded-full shadow-sm">
                 <Images size={10} strokeWidth={2.25} />
                 {slides.length}
               </span>
@@ -526,12 +526,12 @@ function ContentCard({
           // Letterboxed vertical "phone screen" — immediately reads as Story
           // without needing a label, and keeps the row height uniform.
           <div className="h-full flex items-center justify-center bg-gradient-to-b from-muted to-nude/20">
-            <div className="h-full aspect-[9/16] overflow-hidden shadow-md ring-1 ring-border/60 rounded-sm">
+            <div className="h-full aspect-[9/16] overflow-hidden shadow-lg ring-1 ring-border/60 rounded-xl">
               <img
                 src={thumbnailUrl}
                 alt={item.title}
                 loading="lazy"
-                className={"w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.02] " + (blocked ? "opacity-40 grayscale" : "")}
+                className={"w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.03] " + (blocked ? "opacity-40 grayscale" : "")}
               />
             </div>
           </div>
@@ -540,33 +540,36 @@ function ContentCard({
             src={thumbnailUrl}
             alt={item.title}
             loading="lazy"
-            className={"w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.02] " + (blocked ? "opacity-40 grayscale" : "")}
+            className={"w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.03] " + (blocked ? "opacity-40 grayscale" : "")}
           />
         )}
 
-        <div className="absolute top-2.5 left-2.5 z-10">
+        {/* Soft scrim so the top-corner badges stay legible over any photo */}
+        <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/25 to-transparent pointer-events-none" />
+
+        <div className="absolute top-3 left-3 z-10">
           <StatePill state={state} />
         </div>
-        <div
-          className="absolute top-2.5 right-2.5 z-10 flex items-center justify-center size-6 rounded-full bg-foreground/70 backdrop-blur text-offwhite"
-          title={item.type}
-        >
-          <FormatIcon size={12} strokeWidth={2.25} />
+        <div className="absolute top-3 right-3 z-10 inline-flex items-center gap-1.5 bg-foreground/70 backdrop-blur text-offwhite text-[9px] font-semibold uppercase tracking-widest px-2.5 py-1.5 rounded-full shadow-sm">
+          <FormatIcon size={11} strokeWidth={2.25} />
+          {item.type}
         </div>
       </div>
 
       {/* Body */}
-      <div className="flex flex-col flex-1 p-3.5">
+      <div className="flex flex-col flex-1 p-5">
         {item.pillar && (
-          <p className="text-[9px] uppercase tracking-widest text-taupe/80 mb-1.5">
+          <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-taupe/70 mb-2">
             {String(item.pillar).replace(/_/g, " ")}
           </p>
         )}
-        <h3 className="font-serif text-base mb-1.5 leading-snug">{item.title}</h3>
+        {/* No separate caption preview here — item.title is already derived
+            from the caption's opening line (see content-provider.ts), so
+            showing the full caption underneath just repeated the same text
+            twice on the card. */}
+        <h3 className="font-serif text-lg mb-3 leading-snug line-clamp-2">{item.title}</h3>
 
-        {!blocked ? (
-          <p className="text-xs text-taupe leading-relaxed line-clamp-2 mb-3">{item.caption}</p>
-        ) : (
+        {blocked && (
           <p className="text-xs text-taupe leading-relaxed mb-3">
             {item.blockedReason || "This draft didn't meet brand quality standards and needs another pass before it can be scheduled."}
           </p>
@@ -574,7 +577,7 @@ function ContentCard({
       </div>
 
       {/* Meta strip */}
-      <div className="bg-muted border-t border-border px-3.5 py-2.5">
+      <div className="bg-muted/60 border-t border-border/70 px-5 py-3.5">
         {(appointment || item.scheduledFor || item.postedAt) && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-taupe mb-2">
             {appointment && (
@@ -595,16 +598,17 @@ function ContentCard({
           </div>
         )}
 
-        {!blocked && (
-          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={onReview}
-                className="inline-flex items-center gap-1.5 border border-border bg-card text-xs font-medium text-foreground px-3 py-1.5 shadow-sm hover:bg-muted hover:shadow-md active:scale-[0.97] transition-all"
-              >
-                Review
-              </button>
-              {isDraft && (
+        <div className="flex flex-nowrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+              {!blocked && (
+                <button
+                  onClick={onReview}
+                  className="inline-flex items-center gap-1.5 border border-border bg-card text-xs font-medium text-foreground px-3 py-1.5 rounded-lg shadow-sm hover:bg-muted hover:shadow-md active:scale-[0.97] transition-all shrink-0"
+                >
+                  Review
+                </button>
+              )}
+              {!blocked && isDraft && (
                 <button
                   onClick={async () => {
                     setApproving(true);
@@ -612,36 +616,43 @@ function ContentCard({
                     setApproving(false);
                   }}
                   disabled={approving}
-                  className="inline-flex items-center bg-foreground text-offwhite text-xs font-medium px-3 py-1.5 shadow-sm hover:opacity-90 hover:shadow-md active:scale-[0.97] transition-all disabled:opacity-50"
+                  className="inline-flex items-center bg-foreground text-offwhite text-xs font-medium px-3 py-1.5 rounded-lg shadow-sm hover:opacity-90 hover:shadow-md active:scale-[0.97] transition-all disabled:opacity-50 shrink-0"
                 >
                   {approving ? "Approving…" : "Approve"}
                 </button>
               )}
-              {(state === "approved" || state === "scheduled") && (
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-offwhite bg-sage px-2 py-0.5">
+              {!blocked && (state === "approved" || state === "scheduled") && (
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-offwhite bg-sage px-2.5 py-1 rounded-full truncate">
                   {state}
                 </span>
               )}
             </div>
 
-            {/* Discard — two-tap confirm */}
+            {/* Discard — icon + label together (so the action is still named,
+                not just an icon), always pinned to the right of Review/Approve
+                — the outer row is nowrap and this button never grows past its
+                content, so it can't get pushed onto its own line. Two-tap
+                confirm. Available for blocked drafts too, so a post that
+                failed quality checks isn't stuck in the library forever. */}
             {state !== "published" && (
               <button
                 onClick={handleDiscard}
                 disabled={discarding}
                 onBlur={() => setConfirm(false)}
                 className={
-                  "shrink-0 text-[10px] uppercase tracking-widest px-2.5 py-1.5 transition-all disabled:opacity-40 " +
+                  "shrink-0 inline-flex items-center gap-1 text-[10px] uppercase tracking-widest px-2.5 py-1.5 rounded-lg transition-all disabled:opacity-40 " +
                   (confirm
-                    ? "bg-destructive/10 text-destructive border border-destructive/30 rounded"
-                    : "text-taupe hover:text-destructive opacity-0 group-hover:opacity-100")
+                    ? "bg-destructive/10 text-destructive border border-destructive/30"
+                    : blocked
+                      ? "text-destructive/70 hover:text-destructive hover:bg-destructive/10"
+                      : "text-taupe hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100")
                 }
               >
+                <Trash2 size={12} strokeWidth={2} />
                 {discarding ? "…" : confirm ? "Confirm?" : "Discard"}
               </button>
             )}
-          </div>
-        )}
+        </div>
       </div>
     </article>
   );
@@ -916,7 +927,7 @@ function StatePill({ state }: { state: string }) {
     blocked:      "bg-destructive text-offwhite",
   };
   return (
-    <span className={`backdrop-blur px-2 py-1 text-[9px] uppercase tracking-[0.18em] ${styles[state] || styles.draft}`}>
+    <span className={`backdrop-blur px-2.5 py-1 rounded-full text-[9px] uppercase tracking-[0.18em] shadow-sm ${styles[state] || styles.draft}`}>
       {state}
     </span>
   );
