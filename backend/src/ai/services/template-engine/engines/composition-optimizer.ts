@@ -53,13 +53,16 @@ export class CompositionOptimizer {
         if (txtLayer.role === 'heading') estimatedHeight = 300;
         else if (txtLayer.role === 'body') estimatedHeight = 180;
         
-        const { x, y } = layoutEngine.resolveAnchor(
+        let { x, y } = layoutEngine.resolveAnchor(
           txtLayer.anchor || 'middle_left', 
           0, 
           estimatedHeight, 
           constraints,
           regions.textRegion
         );
+
+        // Resolve face collision to carve out No-Text Zones
+        y = layoutEngine.resolveFaceCollision({ x, y, width: regions.textRegion.width, height: estimatedHeight }, constraints);
 
         // Allocate strict bounding box inside textRegion
         txtLayer.allocatedBox = {

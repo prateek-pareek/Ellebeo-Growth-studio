@@ -68,7 +68,7 @@ export interface IDSLBaseLayer {
 
 export interface IDSLImageLayer extends IDSLBaseLayer {
   type: 'image';
-  mask: 'rectangle' | 'circle' | 'arch' | 'die_cut' | 'split' | 'polaroid';
+  mask: 'full_bleed' | 'rectangle' | 'circle' | 'arch' | 'die_cut' | 'split' | 'polaroid';
   paddingPercent: number; // e.g., 0 for full-bleed, 10 for inset
   anchor?: LayoutAnchor; // Used for corner positioning
   component?: string; // Optional device frame component (e.g. desktop_monitor_mockup, tablet_device_mockup)

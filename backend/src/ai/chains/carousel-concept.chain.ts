@@ -64,25 +64,69 @@ You MUST follow these strict Content Density constraints:
 - headline: 1-3 words MAX (Extremely punchy. If it is longer, you have failed.)
 - subheadline: 6-12 words MAX (Optional context)
 - cta: 2-4 words MAX (Optional)
-CRITICAL BRAND CONTENT RULE for Body Slides (Slides 2 to N-1):
-- If the goal is "educational", these slides MUST contain pure educational value about the specific service and the Brand's DNA. No fluff.
-- If the goal is "promotional", these slides MUST contain pure promotional value, highlighting safety measures, expertise, and the specific offer.
+CRITICAL BRAND CONTENT RULE for Body Slides:
+- Ensure all body slides closely follow the provided Narrative Template. Do not deviate.
 NEVER inject variable placeholders, hex codes, or technical IDs.
 NEVER write marketing paragraphs. Treat copy as a precise design object.
 Return ONLY valid JSON, no markdown, no explanation.`;
+
+    const getNarrativeTemplate = (goal: string, count: number): string => {
+      const g = goal.toLowerCase();
+      let slides: string[] = [];
+      
+      // Slide 1: Hook
+      if (g.includes('showcase')) slides.push(`- Slide 1: Cover — Lead with the final result or transformation (Use the hook: "${hookSentence}")`);
+      else if (g.includes('education')) slides.push(`- Slide 1: Cover — Hook the user with a question or core problem (Use the hook: "${hookSentence}")`);
+      else if (g.includes('promotion')) slides.push(`- Slide 1: Cover — The Offer or Attention Grabber (Use the hook: "${hookSentence}")`);
+      else if (g.includes('convert')) slides.push(`- Slide 1: Cover — The Client Desire / Goal (Use the hook: "${hookSentence}")`);
+      else if (g.includes('trust')) slides.push(`- Slide 1: Cover — Client Story or Relatable Struggle (Use the hook: "${hookSentence}")`);
+      else slides.push(`- Slide 1: Cover — Eye-catching opener (Use the hook: "${hookSentence}")`);
+      
+      // Body Slides
+      if (count === 3) {
+        if (g.includes('promotion')) slides.push(`- Slide 2: Value — MUST explicitly say: "Explore coupons and offers on the Ellebeo client portal (check the link in our description)."`);
+        else if (g.includes('convert')) slides.push(`- Slide 2: Value — MUST explicitly say: "Check out my profile in the Ellebeo client portal for seamless booking and exclusive services."`);
+        else if (g.includes('showcase')) slides.push(`- Slide 2: Context — Benefits and Transformation details`);
+        else if (g.includes('education')) slides.push(`- Slide 2: Context — The specific technique, solution, or aftercare tips`);
+        else if (g.includes('trust')) slides.push(`- Slide 2: Context — The Review / Quote`);
+        else slides.push(`- Slide 2: Context — Core value proposition`);
+      } else if (count >= 4) {
+        if (g.includes('showcase')) { slides.push(`- Slide 2: Context — The Before & After explanation`); slides.push(`- Slide 3: Value — Benefits and Transformation details`); }
+        else if (g.includes('education')) { slides.push(`- Slide 2: Context — Explain why this happens or the science behind it`); slides.push(`- Slide 3: Value — The specific technique, solution, or aftercare tips`); }
+        else if (g.includes('promotion')) { slides.push(`- Slide 2: Context — What is included and the benefits`); slides.push(`- Slide 3: Value — MUST explicitly say: "Explore coupons and offers on the Ellebeo client portal (check the link in our description)."`); }
+        else if (g.includes('convert')) { slides.push(`- Slide 2: Context — The Treatment that solves it`); slides.push(`- Slide 3: Value — MUST explicitly say: "Check out my profile in the Ellebeo client portal for seamless booking and exclusive services."`); }
+        else if (g.includes('trust')) { slides.push(`- Slide 2: Context — The Journey to Transformation`); slides.push(`- Slide 3: Value — The Review / Quote`); }
+        else { slides.push(`- Slide 2: Context — The problem or journey`); slides.push(`- Slide 3: Value — Deep dive into specifics`); }
+        
+        // If 5 slides, duplicate the context slide logic for slide 4 (shifting the others down)
+        if (count === 5) {
+           const valSlide = slides.pop()!;
+           slides.push(`- Slide 3: Deep Dive — Additional context or proof`);
+           slides.push(valSlide.replace('Slide 3', 'Slide 4'));
+        }
+      }
+      
+      // CTA Slide
+      if (g.includes('showcase')) slides.push(`- Slide ${count}: CTA — Direct CTA to book the service (CTA: "${callToAction}")`);
+      else if (g.includes('education')) slides.push(`- Slide ${count}: CTA — Soft CTA (e.g. Save this post or book a consultation) (CTA: "${callToAction}")`);
+      else if (g.includes('promotion')) slides.push(`- Slide ${count}: CTA — Urgent CTA to book before the offer expires (CTA: "${callToAction}")`);
+      else if (g.includes('convert')) slides.push(`- Slide ${count}: CTA — Frictionless CTA (e.g. Reserve your slot now) (CTA: "${callToAction}")`);
+      else if (g.includes('trust')) slides.push(`- Slide ${count}: CTA — Experience it yourself (CTA: "${callToAction}")`);
+      else slides.push(`- Slide ${count}: CTA — Invite to book or follow (CTA: "${callToAction}")`);
+      
+      return slides.join('\\n');
+    };
+
+    const narrativeTemplate = getNarrativeTemplate(businessGoal, count);
 
     const userPrompt = `Create ${count} carousel slide concepts for this beauty appointment post.
 
 Business: ${brandName}
 Service: ${serviceName}${clientFirstName ? `\nClient first name: ${clientFirstName}` : ''}
-Hook line: "${hookSentence}"
-CTA: "${callToAction}"
 Goal: ${businessGoal.replace(/_/g, ' ')}
 ${voiceBlock ? `\n${voiceBlock}\n` : ''}
-Generate exactly ${count} slides:
-- Slide 1: Cover — eye-catching opener using the hook
-- Slides 2 to ${count - 1}: Body slides — EXTREMELY CRITICAL: Ensure these are purely educational or purely promotional based on the Goal. Deeply weave in the Brand's DNA and the technician's expertise regarding the Service.
-- Slide ${count}: CTA — invite to book or follow
+Generate exactly ${count} slides using this strict Narrative Template:
+${narrativeTemplate}
 
 Return exactly this JSON shape:
 {

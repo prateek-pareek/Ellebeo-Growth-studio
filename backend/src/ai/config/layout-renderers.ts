@@ -98,6 +98,7 @@ export type BaseCtx = {
   downloadImageAsBuffer: (url: string) => Promise<Buffer>;
   designSpec?: ISemanticDesignSpec;
   designLanguage?: IDesignLanguage;
+  faceCoordinates?: { eyesYPercent: number; mouthYPercent: number; };
 };
 
 export type BaseResult = {
@@ -217,7 +218,18 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
     
     // Phase 2.6: Composition Optimizer balances whitespace and assigns strict bounding boxes
     if (dsl) {
-      const layoutEngine = new LayoutEngine(ctx.w, ctx.h);
+      let faceBox: BoundingBox | undefined = undefined;
+      if (ctx.faceCoordinates) {
+        // Approximate a box covering the face based on Y percentages
+        const eyesY = Math.round((ctx.faceCoordinates.eyesYPercent / 100) * ctx.h);
+        const mouthY = Math.round((ctx.faceCoordinates.mouthYPercent / 100) * ctx.h);
+        const faceTop = Math.max(0, eyesY - (ctx.h * 0.05)); // 5% above eyes
+        const faceBottom = Math.min(ctx.h, mouthY + (ctx.h * 0.08)); // 8% below mouth
+        // We assume the face is roughly centered horizontally
+        faceBox = { x: Math.round(ctx.w * 0.2), y: faceTop, width: Math.round(ctx.w * 0.6), height: faceBottom - faceTop };
+      }
+
+      const layoutEngine = new LayoutEngine(ctx.w, ctx.h, faceBox);
       const constraints = layoutEngine.calculateConstraints('minimal', 'balanced');
       dsl = optimizer.optimize(dsl, constraints, ctx.w, ctx.h);
     }
@@ -398,16 +410,20 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
       <svg width="${ctx.w}" height="${ctx.h}" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <radialGradient id="bgGrad" cx="50%" cy="0%" r="100%">
-            <stop offset="0%" stop-color="${ctx.validSecondaryColor}" stop-opacity="0.15" />
+            <stop offset="0%" stop-color="${ctx.validSecondaryColor}" stop-opacity="0.3" />
             <stop offset="100%" stop-color="${ctx.validBackgroundColor}" stop-opacity="0" />
           </radialGradient>
           <filter id="noise">
-            <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/>
-            <feColorMatrix type="matrix" values="1 0 0 0 0, 0 1 0 0 0, 0 0 1 0 0, 0 0 0 0.05 0" />
+            <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="4" stitchTiles="stitch"/>
+            <feColorMatrix type="matrix" values="1 0 0 0 0, 0 1 0 0 0, 0 0 1 0 0, 0 0 0 0.15 0" />
           </filter>
         </defs>
         <rect width="${ctx.w}" height="${ctx.h}" fill="url(#bgGrad)" />
-        <rect width="${ctx.w}" height="${ctx.h}" filter="url(#noise)" opacity="0.4" />
+        <rect width="${ctx.w}" height="${ctx.h}" filter="url(#noise)" opacity="0.6" style="mix-blend-mode: overlay;" />
+        <!-- Giant Typography as Art watermark -->
+        <text x="50%" y="60%" font-family="sans-serif" font-weight="900" font-size="${ctx.w * 0.4}px" fill="${ctx.validSecondaryColor}" fill-opacity="0.05" text-anchor="middle" letter-spacing="-0.05em">
+          ${((ctx as any).rawName || 'Brand').substring(0, 3).toUpperCase()}
+        </text>
       </svg>
     `;
 
@@ -954,11 +970,13 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     }
     
     // Check if we need to apply a global overlay (like noise) based on brand DNA
-    // For now, we inject the definitions. Later, we can apply the overlay at the end.
-    const overlayLayers = dsl.layers.filter(l => l.type === 'decoration' || l.type === 'text' || (l.type === 'image' && l.component));
+    let overlayLayers = dsl.layers.filter(l => l.type === 'decoration' || l.type === 'text' || (l.type === 'image' && l.component));
     
-    // PHASE 3A: We have removed the random 'injectedFeatures' block.
-    // Decorations are now STRICTLY dictated by the Composition Recipe DSL.
+    // PHASE 3A: Thematic Mood Injection
+    // Inject textures/overlays dynamically rather than hardcoding them in the composition recipe
+    const mood = ctx.designSpec?.style?.mood || 'warm_paper';
+    const moodDecorations = themeEngine.getMoodDecorations(mood);
+    overlayLayers = [...overlayLayers, ...moodDecorations];
     
     overlayLayers.sort((a, b) => a.zIndex - b.zIndex);
 
@@ -1067,11 +1085,11 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           
           if (overlapsX && overlapsY) {
             needsScrim = true;
-            // The scrim should cover the text region with some padding
-            scrimX = Math.max(0, txtR.x - 40);
-            scrimY = Math.max(0, txtR.y - 40);
-            scrimW = Math.min(ctx.w - scrimX, txtR.width + 80);
-            scrimH = Math.min(ctx.h - scrimY, txtR.height + 80);
+            // The scrim should cover the text region with generous padding
+            scrimX = Math.max(0, txtR.x - 80);
+            scrimY = Math.max(0, txtR.y - 120);
+            scrimW = Math.min(ctx.w - scrimX, txtR.width + 160);
+            scrimH = Math.min(ctx.h - scrimY, txtR.height + 240);
             
             // If it's a massive text region (like full bleed bottom), extend to edges
             if (scrimW > ctx.w * 0.8) {
@@ -1093,23 +1111,23 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
             if (ctx.activeTheme === 'editorial_beauty' || ctx.activeTheme === 'warm_wellness') {
                // Editorial uses the brand's background color (beige/milky) to create "fog"
                scrimColorStr = `
-                  <stop offset="0%" stop-color="${ctx.validBackgroundColor}" stop-opacity="0" />
-                  <stop offset="30%" stop-color="${ctx.validBackgroundColor}" stop-opacity="0.4" />
+                  <stop offset="0%" stop-color="${ctx.validBackgroundColor}" stop-opacity="0.2" />
+                  <stop offset="30%" stop-color="${ctx.validBackgroundColor}" stop-opacity="0.6" />
                   <stop offset="100%" stop-color="${ctx.validBackgroundColor}" stop-opacity="0.95" />
                `;
             } else if (ctx.activeTheme === 'quiet_luxury' || ctx.activeTheme === 'natural_organic') {
-               // Minimalist uses a very subtle shadow, barely there
+               // Minimalist uses a very subtle shadow
                scrimColorStr = `
-                  <stop offset="0%" stop-color="#000000" stop-opacity="0" />
-                  <stop offset="50%" stop-color="#000000" stop-opacity="0.15" />
-                  <stop offset="100%" stop-color="#000000" stop-opacity="0.4" />
+                  <stop offset="0%" stop-color="#000000" stop-opacity="0.2" />
+                  <stop offset="50%" stop-color="#000000" stop-opacity="0.4" />
+                  <stop offset="100%" stop-color="#000000" stop-opacity="0.7" />
                `;
             } else {
-               // Clinical, High Fashion, Polished Commercial use stark contrast black shadows for high legibility without fog
+               // Clinical, High Fashion, Polished Commercial use stark contrast black shadows for high legibility
                scrimColorStr = `
-                  <stop offset="0%" stop-color="#000000" stop-opacity="0" />
-                  <stop offset="40%" stop-color="#000000" stop-opacity="0.5" />
-                  <stop offset="100%" stop-color="#000000" stop-opacity="0.85" />
+                  <stop offset="0%" stop-color="#000000" stop-opacity="0.3" />
+                  <stop offset="40%" stop-color="#000000" stop-opacity="0.7" />
+                  <stop offset="100%" stop-color="#000000" stop-opacity="0.95" />
                `;
             }
 
@@ -1135,12 +1153,14 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           typographyMetrics: ctx.typographyMetrics,
           escapeXml: (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
         };
-        // TEMPORARY OVERRIDE REMOVED: Typography system is now theme-aware
-        let typoSystem: TypographySystem = 'editorial';
-        if (ctx.activeTheme === 'clinical_minimalist' || ctx.activeTheme === 'contemporary_cool') {
-          typoSystem = 'technical';
-        } else if (ctx.activeTheme === 'quiet_luxury' || ctx.activeTheme === 'natural_organic') {
-          typoSystem = 'minimal';
+        // Typography system is strictly dictated by the Semantic Variant Family
+        let typoSystem: TypographySystem = 'editorial'; // Default fallback
+        if (ctx.layoutType?.startsWith('clinical')) {
+          typoSystem = 'clinical';
+        } else if (ctx.layoutType?.startsWith('minimalist')) {
+          typoSystem = 'minimalist';
+        } else if (ctx.layoutType?.startsWith('premium')) {
+          typoSystem = 'premium';
         }
         
         svg += typographyEngine.renderTextLayer(typoCtx, textLayer, typoSystem);
