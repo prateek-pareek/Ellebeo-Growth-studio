@@ -1119,6 +1119,50 @@ export class PrimitiveEngine {
         <circle cx="${cx}" cy="${cy}" r="${innerR}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1" stroke-dasharray="3 6" opacity="0.6" />
       </g>`;
     }};
+
+    this.registry['transformation_arrow'] = { category: 'geometry', render: (ctx, layer) => {
+      // Bold directional arrow marking the seam between a before-photo and an
+      // after-photo, with small "BEFORE"/"AFTER" labels either side. Grounded
+      // in the "arrow" decoration tag seen across real mined before/after
+      // templates. Defaults to a vertical seam (side-by-side photos); pass
+      // offsetPercent near 50 to sit on a horizontal seam (stacked photos).
+      const orientation = layer?.orientation === 'horizontal' ? 'horizontal' : 'vertical';
+      const cx = ctx.w / 2;
+      const cy = ctx.h / 2;
+      if (orientation === 'horizontal') {
+        return `
+        <!-- Before/After Transformation Arrow (horizontal seam) -->
+        <g transform="translate(${cx}, ${cy})">
+          <circle cx="0" cy="0" r="26" fill="${ctx.validBackgroundColor}" filter="drop-shadow(0 3px 6px rgba(0,0,0,0.25))" />
+          <path d="M -8 -6 L 8 0 L -8 6 Z" fill="${ctx.validBrandColor}" />
+        </g>
+        <text x="${ctx.constraints.safeX}" y="${cy - 34}" font-family="sans-serif" font-size="11" font-weight="800" letter-spacing="2px" fill="${ctx.validBrandColor}" opacity="0.85">BEFORE</text>
+        <text x="${ctx.w - ctx.constraints.safeX}" y="${cy + 46}" text-anchor="end" font-family="sans-serif" font-size="11" font-weight="800" letter-spacing="2px" fill="${ctx.validBrandColor}" opacity="0.85">AFTER</text>`;
+      }
+      return `
+      <!-- Before/After Transformation Arrow (vertical seam) -->
+      <g transform="translate(${cx}, ${cy})">
+        <circle cx="0" cy="0" r="26" fill="${ctx.validBackgroundColor}" filter="drop-shadow(0 3px 6px rgba(0,0,0,0.25))" />
+        <path d="M -6 -8 L 0 8 L 6 -8 Z" fill="${ctx.validBrandColor}" transform="rotate(90)" />
+      </g>
+      <text x="${cx - 40}" y="${ctx.constraints.safeY + 6}" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="800" letter-spacing="2px" fill="${ctx.validBrandColor}" opacity="0.85">BEFORE</text>
+      <text x="${cx + 40}" y="${ctx.constraints.safeY + 6}" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="800" letter-spacing="2px" fill="${ctx.validBrandColor}" opacity="0.85">AFTER</text>`;
+    }};
+
+    this.registry['star_rating_row'] = { category: 'effects', render: (ctx, layer) => {
+      // Row of 5 filled stars, anchored near the layer's declared position.
+      // Grounded in the "star_rating" decoration tag seen across real mined
+      // testimonial templates.
+      const anchor = layer?.anchor || 'top_center';
+      const startX = anchor.includes('left') ? ctx.constraints.safeX : anchor.includes('right') ? ctx.w - ctx.constraints.safeX - 130 : ctx.w / 2 - 65;
+      const y = anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - 30 : ctx.constraints.safeY + 10;
+      const starPath = "M12 1 L15 8 L23 9 L17 15 L18 23 L12 19 L6 23 L7 15 L1 9 L9 8 Z";
+      let stars = '';
+      for (let i = 0; i < 5; i++) {
+        stars += `<g transform="translate(${startX + i * 26}, ${y}) scale(1.1)"><path d="${starPath}" fill="${ctx.validAccentColor || ctx.validBrandColor}" /></g>`;
+      }
+      return `<!-- Testimonial Star Rating -->\n${stars}`;
+    }};
   }
 
 

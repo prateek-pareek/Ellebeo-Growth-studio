@@ -43,9 +43,18 @@ export class MetadataRetriever implements ITemplateRetriever {
       } else if (id.includes('split')) {
         category = 'Split';
         concept = 'Two-region layout dividing the canvas between a photo area and a dedicated text area.';
+      } else if (id.includes('before_after')) {
+        category = 'Before & After';
+        concept = 'Two real photos (before and after) genuinely stitched side by side or stacked to show a transformation.';
+      } else if (id.includes('scrapbook')) {
+        category = 'Scrapbook';
+        concept = 'Taped or torn-paper photo card with a personal, handmade collage feel.';
+      } else if (id.includes('quadrant')) {
+        category = 'Quadrant';
+        concept = 'Grid- or badge-structured layout evoking a multi-panel composition on a single hero image.';
       }
 
-      const isSplit = id.includes('split') || id.includes('clinical_hero');
+      const isSplit = id.includes('split') || id.includes('clinical_hero') || id.includes('before_after');
       const macroFaceSafe = !isSplit;
 
       const requiresText = id.includes('text_only') || id.includes('quote') || id.includes('testimonial');
@@ -120,7 +129,25 @@ export class MetadataRetriever implements ITemplateRetriever {
       // Product Showcase Family
       { id: 'product_showcase_overlay', concept: 'Full-bleed background photo with headline and tagline text overlaid directly on top.', type: 'procedural' },
       { id: 'product_showcase_halo', concept: 'Circle-cropped product photo with a larger decorative halo ring behind it.', type: 'procedural' },
-      { id: 'product_showcase_band', concept: 'Heading and tagline band over a photo starting mid-canvas, divider at the seam, CTA chip at the bottom.', type: 'procedural' }
+      { id: 'product_showcase_band', concept: 'Heading and tagline band over a photo starting mid-canvas, divider at the seam, CTA chip at the bottom.', type: 'procedural' },
+
+      // Before & After Family
+      { id: 'before_after_side_by_side', concept: 'Real before-photo and after-photo genuinely stitched side by side, arrow marking the transformation, heading below.', type: 'procedural' },
+      { id: 'before_after_stacked', concept: 'Real before-photo and after-photo stitched top and bottom, arrow marking the seam, heading at the bottom.', type: 'procedural' },
+      { id: 'before_after_labeled', concept: 'Side-by-side before/after split with a masking-tape accent, heading and tagline stacked, pinned-up card feel.', type: 'procedural' },
+
+      // Testimonial Family
+      { id: 'testimonial_quote_portrait', concept: 'Circle-masked client portrait with a quote-marks accent, heading carries the quote, tagline carries attribution.', type: 'procedural' },
+      { id: 'testimonial_star_card', concept: 'Glass-card treatment with a 5-star rating row, quote heading, client name as tagline.', type: 'procedural' },
+      { id: 'testimonial_minimal_quote', concept: 'Pure typography quote with a small star rating row, no image required.', type: 'procedural' },
+
+      // Scrapbook Family
+      { id: 'scrapbook_collage', concept: 'Polaroid-masked photo pinned with a masking-tape accent and torn-paper texture, caption-card heading below.', type: 'procedural' },
+      { id: 'scrapbook_journal_entry', concept: 'Inset rectangle photo beside handwritten-feel margin notes and a divider, personal journal-spread feel.', type: 'procedural' },
+
+      // Quadrant Family
+      { id: 'quadrant_grid', concept: 'Full photo with a subtle quadrant grid overlay and a corner badge, evoking a 4-panel structure on one hero image.', type: 'procedural' },
+      { id: 'quadrant_badge_focus', concept: 'Arch-masked photo with a prominent geometric badge and grain texture, heading and tagline stacked below.', type: 'procedural' }
     ];
 
     for (const recipe of compositionRecipes) {
