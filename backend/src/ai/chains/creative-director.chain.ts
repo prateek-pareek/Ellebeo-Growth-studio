@@ -1,4 +1,6 @@
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
+
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import { StrategistOutput } from './brand-strategist.chain';
 
@@ -19,14 +21,20 @@ export interface CreativeDirectorResult {
 }
 
 export class CreativeDirectorChain {
-  private model: ChatOpenAI;
+  private model: ChatGoogleGenerativeAI;
 
   constructor() {
-    this.model = new ChatOpenAI({
-      modelName: 'gpt-4o',
+    this.model = new ChatGoogleGenerativeAI({
+      model: 'gemini-pro-latest',
       temperature: 0.5,
-      maxTokens: 1500,
-      openAIApiKey: process.env['OPENAI_API_KEY'] ?? '',
+      maxOutputTokens: 8192,
+      apiKey: process.env['GEMINI_API_KEY'] ?? '',
+      safetySettings: [
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      ],
     });
   }
 

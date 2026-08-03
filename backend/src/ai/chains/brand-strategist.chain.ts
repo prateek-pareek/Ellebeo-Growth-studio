@@ -1,4 +1,5 @@
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import { AssembledPrompt } from '../types/chain-output.types';
 
@@ -25,8 +26,8 @@ export class BrandStrategistChain {
 You are an elite, senior Brand Strategist and Copywriter for beauty, salon, and medical aesthetics professionals.
 Your goal is to write copywriting that sounds authoritative, clinical, yet warm and client-empathetic.
 ${angle === 'technical'
-  ? 'ANGLE: Focus heavily on technical precision, clinical details, treatment science, and direct value.'
-  : 'ANGLE: Focus heavily on client empathy, addressing anxieties, structural truth, and professional warmth.'}
+        ? 'ANGLE: Focus heavily on technical precision, clinical details, treatment science, and direct value.'
+        : 'ANGLE: Focus heavily on client empathy, addressing anxieties, structural truth, and professional warmth.'}
 
 Avoid generic AI tells like "luxurious", "obsessed", "glow up", or "transformative experience". Instead, focus on technical precision and direct value.
 Never generate fake client names. If name is not provided, do not use any client names.
@@ -35,6 +36,7 @@ OUTPUT INSTRUCTIONS:
 - You must reply in valid JSON format only.
 - Do NOT output any markdown tags (like \`\`\`json), prefix, or suffix.
 - Keep output values strictly clinical and aligned with the practitioner's signature system.
+- CRITICAL: You MUST escape all newlines within your JSON string values as \\n. NEVER output a literal newline inside a string value.
 
 JSON Schema:
 {
@@ -46,16 +48,22 @@ JSON Schema:
   "brandVoiceConfidenceScore": 0.95
 }`;
 
-    const openaiKey = process.env.OPENAI_API_KEY;
+    const openaiKey = process.env.GEMINI_API_KEY;
     if (!openaiKey) {
-      throw new Error('OPENAI_API_KEY is not defined in the environment');
+      throw new Error('GEMINI_API_KEY is not defined in the environment');
     }
 
-    const gpt = new ChatOpenAI({
-      modelName: llmConfig?.modelId || 'gpt-4o-mini',
+    const gpt = new ChatGoogleGenerativeAI({
+      model: llmConfig?.modelId || 'gemini-flash-latest',
       temperature: 0.7,
-      maxTokens: 1024,
-      openAIApiKey: openaiKey,
+      maxOutputTokens: 8192,
+      apiKey: openaiKey,
+      safetySettings: [
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      ],
     });
 
     const res = await gpt.invoke([
@@ -64,10 +72,21 @@ JSON Schema:
     ]);
 
     const content = typeof res.content === 'string' ? res.content : JSON.stringify(res.content);
-    const cleaned = content.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
+    let cleaned = content.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
 
     try {
-      const obj = JSON.parse(cleaned) as Record<string, any>;
+      let obj: Record<string, any>;
+      try {
+        obj = JSON.parse(cleaned);
+      } catch (parseError) {
+        const sanitized = cleaned
+          .replace(/\n/g, '\\n')
+          .replace(/{\\n/g, '{\n')
+          .replace(/\\n}/g, '\n}')
+          .replace(/",\\n/g, '",\n')
+          .replace(/\\n *"/g, '\n  "');
+        obj = JSON.parse(sanitized);
+      }
 
       // Validate blacklist matches
       const normalizedCaption = String(obj.caption || '').toLowerCase();
@@ -85,7 +104,8 @@ JSON Schema:
         brandVoiceConfidenceScore: Number(obj.brandVoiceConfidenceScore || 0.8),
       };
     } catch (err: any) {
-      throw new Error(`Failed to parse Strategist output: ${err.message}. Raw output: ${cleaned}`);
+      const metadata = res.response_metadata ? JSON.stringify(res.response_metadata) : 'No metadata';
+      throw new Error(`Failed to parse Strategist output: ${err.message}. Metadata: ${metadata}. Raw output: ${cleaned}`);
     }
   }
 }

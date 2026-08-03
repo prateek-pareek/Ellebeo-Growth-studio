@@ -5,25 +5,32 @@
 // Non-fatal: if vision fails for any image the orchestrator continues without it.
 // ============================================================================
 
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
+
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 
 const MAX_IMAGES = 3; // Cost cap — never more than 3 moodboard images per generation
 
 export class MoodboardVisionChain {
-  private model: ChatOpenAI | null = null;
+  private model: ChatGoogleGenerativeAI | null = null;
 
-  private getModel(): ChatOpenAI {
+  private getModel(): ChatGoogleGenerativeAI {
     if (!this.model) {
-      if (!process.env['OPENAI_API_KEY']) {
-        throw new Error('OPENAI_API_KEY required for moodboard vision analysis');
+      if (!process.env['GEMINI_API_KEY']) {
+        throw new Error('GEMINI_API_KEY required for moodboard vision analysis');
       }
-      this.model = new ChatOpenAI({
-        modelName: 'gpt-4o',
+      this.model = new ChatGoogleGenerativeAI({
+        model: 'gemini-pro-latest',
         temperature: 0.1,
-        maxTokens: 400,
-        timeout: 25000,
-        openAIApiKey: process.env['OPENAI_API_KEY'],
+        maxOutputTokens: 8192,
+        apiKey: process.env['GEMINI_API_KEY'],
+      safetySettings: [
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      ],
       });
     }
     return this.model;

@@ -123,13 +123,10 @@ export function useAppointments(): UseAppointmentsResult {
   });
   const reqId = useRef(0);
 
-  // background=true is used by the silent 30s poll below — it must never
-  // flip `loading` back to true, or every consumer that gates its whole page
-  // behind `if (loading) return <Loading/>` (e.g. /generate, mid-generation)
-  // gets unmounted and remounted from scratch every 30s, which reads as an
-  // unwanted "page refresh" that resets scroll position and in-flight UI state.
-  const fetch = (id: number, background = false) => {
-    if (!background) setState((prev) => ({ ...prev, loading: true }));
+  const fetch = (id: number, isBackground = false) => {
+    if (!isBackground) {
+      setState((prev) => ({ ...prev, loading: true }));
+    }
     fetchCloudAppointments()
       .then((res) => {
         if (id !== reqId.current) return;
@@ -143,7 +140,7 @@ export function useAppointments(): UseAppointmentsResult {
       })
       .catch(() => {
         if (id !== reqId.current) return;
-        if (!background) setState({ data: [], loading: false, source: "cloud", isEmpty: true, error: true });
+        if (!isBackground) setState({ data: [], loading: false, source: "cloud", isEmpty: true, error: true });
         // Background refreshes fail silently — keep showing the last good data
         // rather than clobbering the screen with an error state over a
         // transient network hiccup during a periodic sync.

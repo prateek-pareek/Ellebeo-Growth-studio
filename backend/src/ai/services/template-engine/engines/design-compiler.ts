@@ -97,10 +97,29 @@ export class DesignCompiler {
       
       if (heading) {
         if (spec.typography.hierarchy === 'editorial') {
-          heading.alignment = spec.composition?.balance === 'asymmetrical' ? 'left' : heading.alignment || 'center';
+          const isAsymmetrical = spec.composition?.balance === 'asymmetrical';
+          heading.alignment = isAsymmetrical ? 'left' : heading.alignment || 'center';
+
+          // TypographyEngine resolves box position/width from BOTH alignment
+          // and the layer's structural anchor. Setting alignment='left' above
+          // without also moving a center/right-type anchor (e.g. the
+          // 'bottom_center' many recipes use) left the two fields disagreeing
+          // — TypographyEngine's width-availability math then measured from
+          // the wrong reference point (anchor's x), producing a badly
+          // undersized/mispositioned box (seen as heading text truncated at
+          // the canvas edge on mined testimonial entries). Keep the anchor's
+          // vertical component but make it genuinely left so both fields
+          // agree on where the box actually is.
+          if (isAsymmetrical) {
+            const currentAnchor = String(heading.anchor || '');
+            if (currentAnchor.includes('top')) heading.anchor = 'top_left';
+            else if (currentAnchor.includes('bottom')) heading.anchor = 'bottom_left';
+            else heading.anchor = 'middle_left';
+          }
+
           // BEHAVIORAL DOMINANCE: Inject massive font scaling overrides
-          (heading as any).fontSize = 140; 
-          
+          (heading as any).fontSize = 140;
+
           if (spec.typography.headlineTreatment === 'experimental') {
             heading.rotation = -90; // Rotate vertically
             heading.anchor = 'middle_left'; // Push to the side

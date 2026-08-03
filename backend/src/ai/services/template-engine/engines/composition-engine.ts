@@ -1,4 +1,4 @@
-import { ICompiledLayoutDSL, IDSLSceneLayer, IDSLImageLayer, IDSLTextLayer, IDSLDecorationLayer } from '../interfaces';
+import { ICompiledLayoutDSL, IDSLSceneLayer, IDSLImageLayer, IDSLTextLayer, IDSLDecorationLayer, CompositionTokens } from '../interfaces';
 import { IDesignLanguage } from './art-direction-engine';
 import { DesignTokens } from './theme-engine';
 
@@ -15,23 +15,30 @@ export interface CompositionMetadata {
 export class CompositionEngine {
 
   public calculateComposition(
-    tokens: DesignTokens,
+    tokens: CompositionTokens | DesignTokens,
     intent: TemplateIntent,
     isFirstSlide: boolean
   ): CompositionMetadata {
 
+    // Helper to determine if we are using new or legacy tokens
+    const isNewArchitecture = 'imageDominance' in tokens;
+
     // 1. Base initialization from Design Tokens
     const metadata: CompositionMetadata = {
-      dominantElement: tokens.headlinePresence === 'hero' ? 'typography' : 'image',
-      whitespaceRatio: tokens.spacing === 'airy' ? 'high' : (tokens.spacing === 'dense' ? 'low' : 'medium'),
-      elementOverlap: tokens.layerDepth === 'high',
+      dominantElement: isNewArchitecture 
+        ? ((tokens as CompositionTokens).imageDominance < 0.5 ? 'typography' : 'image')
+        : ((tokens as DesignTokens).headlinePresence === 'hero' ? 'typography' : 'image'),
+      whitespaceRatio: isNewArchitecture
+        ? ((tokens as CompositionTokens).whitespace === 'massive' || (tokens as CompositionTokens).whitespace === 'high' ? 'high' : ((tokens as CompositionTokens).whitespace === 'minimal' ? 'low' : 'medium'))
+        : ((tokens as DesignTokens).spacing === 'airy' ? 'high' : ((tokens as DesignTokens).spacing === 'dense' ? 'low' : 'medium')),
+      elementOverlap: isNewArchitecture ? (tokens as CompositionTokens).alignment === 'dynamic' : (tokens as DesignTokens).layerDepth === 'high',
       maskPreference: 'full_bleed',
       injectedFeatures: []
     };
 
     // 2. Adjust Mask Preference based on Tokens
-    if (tokens.borderRadius === 'soft') metadata.maskPreference = 'rectangle';
-    if (tokens.borderRadius === 'pill') metadata.maskPreference = 'arch'; // Simple mapping for now
+    if ('borderRadius' in tokens && tokens.borderRadius === 'soft') metadata.maskPreference = 'rectangle';
+    if ('borderRadius' in tokens && tokens.borderRadius === 'pill') metadata.maskPreference = 'arch'; // Simple mapping for now
 
     // 3. Inject Semantic Intent Overrides
     switch (intent) {
@@ -54,13 +61,15 @@ export class CompositionEngine {
         metadata.maskPreference = 'rectangle'; // Usually split screen
         break;
       case 'brand_story':
-        if (tokens.layerDepth === 'high') metadata.maskPreference = 'polaroid';
+        if ('layerDepth' in tokens && tokens.layerDepth === 'high') metadata.maskPreference = 'polaroid';
         break;
     }
 
     // Cover slides generally get more punchy visual weight
     if (isFirstSlide && metadata.dominantElement !== 'typography') {
-      if (tokens.contrast === 'high') {
+      if (!isNewArchitecture && (tokens as DesignTokens).contrast === 'high') {
+        metadata.dominantElement = 'typography';
+      } else if (isNewArchitecture && (tokens as CompositionTokens).whitespace === 'massive') {
         metadata.dominantElement = 'typography';
       }
     }
@@ -667,8 +676,13 @@ export class CompositionEngine {
         zIndex: 10,
         mask: 'circle',
         paddingPercent: 12,
-        anchor: 'top_center',
-        allowedAnchors: ['top_center', 'center']
+        // Locked to top_center (no allowedAnchors variation): the circle mask
+        // is always 60% of the canvas's shorter dimension (fixed in the
+        // renderer, not something this recipe controls), so at 'center' it
+        // would sit even lower and leave LESS room for the heading/tagline
+        // below it than 'top_center' already does — the opposite of a safe
+        // variation.
+        anchor: 'top_center'
       } as IDSLImageLayer);
 
       layers.push({
@@ -684,11 +698,19 @@ export class CompositionEngine {
         id: 'testi_portrait_heading',
         type: 'text',
         zIndex: 30,
-        anchor: 'center',
-        allowedAnchors: ['center', 'bottom_center'],
+        // 'center' used to be offered as a variation here, but
+        // testi_portrait_image is a top-anchored circle at 60% of the
+        // canvas's shorter dimension — vertical-center always lands inside
+        // that circle, guaranteeing a heading/photo collision, not an
+        // occasional one. bottom_center is the only safe position given
+        // this recipe's fixed photo geometry.
+        anchor: 'bottom_center',
         role: 'heading',
         alignment: 'center',
-        maxWidthPercent: 70
+        // Widened from 70 -> 88: a narrower box wraps to more lines, and
+        // every extra line eats further into the tight clearance between
+        // the (fixed-size) circle photo above and the footer reserve below.
+        maxWidthPercent: 88
       } as IDSLTextLayer);
 
       layers.push({

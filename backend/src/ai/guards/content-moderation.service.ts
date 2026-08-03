@@ -57,7 +57,7 @@ export class ContentModerationService {
 
     try {
       const response = await client.chat.completions.create({
-        model: 'gpt-4o',
+        model: 'gemini-pro-latest',
         max_tokens: 256,
         messages: [
           {

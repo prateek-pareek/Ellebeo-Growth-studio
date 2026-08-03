@@ -113,7 +113,7 @@ OUTPUT:
 - Return ONLY valid JSON — no markdown, no explanation, no preamble`;
 
 export class PromptBuilder {
-  constructor(private readonly cache: PromptCache) {}
+  constructor(private readonly cache: PromptCache) { }
 
   async assembleGenerationPrompt(params: {
     brandDNA: BrandDNARecord;
@@ -146,10 +146,10 @@ export class PromptBuilder {
     const { goldenExamplesFragment, goldenExamplesCacheHit } =
       await this.getGoldenExamplesFragment(brandDNA.tenantId, brandDNA.version, goldenExamples);
 
-    const systemPrompt = masterPromptText 
-      ? this.buildDynamicSystemPrompt(masterPromptText) 
+    const systemPrompt = masterPromptText
+      ? this.buildDynamicSystemPrompt(masterPromptText)
       : this.buildSystemPrompt();
-      
+
     const visionSection = visionResult ? this.buildVisionSection(visionResult) : '';
     const goalSection = GOAL_FRAMING[businessGoal] ?? 'Generate engaging content.';
     const platformSection = PLATFORM_RULES[platform];
@@ -342,7 +342,7 @@ ${CRAFT_RULES}`;
     if (dna.brandDnaV2) {
       try {
         const v2 = (typeof dna.brandDnaV2 === 'string' ? JSON.parse(dna.brandDnaV2) : dna.brandDnaV2) as Record<string, any>;
-        
+
         const foundations = v2.foundations || {};
         const essence = v2.essence || {};
         const visual = v2.visual_identity || {};
@@ -426,7 +426,7 @@ ${CRAFT_RULES}`;
       Array.isArray(dna.visualRanking) && dna.visualRanking.length > 0
         ? buildStyleDirectionBlock(dna.visualRanking)
         : dna.aestheticDirection ? `**Aesthetic direction:** ${str(dna.aestheticDirection)}` : '',
-      (function() {
+      (function () {
         const cache = Array.isArray((dna as any).moodboardIntentsCache) ? (dna as any).moodboardIntentsCache : [];
         const moods = cache.filter((c: any) => ['mood', 'vibe', 'style'].includes(c.intent?.toLowerCase()));
         if (moods.length > 0) {

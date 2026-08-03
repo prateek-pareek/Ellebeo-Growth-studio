@@ -3,7 +3,9 @@
 // CRITICAL: Never calls GPT-4o Vision if cache hit exists for this image hash.
 // ============================================================================
 
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
+
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { createHash } from 'crypto';
 import { PrismaClient } from '@prisma/client';
@@ -80,7 +82,7 @@ function validateImageQuality(
 // ---------------------------------------------------------------------------
 
 export class VisionAnalysisChain {
-  private model: ChatOpenAI | null = null;
+  private model: ChatGoogleGenerativeAI | null = null;
   private readonly cfg: ReturnType<ModelRouter['selectVisionModel']>;
 
   constructor(
@@ -90,17 +92,22 @@ export class VisionAnalysisChain {
     this.cfg = modelRouter.selectVisionModel();
   }
 
-  private getModel(): ChatOpenAI {
+  private getModel(): ChatGoogleGenerativeAI {
     if (!this.model) {
-      if (!process.env['OPENAI_API_KEY']) {
-        throw new Error('OPENAI_API_KEY is required for vision analysis (image processing)');
+      if (!process.env['GEMINI_API_KEY']) {
+        throw new Error('GEMINI_API_KEY is required for vision analysis (image processing)');
       }
-      this.model = new ChatOpenAI({
-        modelName: this.cfg.modelId,
+      this.model = new ChatGoogleGenerativeAI({
+        model: this.cfg.modelId,
         temperature: this.cfg.temperature,
-        maxTokens: this.cfg.maxTokens,
-        timeout: this.cfg.timeoutMs,
-        openAIApiKey: process.env['OPENAI_API_KEY'],
+        maxOutputTokens: this.cfg.maxTokens,
+        apiKey: process.env['GEMINI_API_KEY'],
+      safetySettings: [
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      ],
       });
     }
     return this.model;

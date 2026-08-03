@@ -9,6 +9,7 @@ export interface IDesignIntent {
   whitespaceMood: 'expansive' | 'structured' | 'dense';
   typographyPhilosophy: 'editorial_contrast' | 'brutalist_scale' | 'classic_balance';
   readingJourney: 'z_pattern' | 'center_down' | 'asymmetrical_flow';
+  family: string;
 }
 
 export interface IDesignBehaviorProfile {
@@ -189,7 +190,8 @@ export class ArtDirectionEngine {
       imageRole: isAsymmetrical ? 'focal_subject' : 'environmental',
       whitespaceMood: isQuiet ? 'expansive' : (isAggressive ? 'dense' : 'structured'),
       typographyPhilosophy: isAggressive ? 'brutalist_scale' : 'editorial_contrast',
-      readingJourney: isAsymmetrical ? 'z_pattern' : 'center_down'
+      readingJourney: isAsymmetrical ? 'z_pattern' : 'center_down',
+      family: family
     };
   }
 

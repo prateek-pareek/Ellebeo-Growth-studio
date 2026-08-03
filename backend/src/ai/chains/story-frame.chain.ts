@@ -2,7 +2,9 @@
 // story-frame.chain.ts — AI-generated 4-frame story sequence concepts
 // ============================================================================
 
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
+
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import { wrapSystemPrompt } from '../config/platform-system-prompt';
 import { buildBrandVoiceBlock, type BrandVoiceContext } from '../config/brand-voice';
@@ -21,14 +23,20 @@ export interface StoryFrameResult {
 }
 
 export class StoryFrameChain {
-  private model: ChatOpenAI;
+  private model: ChatGoogleGenerativeAI;
 
   constructor() {
-    this.model = new ChatOpenAI({
-      modelName: 'gpt-4o-mini',
+    this.model = new ChatGoogleGenerativeAI({
+      model: 'gemini-flash-latest',
       temperature: 0.7,
-      maxTokens: 500,
-      openAIApiKey: process.env['OPENAI_API_KEY'] ?? '',
+      maxOutputTokens: 8192,
+      apiKey: process.env['GEMINI_API_KEY'] ?? '',
+      safetySettings: [
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      ],
     });
   }
 
