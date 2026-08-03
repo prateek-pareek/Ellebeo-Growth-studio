@@ -1163,6 +1163,19 @@ export class PrimitiveEngine {
       }
       return `<!-- Testimonial Star Rating -->\n${stars}`;
     }};
+
+    // Pre-existing gap (not introduced this session): ThemeEngine.getMoodDecorations('luxury_black')
+    // has always requested a decoration named 'dark_scrim', but only 'dark_scrim_overlay' was ever
+    // registered — and only in the legacy DECORATIONS registry (layout-renderers.ts), a different,
+    // non-DSL rendering surface. universal_dynamic_deco's scene-graph loop only consults THIS
+    // registry, so every DSL-based layout that lands on the 'luxury_black' mood has been silently
+    // dropping its scrim (PrimitiveEngine.renderPrimitive() logs a warning and returns '', it does
+    // not throw). Registering it here, matching the legacy version's exact visual (32% opacity
+    // brand-color wash), makes 'luxury_black' actually do what it says for every family.
+    this.registry['dark_scrim'] = { category: 'effects', render: (ctx) => `
+      <!-- Luxury Black mood: full-canvas dark brand-color scrim -->
+      <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" fill="${ctx.validBrandColor}" fill-opacity="0.32" />`
+    };
   }
 
 

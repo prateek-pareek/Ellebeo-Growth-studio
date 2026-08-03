@@ -676,8 +676,13 @@ export class CompositionEngine {
         zIndex: 10,
         mask: 'circle',
         paddingPercent: 12,
-        anchor: 'top_center',
-        allowedAnchors: ['top_center', 'center']
+        // Locked to top_center (no allowedAnchors variation): the circle mask
+        // is always 60% of the canvas's shorter dimension (fixed in the
+        // renderer, not something this recipe controls), so at 'center' it
+        // would sit even lower and leave LESS room for the heading/tagline
+        // below it than 'top_center' already does — the opposite of a safe
+        // variation.
+        anchor: 'top_center'
       } as IDSLImageLayer);
 
       layers.push({
@@ -693,11 +698,19 @@ export class CompositionEngine {
         id: 'testi_portrait_heading',
         type: 'text',
         zIndex: 30,
-        anchor: 'center',
-        allowedAnchors: ['center', 'bottom_center'],
+        // 'center' used to be offered as a variation here, but
+        // testi_portrait_image is a top-anchored circle at 60% of the
+        // canvas's shorter dimension — vertical-center always lands inside
+        // that circle, guaranteeing a heading/photo collision, not an
+        // occasional one. bottom_center is the only safe position given
+        // this recipe's fixed photo geometry.
+        anchor: 'bottom_center',
         role: 'heading',
         alignment: 'center',
-        maxWidthPercent: 70
+        // Widened from 70 -> 88: a narrower box wraps to more lines, and
+        // every extra line eats further into the tight clearance between
+        // the (fixed-size) circle photo above and the footer reserve below.
+        maxWidthPercent: 88
       } as IDSLTextLayer);
 
       layers.push({
