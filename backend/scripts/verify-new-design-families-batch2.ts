@@ -10,6 +10,7 @@ import { PrimitiveEngine, PrimitiveContext } from '../src/ai/services/template-e
 import { MetadataRetriever } from '../src/ai/services/template-engine/metadata.retriever';
 import { DiversityEngine } from '../src/ai/services/template-engine/diversity.engine';
 import { BASE_TREATMENTS, registerDynamicLayout, COMPILED_LAYOUTS } from '../src/ai/config/layout-renderers';
+import { TypographyEngine, TypographyContext } from '../src/ai/services/template-engine/engines/typography-engine';
 
 // Throwaway verification for the 4 new families (before_after, testimonial,
 // scrapbook, quadrant): runs each recipe through the exact engine chain
@@ -31,6 +32,14 @@ const themeEngine = new ThemeEngine();
 const geometryCompiler = new GeometryCompiler();
 const designCompiler = new DesignCompiler();
 const compositionOptimizer = new CompositionOptimizer();
+const typographyEngine = new TypographyEngine();
+const primitiveEngineForLayers = new PrimitiveEngine();
+
+const SAMPLE_TEXT: Record<string, string> = {
+  heading: 'Radiant Results, Redefined',
+  tagline: 'Book your consultation today',
+  body: 'A gentle, personalised treatment designed around your skin.',
+};
 
 const CANVAS_W = 1080;
 const CANVAS_H = 1080;
@@ -66,6 +75,41 @@ for (const id of NEW_FAMILY_IDS) {
 
     const layerSummary = optimized.layers.map((l: any) => `${l.type}:${l.id}@${l.anchor}`).join(', ');
     console.log(`[OK] ${id} -> ${optimized.layers.length} layers (${layerSummary})`);
+
+    // Render every text layer through the real TypographyEngine and every
+    // decoration through the real PrimitiveEngine — closes the loop on
+    // "typography/composition/primitives/decos actually work", not just
+    // "the DSL has the right layer objects".
+    const primitiveCtxForLayer: PrimitiveContext = {
+      w: CANVAS_W, h: CANVAS_H,
+      validBrandColor: '#1a1a1a', validSecondaryColor: '#f5f0eb', validBackgroundColor: '#ffffff',
+      validAccentColor: '#d4a373',
+      constraints: constraints as any,
+      behavior,
+      layoutState: { occupiedRegions: [] },
+    };
+    for (const layer of optimized.layers) {
+      if (layer.type === 'text') {
+        const typographyCtx: TypographyContext = {
+          w: CANVAS_W, h: CANVAS_H,
+          brandFont: 'Playfair Display',
+          dynamicFontSize: 64,
+          dynamicTextColor: '#1a1a1a',
+          validSecondaryColor: '#f5f0eb',
+          validBackgroundColor: '#ffffff',
+          overlayText: SAMPLE_TEXT[(layer as any).role] || 'Sample Text',
+          constraints: constraints as any,
+          layoutEngine,
+        };
+        const svg = typographyEngine.renderTextLayer(typographyCtx, layer as any);
+        if (!svg || svg.length === 0) throw new Error(`Typography produced empty output for text layer '${layer.id}' (role=${(layer as any).role})`);
+      } else if (layer.type === 'decoration') {
+        const componentName = (layer as any).component;
+        const svg = primitiveEngineForLayers.renderPrimitive(componentName, primitiveCtxForLayer, layer as any);
+        if (!svg || svg.includes('MISSING COMPONENT')) throw new Error(`Primitive '${componentName}' failed to render for decoration layer '${layer.id}'`);
+      }
+    }
+    console.log(`      typography + primitives rendered for all ${optimized.layers.length} layers`);
   } catch (err: any) {
     failures++;
     console.error(`[FAIL] ${id}:`, err?.message || err);

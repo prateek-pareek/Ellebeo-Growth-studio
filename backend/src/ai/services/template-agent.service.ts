@@ -59,16 +59,32 @@ export class TemplateAgentService {
       this.logger.log(`[Template Engine] Starting 5-Stage Pipeline for slide ${context.slideIndex + 1}...`);
 
       // Stage 1: Retrieval
-      const allCandidates = await this.retriever.retrieveCandidates(context);
+      let allCandidates = await this.retriever.retrieveCandidates(context);
       this.logger.log(`[Stage 1] Retrieved ${allCandidates.length} raw candidates from library.`);
+
+      // ── TEST OVERRIDE ───────────────────────────────────────────────────────
+      // Restricts the candidate pool to only the requested design families so
+      // we can verify the AI Art Director's selection + rendering end-to-end
+      // for Before/After, Testimonial, Scrapbook, Quadrant. The AI still picks
+      // freely within that pool (not a fixed layout id) so rotation across the
+      // 4 families can be observed across carousel/story slides. Toggle via
+      // FORCE_FAMILY_POOL in .env (comma-separated family prefixes); remove
+      // this block + the env var once testing is done.
+      const forcedFamilies = process.env['FORCE_FAMILY_POOL']?.split(',').map(f => f.trim()).filter(Boolean);
+      if (forcedFamilies?.length) {
+        const restricted = allCandidates.filter(c => forcedFamilies.some(fam => c.id.includes(fam)));
+        this.logger.warn(`[TEST OVERRIDE] FORCE_FAMILY_POOL=${forcedFamilies.join(',')} -> restricted to ${restricted.length}/${allCandidates.length} candidates`);
+        if (restricted.length > 0) allCandidates = restricted;
+      }
+      // ─────────────────────────────────────────────────────────────────────────
 
       // Stage 2: Hard Constraint Filtering (Deterministic)
       let validCandidates = this.hardConstraintEngine.filter(allCandidates, context);
-      
+
       // If we filtered out too many (e.g. strict exclusions), fall back safely
       if (validCandidates.length < 5) {
         this.logger.warn(`[Stage 2] Too few candidates (${validCandidates.length}) after filtering. Relaxing constraints.`);
-        validCandidates = allCandidates; 
+        validCandidates = allCandidates;
       } else {
         this.logger.log(`[Stage 2] ${validCandidates.length} candidates survived constraint filtering.`);
       }

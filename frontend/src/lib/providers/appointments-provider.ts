@@ -140,7 +140,7 @@ export function useAppointments(): UseAppointmentsResult {
       })
       .catch(() => {
         if (id !== reqId.current) return;
-        if (!background) setState({ data: [], loading: false, source: "cloud", isEmpty: true, error: true });
+        if (!isBackground) setState({ data: [], loading: false, source: "cloud", isEmpty: true, error: true });
         // Background refreshes fail silently — keep showing the last good data
         // rather than clobbering the screen with an error state over a
         // transient network hiccup during a periodic sync.
