@@ -144,6 +144,21 @@ export interface ISemanticDesignSpec {
   };
 }
 
+export interface IDesignIntent {
+  family: string;
+  energy: 'bold' | 'calm' | 'structured' | 'minimal' | 'playful';
+  balance: 'symmetrical' | 'asymmetrical' | 'dynamic';
+  readingFlow: 'z_pattern' | 'center_down' | 'circular' | 'scattered' | 'center_anchored';
+  visualPriority: 'typography_hero' | 'image_hero' | 'composition_hero' | 'cta_hero';
+  whitespace: 'tight' | 'comfortable' | 'airy' | 'luxury';
+  mood: 'luxury' | 'organic' | 'clinical' | 'pop' | 'minimalist';
+  primitives: {
+    cards: 'solid' | 'glass' | 'outlined' | 'floating' | 'none';
+    textureIntensity: 'none' | 'subtle' | 'medium' | 'heavy';
+    density: DecorationDensity;
+  };
+}
+
 export interface ILayoutRegion {
   id: string; // The layer ID (e.g., 'main-heading')
   role: string; // The layer role (e.g., 'heading', 'ghost_headline')
@@ -159,8 +174,49 @@ export interface ILayoutRegion {
   opticalCenter?: { x: number; y: number }; // The perceptual center (ignoring ascenders/descenders)
 }
 
+// ==========================================
+// SPRINT 4: VISUAL RECIPE ARCHITECTURE
+// ==========================================
+
+export interface VisualRecipe {
+  color: ColorRecipe;
+  typography: TypographyRecipe;
+  primitive: PrimitiveRecipe;
+  texture: TextureRecipe;
+  hero: HeroRecipe;
+}
+
+export interface ColorRecipe {
+  surfaceDominance: 'light' | 'dark' | 'brand_heavy' | 'split';
+  contrastPreference: 'high_impact' | 'soft_minimal';
+  warmth: 'warm' | 'cool' | 'neutral'; // Drives premium `#FCFBF8` vs `#FFFFFF`
+  accentStrategy: 'minimal' | 'balanced' | 'dominant';
+  depth: 'flat' | 'subtle' | 'layered' | 'editorial';
+  dominanceRatios: { primary: number; secondary: number; accent: number };
+}
+
+export interface TypographyRecipe {
+  hierarchy: 'editorial' | 'minimal' | 'bold' | 'technical';
+  dominance: 'low' | 'medium' | 'high';
+}
+
+export interface PrimitiveRecipe {
+  cardStyle: 'solid' | 'glass' | 'outlined' | 'floating' | 'none';
+  borderStyle: 'none' | 'thin' | 'thick' | 'architectural';
+}
+
+export interface TextureRecipe {
+  style: 'none' | 'paper' | 'linen' | 'grain' | 'noise';
+  intensity: 'subtle' | 'medium' | 'heavy';
+}
+
+export interface HeroRecipe {
+  focalPoint: 'photography' | 'typography' | 'product' | 'composition';
+}
+
 export interface ILayoutState {
   occupiedRegions: ILayoutRegion[];
+  family?: string; // Optional family identifier (e.g., 'editorial', 'clinical')
 }
 
 // ============================================================================

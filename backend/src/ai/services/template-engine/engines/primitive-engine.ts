@@ -13,6 +13,8 @@ export interface PrimitiveContext {
   constraints: any; // Using any for brevity, typically LayoutConstraints
   behavior?: any; // Semantic Design Behavior Profile
   layoutState?: import('../interfaces').ILayoutState; // Shared geometric state
+  colorHierarchy?: import('./color-composition-engine').ColorHierarchy;
+  recipe?: import('../interfaces').PrimitiveRecipe;
 }
 
 export type PrimitiveRenderer = (ctx: PrimitiveContext, layer?: IDSLDecorationLayer | IDSLTextLayer) => string;
@@ -59,6 +61,17 @@ export class PrimitiveEngine {
             </pattern>
           </defs>
           <rect width="100%" height="100%" fill="url(#blueprintGrid)" />
+        `;
+      }
+    };
+
+    this.registry['rounded_corners'] = {
+      category: 'geometry',
+      render: (ctx) => {
+        const radius = ctx.behavior?.borderRadius || 24;
+        const inset = 16;
+        return `
+          <rect x="${inset}" y="${inset}" width="${ctx.w - (inset * 2)}" height="${ctx.h - (inset * 2)}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1.5" rx="${radius}" opacity="0.4" />
         `;
       }
     };
@@ -966,8 +979,12 @@ export class PrimitiveEngine {
 
     this.registry['margin_rule'] = { category: 'geometry', render: (ctx) => {
       return `
-      <!-- Margin Rule -->
-      <line x1="${ctx.constraints.safeX / 2}" y1="${ctx.constraints.safeY}" x2="${ctx.constraints.safeX / 2}" y2="${ctx.h - ctx.constraints.safeY}" stroke="${ctx.validBrandColor}" stroke-width="1" opacity="0.3" />`;
+      <!-- Editorial Margin Hairline Rule -->
+      <g opacity="0.85">
+        <line x1="${ctx.constraints.safeX / 2}" y1="${ctx.constraints.safeY}" x2="${ctx.constraints.safeX / 2}" y2="${ctx.h - ctx.constraints.safeY}" stroke="${ctx.validBrandColor}" stroke-width="0.75" />
+        <rect x="${ctx.constraints.safeX / 2 - 2}" y="${ctx.constraints.safeY}" width="4" height="1" fill="${ctx.validBrandColor}" />
+        <rect x="${ctx.constraints.safeX / 2 - 2}" y="${ctx.h - ctx.constraints.safeY}" width="4" height="1" fill="${ctx.validBrandColor}" />
+      </g>`;
     }};
 
     this.registry['accent_rule'] = { category: 'geometry', render: (ctx, layer) => {
@@ -984,8 +1001,11 @@ export class PrimitiveEngine {
       }
 
       return `
-      <!-- Accent Rule -->
-      <line x1="${x}" y1="${y}" x2="${x + 60}" y2="${y}" stroke="${ctx.validAccentColor || ctx.validBrandColor}" stroke-width="4" />`;
+      <!-- Editorial Accent Rule -->
+      <g transform="translate(${x}, ${y})">
+        <line x1="0" y1="0" x2="80" y2="0" stroke="${ctx.validAccentColor || ctx.validBrandColor}" stroke-width="1" />
+        <line x1="0" y1="4" x2="80" y2="4" stroke="${ctx.validAccentColor || ctx.validBrandColor}" stroke-width="0.5" opacity="0.5" />
+      </g>`;
     }};
 
     // --- TEXTURE PRIMITIVES ---
@@ -994,8 +1014,9 @@ export class PrimitiveEngine {
       return `
       <!-- Subtle Noise Texture -->
       <filter id="noiseFilter">
-        <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/>
-        <feColorMatrix type="matrix" values="1 0 0 0 0, 0 1 0 0 0, 0 0 1 0 0, 0 0 0 0.08 0" />
+        <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch" result="noise" />
+        <!-- Convert to monochromatic noise -->
+        <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0 0 0 0.08 0" in="noise" />
       </filter>
       <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" style="pointer-events:none;" filter="url(#noiseFilter)" />`;
     }};
@@ -1005,12 +1026,25 @@ export class PrimitiveEngine {
       <!-- Paper Texture -->
       <filter id="paperFilter">
         <feTurbulence type="fractalNoise" baseFrequency="0.04" result="noise" />
-        <feDiffuseLighting in="noise" lighting-color="#fff" surfaceScale="2">
+        <!-- Convert to monochromatic noise before lighting -->
+        <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0 0 0 1 0" in="noise" result="monoNoise" />
+        <feDiffuseLighting in="monoNoise" lighting-color="#fff" surfaceScale="2" result="light">
           <feDistantLight azimuth="45" elevation="60" />
         </feDiffuseLighting>
-        <feBlend mode="multiply" in="SourceGraphic" in2="noise" />
+        <feBlend mode="multiply" in="SourceGraphic" in2="light" />
       </filter>
-      <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" fill="${ctx.validSecondaryColor}" filter="url(#paperFilter)" opacity="0.4" style="mix-blend-mode: multiply;" />`;
+      <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" fill="${ctx.validSecondaryColor}" filter="url(#paperFilter)" opacity="0.4" style="mix-blend-mode: multiply; pointer-events:none;" />`;
+    }};
+
+    this.registry['linen_texture'] = { category: 'effects', render: (ctx) => {
+      return `
+      <!-- Subtle Linen Texture -->
+      <filter id="linenFilter">
+        <!-- Linen has directional fibers, hence the asymmetric frequency -->
+        <feTurbulence type="fractalNoise" baseFrequency="0.01 0.2" numOctaves="2" result="noise" />
+        <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0   0.33 0.33 0.33 0 0   0.33 0.33 0.33 0 0   0 0 0 0.1 0" in="noise" result="coloredNoise" />
+      </filter>
+      <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" filter="url(#linenFilter)" style="pointer-events:none; mix-blend-mode: multiply;" />`;
     }};
 
     this.registry['light_leak'] = { category: 'effects', render: (ctx) => {
@@ -1025,25 +1059,47 @@ export class PrimitiveEngine {
       <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" fill="url(#lightLeakGrad)" style="mix-blend-mode: screen;" />`;
     }};
 
+    this.registry['soft_scrim'] = { category: 'effects', render: (ctx) => {
+      // Optional explicit soft scrim for editorial families, instead of a universal muddy default.
+      return `
+      <!-- Soft Scrim Gradient -->
+      <defs>
+        <linearGradient id="softScrim" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="${ctx.validBackgroundColor}" stop-opacity="0.1" />
+          <stop offset="100%" stop-color="${ctx.validBackgroundColor}" stop-opacity="0.8" />
+        </linearGradient>
+      </defs>
+      <rect x="0" y="${ctx.h * 0.4}" width="${ctx.w}" height="${ctx.h * 0.6}" fill="url(#softScrim)" />`;
+    }};
+
+    // Text Containers (Delegated to TypographyEngine)
+    this.registry['solid_card'] = { category: 'geometry', render: () => '' };
+    this.registry['pill_label'] = { category: 'geometry', render: () => '' };
+    this.registry['inset_card'] = { category: 'geometry', render: () => '' };
+
     // ==========================================
     // PHASE 3 & 4: CLINICAL AND EDUCATIONAL PRIMITIVES
     // ==========================================
     this.registry['clinical_callout_box'] = { category: 'geometry', render: (ctx, layer) => {
       return `
       <!-- Clinical Callout Box with Data / Analysis Style -->
-      <g transform="translate(${ctx.constraints.safeX}, ${ctx.h / 2})">
-        <rect x="0" y="0" width="320" height="180" fill="${ctx.validSecondaryColor}" opacity="0.95" stroke="${ctx.validBrandColor}" stroke-width="2" />
-        <line x1="0" y1="40" x2="320" y2="40" stroke="${ctx.validBrandColor}" stroke-width="1" />
-        <text x="20" y="25" font-family="monospace" font-size="12" font-weight="bold" fill="${ctx.validBrandColor}">ANALYSIS RESULTS</text>
+      <g transform="translate(${ctx.constraints.safeX}, ${ctx.h / 2 - 40})">
+        <rect x="0" y="0" width="360" height="220" fill="${ctx.validSecondaryColor}" opacity="1" filter="drop-shadow(0 15px 30px rgba(0,0,0,0.15))" />
+        <rect x="0" y="0" width="360" height="40" fill="${ctx.validBrandColor}" opacity="0.1" />
+        <rect x="0" y="0" width="4" height="220" fill="${ctx.validBrandColor}" />
+        <text x="20" y="25" font-family="monospace" font-size="12" font-weight="bold" fill="${ctx.validBrandColor}" letter-spacing="2px">CLINICAL ANALYSIS</text>
         <!-- Mock Data Bars -->
-        <rect x="20" y="70" width="280" height="8" fill="${ctx.validBrandColor}" opacity="0.1" />
-        <rect x="20" y="70" width="210" height="8" fill="${ctx.validBrandColor}" />
+        <rect x="20" y="70" width="320" height="6" fill="${ctx.validBrandColor}" opacity="0.1" />
+        <rect x="20" y="70" width="240" height="6" fill="${ctx.validBrandColor}" />
+        <text x="20" y="95" font-family="monospace" font-size="10" fill="${ctx.validBrandColor}" opacity="0.6">EFFICACY 85%</text>
         
-        <rect x="20" y="100" width="280" height="8" fill="${ctx.validBrandColor}" opacity="0.1" />
-        <rect x="20" y="100" width="160" height="8" fill="${ctx.validBrandColor}" />
+        <rect x="20" y="120" width="320" height="6" fill="${ctx.validBrandColor}" opacity="0.1" />
+        <rect x="20" y="120" width="160" height="6" fill="${ctx.validBrandColor}" />
+        <text x="20" y="145" font-family="monospace" font-size="10" fill="${ctx.validBrandColor}" opacity="0.6">TISSUE REPAIR 60%</text>
         
-        <rect x="20" y="130" width="280" height="8" fill="${ctx.validBrandColor}" opacity="0.1" />
-        <rect x="20" y="130" width="250" height="8" fill="${ctx.validBrandColor}" />
+        <rect x="20" y="170" width="320" height="6" fill="${ctx.validBrandColor}" opacity="0.1" />
+        <rect x="20" y="170" width="280" height="6" fill="${ctx.validBrandColor}" />
+        <text x="20" y="195" font-family="monospace" font-size="10" fill="${ctx.validBrandColor}" opacity="0.6">HYDRATION 92%</text>
       </g>`;
     }};
 
@@ -1088,9 +1144,10 @@ export class PrimitiveEngine {
       const offsetPercent = layer && (layer as IDSLDecorationLayer).offsetPercent != null ? (layer as IDSLDecorationLayer).offsetPercent : 40;
       const y = Math.round((offsetPercent / 100) * ctx.h);
       return `
-      <!-- Split Family Seam Line -->
+      <!-- Split Family Seam Line (Architectural Divider) -->
       <g transform="translate(0, ${y})">
-        <line x1="${ctx.constraints.safeX}" y1="0" x2="${ctx.w - ctx.constraints.safeX}" y2="0" stroke="${ctx.validBrandColor}" stroke-width="1.5" opacity="0.4" />
+        <rect x="${ctx.constraints.safeX}" y="-4" width="${ctx.w - ctx.constraints.safeX * 2}" height="8" fill="${ctx.validBrandColor}" opacity="0.9" />
+        <rect x="0" y="0" width="${ctx.w}" height="1" fill="${ctx.validBrandColor}" opacity="0.2" />
       </g>`;
     }};
 

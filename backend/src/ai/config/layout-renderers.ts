@@ -21,11 +21,16 @@ import { TypographyEngine, TypographyContext } from '../services/template-engine
 import { ThemeEngine } from '../services/template-engine/engines/theme-engine';
 import { DesignCompiler } from '../services/template-engine/engines/design-compiler';
 import { VisualResourceEngine } from './visual-resource-library';
+import { ArtDirectionEngine } from '../services/template-engine/engines/art-direction-engine';
 
 const primitiveEngine = new PrimitiveEngine();
 const typographyEngine = new TypographyEngine();
+const artDirectionEngine = new ArtDirectionEngine();
 
 export const COMPILED_LAYOUTS: Record<string, ICompiledLayoutDSL> = { ...compiledLayouts } as any;
+
+import { ColorCompositionEngine, ColorPalette } from '../services/template-engine/engines/color-composition-engine';
+const colorEngine = new ColorCompositionEngine();
 
 export function registerDynamicLayout(layout: ICompiledLayoutDSL) {
   COMPILED_LAYOUTS[layout.id] = layout;
@@ -837,6 +842,7 @@ export type DecoCtx = {
   validSecondaryColor: string;
   validBackgroundColor: string;
   validAccentColor: string;
+  validDepthColor: string;
   brandFont: string;
   rawName: string;
   photoDataUri: string;
@@ -973,18 +979,27 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     // Check if we need to apply a global overlay (like noise) based on brand DNA
     let overlayLayers = dsl.layers.filter(l => l.type === 'decoration' || l.type === 'text' || (l.type === 'image' && l.component));
     
+    // Generate the Visual Recipe instead of relying on rigid family names
+    let visualRecipe;
+    let family: LayoutFamily = 'minimal';
+
+    if (ctx.designLanguage && ctx.designLanguage.intent) {
+      visualRecipe = artDirectionEngine.generateVisualRecipe(ctx.designLanguage.intent, ctx.activeTheme || 'editorial_beauty');
+      family = (ctx.designLanguage.intent.family as LayoutFamily) || 'minimal';
+    } else {
+      const fallbackIntent = artDirectionEngine.generateDesignIntent(ctx.layoutType || 'minimal');
+      visualRecipe = artDirectionEngine.generateVisualRecipe(fallbackIntent, ctx.activeTheme || 'editorial_beauty');
+      family = (fallbackIntent.family as LayoutFamily) || 'minimal';
+    }
+
     // PHASE 3A: Thematic Mood Injection
-    // Inject textures/overlays dynamically rather than hardcoding them in the composition recipe
-    const mood = ctx.designSpec?.style?.mood || 'warm_paper';
-    const moodDecorations = themeEngine.getMoodDecorations(mood);
+    // Inject textures/overlays dynamically via the VisualRecipe (TextureRecipe)
+    const moodDecorations = themeEngine.getMoodDecorations(visualRecipe.texture);
     overlayLayers = [...overlayLayers, ...moodDecorations];
     
     overlayLayers.sort((a, b) => a.zIndex - b.zIndex);
 
     // Initialize LayoutEngine to calculate constraints for PrimitiveCtx
-    let family: LayoutFamily = 'minimal';
-    if (ctx.layoutType?.includes('editorial') || ctx.layoutType?.includes('magazine')) family = 'editorial';
-    if (ctx.layoutType?.includes('architectural') || ctx.layoutType?.includes('diagram') || ctx.layoutType?.includes('grid')) family = 'architectural';
     
     // Construct an estimated face BoundingBox from the vision result's Y coordinates
     let faceBox: BoundingBox | undefined = undefined;
@@ -1002,6 +1017,16 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     const behaviorProfile = (dsl as any)?.behavior;
     const constraints = layoutEngine.calculateConstraints(family, 'balanced', isTensionEnabled, behaviorProfile);
 
+    const colorPalette: ColorPalette = {
+      brandColor: ctx.validBrandColor,
+      secondaryColor: ctx.validSecondaryColor,
+      backgroundColor: ctx.validBackgroundColor,
+      accentColor: ctx.validAccentColor,
+      depthColor: ctx.validDepthColor
+    };
+
+    const colorHierarchy = colorEngine.resolveHierarchy(colorPalette, visualRecipe.color);
+
     const primitiveCtx: PrimitiveContext = {
       w: ctx.w,
       h: ctx.h,
@@ -1010,7 +1035,9 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       validBackgroundColor: ctx.validBackgroundColor,
       constraints,
       behavior: behaviorProfile,
-      layoutState: { occupiedRegions: [] }
+      layoutState: { occupiedRegions: [], family },
+      colorHierarchy,
+      recipe: visualRecipe.primitive
     };
 
     const layoutState = primitiveCtx.layoutState!;
@@ -1070,79 +1097,8 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           }
         }
         
-        
-        // CONDITIONAL SCRIM: Premium Contrast Protection (Glassmorphism / Gradient)
-        // Check if the Text Region mathematically overlaps the Image Region.
-        let needsScrim = false;
-        let scrimX = 0, scrimY = 0, scrimW = ctx.w, scrimH = ctx.h;
-        
-        if (dsl.canvasRegions) {
-          const imgR = dsl.canvasRegions.imageRegion;
-          const txtR = dsl.canvasRegions.textRegion;
-          
-          // Check intersection
-          const overlapsX = txtR.x < imgR.x + imgR.width && txtR.x + txtR.width > imgR.x;
-          const overlapsY = txtR.y < imgR.y + imgR.height && txtR.y + txtR.height > imgR.y;
-          
-          if (overlapsX && overlapsY) {
-            needsScrim = true;
-            // The scrim should cover the text region with generous padding
-            scrimX = Math.max(0, txtR.x - 80);
-            scrimY = Math.max(0, txtR.y - 120);
-            scrimW = Math.min(ctx.w - scrimX, txtR.width + 160);
-            scrimH = Math.min(ctx.h - scrimY, txtR.height + 240);
-            
-            // If it's a massive text region (like full bleed bottom), extend to edges
-            if (scrimW > ctx.w * 0.8) {
-               scrimX = 0;
-               scrimW = ctx.w;
-            }
-          }
-        } else if (ctx.layoutType.includes('full_bleed') || ctx.layoutType.includes('hero')) {
-          needsScrim = true;
-          scrimY = Math.floor(ctx.h * 0.3);
-          scrimH = Math.floor(ctx.h * 0.7);
-        }
-
-        if (needsScrim) {
-          const lighting = ctx.visionResult?.suitabilityScores?.lightingQuality || 60;
-          if (lighting >= 40) { // Apply to most images unless very dark
-            let scrimColorStr = '';
-            // THEME SEPARATION logic
-            if (ctx.activeTheme === 'editorial_beauty' || ctx.activeTheme === 'warm_wellness') {
-               // Editorial uses the brand's background color (beige/milky) to create "fog"
-               scrimColorStr = `
-                  <stop offset="0%" stop-color="${ctx.validBackgroundColor}" stop-opacity="0.2" />
-                  <stop offset="30%" stop-color="${ctx.validBackgroundColor}" stop-opacity="0.6" />
-                  <stop offset="100%" stop-color="${ctx.validBackgroundColor}" stop-opacity="0.95" />
-               `;
-            } else if (ctx.activeTheme === 'quiet_luxury' || ctx.activeTheme === 'natural_organic') {
-               // Minimalist uses a very subtle shadow
-               scrimColorStr = `
-                  <stop offset="0%" stop-color="#000000" stop-opacity="0.2" />
-                  <stop offset="50%" stop-color="#000000" stop-opacity="0.4" />
-                  <stop offset="100%" stop-color="#000000" stop-opacity="0.7" />
-               `;
-            } else {
-               // Clinical, High Fashion, Polished Commercial use stark contrast black shadows for high legibility
-               scrimColorStr = `
-                  <stop offset="0%" stop-color="#000000" stop-opacity="0.3" />
-                  <stop offset="40%" stop-color="#000000" stop-opacity="0.7" />
-                  <stop offset="100%" stop-color="#000000" stop-opacity="0.95" />
-               `;
-            }
-
-            svg += `
-              <defs>
-                <linearGradient id="premium_scrim_${layer.id}" x1="0%" y1="0%" x2="0%" y2="100%">
-                  ${scrimColorStr}
-                </linearGradient>
-              </defs>
-              <!-- Premium Scrim Gradient -->
-              <rect x="${scrimX}" y="${scrimY}" width="${scrimW}" height="${scrimH}" fill="url(#premium_scrim_${layer.id})" />
-            `;
-          }
-        }
+        // CONDITIONAL SCRIM REMOVED IN SPRINT 3.
+        // We now rely on high-contrast Structural Containers (Cards/Pills) instead of muddy full-bleed gradients.
 
         // Then render the text on top
         const typoCtx: TypographyContext = {
@@ -1150,6 +1106,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           constraints,
           layoutEngine,
           layoutState,
+          colorHierarchy,
           designTokens: ctx.designTokens,
           typographyMetrics: ctx.typographyMetrics,
           escapeXml: (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
