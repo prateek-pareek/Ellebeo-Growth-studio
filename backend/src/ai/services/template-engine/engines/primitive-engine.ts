@@ -1173,9 +1173,30 @@ export class PrimitiveEngine {
     // not throw). Registering it here, matching the legacy version's exact visual (32% opacity
     // brand-color wash), makes 'luxury_black' actually do what it says for every family.
     this.registry['dark_scrim'] = { category: 'effects', render: (ctx) => `
-      <!-- Luxury Black mood: full-canvas dark brand-color scrim -->
-      <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" fill="${ctx.validBrandColor}" fill-opacity="0.32" />`
+      <!-- Luxury Black mood: full-canvas dark brand-color scrim. Toned down
+           from 0.32 -> 0.15: at 0.32 it read as a heavy gray/black cover on
+           warm/light-toned photos rather than a subtle mood shift. -->
+      <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" fill="${ctx.validBrandColor}" fill-opacity="0.15" />`
     };
+
+    // Pre-existing gap: clinical_benefits_grid (composition-engine.ts) references this
+    // component but it was never registered — rendered as a red "MISSING COMPONENT" box.
+    // Small stat/metric callout chip, anchor-aware to match how the recipe uses it
+    // (anchor: 'bottom_center', offsetPercent: 10).
+    this.registry['metric_label'] = { category: 'geometry', render: (ctx, layer) => {
+      const anchor = layer?.anchor || 'bottom_center';
+      const offsetPercent = layer && (layer as IDSLDecorationLayer).offsetPercent != null ? (layer as IDSLDecorationLayer).offsetPercent : 10;
+      const cx = ctx.w / 2;
+      const y = anchor.includes('bottom')
+        ? ctx.h - Math.round((offsetPercent / 100) * ctx.h) - 30
+        : Math.round((offsetPercent / 100) * ctx.h);
+      return `
+      <!-- Clinical Benefits Grid: small metric/stat callout chip -->
+      <g transform="translate(${cx - 90}, ${y})">
+        <rect x="0" y="0" width="180" height="46" rx="23" fill="${ctx.validBrandColor}" filter="drop-shadow(0 6px 16px rgba(0,0,0,0.18))" />
+        <text x="90" y="29" font-family="sans-serif" font-size="13" font-weight="800" fill="${ctx.validBackgroundColor}" text-anchor="middle" letter-spacing="2px">KEY BENEFIT</text>
+      </g>`;
+    }};
   }
 
 

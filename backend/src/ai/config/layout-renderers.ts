@@ -889,8 +889,11 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" fill="${ctx.validBrandColor}" fill-opacity="0.55" />`,
 
   dark_scrim_overlay: (ctx) => `
-      <!-- Deep luxury dark scrim overlay -->
-      <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" fill="${ctx.validBrandColor}" fill-opacity="0.32" />`,
+      <!-- Deep luxury dark scrim overlay. Toned down from 0.32 -> 0.15: at
+           0.32 it read as a heavy gray/black cover on warm/light-toned
+           photos rather than a subtle mood shift (see primitive-engine.ts's
+           'dark_scrim', kept in sync with this one). -->
+      <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" fill="${ctx.validBrandColor}" fill-opacity="0.15" />`,
 
   monogram_watermark: (ctx) => `
       <!-- Large single-character monogram watermark in negative space -->
