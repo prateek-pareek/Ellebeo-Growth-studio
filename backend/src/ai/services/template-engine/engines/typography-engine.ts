@@ -33,6 +33,12 @@ export interface TypographyContext {
   };
 }
 
+// ai-image-generation.service.ts's overlayBrandingAndText() always draws an
+// ~85px branding footer band (business name + slide counter) across the
+// bottom of the canvas, independently of this engine's own layout/safe-zone
+// math. Bottom-anchored text must clear that band, not just the canvas edge.
+const BRANDING_FOOTER_RESERVE_PX = 100;
+
 export class TypographyEngine {
   private fontRegistry: FontRegistry;
 
@@ -169,9 +175,18 @@ export class TypographyEngine {
 
       // PHASE 2.5: COMPOSITION VALIDATION PASS
       let isValid = true;
-      
-      // Validation 1: Bleeding off bottom
-      if (y + textHeight > ctx.h - 20) {
+
+      // Validation 1: Bleeding off bottom. This engine's own safe-zone
+      // (ctx.constraints.safeY) has no idea that ai-image-generation.service.ts's
+      // overlayBrandingAndText() draws a separate ~85px branding footer band
+      // (business name + slide counter) across the bottom of every image AFTER
+      // this text is positioned — the two systems don't share a constraint. A
+      // bottom-anchored heading/tagline that only avoided the canvas edge
+      // (not the footer) would render fine in isolation but end up visually
+      // collided with/obscured by that footer band. Reserve real clearance
+      // for it here so any bottom-anchored text layer, in any family, stays
+      // clear of the footer rather than just the canvas edge.
+      if (y + textHeight > ctx.h - BRANDING_FOOTER_RESERVE_PX) {
         isValid = false;
       }
       // Validation 2: Too wide for bounds - strictly enforce safeX margins
@@ -187,7 +202,7 @@ export class TypographyEngine {
         continue;
       } else if (!isValid && attempt === MAX_ATTEMPTS) {
         console.error(`[TypographyEngine] Validation failed after ${MAX_ATTEMPTS} attempts for layer ${layer.id}. Protecting typographic integrity over layout boundaries.`);
-        if (y + textHeight > ctx.h - 40) y = ctx.h - textHeight - 40;
+        if (y + textHeight > ctx.h - BRANDING_FOOTER_RESERVE_PX - 20) y = ctx.h - textHeight - BRANDING_FOOTER_RESERVE_PX - 20;
 
         // The vertical clamp above never fixed horizontal overflow (boxX off the left/right edge),
         // which is why text like "FLAWLESS GLOW" was rendering cut off at the canvas edge instead
