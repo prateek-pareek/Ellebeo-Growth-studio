@@ -4,7 +4,9 @@
 // Architecture enforces this: only /tweak endpoint calls this chain.
 // ============================================================================
 
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
+
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import { AI_CONFIG } from '../../config/ai.config';
 import { PromptBuilder } from '../orchestrator/prompt-builder';
@@ -33,18 +35,23 @@ function parseTweakOutput(raw: string): Omit<TweakResult, 'contentItemId' | 'tok
 }
 
 export class TweakChain {
-  private model: ChatOpenAI | null = null;
+  private model: ChatGoogleGenerativeAI | null = null;
 
   constructor(private readonly promptBuilder: PromptBuilder) {}
 
-  private getModel(): ChatOpenAI {
+  private getModel(): ChatGoogleGenerativeAI {
     if (!this.model) {
-      this.model = new ChatOpenAI({
-        modelName: AI_CONFIG.models.standardText.modelId,
+      this.model = new ChatGoogleGenerativeAI({
+        model: AI_CONFIG.models.standardText.modelId,
         temperature: 0.6,
-        maxTokens: 512,
-        timeout: AI_CONFIG.timeouts.openaiMini,
-        openAIApiKey: process.env['OPENAI_API_KEY'] ?? '',
+        maxOutputTokens: 8192,
+        apiKey: process.env['GEMINI_API_KEY'] ?? '',
+      safetySettings: [
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      ],
       });
     }
     return this.model;

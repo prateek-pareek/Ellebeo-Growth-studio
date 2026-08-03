@@ -1,4 +1,5 @@
 import type { VisualStyleId } from '../../../config/visual-style-library';
+import { VisualTokens } from '../interfaces';
 
 export interface DesignTokens {
   spacing: 'airy' | 'dense' | 'balanced';
@@ -163,12 +164,27 @@ export class ThemeEngine {
   }
 
   /**
-   * Resolves the mood decorations (e.g. paper vs noise) dynamically.
+   * Resolves the mood decorations (e.g. paper vs noise) dynamically based on the VisualTokens.
    * This decouples the aesthetic texture from the structural layout recipe.
    */
-  public getMoodDecorations(mood?: string): any[] {
+  public getMoodDecorations(moodOrTokens?: string | VisualTokens): any[] {
     const layers: any[] = [];
     
+    // NEW ARCHITECTURE: Configuration-Driven Design Recipe
+    if (typeof moodOrTokens === 'object' && moodOrTokens !== null) {
+      const tokens = moodOrTokens as VisualTokens;
+      if (tokens.texture === 'paper') {
+        layers.push({ id: 'mood_texture', type: 'decoration', zIndex: 5, component: 'paper_texture', anchor: 'center' });
+      } else if (tokens.texture === 'noise') {
+        layers.push({ id: 'mood_texture', type: 'decoration', zIndex: 5, component: 'noise_texture', anchor: 'center' });
+      } else if (tokens.texture === 'grain') {
+        layers.push({ id: 'mood_texture', type: 'decoration', zIndex: 5, component: 'subtle_grain', anchor: 'center' });
+      }
+      return layers;
+    }
+
+    // LEGACY FALLBACK
+    const mood = moodOrTokens as string;
     if (mood === 'warm_paper') {
       layers.push({ id: 'mood_texture', type: 'decoration', zIndex: 5, component: 'paper_texture', anchor: 'center' });
     } else if (mood === 'luxury_black') {

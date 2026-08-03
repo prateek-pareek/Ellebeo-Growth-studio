@@ -123,13 +123,10 @@ export function useAppointments(): UseAppointmentsResult {
   });
   const reqId = useRef(0);
 
-  // background=true is used by the silent 30s poll below — it must never
-  // flip `loading` back to true, or every consumer that gates its whole page
-  // behind `if (loading) return <Loading/>` (e.g. /generate, mid-generation)
-  // gets unmounted and remounted from scratch every 30s, which reads as an
-  // unwanted "page refresh" that resets scroll position and in-flight UI state.
-  const fetch = (id: number, background = false) => {
-    if (!background) setState((prev) => ({ ...prev, loading: true }));
+  const fetch = (id: number, isBackground = false) => {
+    if (!isBackground) {
+      setState((prev) => ({ ...prev, loading: true }));
+    }
     fetchCloudAppointments()
       .then((res) => {
         if (id !== reqId.current) return;

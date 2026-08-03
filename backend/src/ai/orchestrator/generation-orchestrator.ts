@@ -1278,7 +1278,7 @@ ${consentShowFace
 function AI_CONFIG_MODEL_LABEL(payload: GenerationJobPayload): string {
   return ['premium', 'tier3', 'tier4', 'tier5'].includes(payload.generationOptions.userTier)
     ? 'anthropic/claude-3-5-sonnet-20241022'
-    : 'openai/gpt-4o-mini';
+    : 'google/gemini-flash-latest';
 }
 
 // ---------------------------------------------------------------------------

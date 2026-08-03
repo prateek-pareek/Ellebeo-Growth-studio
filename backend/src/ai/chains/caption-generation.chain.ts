@@ -4,7 +4,9 @@
 // Auto-retries with amplified brand voice instruction if confidence < 0.6
 // ============================================================================
 
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
+
 import { ChatAnthropic } from '@langchain/anthropic';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
@@ -93,7 +95,7 @@ export class CaptionGenerationChain {
     const { assembledPrompt, brandDNABlacklist, allowRetry = true } = params;
 
     // Option 1: GPT-4o-mini (fast, cheap) — always the primary.
-    const openAiConfig: LLMConfig = { provider: 'openai', modelId: 'gpt-4o-mini', temperature: 0.75, maxTokens: 1024, timeoutMs: 30000, systemPromptCacheKey: null };
+    const openAiConfig: LLMConfig = { provider: 'google', modelId: 'gemini-flash-latest', temperature: 0.75, maxTokens: 1024, timeoutMs: 30000, systemPromptCacheKey: null };
 
     const openAiPromise = this.generate({ assembledPrompt, llmConfig: openAiConfig, brandDNABlacklist, allowRetry })
       .then(result => ({ ...result, generatedBy: 'ChatGPT' }))
@@ -137,7 +139,7 @@ export class CaptionGenerationChain {
     brandDNABlacklist: string[],
     allowRetry: boolean
   ): Promise<(CaptionGenerationResult & { generatedBy: string }) | null> {
-    const gpt4oMiniConfig: LLMConfig = { provider: 'openai', modelId: 'gpt-4o-mini', temperature: 0.85, maxTokens: 1024, timeoutMs: 45000, systemPromptCacheKey: null };
+    const gpt4oMiniConfig: LLMConfig = { provider: 'google', modelId: 'gemini-flash-latest', temperature: 0.85, maxTokens: 1024, timeoutMs: 45000, systemPromptCacheKey: null };
     return this.generate({ assembledPrompt, llmConfig: gpt4oMiniConfig, brandDNABlacklist, allowRetry })
       .then(result => ({ ...result, generatedBy: 'GPT-4o-mini' }))
       .catch(() => null);
@@ -157,7 +159,7 @@ export class CaptionGenerationChain {
       generationConfig: {
         // Match the OpenAI standard-text config so the two options compare fairly.
         temperature: AI_CONFIG.models.standardText.temperature,
-        maxOutputTokens: 4096,
+        maxOutputTokens: 8192,
         responseMimeType: 'application/json',
         thinkingConfig: {
           thinkingBudget: 0,
@@ -233,12 +235,17 @@ export class CaptionGenerationChain {
       });
     }
 
-    return new ChatOpenAI({
-      modelName: config.modelId,
+    return new ChatGoogleGenerativeAI({
+      model: config.modelId,
       temperature: config.temperature,
-      maxTokens: config.maxTokens,
-      timeout: config.timeoutMs,
-      openAIApiKey: process.env['OPENAI_API_KEY'],
+      maxOutputTokens: config.maxTokens,
+      apiKey: process.env['GEMINI_API_KEY'],
+      safetySettings: [
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      ],
     });
   }
 

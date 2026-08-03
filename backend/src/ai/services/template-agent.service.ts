@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import OpenAI from 'openai';
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import { MetadataRetriever } from './template-engine/metadata.retriever';
 import { HardConstraintEngine } from './template-engine/hard-constraint.engine';
 import { RankingEngine } from './template-engine/ranking.engine';
@@ -10,7 +11,6 @@ import { registerDynamicLayout } from '../config/layout-renderers';
 
 @Injectable()
 export class TemplateAgentService {
-  private openai: OpenAI;
   private logger = new Logger(TemplateAgentService.name);
   
   private retriever: MetadataRetriever;
@@ -20,8 +20,6 @@ export class TemplateAgentService {
   private layoutAssembler: LayoutAssemblerService;
 
   constructor() {
-    this.openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
-    
     // Initialize Pipeline Engines
     this.retriever = new MetadataRetriever();
     this.hardConstraintEngine = new HardConstraintEngine();
@@ -145,16 +143,31 @@ JSON SCHEMA:
 }
 `;
 
-      const response = await this.openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [{ role: 'system', content: systemPrompt }],
-        response_format: { type: 'json_object' },
+      const gpt = new ChatGoogleGenerativeAI({
+        model: 'gemini-flash-latest',
         temperature: 0.7,
-        max_tokens: 500,
+        maxOutputTokens: 8192,
+        apiKey: process.env['GEMINI_API_KEY'],
       });
 
-      const responseContent = response.choices[0]?.message?.content || '{}';
-      const decision = JSON.parse(responseContent);
+      // Instruct Gemini strictly on JSON output
+      const finalPrompt = systemPrompt + '\n\nIMPORTANT: You must output ONLY valid JSON. Escape all literal newlines inside strings as \\n. Do not include markdown tags.';
+
+      const res = await gpt.invoke([
+        new SystemMessage(finalPrompt),
+        new HumanMessage("Please return the selected layout id as a JSON object.")
+      ]);
+      const content = typeof res.content === 'string' ? res.content : JSON.stringify(res.content);
+      
+      let cleaned = content.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
+      let decision: any;
+      try {
+        decision = JSON.parse(cleaned);
+      } catch (e) {
+        // Fallback for newlines
+        const sanitized = cleaned.replace(/\n/g, '\\n').replace(/{\\n/g, '{\n').replace(/\\n}/g, '\n}').replace(/",\\n/g, '",\n').replace(/\\n *"/g, '\n  "');
+        decision = JSON.parse(sanitized);
+      }
 
       // Ensure the LLM didn't hallucinate an ID outside the shortlist
       const chosenCandidate = topCandidates.find(c => c.id === decision.selected_layout_id) 

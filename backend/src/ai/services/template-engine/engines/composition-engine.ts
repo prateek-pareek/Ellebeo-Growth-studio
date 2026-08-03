@@ -1,4 +1,4 @@
-import { ICompiledLayoutDSL, IDSLSceneLayer, IDSLImageLayer, IDSLTextLayer, IDSLDecorationLayer } from '../interfaces';
+import { ICompiledLayoutDSL, IDSLSceneLayer, IDSLImageLayer, IDSLTextLayer, IDSLDecorationLayer, CompositionTokens } from '../interfaces';
 import { IDesignLanguage } from './art-direction-engine';
 import { DesignTokens } from './theme-engine';
 
@@ -15,23 +15,30 @@ export interface CompositionMetadata {
 export class CompositionEngine {
 
   public calculateComposition(
-    tokens: DesignTokens,
+    tokens: CompositionTokens | DesignTokens,
     intent: TemplateIntent,
     isFirstSlide: boolean
   ): CompositionMetadata {
 
+    // Helper to determine if we are using new or legacy tokens
+    const isNewArchitecture = 'imageDominance' in tokens;
+
     // 1. Base initialization from Design Tokens
     const metadata: CompositionMetadata = {
-      dominantElement: tokens.headlinePresence === 'hero' ? 'typography' : 'image',
-      whitespaceRatio: tokens.spacing === 'airy' ? 'high' : (tokens.spacing === 'dense' ? 'low' : 'medium'),
-      elementOverlap: tokens.layerDepth === 'high',
+      dominantElement: isNewArchitecture 
+        ? ((tokens as CompositionTokens).imageDominance < 0.5 ? 'typography' : 'image')
+        : ((tokens as DesignTokens).headlinePresence === 'hero' ? 'typography' : 'image'),
+      whitespaceRatio: isNewArchitecture
+        ? ((tokens as CompositionTokens).whitespace === 'massive' || (tokens as CompositionTokens).whitespace === 'high' ? 'high' : ((tokens as CompositionTokens).whitespace === 'minimal' ? 'low' : 'medium'))
+        : ((tokens as DesignTokens).spacing === 'airy' ? 'high' : ((tokens as DesignTokens).spacing === 'dense' ? 'low' : 'medium')),
+      elementOverlap: isNewArchitecture ? (tokens as CompositionTokens).alignment === 'dynamic' : (tokens as DesignTokens).layerDepth === 'high',
       maskPreference: 'full_bleed',
       injectedFeatures: []
     };
 
     // 2. Adjust Mask Preference based on Tokens
-    if (tokens.borderRadius === 'soft') metadata.maskPreference = 'rectangle';
-    if (tokens.borderRadius === 'pill') metadata.maskPreference = 'arch'; // Simple mapping for now
+    if ('borderRadius' in tokens && tokens.borderRadius === 'soft') metadata.maskPreference = 'rectangle';
+    if ('borderRadius' in tokens && tokens.borderRadius === 'pill') metadata.maskPreference = 'arch'; // Simple mapping for now
 
     // 3. Inject Semantic Intent Overrides
     switch (intent) {
@@ -54,13 +61,15 @@ export class CompositionEngine {
         metadata.maskPreference = 'rectangle'; // Usually split screen
         break;
       case 'brand_story':
-        if (tokens.layerDepth === 'high') metadata.maskPreference = 'polaroid';
+        if ('layerDepth' in tokens && tokens.layerDepth === 'high') metadata.maskPreference = 'polaroid';
         break;
     }
 
     // Cover slides generally get more punchy visual weight
     if (isFirstSlide && metadata.dominantElement !== 'typography') {
-      if (tokens.contrast === 'high') {
+      if (!isNewArchitecture && (tokens as DesignTokens).contrast === 'high') {
+        metadata.dominantElement = 'typography';
+      } else if (isNewArchitecture && (tokens as CompositionTokens).whitespace === 'massive') {
         metadata.dominantElement = 'typography';
       }
     }

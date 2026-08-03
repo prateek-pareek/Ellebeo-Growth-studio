@@ -17,7 +17,7 @@ import { ICompiledLayoutDSL, IDSLSceneLayer, IDSLImageLayer, IDSLDecorationLayer
 import { IDesignLanguage } from '../services/template-engine/engines/art-direction-engine';
 import { LayoutEngine, LayoutFamily, NegativeSpace, BoundingBox, LayoutConstraints } from '../services/template-engine/engines/layout-engine';
 import { PrimitiveEngine, PrimitiveContext } from '../services/template-engine/engines/primitive-engine';
-import { TypographyEngine, TypographyContext, TypographySystem } from '../services/template-engine/engines/typography-engine';
+import { TypographyEngine, TypographyContext } from '../services/template-engine/engines/typography-engine';
 import { ThemeEngine } from '../services/template-engine/engines/theme-engine';
 import { DesignCompiler } from '../services/template-engine/engines/design-compiler';
 import { VisualResourceEngine } from './visual-resource-library';
@@ -875,6 +875,7 @@ export type DecoCtx = {
   faceCoordinates?: any;
   injectedFeatures?: string[];
   designTokens?: any;
+  designRecipe?: any;
   designSpec?: ISemanticDesignSpec;
   designLanguage?: IDesignLanguage;
   structuredText?: { headline?: string; subheadline?: string; cta?: string; };
@@ -1178,17 +1179,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           typographyMetrics: ctx.typographyMetrics,
           escapeXml: (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
         };
-        // Typography system is strictly dictated by the Semantic Variant Family
-        let typoSystem: TypographySystem = 'editorial'; // Default fallback
-        if (ctx.layoutType?.startsWith('clinical')) {
-          typoSystem = 'clinical';
-        } else if (ctx.layoutType?.startsWith('minimalist')) {
-          typoSystem = 'minimalist';
-        } else if (ctx.layoutType?.startsWith('premium')) {
-          typoSystem = 'premium';
-        }
-        
-        svg += typographyEngine.renderTextLayer(typoCtx, textLayer, typoSystem);
+        svg += typographyEngine.renderTextLayer(typoCtx, textLayer);
       }
     }
 
