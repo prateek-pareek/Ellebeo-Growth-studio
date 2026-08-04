@@ -384,7 +384,7 @@ export class ArtDirectionEngine {
 
     const texture: TextureRecipe = {
       style: 'none',
-      intensity: intent.primitives.textureIntensity
+      intensity: intent.primitives.textureIntensity === 'none' ? 'subtle' : intent.primitives.textureIntensity // fallback value for type safety, style 'none' overrides
     };
 
     const typography: TypographyRecipe = {

@@ -184,54 +184,25 @@ export class TypographyEngine {
     if (anchor === 'middle') boxX = x - effectiveMaxW / 2;
     else if (anchor === 'end') boxX = x - effectiveMaxW;
 
-      // PHASE 2.5: COMPOSITION VALIDATION PASS
-      let isValid = true;
-
-      // Validation 1: Bleeding off bottom. This engine's own safe-zone
-      // (ctx.constraints.safeY) has no idea that ai-image-generation.service.ts's
-      // overlayBrandingAndText() draws a separate ~85px branding footer band
-      // (business name + slide counter) across the bottom of every image AFTER
-      // this text is positioned — the two systems don't share a constraint. A
-      // bottom-anchored heading/tagline that only avoided the canvas edge
-      // (not the footer) would render fine in isolation but end up visually
-      // collided with/obscured by that footer band. Reserve real clearance
-      // for it here so any bottom-anchored text layer, in any family, stays
-      // clear of the footer rather than just the canvas edge.
-      if (y + textHeight > ctx.h - BRANDING_FOOTER_RESERVE_PX) {
-        isValid = false;
+    // Horizontal overflow guard: clamp boxX (and x) back into the safe area if it
+    // would bleed off the left/right edge — previously caused text like "FLAWLESS
+    // GLOW" to render cut off at the canvas edge instead of being pulled back in bounds.
+    if (boxX < ctx.constraints.safeX - 20 || boxX + effectiveMaxW > ctx.w - ctx.constraints.safeX + 20) {
+      const minX = ctx.constraints.safeX;
+      const maxX = ctx.w - ctx.constraints.safeX;
+      if (anchor === 'middle') {
+        x = Math.max(minX + effectiveMaxW / 2, Math.min(x, maxX - effectiveMaxW / 2));
+      } else if (anchor === 'end') {
+        x = Math.max(x, minX + effectiveMaxW);
+        x = Math.min(x, maxX);
+      } else {
+        x = Math.min(x, maxX - effectiveMaxW);
+        x = Math.max(x, minX);
       }
-      // Validation 2: Too wide for bounds - strictly enforce safeX margins
-      if (boxX < ctx.constraints.safeX - 20 || boxX + effectiveMaxW > ctx.w - ctx.constraints.safeX + 20) {
-        isValid = false;
-      }
+      boxX = anchor === 'middle' ? x - effectiveMaxW / 2 : anchor === 'end' ? x - effectiveMaxW : x;
+    }
 
-      if (!isValid && attempt < MAX_ATTEMPTS) {
-        console.warn(`[TypographyEngine] Validation failed for layer ${layer.id} (boxX: ${boxX}, maxW: ${effectiveMaxW}). Retrying with minor scale adjustment (Attempt ${attempt}).`);
-        // Art Director philosophy: We do not aggressively shrink typography to fit tiny boxes.
-        // We allow a maximum 5% adjustment to gracefully handle slight bleeds.
-        currentScaleMultiplier *= 0.95; 
-        continue;
-      } else if (!isValid && attempt === MAX_ATTEMPTS) {
-        console.error(`[TypographyEngine] Validation failed after ${MAX_ATTEMPTS} attempts for layer ${layer.id}. Protecting typographic integrity over layout boundaries.`);
-        if (y + textHeight > ctx.h - BRANDING_FOOTER_RESERVE_PX - 20) y = ctx.h - textHeight - BRANDING_FOOTER_RESERVE_PX - 20;
-
-        // The vertical clamp above never fixed horizontal overflow (boxX off the left/right edge),
-        // which is why text like "FLAWLESS GLOW" was rendering cut off at the canvas edge instead
-        // of being pulled back in bounds. Clamp x (and therefore boxX) to the safe area too, based
-        // on which text-anchor mode is in effect, same logic used to compute boxX above.
-        const minX = ctx.constraints.safeX;
-        const maxX = ctx.w - ctx.constraints.safeX;
-        if (anchor === 'middle') {
-          x = Math.max(minX + effectiveMaxW / 2, Math.min(x, maxX - effectiveMaxW / 2));
-        } else if (anchor === 'end') {
-          x = Math.max(x, minX + effectiveMaxW);
-          x = Math.min(x, maxX);
-        } else {
-          x = Math.min(x, maxX - effectiveMaxW);
-          x = Math.max(x, minX);
-        }
-        boxX = anchor === 'middle' ? x - effectiveMaxW / 2 : anchor === 'end' ? x - effectiveMaxW : x;
-      }
+    let finalSvg = '';
 
     // Geometry locked. Get Font metrics for baseline.
       const fontBehavior = this.fontRegistry.getBehavior(ctx.brandFont);
