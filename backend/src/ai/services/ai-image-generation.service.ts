@@ -1153,8 +1153,9 @@ CRITICAL IMAGE REQUIREMENTS:
       // Use dynamic brand colors
       const validBrandColor = brandColor.startsWith('#') ? brandColor : '#161616';
       const validSecondaryColor = secondaryColor.startsWith('#') ? secondaryColor : '#161616';
-      const validBackgroundColor = backgroundBrandColor.startsWith('#') ? backgroundBrandColor : '#F7F4EF';
-      const validAccentColor = accentBrandColor.startsWith('#') ? accentBrandColor : '#D4A373';
+      const validBackgroundColor = backgroundBrandColor && backgroundBrandColor.startsWith('#') ? backgroundBrandColor : '#F7F4EF';
+      const validAccentColor = accentBrandColor && accentBrandColor.startsWith('#') ? accentBrandColor : '#D4A373';
+      const validDepthColor = depthBrandColor && depthBrandColor.startsWith('#') ? depthBrandColor : '#1E1E1C';
 
       const rawName = (businessName || 'RAW CANVAS').trim().toUpperCase();
       const spacedName = rawName.split('').join(' ');
@@ -1376,7 +1377,7 @@ CRITICAL IMAGE REQUIREMENTS:
 
       const decoCtx = {
         layoutType: computedLayoutType, w, h, paddingX, paddingTop, paddingBottom, innerW, innerH,
-        validBrandColor, validSecondaryColor, validBackgroundColor, validAccentColor, brandFont, rawName, photoDataUri,
+        validBrandColor, validSecondaryColor, validBackgroundColor, validAccentColor, validDepthColor, brandFont, rawName, photoDataUri,
         escapedLines, dyOffset, dynamicFontSize, dynamicTextColor, overlayText: finalOverlayText, maxLength,
         structuredText: { headline, subheadline, cta },
         visionResult: visionResult,

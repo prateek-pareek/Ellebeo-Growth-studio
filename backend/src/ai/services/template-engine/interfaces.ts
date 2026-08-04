@@ -77,7 +77,7 @@ export interface IDSLImageLayer extends IDSLBaseLayer {
 
 export interface IDSLDecorationLayer extends IDSLBaseLayer {
   type: 'decoration';
-  component: 'wax_seal' | 'ticket_notches' | 'film_sprockets' | 'gallery_frame' | 'masking_tape' | 'gold_accents' | 'glass_card' | '3d_ribbon' | 'metric_panel' | 'editorial_sidebar' | 'status_chip' | 'divider' | 'chapter_tabs' | 'measurement_lines' | 'blueprint_grid' | 'museum_border' | 'thin_divider' | 'editorial_badge' | 'oversized_index' | 'quote_marks' | 'grain_overlay' | 'minimal_grid' | 'metadata_label' | 'ghost_headline' | 'outline_headline' | 'vertical_label' | 'running_header' | 'pull_quote' | 'organic_blob' | 'torn_paper' | 'pill_tag' | 'double_divider' | 'margin_rule' | 'accent_rule' | 'noise_texture' | 'paper_texture' | 'light_leak' | 'organic_accent' | 'structural_border' | 'handmade_mark' | 'margin_notes' | 'ink_stamp' | 'fold_line' | 'editorial_number_block' | 'corner_frame' | 'clinical_callout_box' | 'step_badge' | 'metric_label' | 'large_numeral_bullet' | 'myth_fact_badge' | 'quote_mark_accent' | 'meteor_shower' | 'elegant_line_art' | 'premium_stars' | 'abstract_rings' | 'split_seam_line' | 'countdown_urgency_badge' | 'product_halo_ring' | 'transformation_arrow' | 'star_rating_row' | 'editorial_tape' | 'geometric_badge';
+  component: 'wax_seal' | 'ticket_notches' | 'film_sprockets' | 'gallery_frame' | 'masking_tape' | 'gold_accents' | 'glass_card' | '3d_ribbon' | 'metric_panel' | 'editorial_sidebar' | 'status_chip' | 'divider' | 'chapter_tabs' | 'measurement_lines' | 'blueprint_grid' | 'museum_border' | 'thin_divider' | 'editorial_badge' | 'oversized_index' | 'quote_marks' | 'grain_overlay' | 'minimal_grid' | 'metadata_label' | 'ghost_headline' | 'outline_headline' | 'vertical_label' | 'running_header' | 'pull_quote' | 'organic_blob' | 'torn_paper' | 'pill_tag' | 'double_divider' | 'margin_rule' | 'accent_rule' | 'noise_texture' | 'paper_texture' | 'light_leak' | 'organic_accent' | 'structural_border' | 'handmade_mark' | 'margin_notes' | 'ink_stamp' | 'fold_line' | 'editorial_number_block' | 'corner_frame' | 'clinical_callout_box' | 'step_badge' | 'metric_label' | 'large_numeral_bullet' | 'myth_fact_badge' | 'quote_mark_accent' | 'meteor_shower' | 'elegant_line_art' | 'premium_stars' | 'abstract_rings' | 'split_seam_line' | 'countdown_urgency_badge' | 'product_halo_ring' | 'transformation_arrow' | 'star_rating_row' | 'editorial_tape' | 'geometric_badge' | 'timeline_track' | 'polaroid_frame' | 'sticker' | 'notification_icon_badge' | 'announcement_banner_ribbon' | 'starburst_badge';
   anchor: LayoutAnchor;
   offsetPercent: number; // distance from the anchor
 }
@@ -145,6 +145,21 @@ export interface ISemanticDesignSpec {
   };
 }
 
+export interface IDesignIntent {
+  family: string;
+  energy: 'bold' | 'calm' | 'structured' | 'minimal' | 'playful';
+  balance: 'symmetrical' | 'asymmetrical' | 'dynamic';
+  readingFlow: 'z_pattern' | 'center_down' | 'circular' | 'scattered' | 'center_anchored';
+  visualPriority: 'typography_hero' | 'image_hero' | 'composition_hero' | 'cta_hero';
+  whitespace: 'tight' | 'comfortable' | 'airy' | 'luxury';
+  mood: 'luxury' | 'organic' | 'clinical' | 'pop' | 'minimalist';
+  primitives: {
+    cards: 'solid' | 'glass' | 'outlined' | 'floating' | 'none';
+    textureIntensity: 'none' | 'subtle' | 'medium' | 'heavy';
+    density: DecorationDensity;
+  };
+}
+
 export interface ILayoutRegion {
   id: string; // The layer ID (e.g., 'main-heading')
   role: string; // The layer role (e.g., 'heading', 'ghost_headline')
@@ -160,8 +175,49 @@ export interface ILayoutRegion {
   opticalCenter?: { x: number; y: number }; // The perceptual center (ignoring ascenders/descenders)
 }
 
+// ==========================================
+// SPRINT 4: VISUAL RECIPE ARCHITECTURE
+// ==========================================
+
+export interface VisualRecipe {
+  color: ColorRecipe;
+  typography: TypographyRecipe;
+  primitive: PrimitiveRecipe;
+  texture: TextureRecipe;
+  hero: HeroRecipe;
+}
+
+export interface ColorRecipe {
+  surfaceDominance: 'light' | 'dark' | 'brand_heavy' | 'split';
+  contrastPreference: 'high_impact' | 'soft_minimal';
+  warmth: 'warm' | 'cool' | 'neutral'; // Drives premium `#FCFBF8` vs `#FFFFFF`
+  accentStrategy: 'minimal' | 'balanced' | 'dominant';
+  depth: 'flat' | 'subtle' | 'layered' | 'editorial';
+  dominanceRatios: { primary: number; secondary: number; accent: number };
+}
+
+export interface TypographyRecipe {
+  hierarchy: 'editorial' | 'minimal' | 'bold' | 'technical';
+  dominance: 'low' | 'medium' | 'high';
+}
+
+export interface PrimitiveRecipe {
+  cardStyle: 'solid' | 'glass' | 'outlined' | 'floating' | 'none';
+  borderStyle: 'none' | 'thin' | 'thick' | 'architectural';
+}
+
+export interface TextureRecipe {
+  style: 'none' | 'paper' | 'linen' | 'grain' | 'noise';
+  intensity: 'subtle' | 'medium' | 'heavy';
+}
+
+export interface HeroRecipe {
+  focalPoint: 'photography' | 'typography' | 'product' | 'composition';
+}
+
 export interface ILayoutState {
   occupiedRegions: ILayoutRegion[];
+  family?: string; // Optional family identifier (e.g., 'editorial', 'clinical')
 }
 
 // ============================================================================
