@@ -59,22 +59,8 @@ export class TemplateAgentService {
       this.logger.log(`[Template Engine] Starting 5-Stage Pipeline for slide ${context.slideIndex + 1}...`);
 
       // Stage 1: Retrieval
-      let allCandidates = await this.retriever.retrieveCandidates(context);
+      const allCandidates = await this.retriever.retrieveCandidates(context);
       this.logger.log(`[Stage 1] Retrieved ${allCandidates.length} raw candidates from library.`);
-
-      // TEST OVERRIDE (temporary, remove once visual verification of the 5 new
-      // families - transformation/magazine/polaroid/notification_card/announcement -
-      // is confirmed): restricts the candidate pool to ids containing any of the
-      // comma-separated family prefixes in FORCE_FAMILY_POOL, while still letting
-      // the AI pick freely within that pool (not a single fixed layout id).
-      if (process.env.FORCE_FAMILY_POOL) {
-        const prefixes = process.env.FORCE_FAMILY_POOL.split(',').map((p) => p.trim()).filter(Boolean);
-        const forced = allCandidates.filter((c) => prefixes.some((p) => c.id.includes(p)));
-        if (forced.length > 0) {
-          this.logger.warn(`[TEST OVERRIDE] FORCE_FAMILY_POOL="${process.env.FORCE_FAMILY_POOL}" -> restricting ${allCandidates.length} candidates to ${forced.length}.`);
-          allCandidates = forced;
-        }
-      }
 
       // Stage 2: Hard Constraint Filtering (Deterministic)
       let validCandidates = this.hardConstraintEngine.filter(allCandidates, context);
