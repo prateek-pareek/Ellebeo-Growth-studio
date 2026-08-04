@@ -52,6 +52,21 @@ export class MetadataRetriever implements ITemplateRetriever {
       } else if (id.includes('quadrant')) {
         category = 'Quadrant';
         concept = 'Grid- or badge-structured layout evoking a multi-panel composition on a single hero image.';
+      } else if (id.includes('transformation')) {
+        category = 'Transformation';
+        concept = 'Journey/process layout marking progress with timelines, step badges, or stat callouts — not a dual-photo split.';
+      } else if (id.includes('magazine')) {
+        category = 'Magazine';
+        concept = 'Real magazine-spread layout: masthead, sidebar rule, running header, pull-quote treatment, or contents-page structure.';
+      } else if (id.includes('polaroid')) {
+        category = 'Polaroid';
+        concept = 'Real white polaroid-framed snapshot with a pin/tape or handwritten-caption accent, nostalgic personal-photo feel.';
+      } else if (id.includes('notification_card')) {
+        category = 'Notification Card';
+        concept = 'App-notification-style card: icon badge, centered headline, timestamp/subtext, no image required.';
+      } else if (id.includes('announcement')) {
+        category = 'Announcement';
+        concept = 'Bold communication-themed layout: banner ribbon or spotlight burst framing a prominent headline, no image required.';
       }
 
       const isSplit = id.includes('split') || id.includes('clinical_hero') || id.includes('before_after');
@@ -147,7 +162,29 @@ export class MetadataRetriever implements ITemplateRetriever {
 
       // Quadrant Family
       { id: 'quadrant_grid', concept: 'Full photo with a subtle quadrant grid overlay and a corner badge, evoking a 4-panel structure on one hero image.', type: 'procedural' },
-      { id: 'quadrant_badge_focus', concept: 'Arch-masked photo with a prominent geometric badge and grain texture, heading and tagline stacked below.', type: 'procedural' }
+      { id: 'quadrant_badge_focus', concept: 'Arch-masked photo with a prominent geometric badge and grain texture, heading and tagline stacked below.', type: 'procedural' },
+
+      // Transformation Family
+      { id: 'transformation_timeline', concept: 'Hero photo on top, horizontal milestone timeline marking the journey, heading and tagline below.', type: 'procedural' },
+      { id: 'transformation_journey_arc', concept: 'Arch-masked photo with a step badge marking progress, heading and tagline stacked below.', type: 'procedural' },
+      { id: 'transformation_stat_reveal', concept: 'Single hero photo with a numeral watermark and a stat callout, no dual-photo split.', type: 'procedural' },
+
+      // Magazine Family
+      { id: 'magazine_masthead_cover', concept: 'Full-bleed hero photo, large masthead headline, issue-style running header, sidebar rule down the left margin.', type: 'procedural' },
+      { id: 'magazine_pull_quote_spread', concept: 'Photo occupies one half, large italic pull-quote treatment on the other, vertical brand label along the edge.', type: 'procedural' },
+      { id: 'magazine_contents_grid', concept: 'Text-forward contents-page feel with stacked chapter tabs and an oversized index numeral, no image required.', type: 'procedural' },
+
+      // Polaroid Family
+      { id: 'polaroid_wall', concept: 'Single snapshot dressed with a real polaroid frame and a pin/tape accent, plus a sticker accent suggesting a wider pinned-up wall.', type: 'procedural' },
+      { id: 'polaroid_stacked_caption', concept: 'Single centered polaroid-framed photo with a handwritten-feel caption strip below the frame.', type: 'procedural' },
+
+      // Notification Card Family
+      { id: 'notification_card_alert', concept: 'Pure text alert card: icon badge at top center, glass-card panel behind the title, timestamp/subtext below.', type: 'procedural' },
+      { id: 'notification_card_banner', concept: 'Top banner bar: icon badge and status chip anchor the top edge, heading and subtext stacked below.', type: 'procedural' },
+
+      // Announcement Family
+      { id: 'announcement_banner', concept: 'Solid megaphone banner ribbon across the top, bold headline and tagline stacked below.', type: 'procedural' },
+      { id: 'announcement_spotlight', concept: 'Centered starburst spotlight badge behind the headline, tagline below, no image required.', type: 'procedural' }
     ];
 
     for (const recipe of compositionRecipes) {

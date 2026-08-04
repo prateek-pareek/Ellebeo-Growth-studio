@@ -1197,6 +1197,111 @@ export class PrimitiveEngine {
         <text x="90" y="29" font-family="sans-serif" font-size="13" font-weight="800" fill="${ctx.validBackgroundColor}" text-anchor="middle" letter-spacing="2px">KEY BENEFIT</text>
       </g>`;
     }};
+
+    // ─── TRANSFORMATION FAMILY PRIMITIVES ───
+
+    this.registry['timeline_track'] = { category: 'layout', render: (ctx, layer) => {
+      // Horizontal progress line with 4 evenly-spaced milestone dots, the
+      // last one filled solid to read as "current/final step". Grounded in
+      // the "arrow"/"geometric_badge" step-guide decorations seen across real
+      // mined transformation templates (journey/process narrative, not a
+      // dual-photo split like before_after).
+      const offsetPercent = layer && (layer as IDSLDecorationLayer).offsetPercent != null ? (layer as IDSLDecorationLayer).offsetPercent : 50;
+      const y = Math.round((offsetPercent / 100) * ctx.h);
+      const x1 = ctx.constraints.safeX;
+      const x2 = ctx.w - ctx.constraints.safeX;
+      const steps = 4;
+      let dots = '';
+      for (let i = 0; i < steps; i++) {
+        const cx = x1 + ((x2 - x1) / (steps - 1)) * i;
+        const isLast = i === steps - 1;
+        dots += `<circle cx="${cx}" cy="${y}" r="${isLast ? 8 : 5}" fill="${isLast ? ctx.validBrandColor : ctx.validBackgroundColor}" stroke="${ctx.validBrandColor}" stroke-width="2" />`;
+      }
+      return `
+      <!-- Transformation Family Timeline Track -->
+      <g>
+        <line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="${ctx.validBrandColor}" stroke-width="1.5" opacity="0.35" />
+        ${dots}
+      </g>`;
+    }};
+
+    // ─── POLAROID FAMILY PRIMITIVES ───
+
+    this.registry['polaroid_frame'] = { category: 'layout', render: (ctx, layer) => {
+      // Real white polaroid card border with a taller bottom caption strip,
+      // drawn as an SVG overlay on top of the plain-rectangle photo (the
+      // 'polaroid' image mask has no real pixel-clip implementation in the
+      // Sharp compositor — see universal_dynamic_base in layout-renderers.ts
+      // — so this decoration is what actually produces the polaroid look,
+      // same faking technique editorial_tape/floating_frame already use).
+      // Grounded in the "polaroid frame" decoration tag seen across real
+      // mined polaroid templates, with a slight rotation for the candid,
+      // overlapping-snapshot feel those samples describe.
+      const anchor = layer?.anchor || 'center';
+      const rotation = layer && (layer as IDSLDecorationLayer).offsetPercent != null ? ((layer as IDSLDecorationLayer).offsetPercent % 7) - 3 : -2;
+      const frameW = Math.round(ctx.w * 0.72);
+      const frameH = Math.round(ctx.h * 0.68);
+      const borderSide = Math.round(frameW * 0.045);
+      const borderBottom = Math.round(frameH * 0.14);
+      const cx = anchor.includes('left') ? ctx.constraints.safeX + frameW / 2 : anchor.includes('right') ? ctx.w - ctx.constraints.safeX - frameW / 2 : ctx.w / 2;
+      const cy = anchor.includes('top') ? ctx.constraints.safeY + frameH / 2 : anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - frameH / 2 : ctx.h / 2;
+      const totalH = frameH + borderBottom;
+      // 4 non-overlapping border strips (transparent center so the photo underneath shows through)
+      return `
+      <!-- Polaroid Frame -->
+      <g transform="translate(${cx - frameW / 2}, ${cy - frameH / 2}) rotate(${rotation}, ${frameW / 2}, ${frameH / 2})" filter="drop-shadow(0 10px 24px rgba(0,0,0,0.25))">
+        <rect x="0" y="0" width="${frameW}" height="${borderSide}" fill="${ctx.validBackgroundColor}" />
+        <rect x="0" y="${totalH - borderBottom}" width="${frameW}" height="${borderBottom}" fill="${ctx.validBackgroundColor}" />
+        <rect x="0" y="0" width="${borderSide}" height="${totalH}" fill="${ctx.validBackgroundColor}" />
+        <rect x="${frameW - borderSide}" y="0" width="${borderSide}" height="${totalH}" fill="${ctx.validBackgroundColor}" />
+        <rect x="${borderSide}" y="${borderSide}" width="${frameW - borderSide * 2}" height="${frameH - borderSide}" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="1" />
+      </g>`;
+    }};
+
+    // ─── NOTIFICATION CARD FAMILY PRIMITIVES ───
+
+    this.registry['notification_icon_badge'] = { category: 'geometry', render: (ctx, layer) => {
+      // Small circular app-notification-style icon chip with a simple bell
+      // glyph. Grounded in the "icon_badge" decoration tag from the real
+      // mined notification_card sample, whose own designRules explicitly
+      // call for "icon badge at the top center of the card for emphasis".
+      const anchor = layer?.anchor || 'top_center';
+      const r = 34;
+      const cx = anchor.includes('left') ? ctx.constraints.safeX + r : anchor.includes('right') ? ctx.w - ctx.constraints.safeX - r : ctx.w / 2;
+      const cy = anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - r : ctx.constraints.safeY + r;
+      return `
+      <!-- Notification Card Icon Badge -->
+      <g transform="translate(${cx}, ${cy})">
+        <circle cx="0" cy="0" r="${r}" fill="${ctx.validBrandColor}" filter="drop-shadow(0 6px 14px rgba(0,0,0,0.2))" />
+        <path d="M -10 4 Q -10 -10 0 -12 Q 10 -10 10 4 L 13 9 L -13 9 Z" fill="${ctx.validBackgroundColor}" />
+        <circle cx="0" cy="13" r="3" fill="${ctx.validBackgroundColor}" />
+      </g>`;
+    }};
+
+    // ─── ANNOUNCEMENT FAMILY PRIMITIVES ───
+
+    this.registry['announcement_banner_ribbon'] = { category: 'layout', render: (ctx, layer) => {
+      // Solid brand-color banner ribbon with a small megaphone glyph.
+      // Grounded in the "megaphone graphic" decoration tag from the real
+      // mined announcement sample (the only real sample for this family) —
+      // its own designRules call for "a graphic element related to
+      // communication to reinforce the announcement theme".
+      const anchor = layer?.anchor || 'top_center';
+      const w = Math.round(ctx.w * 0.9);
+      const h = 64;
+      const x = (ctx.w - w) / 2;
+      const y = anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - h : ctx.constraints.safeY;
+      return `
+      <!-- Announcement Banner Ribbon -->
+      <g transform="translate(${x}, ${y})">
+        <rect x="0" y="0" width="${w}" height="${h}" fill="${ctx.validBrandColor}" filter="drop-shadow(0 6px 16px rgba(0,0,0,0.18))" />
+        <g transform="translate(28, ${h / 2})">
+          <path d="M -14 -8 L -2 -8 L 10 -16 L 10 16 L -2 8 L -14 8 Z" fill="${ctx.validBackgroundColor}" />
+          <path d="M -14 -8 L -14 8 L -20 8 L -20 -8 Z" fill="${ctx.validBackgroundColor}" />
+        </g>
+        <text x="${w / 2 + 14}" y="${h / 2 + 5}" font-family="sans-serif" font-size="14" font-weight="800" fill="${ctx.validBackgroundColor}" text-anchor="middle" letter-spacing="2px">ANNOUNCEMENT</text>
+      </g>`;
+    }};
   }
 
 

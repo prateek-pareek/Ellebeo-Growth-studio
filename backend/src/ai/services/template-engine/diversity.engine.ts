@@ -65,6 +65,14 @@ export class DiversityEngine {
           if (id.startsWith('before_after')) return 'before_after';
           if (id.startsWith('scrapbook')) return 'scrapbook';
           if (id.startsWith('quadrant')) return 'quadrant';
+          if (id.startsWith('transformation')) return 'transformation';
+          if (id.startsWith('magazine')) return 'magazine';
+          if (id.startsWith('polaroid')) return 'polaroid';
+          // Must come before the generic id.split('_')[0] fallback below — that
+          // fallback would otherwise fragment 'notification_card_alert' and
+          // 'notification_card_banner' into a bare 'notification' bucket.
+          if (id.startsWith('notification_card')) return 'notification_card';
+          if (id.startsWith('announcement')) return 'announcement';
           if (id.includes('quote')) return 'quote';
           if (id.startsWith('editorial')) return 'editorial';
           if (id.startsWith('clinical')) return 'clinical';

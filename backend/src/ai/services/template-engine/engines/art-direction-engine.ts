@@ -142,6 +142,36 @@ export class ArtDirectionEngine {
       balance = 'symmetrical';
       readingFlow = 'center_down';
       foundKnowledge = true;
+    } else if (baseId.startsWith('transformation')) {
+      family = 'transformation';
+      energy = 'calm'; // matches the mined energy (13/13 real samples) - a journey, not a hard sell
+      balance = 'asymmetrical'; // matches the dominant mined balance (7/13 real samples)
+      readingFlow = 'center_down'; // matches the dominant mined readingFlow (9/13 real samples)
+      foundKnowledge = true;
+    } else if (baseId.startsWith('magazine')) {
+      family = 'magazine';
+      energy = 'calm'; // matches the dominant mined energy (9/10 real samples)
+      balance = 'asymmetrical'; // matches the mined balance (10/10 real samples)
+      readingFlow = 'z_pattern'; // matches the dominant mined readingFlow (7/10 real samples)
+      foundKnowledge = true;
+    } else if (baseId.startsWith('polaroid')) {
+      family = 'polaroid';
+      energy = 'calm'; // matches the dominant mined energy (4/5 real samples)
+      balance = 'asymmetrical'; // matches the mined balance (5/5 real samples)
+      readingFlow = 'center_down'; // matches the dominant mined readingFlow (3/5 real samples)
+      foundKnowledge = true;
+    } else if (baseId.startsWith('notification_card')) {
+      family = 'notification_card';
+      energy = 'calm'; // only 1 real mined sample exists for this family (design-knowledge.json) - grounded in that sample's energy
+      balance = 'symmetrical'; // matches the 1 mined sample
+      readingFlow = 'center_down'; // matches the 1 mined sample
+      foundKnowledge = true;
+    } else if (baseId.startsWith('announcement')) {
+      family = 'announcement';
+      energy = 'calm'; // only 1 real mined sample exists for this family (design-knowledge.json) - grounded in that sample's energy
+      balance = 'asymmetrical'; // matches the 1 mined sample
+      readingFlow = 'z_pattern'; // matches the 1 mined sample
+      foundKnowledge = true;
     } else if (baseId.startsWith('clinical')) {
       family = 'clinical';
       energy = 'structured';
