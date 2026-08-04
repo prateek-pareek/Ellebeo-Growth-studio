@@ -1246,7 +1246,7 @@ CRITICAL IMAGE REQUIREMENTS:
       const composition = this.compositionEngine.calculateComposition(designTokens, templateIntent as any, isFirst);
 
       // NEW ARCHITECTURE: Pull semantic rules from the Art Direction Engine using the layout ID!
-      const intent = this.artDirectionEngine.generateDesignIntent(layoutType);
+      const intent = this.artDirectionEngine.generateDesignIntent(layoutType, index || 0, totalSlides || 1);
       const behavior = this.artDirectionEngine.mapIntentToBehavior(intent);
       const designLanguage = { intent, behavior };
       const geometryOut = this.geometryCompiler.compile(designLanguage, w, h, designSpec);
@@ -1322,7 +1322,14 @@ CRITICAL IMAGE REQUIREMENTS:
         isFullBleed = false;
       }
 
-      const textSurfaceColor = isFullBleed ? validBrandColor : validBackgroundColor;
+      let textSurfaceColor = isFullBleed ? validBrandColor : validBackgroundColor;
+
+      // Split / Inset layout detection: if the image region doesn't span the full canvas, text sits on background
+      const dslInstance = COMPILED_LAYOUTS[computedLayoutType];
+      if (dslInstance && dslInstance.canvasRegions && dslInstance.canvasRegions.imageRegion && dslInstance.canvasRegions.imageRegion.width < w) {
+        textSurfaceColor = validBackgroundColor;
+        isFullBleed = false;
+      }
 
       const surfaceLuminance = getLuminance(textSurfaceColor);
       const isLightSurface = surfaceLuminance > 150; 
@@ -1338,10 +1345,12 @@ CRITICAL IMAGE REQUIREMENTS:
       let posterTextColor = '#FFFFFF';
       try {
         const stats = await sharp(imageBuffer).stats();
-        const meanLuminance = (stats.channels[0].mean + stats.channels[1].mean + stats.channels[2].mean) / 3;
-        posterTextColor = meanLuminance > 127 ? depthBrandColor : '#FFFFFF';
+        if (stats.channels && stats.channels.length >= 3) {
+          const meanLuminance = (stats.channels[0].mean + stats.channels[1].mean + stats.channels[2].mean) / 3;
+          posterTextColor = meanLuminance > 127 ? depthBrandColor : '#FFFFFF';
+        }
       } catch (contrastErr) {
-        console.error('[Sharp Contrast Detection Error]:', contrastErr);
+        // Non-fatal: text-only slides or corrupted buffers fall back to white text
       }
 
       if (isFullBleed && !layoutType.includes('text_only') && photoDataUri) {

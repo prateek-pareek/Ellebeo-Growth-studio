@@ -984,7 +984,9 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     // Phase 2.6: Composition Optimizer
     if (dsl) {
       const layoutEngine = new LayoutEngine(ctx.w, ctx.h);
-      const constraints = layoutEngine.calculateConstraints('minimal', 'balanced');
+      const optFamily = (ctx.designLanguage?.intent?.family as any) || 'minimal';
+      const behaviorProfile = (dsl as any)?.behavior;
+      const constraints = layoutEngine.calculateConstraints(optFamily, 'balanced', false, behaviorProfile);
       dsl = optimizer.optimize(dsl, constraints, ctx.w, ctx.h);
     }
 
@@ -1032,12 +1034,17 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     // Construct an estimated face BoundingBox from the vision result's Y coordinates
     let faceBox: BoundingBox | undefined = undefined;
     if (ctx.faceCoordinates && ctx.faceCoordinates.eyesYPercent) {
-      const faceY = Math.round(ctx.h * (ctx.faceCoordinates.eyesYPercent / 100));
-      // Assume face occupies roughly 60% of the canvas height and 50% of the width (centered)
-      const faceHeight = Math.round(ctx.h * 0.60);
-      const faceWidth = Math.round(ctx.w * 0.50);
+      const eyesY = Math.round((ctx.faceCoordinates.eyesYPercent / 100) * ctx.h);
+      const mouthY = ctx.faceCoordinates.mouthYPercent 
+        ? Math.round((ctx.faceCoordinates.mouthYPercent / 100) * ctx.h)
+        : Math.round(eyesY + (ctx.h * 0.15));
+        
+      const faceTop = Math.max(0, eyesY - Math.round(ctx.h * 0.08)); 
+      const faceBottom = Math.min(ctx.h, mouthY + Math.round(ctx.h * 0.08));
+      const faceHeight = faceBottom - faceTop;
+      const faceWidth = Math.round(ctx.w * 0.45);
       const faceX = Math.round((ctx.w - faceWidth) / 2);
-      faceBox = { x: faceX, y: Math.max(0, faceY - 60), width: faceWidth, height: faceHeight };
+      faceBox = { x: faceX, y: faceTop, width: faceWidth, height: faceHeight };
     }
 
     const layoutEngine = new LayoutEngine(ctx.w, ctx.h, faceBox);

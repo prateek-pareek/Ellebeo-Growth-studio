@@ -1,7 +1,7 @@
 import { IDSLDecorationLayer, IDSLTextLayer } from '../interfaces';
 import { LayoutConstraints } from './layout-engine';
 
-export type PrimitiveCategory = 'geometry' | 'layout' | 'effects' | 'typography';
+export type PrimitiveCategory = 'geometry' | 'layout' | 'effects' | 'typography' | 'illustration';
 
 export interface PrimitiveContext {
   w: number;
@@ -299,8 +299,8 @@ export class PrimitiveEngine {
             </feDiffuseLighting>
           </filter>
         </defs>
-        <!-- Toned down from 0.4 to 0.15 to prevent washing out the image/colors -->
-        <rect width="100%" height="100%" opacity="0.15" style="mix-blend-mode: ${blendMode};" filter="url(#paperFilter)" />
+        <!-- Subtlety Rule: Texture should be noticed after 3-5 seconds, not immediately -->
+        <rect width="100%" height="100%" opacity="0.05" style="mix-blend-mode: ${blendMode};" filter="url(#paperFilter)" />
         `;
       }
     };
@@ -1033,7 +1033,7 @@ export class PrimitiveEngine {
         </feDiffuseLighting>
         <feBlend mode="multiply" in="SourceGraphic" in2="light" />
       </filter>
-      <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" fill="${ctx.validSecondaryColor}" filter="url(#paperFilter)" opacity="0.4" style="mix-blend-mode: multiply; pointer-events:none;" />`;
+      <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" fill="${ctx.validSecondaryColor}" filter="url(#paperFilter)" opacity="0.05" style="mix-blend-mode: multiply; pointer-events:none;" />`;
     }};
 
     this.registry['linen_texture'] = { category: 'effects', render: (ctx) => {
@@ -1254,6 +1254,43 @@ export class PrimitiveEngine {
         <text x="90" y="29" font-family="sans-serif" font-size="13" font-weight="800" fill="${ctx.validBackgroundColor}" text-anchor="middle" letter-spacing="2px">KEY BENEFIT</text>
       </g>`;
     }};
+
+    // --- PHASE 5 MISSING PRIMITIVES (V2) ---
+    const addDeco = (name: string, svg: (ctx: any, layer: any) => string) => {
+      this.registry[name] = { category: 'illustration', render: svg };
+    };
+
+    addDeco('divider', (ctx) => `<line x1="${ctx.constraints.safeX}" y1="${ctx.h/2}" x2="${ctx.w - ctx.constraints.safeX}" y2="${ctx.h/2}" stroke="${ctx.validBrandColor}" stroke-width="2" opacity="0.5" />`);
+    addDeco('arrow', (ctx) => `<g transform="translate(${ctx.w/2}, ${ctx.h/2})"><line x1="0" y1="0" x2="50" y2="0" stroke="${ctx.validBrandColor}" stroke-width="2"/><polygon points="50,0 40,-5 40,5" fill="${ctx.validBrandColor}"/></g>`);
+    
+    const vectorProxy = (ctx: any) => `<g transform="translate(${ctx.w/2 - 25}, ${ctx.h/2 - 25})"><rect width="50" height="50" rx="12" fill="${ctx.validSecondaryColor}" opacity="0.2"/><text x="25" y="35" text-anchor="middle" fill="${ctx.validBrandColor}" font-size="24">✦</text></g>`;
+    
+    ['butterfly', 'floral', 'heart', 'disco_ball', 'doodle', 'speech_bubble', 'paper_clip', 'collage elements'].forEach(name => {
+      addDeco(name, vectorProxy);
+    });
+
+    this.registry['shadow'] = { category: 'effects', render: (ctx) => `<rect width="${ctx.w}" height="${ctx.h}" fill="#000000" opacity="0.2" filter="url(#premium_shadow)" />` };
+    this.registry['star_rating'] = { category: 'illustration', render: (ctx) => `<text x="${ctx.constraints.safeX}" y="${ctx.h/2}" fill="${ctx.validBrandColor}" font-size="24">★★★★★</text>` };
+    this.registry['rounded_corners'] = { category: 'geometry', render: (ctx) => `<rect x="${ctx.constraints.safeX}" y="${ctx.constraints.safeY}" width="${ctx.w - ctx.constraints.safeX*2}" height="${ctx.h - ctx.constraints.safeY*2}" rx="24" fill="${ctx.validBrandColor}" opacity="0.1" />` };
+    this.registry['geometric_shape'] = { category: 'geometry', render: (ctx) => `<rect width="200" height="200" rx="24" fill="${ctx.validBrandColor}" opacity="0.1" />` };
+    this.registry['color_block'] = { category: 'geometry', render: (ctx) => `<rect width="200" height="200" rx="24" fill="${ctx.validBrandColor}" opacity="0.1" />` };
+    
+    this.registry['polaroid'] = { category: 'geometry', render: (ctx) => `<g transform="translate(${ctx.w/2 - 100}, ${ctx.h/2 - 125})"><rect width="200" height="250" fill="#ffffff" filter="url(#premium_shadow)" /><rect x="10" y="10" width="180" height="180" fill="#000000" opacity="0.1" /></g>` };
+    this.registry['paper_tape'] = { category: 'geometry', render: (ctx) => `<g transform="translate(${ctx.w/2 - 50}, 50) rotate(-2)"><rect width="100" height="25" fill="#fdfdfd" opacity="0.85" filter="url(#premium_shadow)" /></g>` };
+    
+    this.registry['dotted border'] = { category: 'geometry', render: (ctx) => `<rect x="${ctx.constraints.safeX}" y="${ctx.constraints.safeY}" width="${ctx.w - ctx.constraints.safeX*2}" height="${ctx.h - ctx.constraints.safeY*2}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="2" stroke-dasharray="4 4" />` };
+    this.registry['dotted_border'] = this.registry['dotted border'];
+    
+    this.registry['circular_frame'] = { category: 'geometry', render: (ctx) => `<circle cx="${ctx.w/2}" cy="${ctx.h/2}" r="200" fill="none" stroke="${ctx.validBrandColor}" stroke-width="3" />` };
+    this.registry['circle'] = this.registry['circular_frame'];
+    
+    this.registry['film_strip'] = { category: 'illustration', render: (ctx) => `<g transform="translate(${ctx.constraints.safeX}, ${ctx.h/2 - 50})"><rect width="200" height="100" fill="#111111" /><circle cx="15" cy="15" r="5" fill="#ffffff" /><circle cx="45" cy="15" r="5" fill="#ffffff" /><circle cx="15" cy="85" r="5" fill="#ffffff" /><circle cx="45" cy="85" r="5" fill="#ffffff" /></g>` };
+    
+    const backgroundFiller = (ctx: any) => `<rect width="${ctx.w}" height="${ctx.h}" fill="${ctx.validSecondaryColor}" opacity="0.05" />`;
+    this.registry['geometric_background'] = { category: 'layout', render: backgroundFiller };
+    this.registry['striped_background'] = { category: 'layout', render: backgroundFiller };
+    this.registry['background_image'] = { category: 'layout', render: backgroundFiller };
+    this.registry['quotation_marks'] = { category: 'effects', render: (ctx) => `<text x="${ctx.constraints.safeX}" y="${ctx.constraints.safeY + 80}" font-family="serif" font-size="120px" font-weight="900" fill="${ctx.validBrandColor}" opacity="0.15">"</text>` };
   }
 
 

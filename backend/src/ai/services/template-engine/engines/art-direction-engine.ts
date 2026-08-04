@@ -52,9 +52,9 @@ export interface IDesignLanguage {
 export class ArtDirectionEngine {
   
   /**
-   * Generates Semantic Design Intent from knowledge tags
+   * Generates Semantic Design Intent from knowledge tags and carousel rhythm
    */
-  public generateDesignIntent(layoutId: string): IDesignIntent {
+  public generateDesignIntent(layoutId: string, slideIndex?: number, totalSlides?: number): IDesignIntent {
     // 1. Procedural Layout Interception
     // Strip numeric suffixes from compiled procedural variants (e.g. editorial_hero_0 -> editorial_hero)
     const baseId = layoutId.replace(/_\d+$/, '');
@@ -215,6 +215,40 @@ export class ArtDirectionEngine {
       console.warn(`[ArtDirectionEngine] No knowledge found for ${layoutId}. Falling back to default.`);
     }
 
+    // [PHASE 3: RHYTHM INJECTION] - Formalize the 4-slide musical rhythm
+    let textureIntensity = mood === 'organic' ? 'heavy' : (mood === 'minimalist' ? 'subtle' : 'none');
+    let density: 'none' | 'low' | 'medium' | 'high' = energy === 'bold' ? 'high' : 'low';
+
+    if (slideIndex !== undefined && totalSlides !== undefined && totalSlides > 1) {
+      const normalizedPos = slideIndex / (totalSlides - 1);
+      
+      // Dense -> Open -> Medium -> Minimal (or custom based on position)
+      if (slideIndex === 0) {
+        // Cover Slide: Punchy, tight, dense
+        whitespace = 'tight';
+        energy = 'bold';
+        density = 'high';
+        textureIntensity = 'heavy';
+      } else if (slideIndex === totalSlides - 1) {
+        // Final Slide: Clean, airy CTA
+        whitespace = 'airy';
+        energy = 'minimal';
+        density = 'low';
+        textureIntensity = 'none';
+      } else if (normalizedPos <= 0.5) {
+        // Slide 2: Comfortable breather
+        whitespace = 'comfortable';
+        energy = 'structured';
+        density = 'medium';
+      } else {
+        // Slide 3: Luxury / Minimal
+        whitespace = 'luxury';
+        energy = 'playful';
+        density = 'medium';
+      }
+      console.log(`[ArtDirectionEngine] Applied Rhythm (Slide ${slideIndex + 1}/${totalSlides}) - Whitespace: ${whitespace}, Density: ${density}, Energy: ${energy}`);
+    }
+
     return {
       family,
       energy: energy as any,
@@ -225,8 +259,8 @@ export class ArtDirectionEngine {
       mood,
       primitives: {
         cards: cardStyle,
-        textureIntensity: mood === 'organic' ? 'heavy' : (mood === 'minimalist' ? 'subtle' : 'none'),
-        density: energy === 'bold' ? 'high' : 'low'
+        textureIntensity: textureIntensity as any,
+        density: density
       }
     };
   }

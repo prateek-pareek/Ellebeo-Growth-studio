@@ -93,6 +93,79 @@ export class CompositionOptimizer {
       }
     }
     
+    // PHASE 4: Self-Correcting Scoring Loop (Contrast, Hierarchy, Whitespace)
+    let { score, issues } = this.scoreComposition(optimized, constraints, canvasHeight);
+    let attempts = 0;
+    
+    while (score < 7.0 && attempts < 3) {
+      console.log(`[CompositionOptimizer] Score ${score} < 7.0. Issues: ${issues.join(', ')}. Triggering repair loop (Attempt ${attempts + 1})...`);
+      
+      // Repair Strategy: Adjust scale and distribute whitespace
+      for (const txt of textLayers) {
+        if (txt.allocatedBox) {
+           // Shrink bounding box request slightly to allow TypographyEngine to drop font sizes
+           txt.allocatedBox.height = Math.max(txt.allocatedBox.height * 0.85, 40); 
+           // Nudge down to break overlaps
+           txt.allocatedBox.y += Math.random() > 0.5 ? 15 : -15; 
+        }
+      }
+      
+      const newEval = this.scoreComposition(optimized, constraints, canvasHeight);
+      score = newEval.score;
+      issues = newEval.issues;
+      attempts++;
+    }
+    
+    if (score < 7.0) {
+      console.warn(`[CompositionOptimizer] Repair loop failed to reach 7.0 (Final Score: ${score}). Proceeding with best effort.`);
+    } else if (attempts > 0) {
+      console.log(`[CompositionOptimizer] Repair successful! Final Score: ${score}`);
+    }
+    
     return optimized;
+  }
+
+  /**
+   * Evaluates the composed DSL against core design principles (Hierarchy, Whitespace, Overlaps).
+   */
+  private scoreComposition(dsl: ICompiledLayoutDSL, constraints: LayoutConstraints, canvasHeight: number): { score: number, issues: string[] } {
+    let score = 10.0;
+    const issues: string[] = [];
+    
+    const textLayers = dsl.layers.filter(l => l.type === 'text') as IDSLTextLayer[];
+    
+    // Check Overlaps (Hierarchy Failure)
+    for (let i = 0; i < textLayers.length; i++) {
+      for (let j = i + 1; j < textLayers.length; j++) {
+        const b1 = textLayers[i].allocatedBox;
+        const b2 = textLayers[j].allocatedBox;
+        if (b1 && b2) {
+          const overlapX = b1.x < b2.x + b2.width && b1.x + b1.width > b2.x;
+          const overlapY = b1.y < b2.y + b2.height && b1.y + b1.height > b2.y;
+          if (overlapX && overlapY) {
+            score -= 2.5;
+            issues.push(`Text collision (${textLayers[i].id} & ${textLayers[j].id})`);
+          }
+        }
+      }
+    }
+    
+    // Check Whitespace Density
+    if (textLayers.length > 3) {
+       score -= 1.0;
+       issues.push("Whitespace crowding (too many distinct text blocks)");
+    }
+    
+    // Check Margin Violations
+    for (const txt of textLayers) {
+      if (txt.allocatedBox) {
+        if (txt.allocatedBox.y < constraints.safeY || (txt.allocatedBox.y + txt.allocatedBox.height) > (canvasHeight - constraints.safeY)) {
+          score -= 1.5;
+          issues.push(`Margin violation (${txt.id})`);
+        }
+      }
+    }
+    
+    return { score: Math.max(0, score), issues };
   }
 }
