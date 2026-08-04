@@ -92,8 +92,8 @@ export class GeometryCompiler {
 
     // 3. ALIGNMENT (Composition Strategy)
     let alignment: 'left' | 'center' | 'right' = 'left';
-    if (intent.readingJourney === 'center_down') alignment = 'center';
-    if (intent.readingJourney === 'z_pattern') alignment = 'left'; // z-pattern starts left
+    if (intent.readingFlow === 'center_down') alignment = 'center';
+    if (intent.readingFlow === 'z_pattern') alignment = 'left'; // z-pattern starts left
 
     // 4. RHYTHM & PADDING (Whitespace padding between elements)
     let padding = Math.round(30 * behavior.negativeSpaceMultiplier);

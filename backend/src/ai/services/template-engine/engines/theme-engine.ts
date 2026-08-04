@@ -1,5 +1,5 @@
 import type { VisualStyleId } from '../../../config/visual-style-library';
-import { VisualTokens } from '../interfaces';
+import { VisualTokens, TextureRecipe } from '../interfaces';
 
 export interface DesignTokens {
   spacing: 'airy' | 'dense' | 'balanced';
@@ -164,40 +164,23 @@ export class ThemeEngine {
   }
 
   /**
-   * Resolves the mood decorations (e.g. paper vs noise) dynamically based on the VisualTokens.
-   * This decouples the aesthetic texture from the structural layout recipe.
+   * Resolves the mood decorations dynamically based on the TextureRecipe.
    */
-  public getMoodDecorations(moodOrTokens?: string | VisualTokens): any[] {
+  public getMoodDecorations(recipe: TextureRecipe): any[] {
     const layers: any[] = [];
     
     // NEW ARCHITECTURE: Configuration-Driven Design Recipe
-    if (typeof moodOrTokens === 'object' && moodOrTokens !== null) {
-      const tokens = moodOrTokens as VisualTokens;
-      if (tokens.texture === 'paper') {
+    if (recipe && typeof recipe === 'object') {
+      if (recipe.style === 'paper') {
         layers.push({ id: 'mood_texture', type: 'decoration', zIndex: 5, component: 'paper_texture', anchor: 'center' });
-      } else if (tokens.texture === 'noise') {
+      } else if (recipe.style === 'noise') {
         layers.push({ id: 'mood_texture', type: 'decoration', zIndex: 5, component: 'noise_texture', anchor: 'center' });
-      } else if (tokens.texture === 'grain') {
+      } else if (recipe.style === 'grain') {
         layers.push({ id: 'mood_texture', type: 'decoration', zIndex: 5, component: 'subtle_grain', anchor: 'center' });
+      } else if (recipe.style === 'linen') {
+        layers.push({ id: 'mood_texture', type: 'decoration', zIndex: 5, component: 'linen_texture', anchor: 'center' });
       }
       return layers;
-    }
-
-    // LEGACY FALLBACK
-    const mood = moodOrTokens as string;
-    if (mood === 'warm_paper') {
-      layers.push({ id: 'mood_texture', type: 'decoration', zIndex: 5, component: 'paper_texture', anchor: 'center' });
-    } else if (mood === 'luxury_black') {
-      layers.push({ id: 'mood_texture', type: 'decoration', zIndex: 5, component: 'noise_texture', anchor: 'center' });
-      layers.push({ id: 'mood_scrim', type: 'decoration', zIndex: 6, component: 'dark_scrim', anchor: 'center' });
-    } else if (mood === 'clinical_white') {
-      // Clean, bright, minimal texture
-      layers.push({ id: 'mood_texture', type: 'decoration', zIndex: 5, component: 'subtle_grain', anchor: 'center' });
-    } else if (mood === 'vibrant_pop') {
-      layers.push({ id: 'mood_texture', type: 'decoration', zIndex: 5, component: 'noise_texture', anchor: 'center' });
-    } else {
-      // Fallback
-      layers.push({ id: 'mood_texture', type: 'decoration', zIndex: 5, component: 'paper_texture', anchor: 'center' });
     }
 
     return layers;
