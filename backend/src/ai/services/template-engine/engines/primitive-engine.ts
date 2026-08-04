@@ -1176,6 +1176,84 @@ export class PrimitiveEngine {
         <circle cx="${cx}" cy="${cy}" r="${innerR}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1" stroke-dasharray="3 6" opacity="0.6" />
       </g>`;
     }};
+
+    this.registry['transformation_arrow'] = { category: 'geometry', render: (ctx, layer) => {
+      // Bold directional arrow marking the seam between a before-photo and an
+      // after-photo, with small "BEFORE"/"AFTER" labels either side. Grounded
+      // in the "arrow" decoration tag seen across real mined before/after
+      // templates. Defaults to a vertical seam (side-by-side photos); pass
+      // offsetPercent near 50 to sit on a horizontal seam (stacked photos).
+      const orientation = layer?.orientation === 'horizontal' ? 'horizontal' : 'vertical';
+      const cx = ctx.w / 2;
+      const cy = ctx.h / 2;
+      if (orientation === 'horizontal') {
+        return `
+        <!-- Before/After Transformation Arrow (horizontal seam) -->
+        <g transform="translate(${cx}, ${cy})">
+          <circle cx="0" cy="0" r="26" fill="${ctx.validBackgroundColor}" filter="drop-shadow(0 3px 6px rgba(0,0,0,0.25))" />
+          <path d="M -8 -6 L 8 0 L -8 6 Z" fill="${ctx.validBrandColor}" />
+        </g>
+        <text x="${ctx.constraints.safeX}" y="${cy - 34}" font-family="sans-serif" font-size="11" font-weight="800" letter-spacing="2px" fill="${ctx.validBrandColor}" opacity="0.85">BEFORE</text>
+        <text x="${ctx.w - ctx.constraints.safeX}" y="${cy + 46}" text-anchor="end" font-family="sans-serif" font-size="11" font-weight="800" letter-spacing="2px" fill="${ctx.validBrandColor}" opacity="0.85">AFTER</text>`;
+      }
+      return `
+      <!-- Before/After Transformation Arrow (vertical seam) -->
+      <g transform="translate(${cx}, ${cy})">
+        <circle cx="0" cy="0" r="26" fill="${ctx.validBackgroundColor}" filter="drop-shadow(0 3px 6px rgba(0,0,0,0.25))" />
+        <path d="M -6 -8 L 0 8 L 6 -8 Z" fill="${ctx.validBrandColor}" transform="rotate(90)" />
+      </g>
+      <text x="${cx - 40}" y="${ctx.constraints.safeY + 6}" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="800" letter-spacing="2px" fill="${ctx.validBrandColor}" opacity="0.85">BEFORE</text>
+      <text x="${cx + 40}" y="${ctx.constraints.safeY + 6}" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="800" letter-spacing="2px" fill="${ctx.validBrandColor}" opacity="0.85">AFTER</text>`;
+    }};
+
+    this.registry['star_rating_row'] = { category: 'effects', render: (ctx, layer) => {
+      // Row of 5 filled stars, anchored near the layer's declared position.
+      // Grounded in the "star_rating" decoration tag seen across real mined
+      // testimonial templates.
+      const anchor = layer?.anchor || 'top_center';
+      const startX = anchor.includes('left') ? ctx.constraints.safeX : anchor.includes('right') ? ctx.w - ctx.constraints.safeX - 130 : ctx.w / 2 - 65;
+      const y = anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - 30 : ctx.constraints.safeY + 10;
+      const starPath = "M12 1 L15 8 L23 9 L17 15 L18 23 L12 19 L6 23 L7 15 L1 9 L9 8 Z";
+      let stars = '';
+      for (let i = 0; i < 5; i++) {
+        stars += `<g transform="translate(${startX + i * 26}, ${y}) scale(1.1)"><path d="${starPath}" fill="${ctx.validAccentColor || ctx.validBrandColor}" /></g>`;
+      }
+      return `<!-- Testimonial Star Rating -->\n${stars}`;
+    }};
+
+    // Pre-existing gap (not introduced this session): ThemeEngine.getMoodDecorations('luxury_black')
+    // has always requested a decoration named 'dark_scrim', but only 'dark_scrim_overlay' was ever
+    // registered — and only in the legacy DECORATIONS registry (layout-renderers.ts), a different,
+    // non-DSL rendering surface. universal_dynamic_deco's scene-graph loop only consults THIS
+    // registry, so every DSL-based layout that lands on the 'luxury_black' mood has been silently
+    // dropping its scrim (PrimitiveEngine.renderPrimitive() logs a warning and returns '', it does
+    // not throw). Registering it here, matching the legacy version's exact visual (32% opacity
+    // brand-color wash), makes 'luxury_black' actually do what it says for every family.
+    this.registry['dark_scrim'] = { category: 'effects', render: (ctx) => `
+      <!-- Luxury Black mood: full-canvas dark brand-color scrim. Toned down
+           from 0.32 -> 0.15: at 0.32 it read as a heavy gray/black cover on
+           warm/light-toned photos rather than a subtle mood shift. -->
+      <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" fill="${ctx.validBrandColor}" fill-opacity="0.15" />`
+    };
+
+    // Pre-existing gap: clinical_benefits_grid (composition-engine.ts) references this
+    // component but it was never registered — rendered as a red "MISSING COMPONENT" box.
+    // Small stat/metric callout chip, anchor-aware to match how the recipe uses it
+    // (anchor: 'bottom_center', offsetPercent: 10).
+    this.registry['metric_label'] = { category: 'geometry', render: (ctx, layer) => {
+      const anchor = layer?.anchor || 'bottom_center';
+      const offsetPercent = layer && (layer as IDSLDecorationLayer).offsetPercent != null ? (layer as IDSLDecorationLayer).offsetPercent : 10;
+      const cx = ctx.w / 2;
+      const y = anchor.includes('bottom')
+        ? ctx.h - Math.round((offsetPercent / 100) * ctx.h) - 30
+        : Math.round((offsetPercent / 100) * ctx.h);
+      return `
+      <!-- Clinical Benefits Grid: small metric/stat callout chip -->
+      <g transform="translate(${cx - 90}, ${y})">
+        <rect x="0" y="0" width="180" height="46" rx="23" fill="${ctx.validBrandColor}" filter="drop-shadow(0 6px 16px rgba(0,0,0,0.18))" />
+        <text x="90" y="29" font-family="sans-serif" font-size="13" font-weight="800" fill="${ctx.validBackgroundColor}" text-anchor="middle" letter-spacing="2px">KEY BENEFIT</text>
+      </g>`;
+    }};
   }
 
 

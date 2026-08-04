@@ -16,6 +16,7 @@ import { ReelScriptChain } from '../chains/reel-script.chain';
 import { PlatformVariantChain } from '../chains/platform-variant.chain';
 import { OutputValidator } from '../guards/output-validator';
 import { JobProgressEmitter } from '../emitters/job-progress.emitter';
+import { GenerationProgressTracker } from '../services/generation-progress.tracker';
 import { ImagePipelineService } from '../services/image-pipeline.service';
 import { SharpImagePipelineService } from '../services/sharp-image-pipeline.service';
 import { CarouselPipelineService, type CarouselSlides } from '../services/carousel-pipeline.service';
@@ -26,7 +27,7 @@ import { AiImageGenerationService } from '../services/ai-image-generation.servic
 import { LogoOverlayService } from '../services/logo-overlay.service';
 import { ReelShotChain, type ReelShotResult } from '../chains/reel-shot.chain';
 import { extractBrandVoice } from '../config/brand-voice';
-import { AI_CONFIG } from '../../config/ai.config';
+import { AI_CONFIG, estimateTotalJobSeconds } from '../../config/ai.config';
 import { ElevenLabsService } from '../services/elevenlabs.service';
 import { OpenAiTtsService } from '../services/openai-tts.service';
 import type { GenerationJobPayload } from '../types/job-payload.types';
@@ -151,6 +152,13 @@ export class GenerationOrchestrator {
 
     const { jobId, tenantId, clientId, consentSnapshot, brandDNA, generationOptions } = payload;
     const jobStart = Date.now();
+
+    // Percent/ETA for this job are computed live from elapsed-time-vs-total-
+    // estimate (see GenerationProgressTracker) rather than stamped as a fixed
+    // value per checkpoint — every checkpoint below only needs to report a
+    // conservative structural floor + human-readable step text.
+    const totalEstimatedSeconds = estimateTotalJobSeconds(generationOptions.outputFormats as string[]);
+    GenerationProgressTracker.init(jobId, totalEstimatedSeconds, AI_CONFIG.progressMap.queued.step);
 
     // Validate Subscription Tier limits and gates (Tier 1 vs Tier 2 vs Tier 3)
     const tenantRecord = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
@@ -479,6 +487,14 @@ export class GenerationOrchestrator {
       }
     }
 
+    // Everything from here on happens inside the single persisted 'generating_text'
+    // -> 'completed' transition, but is actually the bulk of the job's real
+    // wall-clock time (image styling, AI feed image, carousel/story/reel
+    // generation). These raise the tracker's structural floor at each real
+    // checkpoint — the actual percent/ETA shown to the user is computed live
+    // from elapsed time (see GenerationProgressTracker.getLive).
+    await this.progressEmitter.emitSubProgress(jobId, tenantId, 'generating_text', 18, 'Selecting your layout and visual direction...');
+
     // ── Step 4: Platform Variants (conditional) ───────────────────────────────
     if (captionResult && generationOptions.platform.length > 1) {
       try {
@@ -507,6 +523,7 @@ export class GenerationOrchestrator {
     }
 
     // ——— Step 5.5: Image Processing ———————————————————————————————————————————
+    await this.progressEmitter.emitSubProgress(jobId, tenantId, 'generating_text', 20, 'Styling your photo to match your brand...');
     let imageResult: ImageProcessingResult | null = null;
     let aiImageCostUSD = 0;
     const consentShowFace = !!(consentCheck.activeRestrictions as any)?.show_face;
@@ -629,6 +646,7 @@ export class GenerationOrchestrator {
     }
 
     if (feedPhotoUrl && captionResult && imageResult) {
+      await this.progressEmitter.emitSubProgress(jobId, tenantId, 'generating_text', 22, 'Designing your feed image...');
       const safeFeedPhotoUrl = feedPhotoUrl;
       try {
         const feedPrompt = `Transform this beauty photo into a professional Instagram feed post for "${brandDNA.businessName}".
@@ -752,6 +770,7 @@ ${consentShowFace
     }
 
     if (isCarousel && captionResult) {
+      await this.progressEmitter.emitSubProgress(jobId, tenantId, 'generating_text', 24, 'Building your carousel slides...');
       try {
         const conceptResult = await this.carouselConceptChain.generate({
           hookSentence: captionResult.hookSentence || captionResult.caption.slice(0, 80),
@@ -829,6 +848,7 @@ ${consentShowFace
     let storyOutput: StoryOutput | null = null;
     const isStory = (generationOptions.outputFormats as string[]).includes('story');
     if (isStory && captionResult) {
+      await this.progressEmitter.emitSubProgress(jobId, tenantId, 'generating_text', 24, 'Building your story frames...');
       try {
         const storyFrames = await this.storyFrameChain.generate({
           hookSentence: captionResult.hookSentence || captionResult.caption.slice(0, 80),
@@ -901,6 +921,7 @@ ${consentShowFace
     let reelShotResult: ReelShotResult | null = null;
     const isReel = (generationOptions.outputFormats as string[]).includes('reel');
     if (isReel && captionResult) {
+      await this.progressEmitter.emitSubProgress(jobId, tenantId, 'generating_text', 26, 'Storyboarding your reel...');
       try {
         reelShotResult = await this.reelShotChain.generate({
           hookSentence: captionResult.hookSentence || captionResult.caption.slice(0, 80),
@@ -918,6 +939,7 @@ ${consentShowFace
     // â”€â”€ Step 5.7: Voiceover (conditional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     let voiceoverResult: VoiceoverResult | null = null;
     if (reelScriptResult && generationOptions.outputFormats.includes('reel')) {
+      await this.progressEmitter.emitSubProgress(jobId, tenantId, 'generating_text', 28, 'Recording your voiceover...');
       try {
         if (process.env['ELEVENLABS_API_KEY']) {
           const voice = reelScriptResult.elevenLabsVoiceSettings;
@@ -959,6 +981,7 @@ ${consentShowFace
       console.warn('[Validation Engine] Failed to fetch image buffers for Face Protection analysis.', e);
     }
 
+    await this.progressEmitter.emitSubProgress(jobId, tenantId, 'generating_text', 92, 'Running quality and brand checks...');
     const scoringResult = await this.scoringGate.evaluate({
       caption: captionResult?.caption ?? '',
       hashtags: captionResult?.hashtags ?? [],

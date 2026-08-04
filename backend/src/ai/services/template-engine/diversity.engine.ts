@@ -55,6 +55,16 @@ export class DiversityEngine {
       // 4. Macro-Family Diversity Penalty (Ensures Carousel hits distinct families)
       if (carouselHistory.length > 0) {
         const getMacroFamily = (id: string) => {
+          // Family-specific checks must come before the generic 'quote' substring
+          // check below — e.g. 'testimonial_quote_portrait' contains "quote" and
+          // would otherwise get misbucketed with minimalist_quote/premium_quote
+          // (while 'testimonial_star_card', with no "quote" in its name, would
+          // correctly bucket as 'testimonial' — an inconsistent split within the
+          // same family that silently broke its own diversity rotation).
+          if (id.startsWith('testimonial')) return 'testimonial';
+          if (id.startsWith('before_after')) return 'before_after';
+          if (id.startsWith('scrapbook')) return 'scrapbook';
+          if (id.startsWith('quadrant')) return 'quadrant';
           if (id.includes('quote')) return 'quote';
           if (id.startsWith('editorial')) return 'editorial';
           if (id.startsWith('clinical')) return 'clinical';

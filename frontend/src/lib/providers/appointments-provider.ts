@@ -140,7 +140,10 @@ export function useAppointments(): UseAppointmentsResult {
       })
       .catch(() => {
         if (id !== reqId.current) return;
-        setState({ data: [], loading: false, source: "cloud", isEmpty: true, error: true });
+        if (!isBackground) setState({ data: [], loading: false, source: "cloud", isEmpty: true, error: true });
+        // Background refreshes fail silently — keep showing the last good data
+        // rather than clobbering the screen with an error state over a
+        // transient network hiccup during a periodic sync.
       });
   };
 
@@ -151,7 +154,7 @@ export function useAppointments(): UseAppointmentsResult {
 
   // Poll every 30s so widgets like "Bookings This Week" on Home stay in sync
   // with bookings created elsewhere (CRM import, another open tab, etc.)
-  // without requiring a manual page reload.
+  // without requiring a manual page reload. Silent — see `background` above.
   useEffect(() => {
     const timer = setInterval(() => {
       const id = ++reqId.current;
@@ -161,10 +164,10 @@ export function useAppointments(): UseAppointmentsResult {
   }, []);
 
   return {
-    ...state, 
+    ...state,
     refresh: () => {
       const id = ++reqId.current;
       fetch(id);
-    } 
+    }
   };
 }

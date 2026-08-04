@@ -64,11 +64,11 @@ export class TemplateAgentService {
 
       // Stage 2: Hard Constraint Filtering (Deterministic)
       let validCandidates = this.hardConstraintEngine.filter(allCandidates, context);
-      
+
       // If we filtered out too many (e.g. strict exclusions), fall back safely
       if (validCandidates.length < 5) {
         this.logger.warn(`[Stage 2] Too few candidates (${validCandidates.length}) after filtering. Relaxing constraints.`);
-        validCandidates = allCandidates; 
+        validCandidates = allCandidates;
       } else {
         this.logger.log(`[Stage 2] ${validCandidates.length} candidates survived constraint filtering.`);
       }
@@ -95,11 +95,7 @@ We have mathematically narrowed down our layout library to the absolute Top ${to
 Your ONLY job is to select the single best structural variant from this shortlist based strictly on the provided Brand Aesthetic and visual storytelling for the given brief.
 
 Do NOT default to "minimal" or "high-end fashion" unless it perfectly matches the Brand Aesthetic. Adapt dynamically.
-<<<<<<< HEAD
-CRITICAL DESIGN RULE: You MUST rotate across different distinct variants. If previous slides used 'editorial_magazine_cover', you must actively select a different geometry like 'editorial_split' or 'minimalist_offset_quote'. Ensure each slide is distinct geometrically (e.g., rotating between split, centered, and full-bleed) while maintaining brand coherence.
-=======
-CRITICAL DESIGN RULE: You MUST rotate across different Design Families (e.g., if previous slides used 'editorial', you must actively select 'minimalist_quote', 'clinical_hero', 'split', 'countdown_promo', 'product_showcase' or other distinct families). Variants from the same design family must NOT be used continuously. Ensure each slide is distinct visually while maintaining brand coherence.
->>>>>>> 0580ab0403872ad71682c84780a6935e1f28d275
+CRITICAL DESIGN RULE: You MUST rotate across different Design Families (e.g., if previous slides used 'editorial', you must actively select 'minimalist_quote', 'clinical_hero', 'split', 'countdown_promo', 'product_showcase', 'before_after', 'testimonial', 'scrapbook', 'quadrant' or other distinct families). Variants from the same design family must NOT be used continuously. Ensure each slide is distinct visually while maintaining brand coherence.
 
 CONTEXT:
 - Brand Aesthetic: ${context.aesthetic}

@@ -533,6 +533,449 @@ export class CompositionEngine {
         offsetPercent: 10
       } as IDSLDecorationLayer);
 
+    } else if (layoutId === 'before_after_side_by_side') {
+      // RECIPE: Before/After - Side by Side
+      // Real before-photo and after-photo stitched vertically (left/right), arrow marking the seam, heading below
+      layers.push({
+        id: 'ba_side_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'before_after_split',
+        orientation: 'vertical',
+        paddingPercent: 0,
+        anchor: 'center',
+        allowedAnchors: ['center']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'ba_side_arrow',
+        type: 'decoration',
+        zIndex: 25,
+        component: 'transformation_arrow',
+        orientation: 'vertical',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'ba_side_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'bottom_center',
+        allowedAnchors: ['bottom_center', 'top_center'],
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 80
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'ba_side_texture',
+        type: 'decoration',
+        zIndex: 5,
+        component: 'paper_texture',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+    } else if (layoutId === 'before_after_stacked') {
+      // RECIPE: Before/After - Stacked
+      // Real before-photo and after-photo stitched horizontally (top/bottom), arrow marking the seam, heading at the bottom
+      layers.push({
+        id: 'ba_stack_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'before_after_split',
+        orientation: 'horizontal',
+        paddingPercent: 0,
+        anchor: 'center',
+        allowedAnchors: ['center']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'ba_stack_arrow',
+        type: 'decoration',
+        zIndex: 25,
+        component: 'transformation_arrow',
+        orientation: 'horizontal',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'ba_stack_border',
+        type: 'decoration',
+        zIndex: 20,
+        component: 'structural_border',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'ba_stack_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'bottom_center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 80
+      } as IDSLTextLayer);
+
+    } else if (layoutId === 'before_after_labeled') {
+      // RECIPE: Before/After - Labeled Reveal
+      // Side-by-side split with a masking-tape accent and a heading+tagline stack, evoking a pinned-up transformation card
+      layers.push({
+        id: 'ba_labeled_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'before_after_split',
+        orientation: 'vertical',
+        paddingPercent: 5,
+        anchor: 'center',
+        allowedAnchors: ['center']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'ba_labeled_tape',
+        type: 'decoration',
+        zIndex: 35,
+        component: 'editorial_tape',
+        anchor: 'top_center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'ba_labeled_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'top_center',
+        allowedAnchors: ['top_center', 'bottom_center'],
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 70
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'ba_labeled_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_center',
+        role: 'tagline',
+        alignment: 'center',
+        maxWidthPercent: 60
+      } as IDSLTextLayer);
+
+      // ==========================================
+      // TESTIMONIAL FAMILY
+      // ==========================================
+    } else if (layoutId === 'testimonial_quote_portrait') {
+      // RECIPE: Testimonial - Quote with Portrait
+      // Circle-masked client portrait, quote marks accent, heading carries the quote, tagline carries attribution
+      layers.push({
+        id: 'testi_portrait_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'circle',
+        paddingPercent: 12,
+        // Locked to top_center (no allowedAnchors variation): the circle mask
+        // is always 60% of the canvas's shorter dimension (fixed in the
+        // renderer, not something this recipe controls), so at 'center' it
+        // would sit even lower and leave LESS room for the heading/tagline
+        // below it than 'top_center' already does — the opposite of a safe
+        // variation.
+        anchor: 'top_center'
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'testi_portrait_quote',
+        type: 'decoration',
+        zIndex: 20,
+        component: 'quote_marks',
+        anchor: 'top_left',
+        offsetPercent: 5
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'testi_portrait_heading',
+        type: 'text',
+        zIndex: 30,
+        // 'center' used to be offered as a variation here, but
+        // testi_portrait_image is a top-anchored circle at 60% of the
+        // canvas's shorter dimension — vertical-center always lands inside
+        // that circle, guaranteeing a heading/photo collision, not an
+        // occasional one. bottom_center is the only safe position given
+        // this recipe's fixed photo geometry.
+        anchor: 'bottom_center',
+        role: 'heading',
+        alignment: 'center',
+        // Widened from 70 -> 88: a narrower box wraps to more lines, and
+        // every extra line eats further into the tight clearance between
+        // the (fixed-size) circle photo above and the footer reserve below.
+        maxWidthPercent: 88
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'testi_portrait_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_center',
+        role: 'tagline',
+        alignment: 'center',
+        maxWidthPercent: 50
+      } as IDSLTextLayer);
+
+    } else if (layoutId === 'testimonial_star_card') {
+      // RECIPE: Testimonial - Star Rating Card
+      // Glass card treatment with a 5-star rating row leading, quote below, client name as tagline
+      layers.push({
+        id: 'testi_star_card',
+        type: 'decoration',
+        zIndex: 15,
+        component: 'glass_card',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'testi_star_rating',
+        type: 'decoration',
+        zIndex: 30,
+        component: 'star_rating_row',
+        anchor: 'top_center',
+        offsetPercent: 15
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'testi_star_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 65
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'testi_star_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_center',
+        role: 'tagline',
+        alignment: 'center',
+        maxWidthPercent: 45
+      } as IDSLTextLayer);
+
+    } else if (layoutId === 'testimonial_minimal_quote') {
+      // RECIPE: Testimonial - Minimal Quote (no image required)
+      // Pure typography quote for appointments/slides without a usable client photo, small star row for social proof
+      layers.push({
+        id: 'testi_min_accent',
+        type: 'decoration',
+        zIndex: 20,
+        component: 'quote_mark_accent',
+        anchor: 'top_center',
+        offsetPercent: 10
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'testi_min_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 75
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'testi_min_stars',
+        type: 'decoration',
+        zIndex: 30,
+        component: 'star_rating_row',
+        anchor: 'bottom_center',
+        offsetPercent: 15
+      } as IDSLDecorationLayer);
+
+      // ==========================================
+      // SCRAPBOOK FAMILY
+      // ==========================================
+    } else if (layoutId === 'scrapbook_collage') {
+      // RECIPE: Scrapbook - Taped Photo Collage
+      // Polaroid-masked photo pinned with a masking-tape accent, torn-paper texture, heading below like a caption card
+      layers.push({
+        id: 'scrap_collage_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'polaroid',
+        paddingPercent: 8,
+        anchor: 'top_center',
+        allowedAnchors: ['top_center', 'center']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'scrap_collage_tape',
+        type: 'decoration',
+        zIndex: 35,
+        component: 'editorial_tape',
+        anchor: 'top_center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'scrap_collage_torn',
+        type: 'decoration',
+        zIndex: 5,
+        component: 'torn_paper',
+        anchor: 'bottom_center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'scrap_collage_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'bottom_center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 75
+      } as IDSLTextLayer);
+
+    } else if (layoutId === 'scrapbook_journal_entry') {
+      // RECIPE: Scrapbook - Journal Entry
+      // Inset rectangle photo with a divider and handwritten-feel margin notes, like a personal journal spread
+      layers.push({
+        id: 'scrap_journal_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'rectangle',
+        paddingPercent: 12,
+        anchor: 'middle_left',
+        allowedAnchors: ['middle_left', 'top_left']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'scrap_journal_notes',
+        type: 'decoration',
+        zIndex: 20,
+        component: 'margin_notes',
+        anchor: 'middle_right',
+        offsetPercent: 5
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'scrap_journal_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'middle_right',
+        allowedAnchors: ['middle_right', 'bottom_right'],
+        role: 'heading',
+        alignment: 'left',
+        maxWidthPercent: 40
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'scrap_journal_divider',
+        type: 'decoration',
+        zIndex: 20,
+        component: 'divider',
+        anchor: 'center',
+        offsetPercent: 50
+      } as IDSLDecorationLayer);
+
+      // ==========================================
+      // QUADRANT FAMILY
+      // ==========================================
+    } else if (layoutId === 'quadrant_grid') {
+      // RECIPE: Quadrant - Grid Overlay
+      // Full photo with a subtle quadrant grid overlay and a corner badge, evoking a 4-panel structure on a single hero image
+      layers.push({
+        id: 'quad_grid_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'rectangle',
+        paddingPercent: 0,
+        anchor: 'center',
+        allowedAnchors: ['center']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'quad_grid_lines',
+        type: 'decoration',
+        zIndex: 20,
+        component: 'minimal_grid',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'quad_grid_badge',
+        type: 'decoration',
+        zIndex: 35,
+        component: 'geometric_badge',
+        anchor: 'top_right',
+        offsetPercent: 5
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'quad_grid_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'bottom_left',
+        role: 'heading',
+        alignment: 'left',
+        maxWidthPercent: 60
+      } as IDSLTextLayer);
+
+    } else if (layoutId === 'quadrant_badge_focus') {
+      // RECIPE: Quadrant - Badge Focus
+      // Arch-masked photo with a prominent geometric badge and grain texture, heading+tagline stacked below
+      layers.push({
+        id: 'quad_badge_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'arch',
+        paddingPercent: 10,
+        anchor: 'center',
+        allowedAnchors: ['center']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'quad_badge_geo',
+        type: 'decoration',
+        zIndex: 35,
+        component: 'geometric_badge',
+        anchor: 'top_left',
+        offsetPercent: 5
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'quad_badge_grain',
+        type: 'decoration',
+        zIndex: 5,
+        component: 'grain_overlay',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'quad_badge_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'bottom_center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 70
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'quad_badge_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_center',
+        role: 'tagline',
+        alignment: 'center',
+        maxWidthPercent: 50
+      } as IDSLTextLayer);
+
     } else if (layoutId.startsWith('clinical')) {
       // RECIPE: Clinical Family (Precision, Alignment, Steps)
       // Focuses on structured information, steps, and callout boxes

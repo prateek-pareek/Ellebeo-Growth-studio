@@ -132,6 +132,42 @@ const fullBleedBase = async (ctx: BaseCtx): Promise<BaseResult> => ({
   compositeRight: 0,
 });
 
+// Genuine two-photo compositing — a real before-photo and a real after-photo
+// stitched together (not a single-photo crop). Shared by the legacy
+// split_before_after treatment and the DSL/primitive-system before_after
+// family (universal_dynamic_base), so there's one implementation of the
+// actual Sharp stitching logic. Falls back to a single-photo bordered
+// treatment when no before-photo is available for this appointment.
+const stitchBeforeAfterImages = async (ctx: BaseCtx, orientation: 'vertical' | 'horizontal'): Promise<BaseResult> => {
+  if (!ctx.beforePhotoUrl) return borderedDefault(ctx);
+  try {
+    const beforeBuffer = await ctx.downloadImageAsBuffer(ctx.beforePhotoUrl);
+    let composites: sharp.OverlayOptions[];
+    if (orientation === 'horizontal') {
+      const topHalf = await processPortraitFit(beforeBuffer, ctx.innerW, Math.round(ctx.innerH / 2), ctx.validBackgroundColor);
+      const bottomHalf = await processPortraitFit(ctx.imageBuffer, ctx.innerW, Math.round(ctx.innerH / 2), ctx.validBackgroundColor);
+      composites = [
+        { input: topHalf, top: 0, left: 0 },
+        { input: bottomHalf, top: Math.round(ctx.innerH / 2), left: 0 },
+      ];
+    } else {
+      const leftHalf = await processPortraitFit(beforeBuffer, Math.round(ctx.innerW / 2), ctx.innerH, ctx.validBackgroundColor);
+      const rightHalf = await processPortraitFit(ctx.imageBuffer, Math.round(ctx.innerW / 2), ctx.innerH, ctx.validBackgroundColor);
+      composites = [
+        { input: leftHalf, top: 0, left: 0 },
+        { input: rightHalf, top: 0, left: Math.round(ctx.innerW / 2) },
+      ];
+    }
+    const baseImageBuffer = await sharp({
+      create: { width: ctx.innerW, height: ctx.innerH, channels: 3, background: '#000000' },
+    }).composite(composites).png().toBuffer();
+    return { baseImage: sharp(baseImageBuffer), compositeTop: ctx.paddingTop, compositeBottom: ctx.paddingBottom, compositeLeft: ctx.paddingX, compositeRight: ctx.paddingX };
+  } catch (err) {
+    console.error('[Before/After Stitch Error] Failed to stitch before/after images, falling back:', err);
+    return borderedDefault(ctx);
+  }
+};
+
 export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResult>> = {
   bordered_default: async (ctx) => await borderedDefault(ctx),
 
@@ -173,24 +209,7 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
     };
   },
 
-  split_before_after: async (ctx) => {
-    if (!ctx.beforePhotoUrl) return borderedDefault(ctx);
-    try {
-      const beforeBuffer = await ctx.downloadImageAsBuffer(ctx.beforePhotoUrl);
-      const leftHalf = await processPortraitFit(beforeBuffer, Math.round(ctx.innerW / 2), ctx.innerH, ctx.validBackgroundColor);
-      const rightHalf = await processPortraitFit(ctx.imageBuffer, Math.round(ctx.innerW / 2), ctx.innerH, ctx.validBackgroundColor);
-      const baseImageBuffer = await sharp({
-        create: { width: ctx.innerW, height: ctx.innerH, channels: 3, background: '#000000' },
-      }).composite([
-        { input: leftHalf, top: 0, left: 0 },
-        { input: rightHalf, top: 0, left: Math.round(ctx.innerW / 2) },
-      ]).png().toBuffer();
-      return { baseImage: sharp(baseImageBuffer), compositeTop: ctx.paddingTop, compositeBottom: ctx.paddingBottom, compositeLeft: ctx.paddingX, compositeRight: ctx.paddingX };
-    } catch (err) {
-      console.error('[Sharp Split Frame Error] Failed to stitch before/after images, falling back:', err);
-      return borderedDefault(ctx);
-    }
-  },
+  split_before_after: async (ctx) => stitchBeforeAfterImages(ctx, 'vertical'),
 
   arch_mask: async (ctx) => {
     try {
@@ -268,7 +287,13 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
           }
         }
         
-        if (ctx.designSpec?.photo?.imageExecution === 'triptych') {
+        if (imageLayer.mask === 'before_after_split') {
+          // Genuine two-photo compositing for the before_after DSL family —
+          // real before-photo + real after-photo stitched together, not a
+          // single-photo crop. Falls back to a single-photo treatment inside
+          // stitchBeforeAfterImages() when no before-photo is available.
+          return stitchBeforeAfterImages(ctx, imageLayer.orientation === 'horizontal' ? 'horizontal' : 'vertical');
+        } else if (ctx.designSpec?.photo?.imageExecution === 'triptych') {
           // CANVA-STYLE TRIPTYCH: Split the photo into 3 distinct vertical panels
           const panelW = Math.floor(ctx.w * 0.28);
           const gap = Math.floor(ctx.w * 0.04);
@@ -870,8 +895,11 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" fill="${ctx.validBrandColor}" fill-opacity="0.55" />`,
 
   dark_scrim_overlay: (ctx) => `
-      <!-- Deep luxury dark scrim overlay -->
-      <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" fill="${ctx.validBrandColor}" fill-opacity="0.32" />`,
+      <!-- Deep luxury dark scrim overlay. Toned down from 0.32 -> 0.15: at
+           0.32 it read as a heavy gray/black cover on warm/light-toned
+           photos rather than a subtle mood shift (see primitive-engine.ts's
+           'dark_scrim', kept in sync with this one). -->
+      <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" fill="${ctx.validBrandColor}" fill-opacity="0.15" />`,
 
   monogram_watermark: (ctx) => `
       <!-- Large single-character monogram watermark in negative space -->

@@ -34,6 +34,22 @@ export interface TypographyContext {
   };
 }
 
+// ai-image-generation.service.ts's overlayBrandingAndText() always draws a
+// branding footer band (business name + slide counter) across the bottom of
+// the canvas, independently of this engine's own layout/safe-zone math — the
+// two systems don't share state. That footer isn't fixed-height: the fallback
+// tracker sits at a flat h-85, but the randomized "classic bar" variant
+// (1-in-5 chance per slide) positions itself at
+// h - (geometryOut.safeY + 80) - 60, and safeY itself is
+// round(80 * behavior.negativeSpaceMultiplier) — up to 80*1.8=144 for
+// "expansive" (calm/quiet) families like Testimonial. Worst case the footer's
+// top edge lands at h - (144+80) - 60 = h - 284. Reserving only ~100-120px
+// (an earlier, too-narrow guess) still let a 2-line heading's second line
+// dip into it. This engine has no access to that behavior profile to compute
+// the exact figure, so reserve generously for the worst case instead of
+// precisely replicating cross-file math here.
+const BRANDING_FOOTER_RESERVE_PX = 300;
+
 export class TypographyEngine {
   private fontRegistry: FontRegistry;
 
@@ -155,13 +171,30 @@ export class TypographyEngine {
     }
 
     // PHASE 2.5: SMART COMPOSITION (No Shrinking, No Failing)
+    
+    // 1. Vertical Validation & Clamping
     // If text bleeds off the bottom, we shift it up rather than shrinking the font.
-    // If it bleeds off the top, we push it down.
-    if (y + textHeight > ctx.h - ctx.constraints.safeY) {
-      y = ctx.h - ctx.constraints.safeY - textHeight;
+    // We use BRANDING_FOOTER_RESERVE_PX to avoid colliding with the globally-rendered branding footer.
+    if (y + textHeight > ctx.h - BRANDING_FOOTER_RESERVE_PX) {
+      y = ctx.h - textHeight - BRANDING_FOOTER_RESERVE_PX;
     }
     if (y < ctx.constraints.safeY) {
       y = ctx.constraints.safeY;
+    }
+
+    // 2. Horizontal Validation & Clamping
+    // The vertical clamp above doesn't fix horizontal overflow (boxX off the left/right edge).
+    // Clamp x to the safe area based on text-anchor mode.
+    const minX = ctx.constraints.safeX;
+    const maxX = ctx.w - ctx.constraints.safeX;
+    if (anchor === 'middle') {
+      x = Math.max(minX + effectiveMaxW / 2, Math.min(x, maxX - effectiveMaxW / 2));
+    } else if (anchor === 'end') {
+      x = Math.max(x, minX + effectiveMaxW);
+      x = Math.min(x, maxX);
+    } else {
+      x = Math.min(x, maxX - effectiveMaxW);
+      x = Math.max(x, minX);
     }
 
     let boxX = x;
