@@ -160,6 +160,49 @@ export class CompositionEngine {
         maxWidthPercent: 10
       } as IDSLTextLayer);
 
+    } else if (layoutId === 'testimonial_z_pattern') {
+      // RECIPE: Testimonial Z-Pattern
+      // Avatar top left, large quote center right, name/title bottom left.
+      layers.push({
+        id: 'test_z_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'circle',
+        paddingPercent: 12,
+        anchor: 'top_left',
+        allowedAnchors: ['top_left', 'top_right']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'test_z_quote_mark',
+        type: 'decoration',
+        zIndex: 15,
+        component: 'quote_marks',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'test_z_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'center',
+        allowedAnchors: ['center'],
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 70
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'test_z_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_left',
+        role: 'tagline',
+        alignment: 'left',
+        maxWidthPercent: 40
+      } as IDSLTextLayer);
+
     } else if (layoutId === 'split_vertical_stack') {
       // RECIPE: Split - Vertical Stack
       // Heading block on top ~40%, circle-masked photo filling the bottom ~40-95%
@@ -974,6 +1017,525 @@ export class CompositionEngine {
         role: 'tagline',
         alignment: 'center',
         maxWidthPercent: 50
+      } as IDSLTextLayer);
+
+      // ==========================================
+      // TRANSFORMATION FAMILY
+      // ==========================================
+    } else if (layoutId === 'transformation_timeline') {
+      // RECIPE: Transformation - Timeline
+      // Hero photo on top, horizontal milestone timeline marking the journey, heading + tagline below
+      layers.push({
+        id: 'trans_tl_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'rectangle',
+        paddingPercent: 5,
+        anchor: 'top_center',
+        allowedAnchors: ['top_center', 'center']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'trans_tl_track',
+        type: 'decoration',
+        zIndex: 25,
+        component: 'timeline_track',
+        anchor: 'center',
+        offsetPercent: 62
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'trans_tl_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'bottom_center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 80
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'trans_tl_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_center',
+        role: 'tagline',
+        alignment: 'center',
+        maxWidthPercent: 60
+      } as IDSLTextLayer);
+
+    } else if (layoutId === 'transformation_journey_arc') {
+      // RECIPE: Transformation - Journey Arc
+      // Arch-masked photo with a step badge marking progress, heading and tagline stacked below, structured/bold energy
+      layers.push({
+        id: 'trans_arc_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'arch',
+        paddingPercent: 10,
+        anchor: 'top_center',
+        allowedAnchors: ['top_center', 'center']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'trans_arc_badge',
+        type: 'decoration',
+        zIndex: 35,
+        component: 'step_badge',
+        anchor: 'top_left',
+        offsetPercent: 5
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'trans_arc_rule',
+        type: 'decoration',
+        zIndex: 20,
+        component: 'accent_rule',
+        anchor: 'bottom_center',
+        offsetPercent: 30
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'trans_arc_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'bottom_center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 75
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'trans_arc_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_center',
+        role: 'tagline',
+        alignment: 'center',
+        maxWidthPercent: 55
+      } as IDSLTextLayer);
+
+    } else if (layoutId === 'transformation_stat_reveal') {
+      // RECIPE: Transformation - Stat Reveal
+      // Single hero photo with a numeral watermark and a stat/metric callout, no dual-photo split (distinct from before_after)
+      layers.push({
+        id: 'trans_stat_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'rectangle',
+        paddingPercent: 0,
+        anchor: 'center',
+        allowedAnchors: ['center']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'trans_stat_numeral',
+        type: 'decoration',
+        zIndex: 15,
+        component: 'large_numeral_bullet',
+        anchor: 'top_left',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'trans_stat_metric',
+        type: 'decoration',
+        zIndex: 35,
+        component: 'metric_label',
+        anchor: 'bottom_center',
+        offsetPercent: 12
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'trans_stat_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'top_center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 75
+      } as IDSLTextLayer);
+
+      // ==========================================
+      // MAGAZINE FAMILY
+      // ==========================================
+    } else if (layoutId === 'magazine_masthead_cover') {
+      // RECIPE: Magazine - Masthead Cover
+      // Full-bleed hero photo, large masthead headline, issue-style running header, sidebar rule down the left margin
+      layers.push({
+        id: 'mag_mh_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'full_bleed',
+        paddingPercent: 0,
+        anchor: 'center'
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'mag_mh_sidebar',
+        type: 'decoration',
+        zIndex: 20,
+        component: 'editorial_sidebar',
+        anchor: 'middle_left',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'mag_mh_header',
+        type: 'decoration',
+        zIndex: 25,
+        component: 'running_header',
+        anchor: 'top_left',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'mag_mh_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'top_center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 90
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'mag_mh_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_center',
+        role: 'tagline',
+        alignment: 'center',
+        maxWidthPercent: 60
+      } as IDSLTextLayer);
+
+    } else if (layoutId === 'magazine_pull_quote_spread') {
+      // RECIPE: Magazine - Pull Quote Spread
+      // Photo occupies one half, large italic pull-quote treatment on the other, vertical brand label along the edge
+      layers.push({
+        id: 'mag_pq_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'rectangle',
+        paddingPercent: 0,
+        anchor: 'middle_left',
+        allowedAnchors: ['middle_left', 'middle_right']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'mag_pq_quote',
+        type: 'decoration',
+        zIndex: 20,
+        component: 'pull_quote',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'mag_pq_label',
+        type: 'decoration',
+        zIndex: 25,
+        component: 'vertical_label',
+        anchor: 'middle_left',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'mag_pq_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'middle_right',
+        role: 'heading',
+        alignment: 'left',
+        maxWidthPercent: 45
+      } as IDSLTextLayer);
+
+    } else if (layoutId === 'magazine_contents_grid') {
+      // RECIPE: Magazine - Contents Grid
+      // Text-forward contents-page feel: stacked chapter tabs and an oversized index numeral frame the headline, no image required
+      layers.push({
+        id: 'mag_cg_tabs',
+        type: 'decoration',
+        zIndex: 20,
+        component: 'chapter_tabs',
+        anchor: 'top_right',
+        offsetPercent: 5
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'mag_cg_index',
+        type: 'decoration',
+        zIndex: 5,
+        component: 'oversized_index',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'mag_cg_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 70
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'mag_cg_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_center',
+        role: 'tagline',
+        alignment: 'center',
+        maxWidthPercent: 55
+      } as IDSLTextLayer);
+
+      // ==========================================
+      // POLAROID FAMILY
+      // ==========================================
+    } else if (layoutId === 'polaroid_wall') {
+      // RECIPE: Polaroid - Wall
+      // Single snapshot dressed with a real polaroid frame and a pin/tape accent, plus a small sticker accent suggesting a wider pinned-up wall
+      layers.push({
+        id: 'polaroid_wall_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'rectangle',
+        paddingPercent: 14,
+        anchor: 'top_center',
+        allowedAnchors: ['top_center', 'center']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'polaroid_wall_frame',
+        type: 'decoration',
+        zIndex: 15,
+        component: 'polaroid_frame',
+        anchor: 'top_center',
+        offsetPercent: 3
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'polaroid_wall_tape',
+        type: 'decoration',
+        zIndex: 35,
+        component: 'editorial_tape',
+        anchor: 'top_center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'polaroid_wall_sticker',
+        type: 'decoration',
+        zIndex: 20,
+        component: 'sticker',
+        anchor: 'bottom_right',
+        offsetPercent: 5
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'polaroid_wall_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'bottom_center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 75
+      } as IDSLTextLayer);
+
+    } else if (layoutId === 'polaroid_stacked_caption') {
+      // RECIPE: Polaroid - Stacked Caption
+      // Single centered polaroid-framed photo with a handwritten-feel caption strip below the frame
+      layers.push({
+        id: 'polaroid_sc_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'rectangle',
+        paddingPercent: 16,
+        anchor: 'center',
+        allowedAnchors: ['center', 'top_center']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'polaroid_sc_frame',
+        type: 'decoration',
+        zIndex: 15,
+        component: 'polaroid_frame',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'polaroid_sc_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'bottom_center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 70
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'polaroid_sc_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_center',
+        role: 'tagline',
+        alignment: 'center',
+        maxWidthPercent: 50
+      } as IDSLTextLayer);
+
+      // ==========================================
+      // NOTIFICATION CARD FAMILY
+      // ==========================================
+    } else if (layoutId === 'notification_card_alert') {
+      // RECIPE: Notification Card - Alert
+      // Pure text alert card: icon badge at top center, glass-card panel behind the title, timestamp/subtext below
+      layers.push({
+        id: 'notif_alert_panel',
+        type: 'decoration',
+        zIndex: 10,
+        component: 'glass_card',
+        anchor: 'bottom_left',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'notif_alert_icon',
+        type: 'decoration',
+        zIndex: 35,
+        component: 'notification_icon_badge',
+        anchor: 'top_center',
+        offsetPercent: 8
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'notif_alert_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 75
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'notif_alert_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_center',
+        role: 'tagline',
+        alignment: 'center',
+        maxWidthPercent: 55
+      } as IDSLTextLayer);
+
+    } else if (layoutId === 'notification_card_banner') {
+      // RECIPE: Notification Card - Banner
+      // Top banner bar: icon badge and status chip anchor the top edge, heading and subtext stacked below
+      layers.push({
+        id: 'notif_banner_icon',
+        type: 'decoration',
+        zIndex: 35,
+        component: 'notification_icon_badge',
+        anchor: 'top_left',
+        offsetPercent: 5
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'notif_banner_chip',
+        type: 'decoration',
+        zIndex: 30,
+        component: 'status_chip',
+        anchor: 'top_right',
+        offsetPercent: 5
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'notif_banner_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 80
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'notif_banner_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_center',
+        role: 'tagline',
+        alignment: 'center',
+        maxWidthPercent: 60
+      } as IDSLTextLayer);
+
+      // ==========================================
+      // ANNOUNCEMENT FAMILY
+      // ==========================================
+    } else if (layoutId === 'announcement_banner') {
+      // RECIPE: Announcement - Banner
+      // Solid megaphone banner ribbon across the top, bold headline and tagline stacked below
+      layers.push({
+        id: 'announce_banner_ribbon',
+        type: 'decoration',
+        zIndex: 20,
+        component: 'announcement_banner_ribbon',
+        anchor: 'top_center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'announce_banner_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 80
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'announce_banner_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_center',
+        role: 'tagline',
+        alignment: 'center',
+        maxWidthPercent: 60
+      } as IDSLTextLayer);
+
+    } else if (layoutId === 'announcement_spotlight') {
+      // RECIPE: Announcement - Spotlight
+      // Centered starburst spotlight badge behind the headline, tagline below, no image required
+      layers.push({
+        id: 'announce_spot_burst',
+        type: 'decoration',
+        zIndex: 10,
+        component: 'starburst_badge',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'announce_spot_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 75
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'announce_spot_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_center',
+        role: 'tagline',
+        alignment: 'center',
+        maxWidthPercent: 55
       } as IDSLTextLayer);
 
     } else if (layoutId.startsWith('clinical')) {

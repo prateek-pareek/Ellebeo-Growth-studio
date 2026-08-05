@@ -18,7 +18,7 @@ export interface IDesignBehaviorProfile {
   verticalTextAllowance: 'allowed' | 'forced_on_tagline' | 'forbidden';
   textRotationAngle: number;
   secondaryTextOpacity: number;
-  
+
   gridColumns: number;
   negativeSpaceMultiplier: number;
   marginHugging: boolean;
@@ -27,7 +27,7 @@ export interface IDesignBehaviorProfile {
   cropIntent: 'tight_macro' | 'environmental_wide';
   focalPointOffset: string;
   zIndexReordering: string;
-  
+
   captionBarStyling: 'floating_pill' | 'ribbon' | 'none';
   borderRadius: number;
   dividerStrokeWeight: number;
@@ -50,7 +50,7 @@ export interface IDesignLanguage {
 // ─── 2. ART DIRECTION ENGINE ───
 
 export class ArtDirectionEngine {
-  
+
   /**
    * Generates Semantic Design Intent from knowledge tags and carousel rhythm
    */
@@ -58,7 +58,7 @@ export class ArtDirectionEngine {
     // 1. Procedural Layout Interception
     // Strip numeric suffixes from compiled procedural variants (e.g. editorial_hero_0 -> editorial_hero)
     const baseId = layoutId.replace(/_\d+$/, '');
-    
+
     let family = 'editorial';
     let energy = 'calm';
     let balance = 'symmetrical';
@@ -141,6 +141,36 @@ export class ArtDirectionEngine {
       balance = 'symmetrical';
       readingFlow = 'center_down';
       foundKnowledge = true;
+    } else if (baseId.startsWith('transformation')) {
+      family = 'transformation';
+      energy = 'calm'; // matches the mined energy (13/13 real samples) - a journey, not a hard sell
+      balance = 'asymmetrical'; // matches the dominant mined balance (7/13 real samples)
+      readingFlow = 'center_down'; // matches the dominant mined readingFlow (9/13 real samples)
+      foundKnowledge = true;
+    } else if (baseId.startsWith('magazine')) {
+      family = 'magazine';
+      energy = 'calm'; // matches the dominant mined energy (9/10 real samples)
+      balance = 'asymmetrical'; // matches the mined balance (10/10 real samples)
+      readingFlow = 'z_pattern'; // matches the dominant mined readingFlow (7/10 real samples)
+      foundKnowledge = true;
+    } else if (baseId.startsWith('polaroid')) {
+      family = 'polaroid';
+      energy = 'calm'; // matches the dominant mined energy (4/5 real samples)
+      balance = 'asymmetrical'; // matches the mined balance (5/5 real samples)
+      readingFlow = 'center_down'; // matches the dominant mined readingFlow (3/5 real samples)
+      foundKnowledge = true;
+    } else if (baseId.startsWith('notification_card')) {
+      family = 'notification_card';
+      energy = 'calm'; // only 1 real mined sample exists for this family (design-knowledge.json) - grounded in that sample's energy
+      balance = 'symmetrical'; // matches the 1 mined sample
+      readingFlow = 'center_down'; // matches the 1 mined sample
+      foundKnowledge = true;
+    } else if (baseId.startsWith('announcement')) {
+      family = 'announcement';
+      energy = 'calm'; // only 1 real mined sample exists for this family (design-knowledge.json) - grounded in that sample's energy
+      balance = 'asymmetrical'; // matches the 1 mined sample
+      readingFlow = 'z_pattern'; // matches the 1 mined sample
+      foundKnowledge = true;
     } else if (baseId.startsWith('clinical')) {
       family = 'clinical';
       energy = 'structured';
@@ -172,7 +202,7 @@ export class ArtDirectionEngine {
         foundKnowledge = true;
       }
     }
-    
+
     let whitespace: 'tight' | 'comfortable' | 'airy' | 'luxury' = 'comfortable';
     let mood: 'luxury' | 'organic' | 'clinical' | 'pop' | 'minimalist' = 'luxury';
     let visualPriority: 'typography_hero' | 'image_hero' | 'composition_hero' | 'cta_hero' = 'image_hero';
@@ -221,7 +251,7 @@ export class ArtDirectionEngine {
 
     if (slideIndex !== undefined && totalSlides !== undefined && totalSlides > 1) {
       const normalizedPos = slideIndex / (totalSlides - 1);
-      
+
       // Dense -> Open -> Medium -> Minimal (or custom based on position)
       if (slideIndex === 0) {
         // Cover Slide: Punchy, tight, dense
@@ -283,7 +313,7 @@ export class ArtDirectionEngine {
       verticalTextAllowance: 'forbidden',
       textRotationAngle: 0,
       secondaryTextOpacity: 1.0,
-      
+
       gridColumns: 12,
       negativeSpaceMultiplier: 1.0,
       marginHugging: false,
@@ -292,7 +322,7 @@ export class ArtDirectionEngine {
       cropIntent: 'environmental_wide',
       focalPointOffset: 'center',
       zIndexReordering: 'standard',
-      
+
       captionBarStyling: 'none',
       borderRadius: 0,
       dividerStrokeWeight: 1,
@@ -308,7 +338,7 @@ export class ArtDirectionEngine {
     };
 
     // Apply strict geometric overrides based on philosophical intent
-    
+
     if (intent.visualPriority === 'typography_hero') {
       profile.heroBaseFontSize = 140;
       profile.metadataBaseFontSize = 20;
@@ -320,8 +350,8 @@ export class ArtDirectionEngine {
     }
 
     if (intent.mood === 'luxury' || intent.family === 'editorial') {
-      profile.trackingHero = -0.02; 
-      profile.trackingMetadata = 0.15; 
+      profile.trackingHero = -0.02;
+      profile.trackingMetadata = 0.15;
       profile.lineHeightMultiplier = 0.85;
       profile.capitalizationRule = 'force_uppercase';
     } else if (intent.energy === 'bold') {
@@ -369,7 +399,7 @@ export class ArtDirectionEngine {
     const isLuxury = themeId.includes('beauty') || themeId.includes('luxury') || intent.mood === 'luxury';
     const isOrganic = themeId.includes('organic') || themeId.includes('wellness') || intent.mood === 'organic';
     const isClinical = themeId.includes('clinical') || themeId.includes('medical') || intent.mood === 'clinical';
-    
+
     const isBold = intent.energy === 'bold' || isPop;
 
     const color: ColorRecipe = {

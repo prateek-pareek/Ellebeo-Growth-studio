@@ -136,8 +136,43 @@ export class TypographyEngine {
     }
 
     // Wrap text to determine actual lines and height BEFORE Y calculation
-    const escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, effectiveMaxW);
+    let escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, effectiveMaxW);
     let textHeight = escapedLines.length * lineHeight;
+
+    // VERTICAL OVERFLOW PROTECTION
+    if (layer.allocatedBox && textHeight > layer.allocatedBox.height) {
+      let attempts = 0;
+      let currentFontSize = style.fontSize;
+      const minFontSize = style.fontSize * 0.85; // Max 15% shrink
+      const originalLineHeightMultiplier = lineHeight / style.fontSize;
+      
+      while (textHeight > layer.allocatedBox.height && currentFontSize > minFontSize && attempts < 3) {
+        currentFontSize = Math.floor(currentFontSize * 0.95); // 5% shrink per iteration
+        lineHeight = Math.floor(currentFontSize * originalLineHeightMultiplier);
+        style.fontSize = currentFontSize;
+        escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, effectiveMaxW);
+        textHeight = escapedLines.length * lineHeight;
+        attempts++;
+      }
+      
+      // Fallback: Smart Shortening
+      if (textHeight > layer.allocatedBox.height) {
+        if (layer.role === 'body' || layer.role === 'tagline' || layer.role === 'footnote') {
+          // Drop last sentence or truncate
+          const sentences = textToWrap.split('. ');
+          if (sentences.length > 1) {
+            textToWrap = sentences.slice(0, sentences.length - 1).join('. ') + '.';
+          } else {
+            textToWrap = textToWrap.substring(0, Math.floor(textToWrap.length * 0.7)) + '...';
+          }
+        } else if (layer.role === 'heading') {
+           textToWrap = textToWrap.substring(0, Math.floor(textToWrap.length * 0.75)) + '...';
+        }
+        
+        escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, effectiveMaxW);
+        textHeight = escapedLines.length * lineHeight;
+      }
+    }
 
     let x = ctx.w / 2;
     let y = ctx.h / 2;
@@ -155,10 +190,13 @@ export class TypographyEngine {
       y = baseAnchorResult.y;
 
       // Non-negotiable Face Avoidance: Ensure text doesn't overlap facial regions
-      const targetBox = { x: x - effectiveMaxW / 2, y, width: effectiveMaxW, height: textHeight };
-      y = ctx.layoutEngine.resolveFaceCollision(targetBox, ctx.constraints);
-
-      const anchorStr = (layer.anchor as string) || '';
+      const targetBox = { x, y, width: effectiveMaxW, height: textHeight };
+      const resolvedBox = ctx.layoutEngine.resolveFaceCollision(targetBox, ctx.constraints, (ctx as any).family);
+      x = resolvedBox.x;
+      y = resolvedBox.y;
+      effectiveMaxW = resolvedBox.width;
+    
+    const anchorStr = (layer.anchor as string) || '';
       // Fix bug: isCenterAnchor must check HORIZONTAL centering (_center, center, middle), 
       // NOT vertical keywords like 'top' or 'bottom' which misclassified top_left / bottom_left as centered!
       const isCenterAnchor = anchorStr.endsWith('_center') || anchorStr === 'center' || anchorStr === 'top_center' || anchorStr === 'bottom_center' || anchorStr === 'middle_center';
@@ -221,6 +259,24 @@ export class TypographyEngine {
     let boxX = x;
     if (anchor === 'middle') boxX = x - effectiveMaxW / 2;
     else if (anchor === 'end') boxX = x - effectiveMaxW;
+
+    // Horizontal overflow guard: clamp boxX (and x) back into the safe area if it
+    // would bleed off the left/right edge — previously caused text like "FLAWLESS
+    // GLOW" to render cut off at the canvas edge instead of being pulled back in bounds.
+    if (boxX < ctx.constraints.safeX - 20 || boxX + effectiveMaxW > ctx.w - ctx.constraints.safeX + 20) {
+      const minX = ctx.constraints.safeX;
+      const maxX = ctx.w - ctx.constraints.safeX;
+      if (anchor === 'middle') {
+        x = Math.max(minX + effectiveMaxW / 2, Math.min(x, maxX - effectiveMaxW / 2));
+      } else if (anchor === 'end') {
+        x = Math.max(x, minX + effectiveMaxW);
+        x = Math.min(x, maxX);
+      } else {
+        x = Math.min(x, maxX - effectiveMaxW);
+        x = Math.max(x, minX);
+      }
+      boxX = anchor === 'middle' ? x - effectiveMaxW / 2 : anchor === 'end' ? x - effectiveMaxW : x;
+    }
 
     let finalSvg = '';
 
