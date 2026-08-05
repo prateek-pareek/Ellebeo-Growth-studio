@@ -37,6 +37,8 @@
   --color-sage: var(--sage);
   --color-charcoal: var(--charcoal);
   --color-ink: var(--charcoal);
+  --color-brass: var(--brass);
+  --color-brass-ink: var(--brass-ink);
 
   --font-serif: "Playfair Display", serif;
   --font-sans: "Inter", sans-serif;
@@ -51,6 +53,8 @@
   --offwhite: oklch(0.97 0.005 80);   /* #F7F5F2 */
   --sage: oklch(0.62 0.025 145);      /* #8A9486 */
   --charcoal: oklch(0.28 0.005 0);    /* #2F2F2F */
+  --brass: oklch(0.60 0.09 75);       /* #AD8636 — accent for primary actions & highlights only */
+  --brass-ink: oklch(0.46 0.08 75);   /* #7A5E22 — text/icon-safe variant of brass */
 
   /* Map shadcn tokens to brand */
   --background: var(--offwhite);
@@ -76,6 +80,8 @@
   /* Effects */
   --shadow-artifact: 0 4px 24px -4px oklch(0.58 0.025 50 / 0.15);
   --shadow-soft: 0 1px 0 0 oklch(0.58 0.025 50 / 0.08);
+  --shadow-card: 0 1px 2px oklch(0.28 0.02 50 / 0.05), 0 10px 28px -12px oklch(0.28 0.02 50 / 0.14);
+  --shadow-card-hover: 0 2px 4px oklch(0.28 0.02 50 / 0.06), 0 18px 36px -14px oklch(0.28 0.02 50 / 0.20);
 }
 
 .dark {
@@ -96,6 +102,10 @@
   --border: oklch(1 0 0 / 0.1);
   --input: oklch(1 0 0 / 0.15);
   --ring: var(--nude);
+  --brass: oklch(0.74 0.10 80);       /* lighter on dark backgrounds */
+  --brass-ink: var(--brass);
+  --shadow-card: 0 1px 2px oklch(0 0 0 / 0.3), 0 12px 30px -14px oklch(0 0 0 / 0.55);
+  --shadow-card-hover: 0 2px 4px oklch(0 0 0 / 0.35), 0 20px 40px -16px oklch(0 0 0 / 0.6);
 }
 
 @layer base {
@@ -120,6 +130,13 @@
     background-color: var(--nude);
     color: var(--charcoal);
   }
+}
+
+@utility shadow-elevated {
+  box-shadow: var(--shadow-card);
+}
+@utility shadow-elevated-lg {
+  box-shadow: var(--shadow-card-hover);
 }
 
 @layer utilities {

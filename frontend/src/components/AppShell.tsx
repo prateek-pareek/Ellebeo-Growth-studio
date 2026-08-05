@@ -228,7 +228,7 @@ export function AppShell() {
             <span className="eyebrow mt-1">Growth</span>
           </Link>
 
-          <div className="hidden lg:flex items-center gap-7">
+          <div className="hidden lg:flex items-center gap-1">
             {DESKTOP_NAV.map((item) => {
               const active = pathname === item.to;
               return (
@@ -236,12 +236,13 @@ export function AppShell() {
                   key={item.to}
                   to={item.to}
                   className={
-                    "text-[11px] uppercase tracking-[0.22em] pb-1 transition-colors " +
+                    "relative flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] px-3 py-2 rounded-full transition-colors " +
                     (active
-                      ? "text-foreground border-b border-foreground"
-                      : "text-taupe hover:text-foreground")
+                      ? "text-foreground bg-card shadow-elevated"
+                      : "text-taupe hover:text-foreground hover:bg-nude/20")
                   }
                 >
+                  {active && <span className="size-1.5 rounded-full bg-brass" />}
                   {item.label}
                 </Link>
               );
