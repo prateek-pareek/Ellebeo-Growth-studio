@@ -118,7 +118,7 @@ function LoginPage() {
           >
             <p className="eyebrow mb-6">Welcome Back</p>
             <h2 className="font-serif text-5xl leading-tight mb-8">
-              Your brand is <span className="italic">waiting</span> for you.
+              Your brand is <span className="italic text-brass-ink">waiting</span> for you.
             </h2>
             <p className="text-taupe leading-relaxed">
               Continue your work on the intelligence layer. Your content queue and brand DNA are ready for refinement.
@@ -153,7 +153,7 @@ function LoginPage() {
                 type="email"
                 autoComplete="email"
                 placeholder="hello@example.com"
-                className="bg-transparent border-t-0 border-x-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-foreground transition-all"
+                className="bg-transparent border-t-0 border-x-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-brass transition-all"
                 value={email}
                 onChange={(e) => { setEmail(e.target.value); if (errors.email) setErrors(p => ({ ...p, email: undefined })); }}
                 required
@@ -174,7 +174,7 @@ function LoginPage() {
                   type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
                   placeholder="••••••••"
-                  className="bg-transparent border-t-0 border-x-0 border-b rounded-none px-0 pr-7 focus-visible:ring-0 focus-visible:border-foreground transition-all"
+                  className="bg-transparent border-t-0 border-x-0 border-b rounded-none px-0 pr-7 focus-visible:ring-0 focus-visible:border-brass transition-all"
                   value={password}
                   onChange={(e) => { setPassword(e.target.value); if (errors.password) setErrors(p => ({ ...p, password: undefined })); }}
                   required
@@ -193,8 +193,8 @@ function LoginPage() {
             </div>
 
             <Button
-              type="submit" 
-              className="w-full bg-foreground text-background hover:bg-taupe transition-colors py-6 rounded-none text-[11px] uppercase tracking-[0.2em]"
+              type="submit"
+              className="w-full bg-brass text-white hover:brightness-105 shadow-elevated hover:shadow-elevated-lg transition-all py-6 rounded-xl text-[11px] uppercase tracking-[0.2em]"
               disabled={loading}
             >
               {loading ? "Signing in…" : "Access Dashboard"}
@@ -211,7 +211,7 @@ function LoginPage() {
               type="button"
               onClick={handleGoogleSignIn}
               disabled={googleLoading}
-              className="w-full bg-transparent border hairline text-foreground hover:bg-card py-6 rounded-none text-[11px] uppercase tracking-[0.2em] flex items-center justify-center gap-3"
+              className="w-full bg-transparent border border-border text-foreground hover:bg-muted py-6 rounded-xl text-[11px] uppercase tracking-[0.2em] flex items-center justify-center gap-3"
             >
               <GoogleIcon />
               {googleLoading ? "Signing in…" : "Continue with Google"}
@@ -220,7 +220,7 @@ function LoginPage() {
               type="button"
               onClick={handleAppleSignIn}
               disabled={googleLoading}
-              className="w-full bg-foreground text-offwhite hover:bg-taupe py-6 rounded-none text-[11px] uppercase tracking-[0.2em] flex items-center justify-center gap-3"
+              className="w-full bg-foreground text-offwhite hover:bg-taupe py-6 rounded-xl text-[11px] uppercase tracking-[0.2em] flex items-center justify-center gap-3"
             >
               <AppleIcon />
               {googleLoading ? "Signing in…" : "Continue with Apple"}
