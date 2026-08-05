@@ -92,7 +92,7 @@ function TemplatesPage() {
   return (
     <div>
       {/* ── Header ──────────────────────────────────────────────────────── */}
-      <header className="mt-6 lg:mt-10 mb-8">
+      <header className="mt-6 lg:mt-10 mb-6">
         <div className="flex items-center gap-2.5 mb-4">
           <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-taupe">Templates</span>
           <span className="text-taupe/30">·</span>
@@ -102,86 +102,89 @@ function TemplatesPage() {
           </span>
         </div>
         <h1 className="page-title max-w-[22ch]">
-          Start from a <span className="italic text-taupe">template</span>.
+          Start from a <span className="italic text-brass-ink">template</span>.
         </h1>
         <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[52ch]">
           Each template auto-fills with your Brand DNA. Pick a format, choose a goal, edit and approve.
         </p>
       </header>
 
-      {/* ── Format filter — most prominent ──────────────────────────────── */}
-      <div className="mb-6">
-        <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-taupe mb-3">Format</p>
-        <div className="flex flex-wrap gap-2">
-          {FORMAT_FILTERS.map((f) => {
-            const meta = FORMAT_META[f];
-            const Icon = meta?.icon;
-            const active = format === f;
-            return (
+      {/* ── Filters ──────────────────────────────────────────────────────── */}
+      <section className="bg-card rounded-2xl shadow-elevated p-6 mb-6 space-y-5">
+        {/* Format filter — most prominent */}
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-taupe mb-3">Format</p>
+          <div className="flex flex-wrap gap-2">
+            {FORMAT_FILTERS.map((f) => {
+              const meta = FORMAT_META[f];
+              const Icon = meta?.icon;
+              const active = format === f;
+              return (
+                <button
+                  key={f}
+                  onClick={() => setFormat(f)}
+                  className={
+                    "inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest px-3.5 py-1.5 rounded-full border transition-all " +
+                    (active
+                      ? "bg-brass text-white border-brass"
+                      : "bg-muted text-taupe border-transparent hover:border-brass/40 hover:text-foreground")
+                  }
+                >
+                  {Icon && <Icon className="size-3" />}
+                  {f}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Category filter */}
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-taupe mb-3">Category</p>
+          <div className="flex flex-wrap gap-2">
+            {["All", ...categories].map((c) => (
               <button
-                key={f}
-                onClick={() => setFormat(f)}
+                key={c}
+                onClick={() => setCategory(c)}
                 className={
-                  "inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest px-3 py-1.5 rounded-full border-2 transition-all " +
-                  (active
-                    ? "bg-foreground text-offwhite border-foreground"
-                    : "bg-card text-taupe border-border hover:border-foreground/30 hover:bg-nude/20")
+                  "text-[10px] font-semibold uppercase tracking-widest px-3.5 py-1.5 rounded-full border transition-all " +
+                  (category === c
+                    ? "bg-brass text-white border-brass"
+                    : "bg-muted text-taupe border-transparent hover:border-brass/40 hover:text-foreground")
                 }
               >
-                {Icon && <Icon className="size-3" />}
-                {f}
+                {c}
               </button>
-            );
-          })}
+            ))}
+          </div>
         </div>
-      </div>
 
-      {/* ── Category filter ──────────────────────────────────────────────── */}
-      <div className="mb-6">
-        <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-taupe mb-3">Category</p>
-        <div className="flex flex-wrap gap-2.5">
-          {["All", ...categories].map((c) => (
-            <button
-              key={c}
-              onClick={() => setCategory(c)}
-              className={
-                "text-[10px] font-semibold uppercase tracking-widest px-3 py-1.5 rounded-full border-2 transition-all " +
-                (category === c
-                  ? "bg-foreground text-offwhite border-foreground"
-                  : "bg-card text-taupe border-border hover:border-foreground/30 hover:bg-nude/20 hover:text-foreground")
-              }
-            >
-              {c}
-            </button>
-          ))}
+        {/* Pillar filter */}
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-taupe mb-3">Pillar</p>
+          <div className="flex items-center gap-1 bg-muted rounded-full p-1 flex-wrap w-fit">
+            {PILLARS.map((p) => (
+              <button
+                key={p}
+                onClick={() => setPillar(p)}
+                className={
+                  "px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.15em] rounded-full transition-colors whitespace-nowrap " +
+                  (pillar === p
+                    ? "bg-card text-foreground shadow-elevated"
+                    : "text-taupe hover:text-foreground")
+                }
+              >
+                {p}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
-
-      {/* ── Pillar filter ────────────────────────────────────────────────── */}
-      <div className="mb-10 border-b border-border pb-1">
-        <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-taupe mb-3">Pillar</p>
-        <div className="flex flex-wrap gap-x-6 gap-y-2">
-          {PILLARS.map((p) => (
-            <button
-              key={p}
-              onClick={() => setPillar(p)}
-              className={
-                "text-[11px] uppercase tracking-[0.2em] pb-2 -mb-px transition-colors " +
-                (pillar === p
-                  ? "text-foreground border-b border-foreground"
-                  : "text-taupe hover:text-foreground")
-              }
-            >
-              {p}
-            </button>
-          ))}
-        </div>
-      </div>
+      </section>
 
       {/* ── Grid ─────────────────────────────────────────────────────────── */}
       {filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-2xl py-10 text-center">
-          <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">No results</p>
+        <div className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-2xl bg-muted/20 py-10 text-center">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-taupe mb-2">No results</p>
           <p className="text-sm text-taupe">No templates match this filter combination.</p>
         </div>
       ) : (
@@ -214,7 +217,7 @@ function TemplateCard({ template: t }: { template: Template }) {
     : null;
 
   return (
-    <article className="group flex flex-col rounded-2xl border-2 border-border bg-card overflow-hidden hover:border-foreground/25 hover:shadow-md transition-all duration-200">
+    <article className="group flex flex-col rounded-2xl bg-card shadow-elevated hover:shadow-elevated-lg hover:-translate-y-1 transition-all duration-300 overflow-hidden">
 
       {/* Preview — the tenant's own moodboard photo + brand palette, never a generic stock image */}
       <div
@@ -252,7 +255,7 @@ function TemplateCard({ template: t }: { template: Template }) {
       </div>
 
       {/* Body */}
-      <div className="flex flex-col flex-1 p-4">
+      <div className="flex flex-col flex-1 p-5">
         {/* Title — rendered in the tenant's own heading font */}
         <h3 className="font-serif text-lg leading-snug mb-1.5" style={{ fontFamily: t.headingFont || undefined }}>
           {t.name}
@@ -285,7 +288,7 @@ function TemplateCard({ template: t }: { template: Template }) {
         {/* Category chips */}
         <div className="flex flex-wrap gap-1.5 mb-4">
           {t.categories.slice(0, 3).map((c) => (
-            <span key={c} className="text-[9px] uppercase tracking-widest border border-border bg-muted px-2 py-0.5 rounded-full text-taupe">
+            <span key={c} className="text-[9px] font-semibold uppercase tracking-widest bg-muted px-2.5 py-1 rounded-full text-taupe">
               {c}
             </span>
           ))}
@@ -300,7 +303,7 @@ function TemplateCard({ template: t }: { template: Template }) {
         <Link
           to="/generate"
           search={{ templateGoal: t.goal, templateFormat: t.type, templateCategories: t.categories.join(','), templateSlug: t.slug }}
-          className="inline-flex items-center justify-center gap-2 bg-foreground text-offwhite text-[10px] font-semibold uppercase tracking-widest px-4 py-2.5 rounded-xl hover:bg-taupe active:scale-[0.97] transition-all"
+          className="inline-flex items-center justify-center gap-2 bg-brass text-white text-[10px] font-bold uppercase tracking-widest px-4 py-2.5 rounded-xl shadow-elevated hover:brightness-105 hover:shadow-elevated-lg active:scale-[0.97] transition-all"
         >
           <Icon className="size-3" />
           Use {meta.label} template

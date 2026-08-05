@@ -203,7 +203,7 @@ function PlansPage() {
             </div>
             <button
               onClick={() => navigate({ to: "/generate" })}
-              className="bg-white text-foreground px-8 py-3.5 text-[11px] uppercase tracking-[0.22em] hover:bg-offwhite transition-colors inline-flex items-center gap-2"
+              className="bg-brass text-white px-8 py-3.5 rounded-xl text-xs font-semibold shadow-elevated hover:brightness-105 hover:shadow-elevated-lg transition-all inline-flex items-center gap-2"
             >
               Start creating <ArrowRight className="size-3.5" />
             </button>
@@ -231,7 +231,7 @@ function PlansPage() {
             </div>
             <button
               onClick={() => setPurchaseCanceled(false)}
-              className="bg-foreground text-offwhite px-8 py-3.5 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors"
+              className="bg-brass text-white px-8 py-3.5 rounded-xl text-xs font-semibold shadow-elevated hover:brightness-105 hover:shadow-elevated-lg transition-all"
             >
               View plans
             </button>
@@ -259,7 +259,7 @@ function PlansPage() {
         <header className="mb-10">
           <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-taupe mb-3">Subscription plans</p>
           <h1 className="page-title">
-            Choose your <span className="italic text-taupe">studio</span>.
+            Choose your <span className="italic text-brass-ink">studio</span>.
           </h1>
           <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[52ch]">
             Every plan includes AI-powered captions, images, and on-brand content. Higher tiers unlock richer Brand DNA, more formats, and expert human support.
@@ -320,9 +320,9 @@ function PlansPage() {
                     <div>
                       <div className={[
                         "size-9 rounded-xl flex items-center justify-center mb-4",
-                        isRecommended ? "bg-white/10" : "bg-muted",
+                        isRecommended ? "bg-white/10" : "bg-brass/10",
                       ].join(" ")}>
-                        <Sparkles className={["size-4", isRecommended ? "text-white" : "text-taupe"].join(" ")} />
+                        <Sparkles className={["size-4", isRecommended ? "text-white" : "text-brass-ink"].join(" ")} />
                       </div>
                       <p className={[
                         "text-[9px] font-bold uppercase tracking-[0.25em] mb-1",
@@ -370,7 +370,7 @@ function PlansPage() {
                       onClick={() => !isCurrent && !isDowngrade && handleSubscribe(tier.id)}
                       disabled={isCurrent || isDowngrade || busy === tier.id}
                       className={[
-                        "w-full py-3 text-[10px] uppercase tracking-[0.2em] transition-colors inline-flex items-center justify-center gap-2 disabled:cursor-not-allowed",
+                        "w-full py-3 rounded-xl text-[10px] font-bold uppercase tracking-[0.15em] transition-all inline-flex items-center justify-center gap-2 disabled:cursor-not-allowed",
                         isCurrent
                           ? isRecommended
                             ? "border border-white/20 text-offwhite/40 cursor-default"
@@ -379,9 +379,7 @@ function PlansPage() {
                           ? isRecommended
                             ? "bg-white/10 text-offwhite/40 cursor-not-allowed"
                             : "bg-muted text-taupe/40 cursor-not-allowed"
-                          : isRecommended
-                          ? "bg-white text-foreground hover:bg-offwhite"
-                          : "bg-foreground text-offwhite hover:bg-taupe",
+                          : "bg-brass text-white shadow-elevated hover:brightness-105 hover:shadow-elevated-lg",
                       ].join(" ")}
                     >
                       {busy === tier.id
