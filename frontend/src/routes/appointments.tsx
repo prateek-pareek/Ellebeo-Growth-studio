@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useAppointments, type Appointment } from "@/lib/providers/appointments-provider";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
-import { Send } from "lucide-react";
+import { CalendarClock, Layers, Mail, Send, ShieldCheck, Sparkles } from "lucide-react";
 import { Pagination } from "@/components/Pagination";
 
 export const Route = createFileRoute("/appointments")({
@@ -125,7 +125,7 @@ function AppointmentsPage() {
     try {
       if (isMedicalForm) {
         for (const f of medicalFiles) {
-          try { await checkImageSafety(f); } 
+          try { await checkImageSafety(f); }
           catch (err: any) {
             toast.error(err.response?.data?.error?.message || err.response?.data?.message || "Photo failed safety check");
             setIsAdding(false);
@@ -236,6 +236,11 @@ function AppointmentsPage() {
     }
   };
 
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const todayCount    = appointments.filter((a) => a.rawDate === todayISO).length;
+  const consentCount  = appointments.filter((a) => a.consent === "pending" || a.consent === "not_requested").length;
+  const readyCount    = appointments.filter((a) => a.consent === "granted").length;
+
   const filtered = appointments.filter((a) => {
     if (filter === "consent") return a.consent === "pending" || a.consent === "not_requested";
     if (filter === "ready")   return a.consent === "granted";
@@ -252,7 +257,7 @@ function AppointmentsPage() {
   return (
     <div>
       {/* ── Page header ──────────────────────────────────────────────────── */}
-      <header className="mt-6 lg:mt-10 mb-8">
+      <header className="mt-6 lg:mt-10 mb-6">
         <div className="flex items-center gap-2.5 mb-4">
           <span className="text-[9px] font-bold uppercase tracking-[0.3em] text-taupe">Appointments</span>
           <span className="text-taupe/30">·</span>
@@ -262,22 +267,53 @@ function AppointmentsPage() {
           </span>
         </div>
         <h1 className="page-title max-w-[22ch]">
-          Turn appointments into <span className="italic text-taupe">content</span>.
+          Turn appointments into <span className="italic text-brass-ink">content</span>.
         </h1>
         <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[52ch]">
           Upload photos, request client consent (if applicable), and let AI draft the post.
         </p>
       </header>
 
+      {/* ── KPI row ──────────────────────────────────────────────────────── */}
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="bg-card rounded-2xl p-5 shadow-elevated">
+          <span className="flex items-center justify-center size-8 rounded-lg bg-brass/10 text-brass-ink mb-3">
+            <Layers className="size-4" />
+          </span>
+          <p className="stat-figure tnum">{appointments.length}</p>
+          <p className="text-xs text-taupe mt-1">Total appointments</p>
+        </div>
+        <div className="bg-card rounded-2xl p-5 shadow-elevated">
+          <span className="flex items-center justify-center size-8 rounded-lg bg-brass/10 text-brass-ink mb-3">
+            <CalendarClock className="size-4" />
+          </span>
+          <p className="stat-figure tnum">{todayCount}</p>
+          <p className="text-xs text-taupe mt-1">Scheduled today</p>
+        </div>
+        <div className="bg-card rounded-2xl p-5 shadow-elevated">
+          <span className="flex items-center justify-center size-8 rounded-lg bg-destructive/10 text-destructive mb-3">
+            <ShieldCheck className="size-4" />
+          </span>
+          <p className="stat-figure tnum">{consentCount}</p>
+          <p className="text-xs text-taupe mt-1">Consent waiting on reply</p>
+        </div>
+        <div className="bg-card rounded-2xl p-5 shadow-elevated">
+          <span className="flex items-center justify-center size-8 rounded-lg bg-sage/10 text-sage mb-3">
+            <Sparkles className="size-4" />
+          </span>
+          <p className="stat-figure tnum">{readyCount}</p>
+          <p className="text-xs text-taupe mt-1">Ready to turn into content</p>
+        </div>
+      </section>
+
       {/* ── New appointment form ─────────────────────────────────────────── */}
-      <section className="border border-border bg-card shadow-sm overflow-hidden mb-8">
-        {/* Card header */}
-        <div className="bg-muted px-5 py-3 border-b border-border flex items-center justify-between">
+      <section className="bg-card rounded-2xl shadow-elevated overflow-hidden mb-6">
+        <div className="flex items-center justify-between px-6 py-4">
           <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">New appointment</h2>
           <span className="eyebrow">Capture</span>
         </div>
 
-        <form onSubmit={handleAddAppointment} className="p-6 sm:p-8 grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-10 items-start">
+        <form onSubmit={handleAddAppointment} className="px-6 sm:px-8 pb-8 grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-10 items-start">
           {/* Left — details */}
           <div className="space-y-5">
             <p className="text-sm text-taupe leading-relaxed">
@@ -294,7 +330,7 @@ function AppointmentsPage() {
                 onChange={(e) => setClientName(e.target.value)}
                 placeholder="e.g. Sarah J."
                 required
-                className="block w-full border border-border bg-muted/30 px-3 py-2.5 text-sm text-foreground placeholder:text-taupe/60 outline-none focus:border-taupe focus:ring-2 focus:ring-taupe/10 transition-all"
+                className="block w-full rounded-xl border border-border bg-muted/30 px-3.5 py-2.5 text-sm text-foreground placeholder:text-taupe/60 outline-none focus:border-brass focus:ring-2 focus:ring-brass/15 transition-all"
               />
             </div>
 
@@ -308,8 +344,8 @@ function AppointmentsPage() {
                 onChange={(e) => { setClientPhone(e.target.value); if (phoneError) setPhoneError(""); }}
                 placeholder="e.g. +919876543210"
                 type="tel"
-                className={`block w-full border bg-muted/30 px-3 py-2.5 text-sm text-foreground placeholder:text-taupe/60 outline-none focus:ring-2 transition-all ${
-                  phoneError ? "border-destructive focus:border-destructive focus:ring-destructive/10" : "border-border focus:border-taupe focus:ring-taupe/10"
+                className={`block w-full rounded-xl border bg-muted/30 px-3.5 py-2.5 text-sm text-foreground placeholder:text-taupe/60 outline-none focus:ring-2 transition-all ${
+                  phoneError ? "border-destructive focus:border-destructive focus:ring-destructive/10" : "border-border focus:border-brass focus:ring-brass/15"
                 }`}
               />
               {phoneError ? (
@@ -329,7 +365,7 @@ function AppointmentsPage() {
                 onChange={(e) => setServiceName(e.target.value)}
                 placeholder="e.g. Signature Glow Facial"
                 required
-                className="block w-full border border-border bg-muted/30 px-3 py-2.5 text-sm text-foreground placeholder:text-taupe/60 outline-none focus:border-taupe focus:ring-2 focus:ring-taupe/10 transition-all"
+                className="block w-full rounded-xl border border-border bg-muted/30 px-3.5 py-2.5 text-sm text-foreground placeholder:text-taupe/60 outline-none focus:border-brass focus:ring-2 focus:ring-brass/15 transition-all"
               />
             </div>
 
@@ -345,10 +381,10 @@ function AppointmentsPage() {
                     type="button"
                     onClick={() => setCategory(c.value)}
                     className={
-                      "text-[10px] uppercase tracking-widest px-3 py-1.5 border transition-colors " +
+                      "text-[11px] font-medium px-3.5 py-1.5 rounded-full border transition-colors " +
                       (category === c.value
-                        ? "bg-foreground text-offwhite border-foreground"
-                        : "border-border text-taupe hover:text-foreground hover:border-taupe")
+                        ? "bg-brass border-brass text-white"
+                        : "border-border text-taupe hover:text-foreground hover:border-brass/50")
                     }
                   >
                     {c.label}
@@ -365,11 +401,11 @@ function AppointmentsPage() {
                 <label className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                   Upload Photos ({medicalFiles.length} selected)
                 </label>
-                <div className="border border-border bg-muted/30 flex items-center justify-center relative overflow-hidden transition-colors min-h-32">
+                <div className="rounded-xl border-1.5 border-dashed border-border bg-muted/30 flex items-center justify-center relative overflow-hidden transition-colors min-h-32">
                   {medicalFiles.length > 0 ? (
                     <div className="grid grid-cols-3 gap-2 p-2 w-full">
                       {medicalFiles.map((f, i) => (
-                        <div key={i} className="aspect-square relative overflow-hidden border border-border bg-black/5 group/img">
+                        <div key={i} className="aspect-square relative overflow-hidden rounded-lg border border-border bg-black/5 group/img">
                           <img src={URL.createObjectURL(f)} className="w-full h-full object-cover" alt={`Upload ${i+1}`} />
                           <button
                             type="button"
@@ -387,7 +423,7 @@ function AppointmentsPage() {
                           </button>
                         </div>
                       ))}
-                      <label className="aspect-square flex flex-col items-center justify-center border border-dashed border-border hover:border-taupe cursor-pointer text-taupe hover:text-foreground transition-colors bg-muted/50">
+                      <label className="aspect-square flex flex-col items-center justify-center rounded-lg border border-dashed border-border hover:border-brass cursor-pointer text-taupe hover:text-brass-ink transition-colors bg-muted/50">
                         <span className="text-[10px] uppercase tracking-widest">+ Add</span>
                         <input
                           type="file"
@@ -403,7 +439,7 @@ function AppointmentsPage() {
                       </label>
                     </div>
                   ) : (
-                    <label className="flex flex-col items-center justify-center gap-2 text-taupe hover:text-foreground transition-colors py-8 cursor-pointer w-full h-full">
+                    <label className="flex flex-col items-center justify-center gap-2 text-taupe hover:text-brass-ink transition-colors py-8 cursor-pointer w-full h-full">
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
                         <polyline points="17 8 12 3 7 8" />
@@ -449,20 +485,18 @@ function AppointmentsPage() {
             <button
               type="submit"
               disabled={isAdding}
-              className="w-full bg-foreground text-offwhite py-3 text-[11px] uppercase hover:bg-taupe transition-colors disabled:opacity-50"
+              className="w-full bg-brass text-white py-3 rounded-xl text-xs font-semibold shadow-elevated hover:brightness-105 hover:shadow-elevated-lg active:scale-[0.98] transition-all disabled:opacity-50"
             >
-              <span className="tracking-[0.22em] -mr-[0.22em]">
-                {isAdding ? "Creating…" : "Create Appointment"}
-              </span>
+              {isAdding ? "Creating…" : "Create appointment"}
             </button>
           </div>
         </form>
       </section>
 
       {/* ── Appointments table ───────────────────────────────────────────── */}
-      <div className="border border-border bg-card shadow-sm overflow-hidden">
+      <div className="bg-card rounded-2xl shadow-elevated overflow-hidden">
         {/* Table toolbar */}
-        <div className="bg-muted px-5 py-3 border-b border-border flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
           <div className="flex items-center gap-3">
             <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
               Recent appointments
@@ -475,7 +509,7 @@ function AppointmentsPage() {
             )}
           </div>
           {/* Filter tabs */}
-          <div className="flex items-center divide-x divide-border border border-border">
+          <div className="flex items-center gap-1 bg-muted rounded-full p-1">
             {[
               { id: "all",     label: "All" },
               { id: "consent", label: "Consent needed" },
@@ -485,10 +519,10 @@ function AppointmentsPage() {
                 key={f.id}
                 onClick={() => setFilter(f.id as typeof filter)}
                 className={
-                  "px-4 py-1.5 text-[10px] uppercase tracking-[0.2em] transition-colors " +
+                  "px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.15em] rounded-full transition-colors " +
                   (filter === f.id
-                    ? "bg-foreground text-offwhite"
-                    : "text-taupe hover:text-foreground hover:bg-nude/30")
+                    ? "bg-card text-foreground shadow-elevated"
+                    : "text-taupe hover:text-foreground")
                 }
               >
                 {f.label}
@@ -498,7 +532,7 @@ function AppointmentsPage() {
         </div>
 
         {isEmpty && !loading ? (
-          <div className="flex flex-col items-center justify-center border-2 border-dashed border-border m-6 py-10 text-center bg-muted/20">
+          <div className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-xl m-6 py-10 text-center bg-muted/20">
             <p className="eyebrow mb-3">No appointments yet</p>
             <p className="text-sm text-taupe leading-relaxed max-w-md">
               Add your first appointment above to start turning sessions into content.
@@ -506,14 +540,14 @@ function AppointmentsPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm" style={{ minWidth: "700px" }}>
-              <thead className="bg-muted border-b border-border text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            <table className="w-full text-left text-sm" style={{ minWidth: "760px" }}>
+              <thead className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground border-b border-border">
                 <tr>
-                  <th className="px-5 py-3 w-[120px]">Photos</th>
-                  <th className="px-5 py-3">Client · Service</th>
-                  <th className="px-5 py-3 w-[160px]">Date · Category</th>
-                  <th className="px-5 py-3 w-[170px]">Consent</th>
-                  <th className="px-5 py-3 w-[170px] text-right">Action</th>
+                  <th className="px-6 py-3 w-[130px]">Photos</th>
+                  <th className="px-6 py-3">Client · Service</th>
+                  <th className="px-6 py-3 w-[160px]">Date · Category</th>
+                  <th className="px-6 py-3 w-[180px]">Consent</th>
+                  <th className="px-6 py-3 w-[190px] text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -522,7 +556,7 @@ function AppointmentsPage() {
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-5 py-8 text-center text-sm text-taupe italic">
+                    <td colSpan={5} className="px-6 py-8 text-center text-sm text-taupe italic">
                       No appointments match this filter.
                     </td>
                   </tr>
@@ -532,7 +566,7 @@ function AppointmentsPage() {
           </div>
         )}
         {filtered.length > PAGE_SIZE && (
-          <div className="px-5 pb-5">
+          <div className="px-6 pb-2">
             <Pagination
               page={page}
               totalPages={totalPages}
@@ -569,13 +603,13 @@ function PhotoUpload({
       <label className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
         {label}
       </label>
-      <div className="border border-border bg-muted/30 flex items-center justify-center relative overflow-hidden group hover:border-taupe transition-colors min-h-32">
+      <div className="rounded-xl border-1.5 border-dashed border-border bg-muted/30 flex items-center justify-center relative overflow-hidden group hover:border-brass transition-colors min-h-32">
         {file ? (
           <img src={URL.createObjectURL(file)} className="w-full h-auto block" alt={label} />
         ) : selectedAssetPath ? (
           <img src={selectedAssetPath} className="w-full h-auto block" alt={label} />
         ) : (
-          <div className="flex flex-col items-center gap-2 text-taupe group-hover:text-foreground transition-colors py-8">
+          <div className="flex flex-col items-center gap-2 text-taupe group-hover:text-brass-ink transition-colors py-8">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
               <polyline points="17 8 12 3 7 8" />
@@ -597,20 +631,20 @@ function PhotoUpload({
           <button
             type="button"
             onClick={() => setShowLibrary((v) => !v)}
-            className="text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors"
+            className="text-[9px] uppercase tracking-widest text-taupe hover:text-brass-ink transition-colors"
           >
             {selectedAssetPath ? "Change library photo" : "Or pick from asset library"}
           </button>
           {showLibrary && (
-            <div className="mt-1.5 grid grid-cols-4 gap-1.5 border border-border bg-card p-1.5">
+            <div className="mt-1.5 grid grid-cols-4 gap-1.5 rounded-lg border border-border bg-card p-1.5">
               {assetLibrary.map((item) => (
                 <button
                   key={item.storage_path}
                   type="button"
                   onClick={() => { onSelectAsset?.(item.storage_path); setShowLibrary(false); }}
                   className={
-                    "size-12 overflow-hidden border transition-colors " +
-                    (selectedAssetPath === item.storage_path ? "border-foreground" : "border-border hover:border-taupe")
+                    "size-12 overflow-hidden rounded-md border transition-colors " +
+                    (selectedAssetPath === item.storage_path ? "border-brass" : "border-border hover:border-brass/50")
                   }
                   title={item.asset_type}
                 >
@@ -675,12 +709,12 @@ function AppointmentRow({ a, onReminderSent, isMedicalAesthetics }: { a: Appoint
   };
 
   return (
-    <tr className="text-foreground hover:bg-nude/20 transition-colors">
+    <tr className="text-foreground hover:bg-muted/40 transition-colors">
       {/* Photos */}
-      <td className="px-5 py-4">
+      <td className="px-6 py-4">
         <div className="flex gap-1.5">
           {isMedicalRow ? (
-            <div className="size-12 bg-nude/20 border border-border overflow-hidden shrink-0">
+            <div className="size-11 rounded-lg bg-nude/40 overflow-hidden shrink-0">
               {a.afterPhotoUrl || a.beforePhotoUrl ? (
                 <img src={(a.afterPhotoUrl || a.beforePhotoUrl) as string} alt="Photo" className="w-full h-full object-cover" />
               ) : (
@@ -689,14 +723,14 @@ function AppointmentRow({ a, onReminderSent, isMedicalAesthetics }: { a: Appoint
             </div>
           ) : (
             <>
-              <div className="size-12 bg-nude/20 border border-border overflow-hidden shrink-0">
+              <div className="size-11 rounded-lg bg-nude/40 overflow-hidden shrink-0">
                 {a.beforePhotoUrl ? (
                   <img src={a.beforePhotoUrl} alt="Before" className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-[8px] uppercase tracking-widest text-taupe">B</div>
                 )}
               </div>
-              <div className="size-12 bg-nude/20 border border-border overflow-hidden shrink-0">
+              <div className="size-11 rounded-lg bg-nude/40 overflow-hidden shrink-0">
                 {a.afterPhotoUrl ? (
                   <img src={a.afterPhotoUrl} alt="After" className="w-full h-full object-cover" />
                 ) : (
@@ -709,27 +743,27 @@ function AppointmentRow({ a, onReminderSent, isMedicalAesthetics }: { a: Appoint
       </td>
 
       {/* Client · Service */}
-      <td className="px-5 py-4">
+      <td className="px-6 py-4">
         <p className="font-serif text-base leading-tight mb-0.5">{a.clientName}</p>
         <p className="text-xs text-taupe truncate max-w-[22ch]">{a.service}</p>
         {a.notes && (
           <p className="text-xs text-taupe mt-1 line-clamp-1 max-w-[26ch] leading-relaxed">{a.notes}</p>
         )}
         {a.contentReady > 0 && (
-          <Link to="/content" className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors mt-1 block">
+          <Link to="/content" className="text-[10px] font-semibold uppercase tracking-widest text-brass-ink hover:text-brass transition-colors mt-1 block">
             {a.contentReady} draft{a.contentReady !== 1 ? "s" : ""} ready →
           </Link>
         )}
       </td>
 
       {/* Date · Category */}
-      <td className="px-5 py-4">
+      <td className="px-6 py-4">
         <p className="text-xs text-foreground">{a.date}</p>
         <p className="text-[10px] uppercase tracking-widest text-taupe mt-0.5">{a.category}</p>
       </td>
 
       {/* Consent */}
-      <td className="px-5 py-4">
+      <td className="px-6 py-4">
         {isMedicalRow ? (
           <span className="text-[10px] uppercase tracking-widest text-taupe">N/A</span>
         ) : (
@@ -738,7 +772,7 @@ function AppointmentRow({ a, onReminderSent, isMedicalAesthetics }: { a: Appoint
       </td>
 
       {/* Action */}
-      <td className="px-5 py-4 text-right">
+      <td className="px-6 py-4 text-right">
         {showPhoneInput && (
           <div className="flex items-center gap-2 mb-2 justify-end">
             <input
@@ -746,12 +780,12 @@ function AppointmentRow({ a, onReminderSent, isMedicalAesthetics }: { a: Appoint
               value={phone}
               onChange={e => setPhone(e.target.value)}
               placeholder="+91 98765 43210"
-              className="border border-border bg-muted/30 px-2 py-1.5 text-xs text-foreground placeholder:text-taupe/50 outline-none focus:border-taupe w-36"
+              className="rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-xs text-foreground placeholder:text-taupe/50 outline-none focus:border-brass w-36"
             />
             <button
               onClick={handleSavePhone}
               disabled={!phone.trim() || savingPhone}
-              className="text-[10px] uppercase tracking-widest bg-foreground text-offwhite px-3 py-1.5 disabled:opacity-50"
+              className="text-[10px] font-semibold uppercase tracking-widest bg-brass text-white rounded-lg px-3 py-1.5 disabled:opacity-50"
             >
               {savingPhone ? "Saving…" : "Save & Send"}
             </button>
@@ -761,7 +795,7 @@ function AppointmentRow({ a, onReminderSent, isMedicalAesthetics }: { a: Appoint
           <Link
             to="/generate"
             search={{ appointment: a.id }}
-            className="inline-flex items-center bg-foreground text-offwhite text-xs font-medium px-3.5 py-2 shadow-sm hover:opacity-90 hover:shadow-md active:scale-[0.97] transition-all"
+            className="inline-flex items-center bg-brass text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-elevated hover:brightness-105 hover:shadow-elevated-lg active:scale-[0.97] transition-all"
           >
             Turn into content
           </Link>
@@ -771,7 +805,7 @@ function AppointmentRow({ a, onReminderSent, isMedicalAesthetics }: { a: Appoint
               type="button"
               onClick={handleSendReminder}
               disabled={sending}
-              className="inline-flex items-center gap-1.5 bg-foreground text-offwhite text-xs font-medium px-3.5 py-2 shadow-sm hover:opacity-90 active:scale-[0.97] transition-all disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 bg-brass text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-elevated hover:brightness-105 active:scale-[0.97] transition-all disabled:opacity-50"
             >
               <Send className="size-3" />
               {sending ? "Sending…" : "Send reminder"}
@@ -779,7 +813,7 @@ function AppointmentRow({ a, onReminderSent, isMedicalAesthetics }: { a: Appoint
             <Link
               to="/consent/$id"
               params={{ id: a.id }}
-              className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors"
+              className="text-[10px] font-semibold uppercase tracking-widest text-taupe hover:text-foreground transition-colors"
             >
               View consent →
             </Link>
@@ -789,25 +823,23 @@ function AppointmentRow({ a, onReminderSent, isMedicalAesthetics }: { a: Appoint
             <Link
               to="/consent/$id"
               params={{ id: a.id }}
-              className="inline-flex items-center gap-1.5 bg-foreground text-offwhite text-xs font-medium px-3.5 py-2 shadow-sm hover:opacity-90 hover:shadow-md active:scale-[0.97] transition-all"
+              className="inline-flex items-center gap-1.5 bg-brass text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-elevated hover:brightness-105 hover:shadow-elevated-lg active:scale-[0.97] transition-all"
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
-              </svg>
+              <Mail className="size-3" />
               Request consent
             </Link>
             <button
               type="button"
               onClick={handleSendReminder}
               disabled={sending}
-              className="inline-flex items-center gap-1.5 border border-border bg-card text-[10px] font-medium text-taupe px-3 py-1.5 hover:text-foreground hover:bg-nude/30 active:scale-[0.97] transition-all disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 border border-border bg-card text-[10px] font-semibold text-taupe rounded-lg px-3 py-1.5 hover:text-foreground hover:bg-muted active:scale-[0.97] transition-all disabled:opacity-50"
             >
               <Send className="size-3" />
               {sending ? "Sending…" : "Send SMS reminder"}
             </button>
           </div>
         ) : (
-          <span className="inline-flex items-center gap-1.5 border border-destructive/30 bg-destructive/5 text-destructive text-xs font-medium px-3.5 py-2">
+          <span className="inline-flex items-center gap-1.5 bg-destructive/10 text-destructive text-[10px] font-bold uppercase tracking-wide px-3 py-1.5 rounded-full">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
             </svg>
@@ -821,18 +853,18 @@ function AppointmentRow({ a, onReminderSent, isMedicalAesthetics }: { a: Appoint
 
 function ConsentBadge({ status }: { status: Appointment["consent"] }) {
   const map: Record<Appointment["consent"], { label: string; help: string; badge: string }> = {
-    granted:       { label: "Granted",      help: "Photos and quotes can be used.",  badge: "text-sage bg-sage/10" },
-    pending:       { label: "Pending",       help: "Waiting on client reply.",         badge: "text-taupe bg-taupe/10" },
-    declined:      { label: "Declined",      help: "Do not use this content.",         badge: "text-destructive bg-destructive/10" },
-    not_requested: { label: "Required",      help: "Send a request to the client.",    badge: "text-foreground bg-muted" },
+    granted:       { label: "Granted",  help: "Photos and quotes can be used.", badge: "bg-sage/10 text-sage" },
+    pending:       { label: "Pending",  help: "Waiting on client reply.",       badge: "bg-brass/10 text-brass-ink" },
+    declined:      { label: "Declined", help: "Do not use this content.",      badge: "bg-destructive/10 text-destructive" },
+    not_requested: { label: "Required", help: "Send a request to the client.", badge: "bg-muted text-taupe" },
   };
   const m = map[status];
   return (
     <div>
-      <span className={`inline-block text-[10px] uppercase tracking-widest px-2 py-0.5 mb-1 ${m.badge}`}>
+      <span className={`inline-block text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full mb-1.5 ${m.badge}`}>
         {m.label}
       </span>
-      <p className="text-xs text-taupe leading-snug">{m.help}</p>
+      <p className="text-xs text-taupe leading-snug max-w-[20ch]">{m.help}</p>
     </div>
   );
 }
