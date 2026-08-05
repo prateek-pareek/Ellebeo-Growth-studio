@@ -74,7 +74,7 @@ function CalendarPage() {
 
   return (
     <>
-      <header className="mt-6 lg:mt-8 mb-8 flex flex-wrap items-end justify-between gap-6">
+      <header className="mt-6 lg:mt-8 mb-6 flex flex-wrap items-end justify-between gap-6">
         <div className="max-w-[60ch]">
           <p className="eyebrow mb-4">Calendar</p>
           <h1 className="page-title">
@@ -90,137 +90,139 @@ function CalendarPage() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={goPrev}
-            className="px-3 py-2.5 text-sm border hairline hover:bg-card leading-none"
-            aria-label="Previous month"
-          >
-            ‹
-          </button>
-          <button
-            onClick={goNext}
-            className="px-3 py-2.5 text-sm border hairline hover:bg-card leading-none"
-            aria-label="Next month"
-          >
-            ›
-          </button>
-          <button className="px-5 py-2.5 text-[11px] uppercase tracking-[0.2em] border hairline hover:bg-card">
-            Week
-          </button>
-          <button className="px-5 py-2.5 text-[11px] uppercase tracking-[0.2em] bg-foreground text-offwhite">
-            Month
-          </button>
-          {/* <Link
-            to="/campaigns"
-            className="px-5 py-2.5 text-[11px] uppercase tracking-[0.2em] border hairline hover:bg-card"
-          >
-            Campaigns
-          </Link> */}
+          <div className="flex items-center gap-1 bg-muted rounded-full p-1">
+            <button
+              onClick={goPrev}
+              className="size-8 flex items-center justify-center rounded-full text-taupe hover:text-foreground hover:bg-card transition-colors leading-none"
+              aria-label="Previous month"
+            >
+              ‹
+            </button>
+            <button
+              onClick={goNext}
+              className="size-8 flex items-center justify-center rounded-full text-taupe hover:text-foreground hover:bg-card transition-colors leading-none"
+              aria-label="Next month"
+            >
+              ›
+            </button>
+          </div>
+          <div className="flex items-center gap-1 bg-muted rounded-full p-1">
+            <button className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.15em] rounded-full text-taupe hover:text-foreground transition-colors">
+              Week
+            </button>
+            <button className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.15em] rounded-full bg-card text-foreground shadow-elevated">
+              Month
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* Day headers */}
-      <div className="grid grid-cols-7 mb-3">
-        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
-          <div key={d} className="text-[10px] uppercase tracking-[0.25em] text-taupe pb-2">
-            {d}
-          </div>
-        ))}
-      </div>
-
-      {/* Calendar grid */}
-      <div className="grid grid-cols-7 gap-px bg-taupe/25 border border-taupe/25 mb-8">
-        {Array.from({ length: totalCells }, (_, i) => {
-          const day = i - startOffset + 1;
-          const inMonth = day >= 1 && day <= daysInMonth;
-
-          if (!inMonth) {
-            return <div key={i} className="bg-card/40 min-h-[110px] sm:min-h-[140px]" />;
-          }
-
-          const dayEntries = entriesByDay.get(day) ?? [];
-          const primary = dayEntries[0] ?? null;
-          // i % 7 gives day-of-week index in Mon-first grid: 0=Mon … 4=Fri, 5=Sat, 6=Sun
-          const isWeekday = i % 7 < 5;
-          const isQuiet = dayEntries.length === 0 && isWeekday && !loading;
-
-          const isDragTarget = dragOverDay === day;
-
-          return (
-            <div
-              key={i}
-              onClick={() => setSelectedDay(day)}
-              onDragOver={(e) => { e.preventDefault(); setDragOverDay(day); }}
-              onDragLeave={() => setDragOverDay(null)}
-              onDrop={(e) => { e.preventDefault(); handleDrop(day); }}
-              className={
-                "bg-card min-h-[110px] sm:min-h-[140px] p-3 sm:p-4 flex flex-col gap-2 transition-colors cursor-pointer hover:bg-nude/20 " +
-                (primary?.status === "scheduled" ? "ring-1 ring-inset ring-foreground/10 " : "") +
-                (isDragTarget ? "bg-nude/30 ring-1 ring-inset ring-foreground/30" : "")
-              }
-            >
-              <div className="flex items-baseline justify-between">
-                <span className="text-[11px] font-semibold tabular-nums text-foreground/75">
-                  {String(day).padStart(2, "0")}
-                </span>
-                {isQuiet ? (
-                  <span className="text-[8px] uppercase tracking-widest text-taupe font-medium">Quiet</span>
-                ) : primary?.status && primary.status !== "rest" ? (
-                  <span className={"size-1.5 rounded-full " + STATUS_DOT[primary.status]} />
-                ) : null}
-              </div>
-              {dayEntries.length > 0 ? (
-                <div className="mt-auto space-y-1">
-                  {dayEntries.slice(0, 2).map((e, j) => (
-                    <button
-                      key={j}
-                      type="button"
-                      draggable
-                      onDragStart={(ev) => { ev.stopPropagation(); draggedEntry.current = e; ev.dataTransfer.effectAllowed = "move"; }}
-                      onClick={(ev) => { ev.stopPropagation(); setSelectedEntry(e); }}
-                      className="w-full text-left hover:bg-foreground/5 rounded-sm px-1 -mx-1 py-0.5 transition-colors cursor-grab active:cursor-grabbing"
-                    >
-                      <p className="text-[11px] font-medium leading-tight tracking-tight line-clamp-1">{e.title}</p>
-                      <p className="text-[10px] text-taupe">{e.type}</p>
-                    </button>
-                  ))}
-                  {dayEntries.length > 2 && (
-                    <button
-                      type="button"
-                      onClick={(ev) => { ev.stopPropagation(); setSelectedEntry(dayEntries[2]); }}
-                      className="text-[9px] font-medium text-taupe hover:text-foreground transition-colors"
-                    >
-                      +{dayEntries.length - 2} more
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <p className={
-                  "text-[10px] italic mt-auto " +
-                  (isQuiet ? "text-taupe" : "text-taupe/80")
-                }>
-                  {isQuiet ? "Fill with a post" : "Open slot"}
-                </p>
-              )}
+      {/* Calendar */}
+      <div className="bg-card rounded-2xl shadow-elevated overflow-hidden mb-6">
+        {/* Day headers */}
+        <div className="grid grid-cols-7 border-b border-border">
+          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+            <div key={d} className="text-[10px] font-semibold uppercase tracking-[0.2em] text-taupe px-3 sm:px-4 py-3">
+              {d}
             </div>
-          );
-        })}
+          ))}
+        </div>
+
+        {/* Calendar grid */}
+        <div className="grid grid-cols-7 gap-px bg-border">
+          {Array.from({ length: totalCells }, (_, i) => {
+            const day = i - startOffset + 1;
+            const inMonth = day >= 1 && day <= daysInMonth;
+
+            if (!inMonth) {
+              return <div key={i} className="bg-card/40 min-h-[110px] sm:min-h-[140px]" />;
+            }
+
+            const dayEntries = entriesByDay.get(day) ?? [];
+            const primary = dayEntries[0] ?? null;
+            // i % 7 gives day-of-week index in Mon-first grid: 0=Mon … 4=Fri, 5=Sat, 6=Sun
+            const isWeekday = i % 7 < 5;
+            const isQuiet = dayEntries.length === 0 && isWeekday && !loading;
+
+            const isDragTarget = dragOverDay === day;
+
+            return (
+              <div
+                key={i}
+                onClick={() => setSelectedDay(day)}
+                onDragOver={(e) => { e.preventDefault(); setDragOverDay(day); }}
+                onDragLeave={() => setDragOverDay(null)}
+                onDrop={(e) => { e.preventDefault(); handleDrop(day); }}
+                className={
+                  "bg-card min-h-[110px] sm:min-h-[140px] p-3 sm:p-4 flex flex-col gap-2 transition-colors cursor-pointer hover:bg-muted/40 " +
+                  (isDragTarget ? "bg-brass/10 ring-2 ring-inset ring-brass/40" : "")
+                }
+              >
+                <div className="flex items-baseline justify-between">
+                  <span className="text-[11px] font-semibold tabular-nums text-foreground/75">
+                    {String(day).padStart(2, "0")}
+                  </span>
+                  {isQuiet ? (
+                    <span className="text-[8px] font-bold uppercase tracking-widest text-brass-ink bg-brass/10 rounded-full px-1.5 py-0.5">Quiet</span>
+                  ) : primary?.status && primary.status !== "rest" ? (
+                    <span className={"size-1.5 rounded-full " + STATUS_DOT[primary.status]} />
+                  ) : null}
+                </div>
+                {dayEntries.length > 0 ? (
+                  <div className="mt-auto space-y-1">
+                    {dayEntries.slice(0, 2).map((e, j) => (
+                      <button
+                        key={j}
+                        type="button"
+                        draggable
+                        onDragStart={(ev) => { ev.stopPropagation(); draggedEntry.current = e; ev.dataTransfer.effectAllowed = "move"; }}
+                        onClick={(ev) => { ev.stopPropagation(); setSelectedEntry(e); }}
+                        className="w-full text-left hover:bg-brass/10 rounded-md px-1.5 -mx-1.5 py-1 transition-colors cursor-grab active:cursor-grabbing"
+                      >
+                        <p className="text-[11px] font-medium leading-tight tracking-tight line-clamp-1">{e.title}</p>
+                        <p className="text-[10px] text-taupe">{e.type}</p>
+                      </button>
+                    ))}
+                    {dayEntries.length > 2 && (
+                      <button
+                        type="button"
+                        onClick={(ev) => { ev.stopPropagation(); setSelectedEntry(dayEntries[2]); }}
+                        className="text-[9px] font-semibold text-taupe hover:text-brass-ink transition-colors px-1.5"
+                      >
+                        +{dayEntries.length - 2} more
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <p className={
+                    "text-[10px] italic mt-auto " +
+                    (isQuiet ? "text-taupe" : "text-taupe/80")
+                  }>
+                    {isQuiet ? "Fill with a post" : "Open slot"}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Legend */}
-      <div className="flex flex-wrap items-center gap-6 mb-8 text-[10px] uppercase tracking-widest text-taupe">
+      <div className="flex flex-wrap items-center gap-6 mb-6 text-[10px] font-semibold uppercase tracking-widest text-taupe">
         <span className="flex items-center gap-2"><span className="size-1.5 rounded-full bg-foreground" /> Scheduled</span>
         <span className="flex items-center gap-2"><span className="size-1.5 rounded-full bg-taupe/60" /> Draft</span>
         <span className="flex items-center gap-2"><span className="size-1.5 rounded-full bg-sage" /> Published</span>
         <span className="flex items-center gap-2"><span className="size-1.5 rounded-full border border-taupe/40" /> Open slot</span>
-        <span className="flex items-center gap-2"><span className="text-[8px] uppercase tracking-widest">Quiet</span> Quiet weekday</span>
+        <span className="flex items-center gap-2"><span className="text-[8px] font-bold uppercase tracking-widest text-brass-ink bg-brass/10 rounded-full px-1.5 py-0.5">Quiet</span> Quiet weekday</span>
       </div>
 
-      <div className="grid grid-cols-12 gap-8 lg:gap-10">
+      <div className="grid grid-cols-12 gap-6">
         {/* Posting cadence */}
-        <section className="col-span-12 lg:col-span-5">
-          <h3 className="eyebrow mb-4">Posting cadence — {month}</h3>
-          <div className="artifact p-6 space-y-4">
+        <section className="col-span-12 lg:col-span-5 bg-card rounded-2xl shadow-elevated overflow-hidden">
+          <div className="px-6 py-4">
+            <h3 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Posting cadence — {month}</h3>
+          </div>
+          <div className="px-6 pb-6 space-y-4">
             {(() => {
               const weeks = Math.max(1, Math.ceil(daysInMonth / 7));
               const reelCount = entries.filter(e => e.type?.toLowerCase() === "reel").length;
@@ -241,11 +243,13 @@ function CalendarPage() {
         </section>
 
         {/* Upcoming queue */}
-        <section className="col-span-12 lg:col-span-7">
-          <h2 className="eyebrow mb-6">Upcoming scheduled</h2>
-          <div className="space-y-px bg-border">
+        <section className="col-span-12 lg:col-span-7 bg-card rounded-2xl shadow-elevated overflow-hidden">
+          <div className="px-6 py-4">
+            <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Upcoming scheduled</h2>
+          </div>
+          <div className="divide-y divide-border">
             {upcoming.length === 0 ? (
-              <div className="bg-card p-6 text-sm text-taupe italic">
+              <div className="px-6 py-8 text-sm text-taupe italic text-center">
                 No scheduled content yet. Approve content and schedule it to see it here.
               </div>
             ) : upcoming.map((c) => {
@@ -255,17 +259,17 @@ function CalendarPage() {
                   new Date(c.scheduledFor).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: AU_TZ })
                 : null;
               return (
-                <div key={c.id} className="bg-card p-5 flex items-start gap-5">
-                  <div className="size-20 sm:size-24 shrink-0 overflow-hidden bg-nude/30">
+                <div key={c.id} className="px-6 py-4 flex items-start gap-4 hover:bg-muted/40 transition-colors">
+                  <div className="size-16 sm:size-20 shrink-0 overflow-hidden rounded-xl bg-nude/30">
                     <img src={c.image} alt={c.title} className="w-full h-full object-cover" loading="lazy" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="eyebrow mb-1">{c.type} · {c.pillar}</p>
-                    <p className="font-serif text-xl leading-snug mb-1">{c.title}</p>
+                    <p className="font-serif text-lg leading-snug mb-1">{c.title}</p>
                     <p className="text-xs text-taupe leading-relaxed line-clamp-2">{c.caption}</p>
                   </div>
                   <div className="text-right hidden sm:block shrink-0">
-                    <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">When</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-taupe mb-1">When</p>
                     <p className="text-sm font-medium">{whenLabel ?? "—"}</p>
                   </div>
                 </div>
@@ -298,8 +302,8 @@ function CalendarPage() {
 
 function Cadence({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between border-b hairline pb-3 last:border-0 last:pb-0">
-      <span className="text-[11px] uppercase tracking-widest text-taupe">{label}</span>
+    <div className="flex items-baseline justify-between border-b border-border pb-3 last:border-0 last:pb-0">
+      <span className="text-[11px] font-medium uppercase tracking-widest text-taupe">{label}</span>
       <span className="font-serif text-lg">{value}</span>
     </div>
   );
@@ -434,17 +438,17 @@ function EntryDetailModal({ entry, dayEntries, contentItems, onClose, onMutated 
 
   return (
     <Dialog open={entry !== null} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-lg p-0 overflow-hidden flex flex-col max-h-[90vh]">
+      <DialogContent className="max-w-lg p-0 overflow-hidden flex flex-col max-h-[90vh] rounded-2xl">
 
         {/* ── Entries list (shown when day has multiple posts) ── */}
         {showList && (
-          <div className="border-b hairline">
-            <p className="px-6 pt-5 pb-2 text-[10px] uppercase tracking-widest text-taupe">
+          <div className="border-b border-border">
+            <p className="px-6 pt-5 pb-2 text-[10px] font-semibold uppercase tracking-widest text-taupe">
               {dayEntries.length} posts · {active
                 ? new Date(active.scheduledFor ?? "").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })
                 : ""}
             </p>
-            <div className="space-y-px bg-border mx-6 mb-4 border hairline">
+            <div className="space-y-1.5 px-6 mb-4">
               {dayEntries.map((e, i) => {
                 const isActive = active?.scheduledPostId === e.scheduledPostId;
                 const timeLabel = e.scheduledFor
@@ -456,22 +460,22 @@ function EntryDetailModal({ entry, dayEntries, contentItems, onClose, onMutated 
                     type="button"
                     onClick={() => setActive(e)}
                     className={
-                      "w-full text-left px-4 py-3 flex items-center gap-3 transition-colors " +
-                      (isActive ? "bg-foreground text-offwhite" : "bg-card hover:bg-nude/20")
+                      "w-full text-left rounded-xl px-4 py-3 flex items-center gap-3 transition-colors " +
+                      (isActive ? "bg-brass text-white" : "bg-muted hover:bg-muted/70")
                     }
                   >
                     <span className={"size-1.5 rounded-full shrink-0 " + STATUS_DOT[e.status]} />
                     <div className="flex-1 min-w-0">
                       <p className="text-[11px] font-medium line-clamp-1 leading-tight">{e.title}</p>
-                      <p className={"text-[10px] mt-0.5 " + (isActive ? "text-offwhite/60" : "text-taupe")}>
+                      <p className={"text-[10px] mt-0.5 " + (isActive ? "text-white/70" : "text-taupe")}>
                         {e.type}{timeLabel ? ` · ${timeLabel}` : ""}
                       </p>
                     </div>
                     <span className={
-                      "text-[9px] uppercase tracking-widest px-1.5 py-0.5 shrink-0 " +
+                      "text-[9px] font-bold uppercase tracking-widest rounded-full px-2 py-0.5 shrink-0 " +
                       (e.status === "published"
-                        ? isActive ? "bg-sage/30 text-sage" : "bg-sage/20 text-sage"
-                        : isActive ? "bg-offwhite/10 text-offwhite/70" : "bg-foreground/8 text-taupe")
+                        ? isActive ? "bg-white/20 text-white" : "bg-sage/15 text-sage"
+                        : isActive ? "bg-white/15 text-white" : "bg-card text-taupe")
                     }>
                       {e.status}
                     </span>
@@ -489,7 +493,7 @@ function EntryDetailModal({ entry, dayEntries, contentItems, onClose, onMutated 
         <DialogHeader className="pl-6 pr-12 pt-5 pb-0 shrink-0">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-taupe mb-1">
                 {active?.platform ? <span className="capitalize">{active.platform}</span> : null}
                 {active?.platform && active?.type ? " · " : null}
                 {active?.type}
@@ -500,10 +504,10 @@ function EntryDetailModal({ entry, dayEntries, contentItems, onClose, onMutated 
             </div>
             {!showList && (
               <span className={
-                "shrink-0 mt-0.5 text-[9px] uppercase tracking-widest px-2 py-1 " +
-                (active?.status === "published" ? "bg-sage/20 text-sage"
-                  : active?.status === "scheduled" ? "bg-foreground/10 text-foreground"
-                  : "bg-taupe/10 text-taupe")
+                "shrink-0 mt-0.5 text-[9px] font-bold uppercase tracking-widest rounded-full px-2.5 py-1 " +
+                (active?.status === "published" ? "bg-sage/15 text-sage"
+                  : active?.status === "scheduled" ? "bg-muted text-foreground"
+                  : "bg-brass/10 text-brass-ink")
               }>
                 {active?.status}
               </span>
@@ -516,7 +520,7 @@ function EntryDetailModal({ entry, dayEntries, contentItems, onClose, onMutated 
 
         <div className="px-6 py-5 space-y-5 flex-1 min-h-0 overflow-y-auto">
           {contentItem?.image && (
-            <div className="w-full aspect-[4/5] overflow-hidden bg-nude/30">
+            <div className="w-full aspect-[4/5] overflow-hidden rounded-xl bg-nude/30">
               <img src={contentItem.image} alt={active?.title} className="w-full h-full object-contain" />
             </div>
           )}
@@ -526,13 +530,13 @@ function EntryDetailModal({ entry, dayEntries, contentItems, onClose, onMutated 
 
           {active?.status !== "published" && (
             <div className="space-y-3">
-              <label className="text-[10px] uppercase tracking-widest text-taupe block">Reschedule</label>
+              <label className="text-[10px] font-semibold uppercase tracking-widest text-taupe block">Reschedule</label>
               <DateTimePicker value={rescheduleTime} onChange={setRescheduleTime} />
               <button
                 type="button"
                 onClick={handleReschedule}
                 disabled={!rescheduleTime || rescheduling}
-                className="w-full py-3 text-[10px] uppercase tracking-widest bg-foreground text-offwhite hover:bg-taupe transition-colors disabled:opacity-40"
+                className="w-full py-3 rounded-xl text-xs font-semibold bg-brass text-white shadow-elevated hover:brightness-105 transition-all disabled:opacity-40"
               >
                 {rescheduling ? "Saving…" : "Save new time"}
               </button>
@@ -545,13 +549,13 @@ function EntryDetailModal({ entry, dayEntries, contentItems, onClose, onMutated 
             type="button"
             onClick={handleDelete}
             disabled={deleting || active?.status === "published"}
-            className="px-4 py-2.5 text-[10px] uppercase tracking-widest text-destructive border border-destructive/30 hover:bg-destructive/5 disabled:opacity-30"
+            className="px-4 py-2.5 rounded-lg text-[10px] font-semibold uppercase tracking-widest text-destructive bg-destructive/10 hover:bg-destructive/15 disabled:opacity-30 transition-colors"
           >
             {deleting ? "Cancelling…" : "Cancel post"}
           </button>
           <div className="flex gap-2">
             <DialogClose asChild>
-              <button type="button" className="px-5 py-2.5 text-[11px] uppercase tracking-[0.2em] border hairline hover:bg-card">
+              <button type="button" className="px-5 py-2.5 rounded-lg text-[11px] font-semibold uppercase tracking-[0.15em] border border-border hover:bg-muted transition-colors">
                 Close
               </button>
             </DialogClose>
@@ -560,7 +564,7 @@ function EntryDetailModal({ entry, dayEntries, contentItems, onClose, onMutated 
                 type="button"
                 onClick={handlePublishNow}
                 disabled={publishing}
-                className="px-5 py-2.5 text-[11px] uppercase tracking-[0.2em] bg-foreground text-offwhite disabled:opacity-40"
+                className="px-5 py-2.5 rounded-lg text-[11px] font-semibold uppercase tracking-[0.15em] bg-brass text-white shadow-elevated hover:brightness-105 disabled:opacity-40 transition-all"
               >
                 {publishing ? "Publishing…" : "Publish now"}
               </button>
@@ -587,22 +591,22 @@ function DateTimePicker({ value, onChange }: DateTimePickerProps) {
   return (
     <div className="grid grid-cols-2 gap-3">
       <div className="flex flex-col gap-1.5">
-        <span className="text-[10px] uppercase tracking-widest text-taupe">Date</span>
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-taupe">Date</span>
         <input
           type="date"
           value={datePart ?? ""}
           min={TODAY}
           onChange={(e) => onChange(`${e.target.value}T${timePart ?? "09:00"}`)}
-          className="border hairline bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground w-full"
+          className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm focus:outline-none focus:border-brass focus:ring-2 focus:ring-brass/15 w-full"
         />
       </div>
       <div className="flex flex-col gap-1.5">
-        <span className="text-[10px] uppercase tracking-widest text-taupe">Time <span className="normal-case tracking-normal font-normal text-taupe/50">AEST</span></span>
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-taupe">Time <span className="normal-case tracking-normal font-normal text-taupe/50">AEST</span></span>
         <input
           type="time"
           value={timePart ?? "09:00"}
           onChange={(e) => onChange(`${datePart ?? TODAY}T${e.target.value}`)}
-          className="border hairline bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground w-full"
+          className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm focus:outline-none focus:border-brass focus:ring-2 focus:ring-brass/15 w-full"
         />
       </div>
     </div>
@@ -714,7 +718,7 @@ function ScheduleModal({ open, onClose, day, year, monthIndex, contentItems, onS
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-lg p-0 overflow-hidden">
+      <DialogContent className="max-w-lg p-0 overflow-hidden rounded-2xl">
         <DialogHeader className="px-6 pt-6 pb-0 shrink-0">
           <DialogTitle className="font-serif text-2xl font-normal">
             Schedule for {String(day).padStart(2, "0")} {monthLabel}
@@ -735,17 +739,17 @@ function ScheduleModal({ open, onClose, day, year, monthIndex, contentItems, onS
 
           {/* Content picker */}
           <div>
-            <label className="text-[10px] uppercase tracking-widest text-taupe block mb-2">Content</label>
+            <label className="text-[10px] font-semibold uppercase tracking-widest text-taupe block mb-2">Content</label>
             <input
               type="text"
               placeholder="Search content…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full border hairline bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground mb-px"
+              className="w-full rounded-lg border border-border bg-muted/30 px-4 py-2.5 text-sm focus:outline-none focus:border-brass focus:ring-2 focus:ring-brass/15 mb-2"
             />
-            <div className="max-h-48 overflow-y-auto space-y-px bg-border border hairline">
+            <div className="max-h-48 overflow-y-auto space-y-1.5">
               {filtered.length === 0 ? (
-                <div className="bg-card px-4 py-3 text-sm text-taupe italic">
+                <div className="px-4 py-3 text-sm text-taupe italic">
                   No approved content found.
                 </div>
               ) : (
@@ -755,14 +759,14 @@ function ScheduleModal({ open, onClose, day, year, monthIndex, contentItems, onS
                     type="button"
                     onClick={() => setSelectedItemId(c.id)}
                     className={
-                      "w-full text-left bg-card px-4 py-3 flex items-start gap-3 transition-colors hover:bg-nude/20 " +
-                      (selectedItemId === c.id ? "ring-1 ring-inset ring-foreground" : "")
+                      "w-full text-left rounded-lg px-4 py-3 flex items-start gap-3 transition-colors " +
+                      (selectedItemId === c.id ? "bg-brass/10 ring-1 ring-inset ring-brass" : "bg-muted/30 hover:bg-muted")
                     }
                   >
                     <img
                       src={c.image}
                       alt=""
-                      className="size-10 shrink-0 object-cover bg-nude/30"
+                      className="size-10 shrink-0 rounded-md object-cover bg-nude/30"
                     />
                     <div className="min-w-0">
                       <p className="text-[11px] font-medium leading-tight line-clamp-1">{c.title}</p>
@@ -780,18 +784,18 @@ function ScheduleModal({ open, onClose, day, year, monthIndex, contentItems, onS
 
           {/* Format */}
           <div>
-            <label className="text-[10px] uppercase tracking-widest text-taupe block mb-2">Format</label>
-            <div className="flex gap-px bg-border border hairline">
+            <label className="text-[10px] font-semibold uppercase tracking-widest text-taupe block mb-2">Format</label>
+            <div className="flex items-center gap-1 bg-muted rounded-full p-1">
               {(["feed", "story", "reel", "carousel"] as const).map((f) => (
                 <button
                   key={f}
                   type="button"
                   onClick={() => setPostFormat(f)}
                   className={
-                    "flex-1 py-2.5 text-[10px] uppercase tracking-widest transition-colors " +
+                    "flex-1 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest transition-colors " +
                     (postFormat === f
-                      ? "bg-foreground text-offwhite"
-                      : "bg-card hover:bg-nude/20 text-taupe")
+                      ? "bg-card text-foreground shadow-elevated"
+                      : "text-taupe hover:text-foreground")
                   }
                 >
                   {f}
@@ -822,7 +826,7 @@ function ScheduleModal({ open, onClose, day, year, monthIndex, contentItems, onS
           <DialogClose asChild>
             <button
               type="button"
-              className="px-5 py-2.5 text-[11px] uppercase tracking-[0.2em] border hairline hover:bg-card"
+              className="px-5 py-2.5 rounded-lg text-[11px] font-semibold uppercase tracking-[0.15em] border border-border hover:bg-muted transition-colors"
             >
               Cancel
             </button>
@@ -831,7 +835,7 @@ function ScheduleModal({ open, onClose, day, year, monthIndex, contentItems, onS
             type="button"
             onClick={handleSubmit}
             disabled={!selectedItemId || !scheduleTime || submitting}
-            className="px-5 py-2.5 text-[11px] uppercase tracking-[0.2em] bg-foreground text-offwhite disabled:opacity-40"
+            className="px-5 py-2.5 rounded-lg text-[11px] font-semibold uppercase tracking-[0.15em] bg-brass text-white shadow-elevated hover:brightness-105 disabled:opacity-40 transition-all"
           >
             {submitting ? "Scheduling…" : "Schedule"}
           </button>
