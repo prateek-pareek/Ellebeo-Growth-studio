@@ -53,7 +53,7 @@
   --offwhite: oklch(0.97 0.005 80);   /* #F7F5F2 */
   --sage: oklch(0.62 0.025 145);      /* #8A9486 */
   --charcoal: oklch(0.28 0.005 0);    /* #2F2F2F */
-  --brass: oklch(0.60 0.09 75);       /* #AD8636 — accent for primary actions & highlights only */
+  --brass: oklch(55.085% 0.10224 72.474);       /* #AD8636 — accent for primary actions & highlights only */
   --brass-ink: oklch(0.46 0.08 75);   /* text/icon-safe variant of brass */
 
   /* Map shadcn tokens to brand */
