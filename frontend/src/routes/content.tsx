@@ -373,7 +373,7 @@ function ContentPage() {
             <EmptyState onClear={clearFilters} hasFilters={hasActiveFilters} />
           ) : (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-7">
                 {pageItems.map((c) => (
                   <ContentCard
                     key={c.id}
@@ -488,20 +488,21 @@ function ContentCard({
   const FormatIcon = FORMAT_ICON[item.type] ?? AlignLeft;
 
   return (
-    <article className="group flex flex-col rounded-2xl bg-card shadow-elevated hover:shadow-elevated-lg hover:-translate-y-1 transition-all duration-300 overflow-hidden">
-      {/* Media — fixed height across every format so the grid stays level;
+    <article className="group flex flex-col rounded-3xl bg-card shadow-elevated hover:shadow-elevated-lg hover:-translate-y-1.5 transition-all duration-300 overflow-hidden">
+      {/* Media — a consistent aspect ratio (not a fixed pixel height) across every
+          format, so cards stay level whatever the grid's column width is;
           format identity comes from the badge + the story "phone" inset +
           the carousel stacked-card effect below, not from a wobbly aspect ratio. */}
       <div
-        className="relative h-72 bg-muted overflow-hidden cursor-pointer"
+        className="relative aspect-[4/5] bg-muted overflow-hidden cursor-pointer"
         onClick={onReview}
       >
         {isCarousel ? (
           <>
             {/* Stacked-deck effect: two offset cards peeking out behind the top image */}
-            <div className="absolute inset-x-5 top-3 bottom-0 bg-card border border-border rotate-[-2deg] rounded-xl" />
-            <div className="absolute inset-x-4 top-1.5 bottom-0 bg-card border border-border rotate-[1.5deg] rounded-xl" />
-            <div className="absolute inset-1.5 overflow-hidden rounded-xl">
+            <div className="absolute inset-x-6 top-4 bottom-0 bg-card border border-border rotate-[-2deg] rounded-2xl" />
+            <div className="absolute inset-x-5 top-2 bottom-0 bg-card border border-border rotate-[1.5deg] rounded-2xl" />
+            <div className="absolute inset-2 overflow-hidden rounded-2xl">
               <img
                 src={thumbnailUrl}
                 alt={item.title}
@@ -510,7 +511,7 @@ function ContentCard({
               />
             </div>
             {slides.length > 1 && (
-              <span className="absolute bottom-3 right-3 z-10 inline-flex items-center gap-1 bg-foreground/80 backdrop-blur text-offwhite text-[9px] font-semibold px-2 py-1 rounded-full shadow-sm">
+              <span className="absolute bottom-4 right-4 z-10 inline-flex items-center gap-1 bg-foreground/80 backdrop-blur text-offwhite text-[9px] font-semibold px-2 py-1 rounded-full shadow-sm">
                 <Images size={10} strokeWidth={2.25} />
                 {slides.length}
               </span>
@@ -520,7 +521,7 @@ function ContentCard({
           // Letterboxed vertical "phone screen" — immediately reads as Story
           // without needing a label, and keeps the row height uniform.
           <div className="h-full flex items-center justify-center bg-gradient-to-b from-muted to-nude/20">
-            <div className="h-full aspect-[9/16] overflow-hidden shadow-lg ring-1 ring-border/60 rounded-xl">
+            <div className="h-full aspect-[9/16] overflow-hidden shadow-lg ring-1 ring-border/60 rounded-2xl">
               <img
                 src={thumbnailUrl}
                 alt={item.title}
@@ -539,21 +540,21 @@ function ContentCard({
         )}
 
         {/* Soft scrim so the top-corner badges stay legible over any photo */}
-        <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/25 to-transparent pointer-events-none" />
+        <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/25 to-transparent pointer-events-none" />
 
-        <div className="absolute top-3 left-3 z-10">
+        <div className="absolute top-4 left-4 z-10">
           <StatePill state={state} />
         </div>
-        <div className="absolute top-3 right-3 z-10 inline-flex items-center gap-1.5 bg-foreground/70 backdrop-blur text-offwhite text-[9px] font-semibold uppercase tracking-widest px-2.5 py-1.5 rounded-full shadow-sm">
+        <div className="absolute top-4 right-4 z-10 inline-flex items-center gap-1.5 bg-foreground/70 backdrop-blur text-offwhite text-[9px] font-semibold uppercase tracking-widest px-2.5 py-1.5 rounded-full shadow-sm">
           <FormatIcon size={11} strokeWidth={2.25} />
           {item.type}
         </div>
       </div>
 
       {/* Body */}
-      <div className="flex flex-col flex-1 p-5">
+      <div className="flex flex-col flex-1 p-6">
         {item.pillar && (
-          <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-taupe/70 mb-2">
+          <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-taupe/70 mb-2.5">
             {String(item.pillar).replace(/_/g, " ")}
           </p>
         )}
@@ -561,7 +562,7 @@ function ContentCard({
             from the caption's opening line (see content-provider.ts), so
             showing the full caption underneath just repeated the same text
             twice on the card. */}
-        <h3 className="font-serif text-lg mb-3 leading-snug line-clamp-2">{item.title}</h3>
+        <h3 className="font-serif text-xl mb-3 leading-snug line-clamp-2">{item.title}</h3>
 
         {blocked && (
           <p className="text-xs text-taupe leading-relaxed mb-3">
@@ -571,7 +572,7 @@ function ContentCard({
       </div>
 
       {/* Meta strip */}
-      <div className="bg-muted/60 border-t border-border/70 px-5 py-3.5">
+      <div className="bg-muted/60 border-t border-border/70 px-6 py-4">
         {(appointment || item.scheduledFor || item.postedAt) && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-taupe mb-2">
             {appointment && (
