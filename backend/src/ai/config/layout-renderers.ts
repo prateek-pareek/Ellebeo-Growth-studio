@@ -1012,7 +1012,12 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       const optFamily = (ctx.designLanguage?.intent?.family as any) || 'minimal';
       const behaviorProfile = (dsl as any)?.behavior;
       const constraints = layoutEngine.calculateConstraints(optFamily, 'balanced', false, behaviorProfile);
-      dsl = optimizer.optimize(dsl, constraints, ctx.w, ctx.h);
+      // Pass the real copy through so the optimizer estimates heading/tagline heights
+      // from actual text + font size instead of a flat guess — previously a long
+      // headline could render taller than its estimated box and visually overlap the
+      // tagline stacked beneath it, with the optimizer's own overlap check never
+      // catching it because it only ever compared the (wrong) estimated boxes.
+      dsl = optimizer.optimize(dsl, constraints, ctx.w, ctx.h, undefined, ctx.structuredText);
     }
 
     if (!dsl || !dsl.layers) return '';

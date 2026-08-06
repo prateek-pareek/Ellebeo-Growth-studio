@@ -1,13 +1,42 @@
 import { ICompiledLayoutDSL, IDSLTextLayer, IDSLDecorationLayer, IDSLImageLayer } from '../interfaces';
 import { LayoutConstraints, LayoutEngine } from './layout-engine';
 
+export interface ITextCopyHint {
+  headline?: string;
+  subheadline?: string;
+  cta?: string;
+}
+
 export class CompositionOptimizer {
-  
+
   /**
-   * Optimizes the compiled layout DSL by calculating exact bounding boxes, 
+   * Estimates real text block height from actual copy + font size instead of a flat
+   * guess. Falls back to the given default when no copy text is available for this
+   * role (e.g. the base-image pass, which never renders text and only needs a rough
+   * region split) — same behavior as before for every caller that doesn't pass copy.
+   */
+  private estimateTextBlockHeight(text: string | undefined, fontSize: number, maxWidthPx: number, fallback: number): number {
+    if (!text || !fontSize || !maxWidthPx) return fallback;
+    const avgCharWidth = fontSize * 0.58; // rough average glyph width for a bold display/sans headline face
+    const charsPerLine = Math.max(1, Math.floor(maxWidthPx / avgCharWidth));
+    const lines = Math.max(1, Math.ceil(text.length / charsPerLine));
+    const lineHeight = fontSize * 1.15;
+    return Math.round(lines * lineHeight + fontSize * 0.4); // + breathing room for descenders/padding
+  }
+
+  private copyForRole(role: string | undefined, copy?: ITextCopyHint): string | undefined {
+    if (!copy) return undefined;
+    if (role === 'heading') return copy.headline;
+    if (role === 'tagline' || role === 'body') return copy.subheadline;
+    if (role === 'footnote' || role === 'watermark') return copy.cta;
+    return undefined;
+  }
+
+  /**
+   * Optimizes the compiled layout DSL by calculating exact bounding boxes,
    * balancing whitespace, and preventing overlaps, BEFORE it is passed to the renderers.
    */
-  public optimize(dsl: ICompiledLayoutDSL, constraints: LayoutConstraints, canvasW: number, canvasHeight: number, faceBox?: any): ICompiledLayoutDSL {
+  public optimize(dsl: ICompiledLayoutDSL, constraints: LayoutConstraints, canvasW: number, canvasHeight: number, faceBox?: any, copy?: ITextCopyHint): ICompiledLayoutDSL {
     const optimized = JSON.parse(JSON.stringify(dsl)) as ICompiledLayoutDSL;
     
     if (!optimized.layers) return optimized;
@@ -51,12 +80,23 @@ export class CompositionOptimizer {
     sortedTextLayers.sort((a, b) => (roleWeight[b.role || 'body'] || 0) - (roleWeight[a.role || 'body'] || 0));
 
     let headingBox: any = null;
-    
+    const behaviorProfile = (dsl as any)?.behavior;
+    const fontSizeForRole = (role: string | undefined): number => {
+      if (role === 'heading') return behaviorProfile?.heroBaseFontSize || 100;
+      if (role === 'tagline' || role === 'footnote' || role === 'watermark') return behaviorProfile?.metadataBaseFontSize || 24;
+      return behaviorProfile?.bodyBaseFontSize || 32;
+    };
+
     for (const txtLayer of sortedTextLayers) {
-        let estimatedHeight = 120;
-        if (txtLayer.role === 'heading') estimatedHeight = 300;
-        else if (txtLayer.role === 'body') estimatedHeight = 180;
-        
+        const fallbackHeight = txtLayer.role === 'heading' ? 300 : (txtLayer.role === 'body' ? 180 : 120);
+        const maxWidthPx = regions.textRegion.width * ((txtLayer.maxWidthPercent || 100) / 100);
+        let estimatedHeight = this.estimateTextBlockHeight(
+          this.copyForRole(txtLayer.role, copy),
+          fontSizeForRole(txtLayer.role),
+          maxWidthPx,
+          fallbackHeight,
+        );
+
         let targetRegion: any = regions.textRegion;
         let x = 0, y = 0;
 
