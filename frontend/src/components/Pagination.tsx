@@ -28,7 +28,7 @@ export function Pagination({
         <button
           onClick={() => onChange(page - 1)}
           disabled={page === 1}
-          className="size-7 flex items-center justify-center border border-border text-taupe text-xs hover:text-foreground hover:border-foreground/50 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+          className="size-7 flex items-center justify-center rounded-full text-taupe text-xs hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:pointer-events-none transition-colors"
           aria-label="Previous page"
         >
           ‹
@@ -41,10 +41,10 @@ export function Pagination({
               key={p}
               onClick={() => onChange(p)}
               className={
-                "size-7 flex items-center justify-center text-[11px] tabular-nums border transition-colors " +
+                "size-7 flex items-center justify-center rounded-full text-[11px] tabular-nums transition-colors " +
                 (p === page
-                  ? "bg-foreground text-offwhite border-foreground"
-                  : "border-border text-taupe hover:text-foreground hover:border-foreground/50")
+                  ? "bg-brass text-white"
+                  : "text-taupe hover:text-foreground hover:bg-muted")
               }
             >
               {p}
@@ -54,7 +54,7 @@ export function Pagination({
         <button
           onClick={() => onChange(page + 1)}
           disabled={page === totalPages}
-          className="size-7 flex items-center justify-center border border-border text-taupe text-xs hover:text-foreground hover:border-foreground/50 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+          className="size-7 flex items-center justify-center rounded-full text-taupe text-xs hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:pointer-events-none transition-colors"
           aria-label="Next page"
         >
           ›

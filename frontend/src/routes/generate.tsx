@@ -311,7 +311,7 @@ function GeneratePage() {
             <p className="text-taupe text-base leading-relaxed mb-10 max-w-sm">
               Upgrade to start turning every appointment into polished, on-brand content — automatically.
             </p>
-            <button className="bg-foreground text-offwhite px-8 py-4 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors w-full sm:w-auto">
+            <button className="bg-brass text-white px-8 py-4 text-[11px] uppercase tracking-[0.22em] rounded-xl shadow-elevated hover:brightness-105 hover:shadow-elevated-lg active:scale-[0.97] transition-all w-full sm:w-auto">
               Unlock Now →
             </button>
           </div>
@@ -370,7 +370,7 @@ function GeneratePage() {
                     }
                     navigate({ to: "/plans" });
                   }}
-                  className="bg-foreground text-offwhite px-8 py-4 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors w-full sm:w-auto"
+                  className="bg-brass text-white px-8 py-4 text-[11px] uppercase tracking-[0.22em] rounded-xl shadow-elevated hover:brightness-105 hover:shadow-elevated-lg active:scale-[0.97] transition-all w-full sm:w-auto"
                 >
                   Buy More Generations →
                 </button>
@@ -402,7 +402,7 @@ function GeneratePage() {
                     }
                     navigate({ to: "/plans" });
                   }}
-                  className="bg-foreground text-offwhite px-8 py-4 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors w-full sm:w-auto"
+                  className="bg-brass text-white px-8 py-4 text-[11px] uppercase tracking-[0.22em] rounded-xl shadow-elevated hover:brightness-105 hover:shadow-elevated-lg active:scale-[0.97] transition-all w-full sm:w-auto"
                 >
                   Choose a Plan →
                 </button>
@@ -428,7 +428,7 @@ function GeneratePage() {
           )}
         </div>
         <h1 className="page-title max-w-[20ch]">
-          Turn this appointment into <span className="italic text-taupe">content.</span>
+          Turn this appointment into <span className="italic text-brass-ink">content.</span>
         </h1>
         <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[52ch]">
           Every step is shaped by your Brand DNA — tone, pillar mix, ideal client, CTA style and visual direction.
@@ -516,14 +516,14 @@ function GeneratePage() {
 
 function EmptyState() {
   return (
-    <div className="artifact p-10 text-center">
+    <div className="bg-card rounded-2xl shadow-elevated p-10 text-center">
       <p className="eyebrow mb-3">No appointments yet</p>
       <p className="text-sm text-taupe leading-relaxed max-w-md mx-auto mb-6">
         Add your first appointment to start turning sessions into content.
       </p>
       <Link
         to="/appointments"
-        className="inline-block bg-foreground text-offwhite px-6 py-3 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors"
+        className="inline-block bg-brass text-white px-6 py-3 text-[11px] uppercase tracking-[0.22em] rounded-xl shadow-elevated hover:brightness-105 hover:shadow-elevated-lg active:scale-[0.97] transition-all"
       >
         Go to appointments
       </Link>
@@ -533,14 +533,14 @@ function EmptyState() {
 
 function NotFoundState({ requestedId }: { requestedId: string }) {
   return (
-    <div className="artifact p-10 text-center">
+    <div className="bg-card rounded-2xl shadow-elevated p-10 text-center">
       <p className="eyebrow mb-3">Appointment not found</p>
       <p className="text-sm text-taupe leading-relaxed max-w-md mx-auto mb-6">
         We couldn't find appointment <span className="font-mono">{requestedId}</span> in your account.
       </p>
       <Link
         to="/appointments"
-        className="inline-block bg-foreground text-offwhite px-6 py-3 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors"
+        className="inline-block bg-brass text-white px-6 py-3 text-[11px] uppercase tracking-[0.22em] rounded-xl shadow-elevated hover:brightness-105 hover:shadow-elevated-lg active:scale-[0.97] transition-all"
       >
         Back to appointments
       </Link>
@@ -567,12 +567,12 @@ function Stepper({
   const idx = steps.findIndex((s) => s.id === step);
 
   return (
-    <div className="rounded-2xl border border-border bg-card shadow-sm p-4 sm:p-5">
+    <div className="bg-card rounded-2xl shadow-elevated p-4 sm:p-5">
       {/* Progress bar + counter */}
       <div className="flex items-center gap-3 mb-5">
-        <div className="flex-1 h-1 bg-border rounded-full overflow-hidden">
+        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
           <div
-            className="h-full bg-gradient-to-r from-taupe to-foreground rounded-full transition-all duration-500 ease-out"
+            className="h-full bg-brass rounded-full transition-all duration-500 ease-out"
             style={{ width: `${Math.round(((idx + 1) / steps.length) * 100)}%` }}
           />
         </div>
@@ -586,7 +586,7 @@ function Stepper({
         {/* Connecting line behind circles */}
         <div className="absolute left-0 right-0 top-[14px] h-px bg-border z-0" />
         <div
-          className="absolute left-0 top-[14px] h-px bg-foreground z-0 transition-all duration-500 ease-out"
+          className="absolute left-0 top-[14px] h-px bg-brass z-0 transition-all duration-500 ease-out"
           style={{ width: idx === 0 ? "0%" : `${(idx / (steps.length - 1)) * 100}%` }}
         />
 
@@ -607,10 +607,10 @@ function Stepper({
               <div className={
                 "size-7 rounded-full flex items-center justify-center border-2 transition-all duration-300 " +
                 (done
-                  ? "bg-foreground border-foreground"
+                  ? "bg-brass border-brass"
                   : active
-                    ? "bg-foreground border-foreground ring-4 ring-foreground/10"
-                    : "bg-card border-border group-hover:border-foreground/30")
+                    ? "bg-brass border-brass ring-4 ring-brass/15"
+                    : "bg-card border-border group-hover:border-brass/40")
               }>
                 {done ? (
                   <svg width="9" height="7" viewBox="0 0 10 8" fill="none">
@@ -619,7 +619,7 @@ function Stepper({
                 ) : (
                   <span className={
                     "text-[9px] font-bold tabular-nums " +
-                    (active ? "text-offwhite" : "text-taupe")
+                    (active ? "text-white" : "text-taupe")
                   }>
                     {i + 1}
                   </span>
@@ -651,7 +651,7 @@ function Stepper({
 
 function ContextStrip({ appointment }: { appointment: Appointment }) {
   return (
-    <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 bg-card border hairline">
+    <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 bg-card rounded-xl shadow-elevated">
       <div className="flex items-center gap-2 min-w-0">
         <span className="text-[9px] uppercase tracking-widest text-taupe shrink-0">Working on</span>
         <span className="text-sm font-medium truncate">{appointment.clientName}</span>
@@ -700,8 +700,8 @@ function SelectAppointment({
 
       {/* Template category filter notice */}
       {hasFilter && (
-        <div className="mb-4 flex items-start gap-3 bg-card border hairline px-4 py-3">
-          <span className="size-1.5 rounded-full bg-taupe shrink-0 mt-1.5" />
+        <div className="mb-4 flex items-start gap-3 bg-card rounded-xl shadow-elevated px-4 py-3">
+          <span className="size-1.5 rounded-full bg-brass shrink-0 mt-1.5" />
           <p className="text-[11px] text-taupe leading-relaxed">
             This template is designed for{" "}
             <span className="text-foreground font-medium">{templateCategories.join(", ")}</span>.
@@ -718,8 +718,8 @@ function SelectAppointment({
           const consentColor =
             a.consent === "granted" ? "bg-sage/10 text-sage border-sage/20" :
               a.consent === "declined" ? "bg-destructive/10 text-destructive border-destructive/20" :
-                a.consent === "pending" ? "bg-taupe/10 text-taupe border-taupe/20" :
-                  "bg-border text-taupe/50 border-border";
+                a.consent === "pending" ? "bg-brass/10 text-brass-ink border-brass/20" :
+                  "bg-muted text-taupe/60 border-transparent";
           const consentLabel =
             a.consent === "granted" ? "Consent granted" :
               a.consent === "declined" ? "Declined" :
@@ -734,13 +734,13 @@ function SelectAppointment({
               className={
                 "w-full text-left group rounded-2xl border-2 p-4 flex items-center gap-4 transition-all duration-200 " +
                 (matches
-                  ? "border-border bg-card hover:border-foreground/30 hover:bg-nude/20 hover:shadow-sm cursor-pointer"
+                  ? "border-border bg-card hover:border-brass/40 hover:bg-nude/20 hover:shadow-elevated cursor-pointer"
                   : "border-border bg-muted/30 opacity-50 cursor-not-allowed")
               }
             >
               {/* Initials avatar */}
-              <div className={"size-10 rounded-xl flex items-center justify-center shrink-0 transition-colors " + (matches ? "bg-muted group-hover:bg-nude/40" : "bg-muted")}>
-                <span className={"text-[11px] font-semibold tracking-wide transition-colors " + (matches ? "text-taupe group-hover:text-foreground" : "text-taupe/50")}>
+              <div className={"size-10 rounded-xl flex items-center justify-center shrink-0 transition-colors " + (matches ? "bg-muted group-hover:bg-brass/10" : "bg-muted")}>
+                <span className={"text-[11px] font-semibold tracking-wide transition-colors " + (matches ? "text-taupe group-hover:text-brass-ink" : "text-taupe/50")}>
                   {initials}
                 </span>
               </div>
@@ -763,7 +763,7 @@ function SelectAppointment({
 
               {/* Category mismatch badge or consent badge */}
               {!matches ? (
-                <span className="shrink-0 text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full border bg-border text-taupe/50 border-border">
+                <span className="shrink-0 text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full bg-muted text-taupe/60">
                   Wrong category
                 </span>
               ) : (
@@ -773,7 +773,7 @@ function SelectAppointment({
               )}
 
               {/* Arrow */}
-              {matches && <ChevronRight className="size-4 text-taupe/40 group-hover:text-foreground shrink-0 transition-colors" />}
+              {matches && <ChevronRight className="size-4 text-taupe/40 group-hover:text-brass-ink shrink-0 transition-colors" />}
             </button>
           );
         })}
@@ -812,7 +812,7 @@ function ConsentStep({
 
       {/* Template context banner */}
       {fromTemplate && (
-        <div className="flex items-center gap-3 bg-foreground text-offwhite px-5 py-3">
+        <div className="flex items-center gap-3 bg-foreground text-offwhite rounded-xl px-5 py-3">
           <span className="text-[10px] uppercase tracking-widest">Template selected</span>
           <span className="text-taupe/60 text-[10px]">·</span>
           <span className="text-[10px] text-nude/80 uppercase tracking-widest">Goal &amp; format pre-set — confirm consent to generate</span>
@@ -821,7 +821,7 @@ function ConsentStep({
 
       {/* Status banner */}
       {granted ? (
-        <div className="flex items-start gap-3 bg-card border hairline px-5 py-4">
+        <div className="flex items-start gap-3 bg-card rounded-xl shadow-elevated px-5 py-4">
           <span className="size-2 rounded-full bg-sage shrink-0 mt-1" />
           <div>
             <p className="text-[10px] uppercase tracking-widest text-taupe mb-0.5">Cleared to publish</p>
@@ -831,15 +831,15 @@ function ConsentStep({
           </div>
         </div>
       ) : appointment.consent === "pending" ? (
-        <div className="flex items-start gap-3 bg-card border hairline px-5 py-4">
-          <span className="size-2 rounded-full bg-foreground shrink-0 mt-1" />
+        <div className="flex items-start gap-3 bg-card rounded-xl shadow-elevated px-5 py-4">
+          <span className="size-2 rounded-full bg-brass shrink-0 mt-1" />
           <div>
             <p className="text-[10px] uppercase tracking-widest text-taupe mb-0.5">Awaiting client reply</p>
             <p className="text-sm text-foreground">Consent request sent — waiting for {appointment.clientName} to respond.</p>
           </div>
         </div>
       ) : appointment.consent === "declined" ? (
-        <div className="flex items-start gap-3 bg-card border hairline border-destructive/30 px-5 py-4">
+        <div className="flex items-start gap-3 bg-card rounded-xl shadow-elevated border border-destructive/20 px-5 py-4">
           <span className="size-2 rounded-full bg-destructive shrink-0 mt-1" />
           <div>
             <p className="text-[10px] uppercase tracking-widest text-destructive mb-0.5">Consent declined</p>
@@ -847,13 +847,13 @@ function ConsentStep({
           </div>
         </div>
       ) : (
-        <div className="flex items-start gap-3 bg-card border hairline px-5 py-4">
+        <div className="flex items-start gap-3 bg-card rounded-xl shadow-elevated px-5 py-4">
           <span className="size-2 rounded-full bg-taupe shrink-0 mt-1" />
           <div>
             <p className="text-[10px] uppercase tracking-widest text-taupe mb-0.5">Consent required</p>
             <p className="text-sm text-taupe">
               You need client consent before generating content.{" "}
-              <Link to="/consent/$id" params={{ id: appointment.id }} className="text-foreground underline underline-offset-2">
+              <Link to="/consent/$id" params={{ id: appointment.id }} className="text-brass-ink underline underline-offset-2">
                 Request consent →
               </Link>
             </p>
@@ -862,16 +862,16 @@ function ConsentStep({
       )}
 
       {/* Main card */}
-      <div className="artifact">
+      <div className="bg-card rounded-2xl shadow-elevated overflow-hidden">
         {/* Client header */}
-        <div className="flex items-start justify-between px-8 pt-8 pb-5 border-b hairline">
+        <div className="flex items-start justify-between px-8 pt-8 pb-5">
           <div>
             <p className="font-serif text-3xl mb-1">{appointment.clientName}</p>
             <p className="text-xs text-taupe">{appointment.service} · {appointment.date}</p>
           </div>
           <span className={
-            "text-[10px] uppercase tracking-widest shrink-0 mt-1 " +
-            (granted ? "text-sage" : appointment.consent === "declined" ? "text-destructive" : "text-taupe")
+            "shrink-0 mt-1 text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full " +
+            (granted ? "bg-sage/10 text-sage" : appointment.consent === "declined" ? "bg-destructive/10 text-destructive" : "bg-muted text-taupe")
           }>
             {granted ? "Consent granted" : appointment.consent === "declined" ? "Consent declined" : appointment.consent === "pending" ? "Pending" : "Not requested"}
           </span>
@@ -922,7 +922,7 @@ function ConsentStep({
         {granted && (
           <button
             onClick={onContinue}
-            className="bg-foreground text-offwhite px-8 py-3 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors"
+            className="bg-brass text-white px-8 py-3 text-[11px] uppercase tracking-[0.22em] rounded-xl shadow-elevated hover:brightness-105 hover:shadow-elevated-lg active:scale-[0.97] transition-all"
           >
             {fromTemplate ? "Generate now →" : "Continue"}
           </button>
@@ -974,8 +974,8 @@ function GoalStep({
               className={
                 "relative group p-4 text-left rounded-2xl border-2 transition-all duration-200 " +
                 (selected
-                  ? "border-foreground bg-foreground text-offwhite shadow-md scale-[1.01]"
-                  : "border-border bg-card hover:border-foreground/30 hover:bg-nude/20 hover:shadow-sm")
+                  ? "border-brass bg-brass text-white shadow-elevated scale-[1.01]"
+                  : "border-border bg-card hover:border-brass/40 hover:bg-nude/20 hover:shadow-elevated")
               }
             >
               {/* Check indicator */}
@@ -991,13 +991,13 @@ function GoalStep({
               {/* Icon badge */}
               <div className={
                 "size-7 rounded-lg flex items-center justify-center mb-3 transition-colors " +
-                (selected ? "bg-white/15" : "bg-muted group-hover:bg-nude/40")
+                (selected ? "bg-white/15" : "bg-brass/10 group-hover:bg-brass/15")
               }>
-                <Icon className={"size-3.5 transition-colors " + (selected ? "text-nude" : "text-taupe group-hover:text-foreground")} />
+                <Icon className={"size-3.5 transition-colors " + (selected ? "text-white" : "text-brass-ink")} />
               </div>
 
               <p className="font-serif text-base leading-tight mb-0.5">{g.name}</p>
-              <p className={"text-[11px] leading-relaxed " + (selected ? "text-nude" : "text-taupe")}>{g.help}</p>
+              <p className={"text-[11px] leading-relaxed " + (selected ? "text-white/80" : "text-taupe")}>{g.help}</p>
             </button>
           );
         })}
@@ -1013,7 +1013,7 @@ function GoalStep({
         </button>
         <button
           onClick={onContinue}
-          className="bg-foreground text-offwhite px-8 py-3 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors rounded-xl"
+          className="bg-brass text-white px-8 py-3 text-[11px] uppercase tracking-[0.22em] rounded-xl shadow-elevated hover:brightness-105 hover:shadow-elevated-lg active:scale-[0.97] transition-all"
         >
           Continue →
         </button>
@@ -1063,8 +1063,8 @@ function FormatStep({
               className={
                 "relative group p-4 text-left rounded-2xl border-2 transition-all duration-200 " +
                 (selected
-                  ? "border-foreground bg-foreground text-offwhite shadow-md scale-[1.01]"
-                  : "border-border bg-card hover:border-foreground/30 hover:bg-nude/20 hover:shadow-sm")
+                  ? "border-brass bg-brass text-white shadow-elevated scale-[1.01]"
+                  : "border-border bg-card hover:border-brass/40 hover:bg-nude/20 hover:shadow-elevated")
               }
             >
               {/* Check indicator */}
@@ -1080,21 +1080,21 @@ function FormatStep({
               {/* Icon badge */}
               <div className={
                 "size-7 rounded-lg flex items-center justify-center mb-3 transition-colors " +
-                (selected ? "bg-white/15" : "bg-muted group-hover:bg-nude/40")
+                (selected ? "bg-white/15" : "bg-brass/10 group-hover:bg-brass/15")
               }>
-                <Icon className={"size-3.5 transition-colors " + (selected ? "text-nude" : "text-taupe group-hover:text-foreground")} />
+                <Icon className={"size-3.5 transition-colors " + (selected ? "text-white" : "text-brass-ink")} />
               </div>
 
               <p className="font-serif text-base leading-tight mb-0.5">{f.name}</p>
-              <p className={"text-[11px] leading-relaxed " + (selected ? "text-nude" : "text-taupe")}>{f.help}</p>
+              <p className={"text-[11px] leading-relaxed " + (selected ? "text-white/80" : "text-taupe")}>{f.help}</p>
             </button>
           );
         })}
       </div>
 
       {/* Pro Studio Tip Banner */}
-      <div className="mb-6 p-4 bg-muted/40 border border-border rounded-xl flex items-start gap-3">
-        <span className="text-amber-500 font-bold text-base leading-none">✦</span>
+      <div className="mb-6 p-4 bg-brass/5 border border-brass/20 rounded-xl flex items-start gap-3">
+        <span className="text-brass-ink font-bold text-base leading-none">✦</span>
         <div>
           <p className="text-[9px] uppercase tracking-widest font-bold text-taupe mb-1">PRO STUDIO INSIGHT · CAROUSEL VS STORY</p>
           <p className="text-xs text-foreground/80 leading-relaxed font-serif italic">
@@ -1113,7 +1113,7 @@ function FormatStep({
         </button>
         <button
           onClick={() => onContinue(format)}
-          className="bg-foreground text-offwhite px-8 py-3 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors rounded-xl"
+          className="bg-brass text-white px-8 py-3 text-[11px] uppercase tracking-[0.22em] rounded-xl shadow-elevated hover:brightness-105 hover:shadow-elevated-lg active:scale-[0.97] transition-all"
         >
           Generate →
         </button>
@@ -1285,7 +1285,7 @@ function GeneratingScreen({ jobStatus, brandDna, appointment, estimatedSeconds, 
   const currentStepLabel = jobProgress?.step;
 
   return (
-    <div className="artifact relative flex flex-col items-center justify-center overflow-hidden bg-background border border-border/40 shadow-xl rounded-2xl w-full max-w-4xl mx-auto min-h-[600px]">
+    <div className="relative flex flex-col items-center justify-center overflow-hidden bg-card shadow-elevated-lg rounded-2xl w-full max-w-4xl mx-auto min-h-[600px]">
       <style>{`
         @keyframes customMarquee {
           0% { transform: translateX(0%); }
@@ -1331,9 +1331,9 @@ function GeneratingScreen({ jobStatus, brandDna, appointment, estimatedSeconds, 
             <span>{Math.floor(displayProgress)}%</span>
             <span>{etaLabel}</span>
           </div>
-          <div className="relative w-full h-1 bg-border/50 overflow-hidden rounded-full shadow-inner">
+          <div className="relative w-full h-1.5 bg-muted overflow-hidden rounded-full">
             <div
-              className="absolute top-0 left-0 h-full bg-foreground"
+              className="absolute inset-y-0 left-0 bg-brass rounded-full"
               style={{ width: `${displayProgress}%` }}
             />
           </div>
@@ -1343,13 +1343,13 @@ function GeneratingScreen({ jobStatus, brandDna, appointment, estimatedSeconds, 
         </div>
 
         {/* Luxury Pro Studio Tip Card */}
-        <div className="w-full max-w-md bg-card/80 border border-border/80 p-4 rounded-xl shadow-sm backdrop-blur-sm transition-all duration-500 text-left relative overflow-hidden group">
+        <div className="w-full max-w-md bg-card/80 border border-border/80 p-4 rounded-xl shadow-elevated backdrop-blur-sm transition-all duration-500 text-left relative overflow-hidden group">
           <div className="flex items-center justify-between mb-2">
             <span className="inline-flex items-center gap-1.5 text-[9px] uppercase tracking-[0.2em] font-bold text-taupe">
-              <span className="size-1.5 rounded-full bg-amber-400 animate-pulse" />
+              <span className="size-1.5 rounded-full bg-brass animate-pulse" />
               Pro Studio Tip · {PRO_STUDIO_TIPS[msgIndex % PRO_STUDIO_TIPS.length].category}
             </span>
-            <span className="text-[9px] font-bold text-foreground bg-muted border border-border px-2 py-0.5 rounded">
+            <span className="text-[9px] font-bold text-brass-ink bg-brass/10 border border-brass/20 px-2 py-0.5 rounded-full">
               {PRO_STUDIO_TIPS[msgIndex % PRO_STUDIO_TIPS.length].stat}
             </span>
           </div>
@@ -1422,7 +1422,7 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, jobProgress, back
 
   if (!backendVariants || backendVariants.length === 0) {
     return (
-      <div className="artifact p-12 text-center">
+      <div className="bg-card rounded-2xl shadow-elevated p-12 text-center">
         <p className="eyebrow mb-3">No content generated</p>
         <p className="text-sm text-taupe">The job completed but returned no content. Try again.</p>
       </div>
@@ -1622,13 +1622,13 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, jobProgress, back
       {(contentItem.contentPillar || contentItem.layoutType) && (
         <div className="flex flex-wrap gap-2">
           {contentItem.contentPillar && (
-            <span className="inline-flex items-center gap-1.5 text-[9px] uppercase tracking-widest text-taupe border hairline px-2.5 py-1">
+            <span className="inline-flex items-center gap-1.5 text-[9px] uppercase tracking-widest text-taupe bg-muted px-2.5 py-1 rounded-full">
               <span className="size-1.5 rounded-full bg-sage shrink-0" />
               Pillar&nbsp;<span className="text-foreground font-semibold">{humanizeSlug(contentItem.contentPillar)}</span>
             </span>
           )}
           {contentItem.layoutType && (
-            <span className="inline-flex items-center gap-1.5 text-[9px] uppercase tracking-widest text-taupe border hairline px-2.5 py-1">
+            <span className="inline-flex items-center gap-1.5 text-[9px] uppercase tracking-widest text-taupe bg-muted px-2.5 py-1 rounded-full">
               Layout&nbsp;<span className="text-foreground font-semibold">{humanizeSlug(contentItem.layoutType)}</span>
             </span>
           )}
@@ -1637,14 +1637,14 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, jobProgress, back
 
       {/* Option tabs */}
       {variants.length > 1 && (
-        <div className="grid gap-px bg-border border hairline" style={{ gridTemplateColumns: `repeat(${variants.length}, 1fr)` }}>
+        <div className="grid gap-px bg-border rounded-xl overflow-hidden shadow-elevated" style={{ gridTemplateColumns: `repeat(${variants.length}, 1fr)` }}>
           {variants.map((_: any, i: number) => (
             <button
               key={i}
               onClick={() => setActiveVariant(i)}
-              className={"p-4 text-left transition-colors " + (i === activeVariant ? "bg-foreground text-offwhite" : "bg-card hover:bg-nude/20")}
+              className={"p-4 text-left transition-colors " + (i === activeVariant ? "bg-brass text-white" : "bg-card hover:bg-muted")}
             >
-              <p className={"text-[9px] uppercase tracking-widest mb-1 " + (i === activeVariant ? "text-nude" : "text-taupe")}>
+              <p className={"text-[9px] uppercase tracking-widest mb-1 " + (i === activeVariant ? "text-white/70" : "text-taupe")}>
                 Option {i + 1}
               </p>
               <p className="text-xs font-medium">{MODEL_LABELS[variants[i]?.generatedBy] ?? `Option ${i + 1}`}</p>
@@ -1654,15 +1654,15 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, jobProgress, back
       )}
 
       {/* Draft preview card */}
-      <div className="border border-border bg-card shadow-sm overflow-hidden">
+      <div className="bg-card rounded-2xl shadow-elevated overflow-hidden">
 
         {/* Card header / Tabs */}
-        <div className="flex flex-wrap items-center justify-between border-b border-border bg-muted px-4 py-2">
+        <div className="flex flex-wrap items-center justify-between px-4 py-3">
           <div className="flex items-center gap-1.5 overflow-x-auto">
             <button
               onClick={() => setActiveTab('visual')}
               className={`px-3 py-1.5 text-[10px] uppercase tracking-widest font-semibold border-b-2 transition-all ${activeTab === 'visual'
-                  ? 'border-foreground text-foreground'
+                  ? 'border-brass text-brass-ink'
                   : 'border-transparent text-taupe hover:text-foreground'
                 }`}
             >
@@ -1689,8 +1689,8 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, jobProgress, back
                       <button
                         key={i}
                         onClick={() => setActiveSlide(i)}
-                        className={"overflow-hidden border transition-all " +
-                          (i === safeFrame ? "border-foreground" : "border-transparent opacity-50 hover:opacity-80")}
+                        className={"overflow-hidden rounded-lg border transition-all " +
+                          (i === safeFrame ? "border-brass" : "border-transparent opacity-50 hover:opacity-80")}
                       >
                         <img src={frame.url} alt={frame.title || frame.label} className="w-full aspect-[9/16] object-cover" />
                       </button>
@@ -1760,9 +1760,9 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, jobProgress, back
                         <button
                           key={i}
                           onClick={() => setActiveSlide(i)}
-                          className={"w-full text-left px-4 py-3 flex items-center gap-3 transition-colors " + (i === safeFrame ? "bg-foreground text-offwhite" : "bg-card hover:bg-nude/20")}
+                          className={"w-full text-left px-4 py-3 flex items-center gap-3 rounded-lg transition-colors " + (i === safeFrame ? "bg-brass text-white" : "bg-card hover:bg-muted")}
                         >
-                          <span className={"text-[9px] tabular-nums shrink-0 " + (i === safeFrame ? "text-nude" : "text-taupe")}>
+                          <span className={"text-[9px] tabular-nums shrink-0 " + (i === safeFrame ? "text-white/70" : "text-taupe")}>
                             {String(i + 1).padStart(2, '0')}
                           </span>
                           <span className="text-xs font-medium truncate">
@@ -1801,7 +1801,7 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, jobProgress, back
                       <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Suggested hashtags</p>
                       <div className="flex flex-wrap gap-2">
                         {opt.hashtags.map((h: string) => (
-                          <span key={h} className="text-[10px] uppercase tracking-widest border hairline px-2 py-1 text-taupe">#{h}</span>
+                          <span key={h} className="text-[10px] uppercase tracking-widest bg-muted px-2.5 py-1 rounded-full text-taupe">#{h}</span>
                         ))}
                       </div>
                     </div>
@@ -1827,7 +1827,7 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, jobProgress, back
                     <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60" />
 
                     {/* SIMULATED badge — top right */}
-                    <div className="absolute top-3 right-3 bg-black/70 border border-white/20 px-2 py-0.5">
+                    <div className="absolute top-3 right-3 bg-black/70 border border-white/20 px-2 py-0.5 rounded-full">
                       <p className="text-[8px] uppercase tracking-widest text-white/70">Simulated</p>
                     </div>
 
@@ -1929,7 +1929,7 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, jobProgress, back
                       <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">Suggested hashtags</p>
                       <div className="flex flex-wrap gap-2">
                         {opt.hashtags.map((h: string) => (
-                          <span key={h} className="text-[10px] uppercase tracking-widest border hairline px-2 py-1 text-taupe">#{h}</span>
+                          <span key={h} className="text-[10px] uppercase tracking-widest bg-muted px-2.5 py-1 rounded-full text-taupe">#{h}</span>
                         ))}
                       </div>
                     </div>
@@ -1952,14 +1952,14 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, jobProgress, back
                     />
 
                     {/* Slide counter badge */}
-                    <div className="absolute top-3 left-3 bg-foreground/80 px-2 py-1">
+                    <div className="absolute top-3 left-3 bg-foreground/80 px-2.5 py-1 rounded-full">
                       <p className="text-[9px] uppercase tracking-widest text-offwhite tabular-nums">
                         {safeSlide + 1}/{carouselSlides.length}
                       </p>
                     </div>
 
                     {/* Slide name badge — AI-generated concept name, not a hardcoded counter */}
-                    <div className="absolute top-3 right-3 bg-foreground/80 px-2 py-1 max-w-[65%]">
+                    <div className="absolute top-3 right-3 bg-foreground/80 px-2.5 py-1 rounded-full max-w-[65%]">
                       <p className="text-[9px] uppercase tracking-widest text-nude truncate">
                         {carouselSlides[safeSlide]?.title || carouselSlides[safeSlide]?.label || `Slide ${safeSlide + 1}`}
                       </p>
@@ -1969,7 +1969,7 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, jobProgress, back
                     {safeSlide > 0 && (
                       <button
                         onClick={() => setActiveSlide(safeSlide - 1)}
-                        className="absolute left-2 top-1/2 -translate-y-1/2 size-8 flex items-center justify-center bg-foreground/70 hover:bg-foreground transition-colors"
+                        className="absolute left-2 top-1/2 -translate-y-1/2 size-8 flex items-center justify-center bg-foreground/70 hover:bg-foreground rounded-full shadow-md transition-colors"
                       >
                         <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                           <path d="M6.5 2L3.5 5l3 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -1979,7 +1979,7 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, jobProgress, back
                     {safeSlide < carouselSlides.length - 1 && (
                       <button
                         onClick={() => setActiveSlide(safeSlide + 1)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 size-8 flex items-center justify-center bg-foreground/70 hover:bg-foreground transition-colors"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 size-8 flex items-center justify-center bg-foreground/70 hover:bg-foreground rounded-full shadow-md transition-colors"
                       >
                         <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                           <path d="M3.5 2L6.5 5l-3 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -1994,7 +1994,7 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, jobProgress, back
                       <button
                         key={i}
                         onClick={() => setActiveSlide(i)}
-                        className={"shrink-0 relative overflow-hidden transition-all " + (i === safeSlide ? "ring-2 ring-foreground" : "opacity-60 hover:opacity-90")}
+                        className={"shrink-0 relative overflow-hidden rounded-lg transition-all " + (i === safeSlide ? "ring-2 ring-brass" : "opacity-60 hover:opacity-90")}
                       >
                         <img
                           src={slide.url}
@@ -2036,9 +2036,9 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, jobProgress, back
                         <button
                           key={i}
                           onClick={() => setActiveSlide(i)}
-                          className={"w-full text-left px-4 py-3 flex items-center gap-3 transition-colors " + (i === safeSlide ? "bg-foreground text-offwhite" : "bg-card hover:bg-nude/20")}
+                          className={"w-full text-left px-4 py-3 flex items-center gap-3 rounded-lg transition-colors " + (i === safeSlide ? "bg-brass text-white" : "bg-card hover:bg-muted")}
                         >
-                          <span className={"text-[9px] tabular-nums shrink-0 " + (i === safeSlide ? "text-nude" : "text-taupe")}>
+                          <span className={"text-[9px] tabular-nums shrink-0 " + (i === safeSlide ? "text-white/70" : "text-taupe")}>
                             {String(i + 1).padStart(2, '0')}
                           </span>
                           <span className="text-xs font-medium truncate">
@@ -2162,10 +2162,10 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, jobProgress, back
               onClick={() => handleRefine(r)}
               disabled={!!refining}
               className={
-                "px-3 py-1.5 text-[10px] uppercase tracking-widest border hairline transition-colors " +
+                "px-3.5 py-1.5 text-[10px] uppercase tracking-widest rounded-full border transition-colors " +
                 (refining === r
-                  ? "bg-foreground text-offwhite border-foreground"
-                  : "bg-card text-taupe hover:text-foreground hover:border-foreground disabled:opacity-40")
+                  ? "bg-brass text-white border-brass"
+                  : "bg-card text-taupe border-border hover:text-foreground hover:border-brass/50 disabled:opacity-40")
               }
             >
               {refining === r ? (refineStatus ?? "Refining…") : r}
@@ -2185,19 +2185,19 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, jobProgress, back
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => handleAction("draft")}
-            className="border hairline px-5 py-2.5 text-[10px] uppercase tracking-widest text-taupe hover:text-foreground hover:border-foreground transition-colors"
+            className="border border-border rounded-xl px-5 py-2.5 text-[10px] uppercase tracking-widest text-taupe hover:text-foreground hover:bg-muted transition-colors"
           >
             Save as draft
           </button>
           <button
             onClick={() => handleAction("approve")}
-            className="border hairline px-5 py-2.5 text-[10px] uppercase tracking-widest text-foreground hover:bg-nude/20 transition-colors"
+            className="border border-border rounded-xl px-5 py-2.5 text-[10px] uppercase tracking-widest text-foreground hover:bg-muted transition-colors"
           >
             Approve
           </button>
           <button
             onClick={() => setShowScheduleModal(true)}
-            className="bg-foreground text-offwhite px-5 py-2.5 text-[10px] uppercase tracking-widest hover:bg-taupe transition-colors"
+            className="bg-brass text-white px-5 py-2.5 text-[10px] uppercase tracking-widest rounded-xl shadow-elevated hover:brightness-105 hover:shadow-elevated-lg active:scale-[0.97] transition-all"
           >
             Approve & schedule
           </button>
@@ -2207,34 +2207,34 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, jobProgress, back
       {/* Schedule modal */}
       {showScheduleModal && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-card border hairline p-8 w-full max-w-sm shadow-xl">
+          <div className="bg-card rounded-2xl shadow-elevated-lg p-8 w-full max-w-sm">
             <p className="eyebrow mb-2">Schedule post</p>
             <p className="text-sm text-taupe mb-6 leading-relaxed">
               Pick a date and time to publish. The post will be approved and added to your calendar.
             </p>
 
-            <div className="space-y-1 mb-6">
+            <div className="space-y-1.5 mb-6">
               <label className="text-[10px] uppercase tracking-widest text-taupe block mb-1">Date & Time</label>
               <input
                 type="datetime-local"
                 value={scheduleDateTime}
                 onChange={e => setScheduleDateTime(e.target.value)}
                 min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
-                className="w-full bg-transparent border-b hairline py-2 text-sm outline-none focus:border-foreground text-foreground"
+                className="w-full rounded-lg border border-border bg-muted/30 px-3.5 py-2.5 text-sm outline-none focus:border-brass focus:ring-2 focus:ring-brass/15 text-foreground transition-all"
               />
             </div>
 
             <div className="flex gap-3">
               <button
                 onClick={() => { setShowScheduleModal(false); setScheduleDateTime(''); }}
-                className="flex-1 border hairline px-4 py-3 text-[10px] uppercase tracking-widest text-taupe hover:text-foreground hover:border-foreground transition-colors"
+                className="flex-1 border border-border rounded-xl px-4 py-3 text-[10px] uppercase tracking-widest text-taupe hover:text-foreground hover:bg-muted transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleScheduleSubmit}
                 disabled={!scheduleDateTime || scheduling}
-                className="flex-1 bg-foreground text-offwhite px-4 py-3 text-[10px] uppercase tracking-widest hover:bg-taupe transition-colors disabled:opacity-50"
+                className="flex-1 bg-brass text-white px-4 py-3 text-[10px] uppercase tracking-widest rounded-xl shadow-elevated hover:brightness-105 hover:shadow-elevated-lg active:scale-[0.97] transition-all disabled:opacity-50"
               >
                 {scheduling ? "Scheduling..." : "Confirm"}
               </button>
@@ -2249,8 +2249,8 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, jobProgress, back
 
 function BrandDNAInfluence({ brandDna }: any) {
   return (
-    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-      <div className="bg-muted border-b border-border px-5 py-3">
+    <div className="bg-card rounded-2xl shadow-elevated overflow-hidden">
+      <div className="px-5 py-4">
         <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Brand DNA Influence</p>
       </div>
       {brandDna ? (

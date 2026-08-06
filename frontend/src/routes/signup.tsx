@@ -130,7 +130,7 @@ function SignupPage() {
           >
             <p className="eyebrow mb-6">The Intelligence Layer</p>
             <h2 className="font-serif text-5xl leading-tight mb-8">
-              Build a brand that <span className="italic">feels</span> like you.
+              Build a brand that <span className="italic text-brass-ink">feels</span> like you.
             </h2>
             <p className="text-taupe leading-relaxed">
               Elle.Be.O Growth uses AI to capture your unique voice, style, and goals, turning your expertise into a living Brand DNA.
@@ -164,7 +164,7 @@ function SignupPage() {
                 id="business-name"
                 type="text"
                 placeholder="e.g. Noir Aesthetics"
-                className="bg-transparent border-t-0 border-x-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-foreground transition-all"
+                className="bg-transparent border-t-0 border-x-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-brass transition-all"
                 value={businessName}
                 onChange={(e) => { setBusinessName(e.target.value); if (errors.businessName) setErrors(p => ({ ...p, businessName: undefined })); }}
                 required
@@ -179,7 +179,7 @@ function SignupPage() {
                 type="email"
                 autoComplete="email"
                 placeholder="hello@example.com"
-                className="bg-transparent border-t-0 border-x-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-foreground transition-all"
+                className="bg-transparent border-t-0 border-x-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-brass transition-all"
                 value={email}
                 onChange={(e) => { setEmail(e.target.value); if (errors.email) setErrors(p => ({ ...p, email: undefined })); }}
                 required
@@ -195,7 +195,7 @@ function SignupPage() {
                   type={showPassword ? "text" : "password"}
                   autoComplete="new-password"
                   placeholder="••••••••"
-                  className="bg-transparent border-t-0 border-x-0 border-b rounded-none px-0 pr-7 focus-visible:ring-0 focus-visible:border-foreground transition-all"
+                  className="bg-transparent border-t-0 border-x-0 border-b rounded-none px-0 pr-7 focus-visible:ring-0 focus-visible:border-brass transition-all"
                   value={password}
                   onChange={(e) => { setPassword(e.target.value); if (errors.password) setErrors(p => ({ ...p, password: undefined })); }}
                   required
@@ -214,9 +214,9 @@ function SignupPage() {
               {errors.password && <p className="text-[11px] text-destructive mt-1">{errors.password}</p>}
             </div>
 
-            <Button 
-              type="submit" 
-              className="w-full bg-foreground text-background hover:bg-taupe transition-colors py-6 rounded-none text-[11px] uppercase tracking-[0.2em]"
+            <Button
+              type="submit"
+              className="w-full bg-brass text-white hover:brightness-105 shadow-elevated hover:shadow-elevated-lg transition-all py-6 rounded-xl text-[11px] uppercase tracking-[0.2em]"
               disabled={loading}
             >
               {loading ? "Creating Account…" : "Get Started"}
@@ -233,7 +233,7 @@ function SignupPage() {
               type="button"
               onClick={handleGoogleSignUp}
               disabled={googleLoading}
-              className="w-full bg-transparent border hairline text-foreground hover:bg-card py-6 rounded-none text-[11px] uppercase tracking-[0.2em] flex items-center justify-center gap-3"
+              className="w-full bg-transparent border border-border text-foreground hover:bg-muted py-6 rounded-xl text-[11px] uppercase tracking-[0.2em] flex items-center justify-center gap-3"
             >
               <GoogleIcon />
               {googleLoading ? "Connecting…" : "Continue with Google"}
@@ -242,7 +242,7 @@ function SignupPage() {
               type="button"
               onClick={handleAppleSignUp}
               disabled={googleLoading}
-              className="w-full bg-foreground text-offwhite hover:bg-taupe py-6 rounded-none text-[11px] uppercase tracking-[0.2em] flex items-center justify-center gap-3"
+              className="w-full bg-foreground text-offwhite hover:bg-taupe py-6 rounded-xl text-[11px] uppercase tracking-[0.2em] flex items-center justify-center gap-3"
             >
               <AppleIcon />
               {googleLoading ? "Connecting…" : "Continue with Apple"}

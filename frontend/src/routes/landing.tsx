@@ -164,7 +164,7 @@ function LandingPage() {
             </Link>
             <Link
               to="/signup"
-              className="inline-flex items-center gap-2 bg-foreground text-offwhite text-xs font-semibold px-5 py-2.5 rounded-full shadow-sm hover:opacity-90 active:scale-[0.97] transition-all"
+              className="inline-flex items-center gap-2 bg-brass text-white text-xs font-semibold px-5 py-2.5 rounded-full shadow-sm hover:brightness-105 active:scale-[0.97] transition-all"
             >
               Get started
             </Link>
@@ -210,7 +210,7 @@ function LandingPage() {
                   </Link>
                   <Link
                     to="/signup"
-                    className="inline-flex items-center gap-2 bg-foreground text-offwhite text-xs font-semibold px-5 py-2.5 rounded-full"
+                    className="inline-flex items-center gap-2 bg-brass text-white text-xs font-semibold px-5 py-2.5 rounded-full"
                   >
                     Get started <ArrowRight className="size-3" />
                   </Link>
@@ -253,9 +253,9 @@ function LandingPage() {
               className="mt-6 font-serif text-[2.6rem] sm:text-[3rem] lg:text-[3.5rem] font-semibold leading-[1.08] tracking-tight"
             >
               Every appointment becomes{" "}
-              <span className="italic text-taupe">content</span>{" "}
+              <span className="italic text-brass-ink">content</span>{" "}
               that fills your{" "}
-              <span className="italic text-taupe">calendar.</span>
+              <span className="italic text-brass-ink">calendar.</span>
             </motion.h1>
 
             <motion.p
@@ -269,7 +269,7 @@ function LandingPage() {
             <motion.div variants={fadeUp} className="mt-8 flex flex-wrap gap-3">
               <Link
                 to="/login"
-                className="inline-flex items-center gap-2 bg-foreground text-offwhite text-sm font-semibold px-7 py-3.5 rounded-full shadow-[0_12px_28px_-10px_rgba(0,0,0,0.45)] hover:opacity-90 hover:shadow-xl active:scale-[0.97] transition-all"
+                className="inline-flex items-center gap-2 bg-brass text-white text-sm font-semibold px-7 py-3.5 rounded-full shadow-[0_12px_28px_-10px_rgba(173,134,54,0.45)] hover:brightness-105 hover:shadow-xl active:scale-[0.97] transition-all"
               >
                 Sign in to your studio
                 <ArrowRight className="size-3.5" />
@@ -327,7 +327,7 @@ function LandingPage() {
               {/* Rows */}
               <div className="divide-y divide-border">
                 {[
-                  { type: "Carousel", client: "Zara M.",  service: "Balayage",  status: "Needs review", dot: "bg-amber-400", img: "https://images.unsplash.com/photo-1560066984-138dadb4c035?w=88&h=88&fit=crop&q=75" },
+                  { type: "Carousel", client: "Zara M.",  service: "Balayage",  status: "Needs review", dot: "bg-brass", img: "https://images.unsplash.com/photo-1560066984-138dadb4c035?w=88&h=88&fit=crop&q=75" },
                   { type: "Reel",     client: "Priya S.", service: "Lash lift", status: "Scheduled",    dot: "bg-foreground", img: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=88&h=88&fit=crop&q=75" },
                   { type: "Story",    client: "Jade T.",  service: "Colour",    status: "Published",    dot: "bg-sage", img: "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=88&h=88&fit=crop&q=75" },
                   { type: "Caption",  client: "Maya K.",  service: "Keratin",   status: "Draft",        dot: "bg-taupe/40", img: "https://images.unsplash.com/photo-1519699047748-de8e457a634e?w=88&h=88&fit=crop&q=75" },
@@ -362,7 +362,7 @@ function LandingPage() {
                   Brand DNA ·{" "}
                   <span className="text-foreground font-medium">The Elevated Specialist</span>
                 </span>
-                <span className="inline-flex items-center gap-2 bg-foreground text-offwhite text-xs font-medium px-4 py-2 rounded-lg">
+                <span className="inline-flex items-center gap-2 bg-brass text-white text-xs font-medium px-4 py-2 rounded-lg">
                   <Sparkles className="size-3" />
                   Generate content
                 </span>
@@ -627,7 +627,7 @@ function LandingPage() {
             <p className="eyebrow">Ready to grow?</p>
             <h2 className="font-serif text-5xl sm:text-6xl lg:text-7xl leading-[1.02] tracking-tight max-w-[18ch] mx-auto">
               Your next client is already{" "}
-              <span className="italic text-taupe">scrolling</span>.
+              <span className="italic text-brass-ink">scrolling</span>.
             </h2>
             <p className="text-base sm:text-lg text-taupe leading-relaxed max-w-[46ch] mx-auto">
               Join 2,400+ beauty technicians who use Growth Studio to turn their best work
@@ -636,7 +636,7 @@ function LandingPage() {
             <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
               <Link
                 to="/login"
-                className="inline-flex items-center gap-2 bg-foreground text-offwhite text-sm font-medium px-8 py-4 rounded-full shadow-lg hover:opacity-90 hover:shadow-xl active:scale-[0.97] transition-all"
+                className="inline-flex items-center gap-2 bg-brass text-white text-sm font-medium px-8 py-4 rounded-full shadow-lg hover:brightness-105 hover:shadow-xl active:scale-[0.97] transition-all"
               >
                 Sign in to Growth Studio
                 <ArrowRight className="size-4" />
