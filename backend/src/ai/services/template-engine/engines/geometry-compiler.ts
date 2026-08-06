@@ -41,17 +41,16 @@ export class GeometryCompiler {
     const intent = preset.intent;
     const behavior = preset.behavior;
     
-    // 1. SAFE ZONES (Whitespace Strategy)
+    // 1. SAFE ZONES (Whitespace Strategy) — graded across the full negativeSpace enum;
+    // previously only 'massive'/'minimal' had any effect and 'medium'/'large' silently
+    // no-op'd even though the LLM picks them just as often.
     let safeX = Math.round(60 * behavior.negativeSpaceMultiplier);
     let safeY = Math.round(80 * behavior.negativeSpaceMultiplier);
 
-    if (designSpec?.composition?.negativeSpace === 'massive') {
-      safeX = Math.round(safeX * 1.5);
-      safeY = Math.round(safeY * 1.5);
-    } else if (designSpec?.composition?.negativeSpace === 'minimal') {
-      safeX = Math.round(safeX * 0.6);
-      safeY = Math.round(safeY * 0.6);
-    }
+    const negativeSpaceScale: Record<string, number> = { minimal: 0.6, medium: 1.0, large: 1.25, massive: 1.5 };
+    const spaceScale = negativeSpaceScale[designSpec?.composition?.negativeSpace || 'medium'] ?? 1.0;
+    safeX = Math.round(safeX * spaceScale);
+    safeY = Math.round(safeY * spaceScale);
 
     if (behavior.marginHugging) {
       safeX = Math.round(safeX * 0.3);
@@ -60,21 +59,19 @@ export class GeometryCompiler {
 
     const contentMaxWidth = canvasWidth - (safeX * 2);
 
-    // 2. TYPOGRAPHY SCALING (Proportional Strategy)
+    // 2. TYPOGRAPHY SCALING (Proportional Strategy) — graded across the full dominance
+    // enum ('medium' previously no-op'd) and now also covers 'editorial'/'technical'
+    // hierarchies, not just 'bold'/'minimal'.
     const baseScale = canvasWidth;
     let heroSize = behavior.heroBaseFontSize;
     let bodySize = behavior.bodyBaseFontSize;
 
-    if (designSpec?.typography?.dominance === 'high') {
-      heroSize = Math.round(heroSize * 1.3);
-    } else if (designSpec?.typography?.dominance === 'low') {
-      heroSize = Math.round(heroSize * 0.7);
-    }
+    const dominanceScale: Record<string, number> = { low: 0.7, medium: 1.0, high: 1.3 };
+    heroSize = Math.round(heroSize * (dominanceScale[designSpec?.typography?.dominance || 'medium'] ?? 1.0));
 
-    if (designSpec?.typography?.hierarchy === 'bold') {
-      bodySize = Math.round(bodySize * 1.2);
-    } else if (designSpec?.typography?.hierarchy === 'minimal') {
-      bodySize = Math.round(bodySize * 0.8);
+    const hierarchyBodyScale: Record<string, number> = { bold: 1.2, editorial: 1.1, technical: 0.95, minimal: 0.8 };
+    if (designSpec?.typography?.hierarchy) {
+      bodySize = Math.round(bodySize * (hierarchyBodyScale[designSpec.typography.hierarchy] ?? 1.0));
     }
 
     const typography = {
@@ -90,10 +87,13 @@ export class GeometryCompiler {
       metadataTracking: `${behavior.trackingMetadata}em`,
     };
 
-    // 3. ALIGNMENT (Composition Strategy)
+    // 3. ALIGNMENT (Composition Strategy) — an explicit designSpec.typography.alignment
+    // is a more direct signal than reading flow and wins when present; otherwise fall
+    // back to the reading-flow-derived default as before.
     let alignment: 'left' | 'center' | 'right' = 'left';
     if (intent.readingFlow === 'center_down') alignment = 'center';
     if (intent.readingFlow === 'z_pattern') alignment = 'left'; // z-pattern starts left
+    if (designSpec?.typography?.alignment) alignment = designSpec.typography.alignment;
 
     // 4. RHYTHM & PADDING (Whitespace padding between elements)
     let padding = Math.round(30 * behavior.negativeSpaceMultiplier);

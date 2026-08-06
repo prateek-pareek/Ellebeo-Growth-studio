@@ -234,12 +234,21 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
 
   universal_dynamic_base: async (ctx) => {
     let dsl = COMPILED_LAYOUTS[ctx.layoutType];
-    
-    // Phase 2.5: Design Compiler takes semantic intent and mutates the DSL mathematically
+
+    // Phase 2.5: Design Compiler takes semantic intent and mutates the DSL mathematically.
+    // designLanguage (the generic family/energy-driven behavior profile) runs first as
+    // a baseline; designSpec runs second so the more specific, per-selection photo.role/
+    // treatment intent — grounded for this exact template — wins on imageLayer.paddingPercent/
+    // anchor rather than being silently clobbered by the generic behavior profile.
+    // Previously this compiler only ever ran against ctx.designLanguage here, so
+    // designSpec.photo never affected image geometry outside the decoration path.
     if (ctx.designLanguage && dsl) {
       dsl = designCompiler.compile(dsl, ctx.designLanguage);
     }
-    
+    if (ctx.designSpec && dsl) {
+      dsl = designCompiler.compile(dsl, ctx.designSpec);
+    }
+
     // Phase 2.6: Composition Optimizer balances whitespace and assigns strict bounding boxes
     if (dsl) {
       let faceBox: BoundingBox | undefined = undefined;
@@ -261,32 +270,32 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
     if (dsl && dsl.layers) {
       const isEditorial = ctx.layoutType.includes('editorial');
       const imageLayer = dsl.layers.find(l => l.type === 'image') as IDSLImageLayer;
-      
+
       if (imageLayer) {
         // AI ART DIRECTION UPGRADE: Region-Based Extraction
         // If the optimizer successfully allocated rigorous Image and Text Regions,
         // use those explicit mathematical coordinates.
         if (dsl.canvasRegions && (!imageLayer.mask || imageLayer.mask === 'rectangle' || imageLayer.mask === 'split')) {
           const region = dsl.canvasRegions.imageRegion;
-          
+
           if (region.width < ctx.w) {
             // Asymmetrical Bleed or Split (Photo does not occupy 100% of canvas width)
             const splitPhoto = await processPortraitFit(ctx.imageBuffer, region.width, region.height, ctx.validBackgroundColor);
-            
+
             const baseImageBuffer = await sharp({
               create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validBackgroundColor },
             }).composite([{ input: splitPhoto, top: region.y, left: region.x }]).png().toBuffer();
-            
-            return { 
-              baseImage: sharp(baseImageBuffer), 
-              compositeTop: dsl.canvasRegions.textRegion.y, 
-              compositeBottom: 0, 
+
+            return {
+              baseImage: sharp(baseImageBuffer),
+              compositeTop: dsl.canvasRegions.textRegion.y,
+              compositeBottom: 0,
               compositeLeft: dsl.canvasRegions.textRegion.x,
-              compositeRight: ctx.w - (dsl.canvasRegions.textRegion.x + dsl.canvasRegions.textRegion.width) 
+              compositeRight: ctx.w - (dsl.canvasRegions.textRegion.x + dsl.canvasRegions.textRegion.width)
             };
           }
         }
-        
+
         if (imageLayer.mask === 'before_after_split') {
           // Genuine two-photo compositing for the before_after DSL family —
           // real before-photo + real after-photo stitched together, not a
@@ -302,7 +311,7 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
           const startY = Math.floor((ctx.h - panelH) / 2);
 
           const fullPhoto = await processPortraitFit(ctx.imageBuffer, ctx.w, ctx.h, ctx.validBackgroundColor);
-          
+
           const extractPanel = async (x: number) => {
             return sharp(fullPhoto).extract({ left: x, top: startY, width: panelW, height: panelH }).toBuffer();
           };
@@ -318,38 +327,38 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
             { input: p2, top: startY, left: startX + panelW + gap },
             { input: p3, top: startY, left: startX + (panelW + gap) * 2 },
           ]).png().toBuffer();
-          
+
           return { baseImage: sharp(baseImageBuffer), compositeTop: startY, compositeBottom: startY, compositeLeft: startX, compositeRight: startX };
         } else if (imageLayer.mask === 'circle') {
           const size = Math.floor(Math.min(ctx.w, ctx.h) * 0.6); // 60% of canvas width
           const paddingPx = Math.floor(ctx.w * (imageLayer.paddingPercent || 15) / 100);
-          
+
           let cx = ctx.w / 2;
           let cy = ctx.h / 2;
-          
+
           if (imageLayer.anchor) {
             if (imageLayer.anchor.includes('right')) cx = ctx.w - paddingPx - (size / 2);
             if (imageLayer.anchor.includes('left')) cx = paddingPx + (size / 2);
             if (imageLayer.anchor.includes('top')) cy = paddingPx + (size / 2);
             if (imageLayer.anchor.includes('bottom')) cy = ctx.h - paddingPx - (size / 2);
           }
-          
+
           const leftOffset = Math.floor(cx - (size / 2));
           const topOffset = Math.floor(cy - (size / 2));
-          
-          const circleSvg = `<svg width="${size}" height="${size}"><circle cx="${size/2}" cy="${size/2}" r="${size/2}" fill="#fff"/></svg>`;
+
+          const circleSvg = `<svg width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${size / 2}" fill="#fff"/></svg>`;
           const splitPhoto = await processPortraitFit(ctx.imageBuffer, size, size, ctx.validBackgroundColor);
           const roundedPhoto = await sharp(splitPhoto).composite([{ input: Buffer.from(circleSvg), blend: 'dest-in' }]).png().toBuffer();
-          
+
           const baseImageBuffer = await sharp({
             create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor },
           }).composite([{ input: roundedPhoto, top: topOffset, left: leftOffset }]).png().toBuffer();
-          
+
           const isRight = imageLayer.anchor?.includes('right');
           const isLeft = imageLayer.anchor?.includes('left');
           const compLeft = isRight ? ctx.paddingX : (isLeft ? leftOffset + size + ctx.paddingX : ctx.paddingX);
           const compRight = isLeft ? ctx.paddingX : (isRight ? ctx.w - leftOffset + ctx.paddingX : ctx.paddingX);
-          
+
           return { baseImage: sharp(baseImageBuffer), compositeTop: ctx.paddingTop, compositeBottom: ctx.paddingBottom, compositeLeft: compLeft, compositeRight: compRight };
         } else {
           let targetW: number;
@@ -417,7 +426,7 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
           let cBottom = ctx.paddingBottom;
           let cLeft = ctx.paddingX;
           let cRight = ctx.paddingX;
-          
+
           const safeAnchor = imageLayer.anchor || 'center';
 
           if (safeAnchor === 'top_center' || safeAnchor === 'top_left' || safeAnchor === 'top_right') {
@@ -434,7 +443,7 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
         }
       }
     }
-    
+
     // Fallback: If no image layer exists (e.g. text-only layout), return a textured procedural canvas
     const gradientSvg = `
       <svg width="${ctx.w}" height="${ctx.h}" xmlns="http://www.w3.org/2000/svg">
@@ -472,20 +481,20 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
     const polaroidFrame = await sharp({ create: { width: frameW, height: frameH, channels: 3, background: '#ffffff' } }).png().toBuffer();
     const baseImage = sharp({ create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor } })
       .composite([
-        { input: polaroidFrame, top: Math.floor((ctx.h - frameH)/2), left: Math.floor((ctx.w - frameW)/2) },
-        { input: photo, top: Math.floor((ctx.h - frameH)/2) + 30, left: Math.floor((ctx.w - frameW)/2) + 30 }
+        { input: polaroidFrame, top: Math.floor((ctx.h - frameH) / 2), left: Math.floor((ctx.w - frameW) / 2) },
+        { input: photo, top: Math.floor((ctx.h - frameH) / 2) + 30, left: Math.floor((ctx.w - frameW) / 2) + 30 }
       ]);
-    return { baseImage, compositeTop: Math.floor((ctx.h - frameH)/2) + minDim + 50, compositeBottom: ctx.paddingBottom, compositeLeft: Math.floor((ctx.w - frameW)/2) + 40, compositeRight: Math.floor((ctx.w - frameW)/2) + 40 };
+    return { baseImage, compositeTop: Math.floor((ctx.h - frameH) / 2) + minDim + 50, compositeBottom: ctx.paddingBottom, compositeLeft: Math.floor((ctx.w - frameW) / 2) + 40, compositeRight: Math.floor((ctx.w - frameW) / 2) + 40 };
   },
 
   circle_crop: async (ctx) => {
     const minDim = Math.floor(Math.min(ctx.w, ctx.h) * 0.75);
     const photo = await processPortraitFit(ctx.imageBuffer, minDim, minDim, ctx.validBackgroundColor);
-    const circleSvg = Buffer.from(`<svg width="${minDim}" height="${minDim}"><circle cx="${minDim/2}" cy="${minDim/2}" r="${minDim/2}" fill="white"/></svg>`);
+    const circleSvg = Buffer.from(`<svg width="${minDim}" height="${minDim}"><circle cx="${minDim / 2}" cy="${minDim / 2}" r="${minDim / 2}" fill="white"/></svg>`);
     const masked = await sharp(photo).composite([{ input: circleSvg, blend: 'dest-in' }]).png().toBuffer();
     const baseImage = sharp({ create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor } })
-      .composite([{ input: masked, top: Math.floor((ctx.h - minDim)/2), left: Math.floor((ctx.w - minDim)/2) }]);
-    return { baseImage, compositeTop: Math.floor((ctx.h - minDim)/2) + minDim + 40, compositeBottom: ctx.paddingBottom, compositeLeft: ctx.paddingX, compositeRight: ctx.paddingX };
+      .composite([{ input: masked, top: Math.floor((ctx.h - minDim) / 2), left: Math.floor((ctx.w - minDim) / 2) }]);
+    return { baseImage, compositeTop: Math.floor((ctx.h - minDim) / 2) + minDim + 40, compositeBottom: ctx.paddingBottom, compositeLeft: ctx.paddingX, compositeRight: ctx.paddingX };
   },
 
 
@@ -553,32 +562,32 @@ const tspans = (ctx: TextCtx, x: string, dyFirst = 0) => {
     const headline = ctx.structuredText.headline ? ctx.escapeXml(ctx.structuredText.headline.toUpperCase()) : '';
     const subheadline = ctx.structuredText.subheadline ? ctx.escapeXml(ctx.structuredText.subheadline) : '';
     let currentDy = dyFirst;
-    
+
     // Headline (Massive, Bold)
     if (headline) {
-       const hLines = splitTextIntoLines(headline, 22);
-       const hSize = ctx.dynamicFontSize;
-       svg += `<tspan x="${x}" dy="${currentDy}" font-weight="800" font-family="'${ctx.brandFont}', sans-serif" font-size="${hSize}px" letter-spacing="2px">${hLines[0]}</tspan>`;
-       for (let i = 1; i < hLines.length; i++) {
-         svg += `<tspan x="${x}" dy="${Math.round(hSize * 1.2)}">${hLines[i]}</tspan>`;
-       }
-       currentDy = Math.round(hSize * 1.5); // Push subheadline down
+      const hLines = splitTextIntoLines(headline, 22);
+      const hSize = ctx.dynamicFontSize;
+      svg += `<tspan x="${x}" dy="${currentDy}" font-weight="800" font-family="'${ctx.brandFont}', sans-serif" font-size="${hSize}px" letter-spacing="2px">${hLines[0]}</tspan>`;
+      for (let i = 1; i < hLines.length; i++) {
+        svg += `<tspan x="${x}" dy="${Math.round(hSize * 1.2)}">${hLines[i]}</tspan>`;
+      }
+      currentDy = Math.round(hSize * 1.5); // Push subheadline down
     }
-    
+
     // Subheadline (Smaller, Lighter, Italic)
     if (subheadline) {
-       const sLines = splitTextIntoLines(subheadline, 40);
-       const sSize = Math.round(ctx.dynamicFontSize * 0.55);
-       const fontStyle = "italic";
-       const fontWeight = "300";
-       svg += `<tspan x="${x}" dy="${currentDy}" font-weight="${fontWeight}" font-style="${fontStyle}" font-size="${sSize}px" font-family="'Georgia', serif" letter-spacing="1px">${sLines[0]}</tspan>`;
-       for (let i = 1; i < sLines.length; i++) {
-         svg += `<tspan x="${x}" dy="${Math.round(sSize * 1.4)}">${sLines[i]}</tspan>`;
-       }
+      const sLines = splitTextIntoLines(subheadline, 40);
+      const sSize = Math.round(ctx.dynamicFontSize * 0.55);
+      const fontStyle = "italic";
+      const fontWeight = "300";
+      svg += `<tspan x="${x}" dy="${currentDy}" font-weight="${fontWeight}" font-style="${fontStyle}" font-size="${sSize}px" font-family="'Georgia', serif" letter-spacing="1px">${sLines[0]}</tspan>`;
+      for (let i = 1; i < sLines.length; i++) {
+        svg += `<tspan x="${x}" dy="${Math.round(sSize * 1.4)}">${sLines[i]}</tspan>`;
+      }
     }
     return svg;
   }
-  
+
   // Fallback to legacy lines
   return ctx.escapedLines.map((line, idx) => `<tspan x="${x}" dy="${idx === 0 ? dyFirst : ctx.dyOffset}">${line}</tspan>`).join('');
 };
@@ -700,7 +709,7 @@ export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
   // ── Premium Calendar / Wax-Stamp Date Tile ──────────────────────────────
   editorial_date_stamp: (ctx) => {
     const now = new Date();
-    const monthNames = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+    const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
     const month = monthNames[now.getMonth()];
     const day = String(now.getDate()).padStart(2, '0');
     const year = String(now.getFullYear());
@@ -767,7 +776,7 @@ export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
     // Generate a deterministic random index based on the text length and image size so it's stable per render
     const seed = ctx.overlayText.length + ctx.w + ctx.h;
     const styleIndex = seed % 6;
-    
+
     switch (styleIndex) {
       case 0: {
         // Giant transparent word
@@ -970,22 +979,45 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
 
   universal_dynamic_deco: (ctx) => {
     let dsl = COMPILED_LAYOUTS[ctx.layoutType];
-    
+
     // Phase 2.5: Design Compiler mutates text widths and alignments based on semantic intent
     if (ctx.designSpec && dsl) {
       dsl = designCompiler.compile(dsl, ctx.designSpec);
     }
-    
+
     // Compile DSL rules dynamically based on semantic intent
     if (ctx.designLanguage) {
       dsl = designCompiler.compile(dsl, ctx.designLanguage);
     }
-    
+
+    // Extract faceBox early for the optimizer
+    let faceBox: any | undefined = undefined;
+    if (ctx.faceCoordinates && ctx.faceCoordinates.eyesYPercent) {
+      const eyesY = Math.round((ctx.faceCoordinates.eyesYPercent / 100) * ctx.h);
+      const mouthY = ctx.faceCoordinates.mouthYPercent
+        ? Math.round((ctx.faceCoordinates.mouthYPercent / 100) * ctx.h)
+        : Math.round(eyesY + (ctx.h * 0.15));
+
+      const faceTop = Math.max(0, eyesY - Math.round(ctx.h * 0.08));
+      const faceBottom = Math.min(ctx.h, mouthY + Math.round(ctx.h * 0.08));
+      const faceHeight = faceBottom - faceTop;
+      const faceWidth = Math.round(ctx.w * 0.45);
+      const faceX = Math.round((ctx.w - faceWidth) / 2);
+      faceBox = { x: faceX, y: faceTop, width: faceWidth, height: faceHeight };
+    }
+
     // Phase 2.6: Composition Optimizer
     if (dsl) {
-      const layoutEngine = new LayoutEngine(ctx.w, ctx.h);
-      const constraints = layoutEngine.calculateConstraints('minimal', 'balanced');
-      dsl = optimizer.optimize(dsl, constraints, ctx.w, ctx.h);
+      const layoutEngine = new LayoutEngine(ctx.w, ctx.h, faceBox);
+      const optFamily = (ctx.designLanguage?.intent?.family as any) || 'minimal';
+      const behaviorProfile = (dsl as any)?.behavior;
+      const constraints = layoutEngine.calculateConstraints(optFamily, 'balanced', false, behaviorProfile);
+      // Pass the real copy through so the optimizer estimates heading/tagline heights
+      // from actual text + font size instead of a flat guess — previously a long
+      // headline could render taller than its estimated box and visually overlap the
+      // tagline stacked beneath it, with the optimizer's own overlap check never
+      // catching it because it only ever compared the (wrong) estimated boxes.
+      dsl = optimizer.optimize(dsl, constraints, ctx.w, ctx.h, undefined, ctx.structuredText);
     }
 
     if (!dsl || !dsl.layers) return '';
@@ -996,17 +1028,17 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     const contract = (dsl as any).contract;
     if (contract && Array.isArray(contract.required)) {
       for (const req of contract.required) {
-        const hasPrimitive = dsl.layers.some(l => ('component' in l && l.component === req)) || 
-                             (ctx.injectedFeatures || []).includes(req);
+        const hasPrimitive = dsl.layers.some(l => ('component' in l && l.component === req)) ||
+          (ctx.injectedFeatures || []).includes(req);
         if (!hasPrimitive) {
           console.warn(`[Renderer] Template '${dsl.id}' is missing required primitive: '${req}'.`);
         }
       }
     }
-    
+
     // Check if we need to apply a global overlay (like noise) based on brand DNA
     let overlayLayers = dsl.layers.filter(l => l.type === 'decoration' || l.type === 'text' || (l.type === 'image' && l.component));
-    
+
     // Generate the Visual Recipe instead of relying on rigid family names
     let visualRecipe;
     let family: LayoutFamily = 'minimal';
@@ -1015,42 +1047,68 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       visualRecipe = artDirectionEngine.generateVisualRecipe(ctx.designLanguage.intent, ctx.activeTheme || 'editorial_beauty');
       family = (ctx.designLanguage.intent.family as LayoutFamily) || 'minimal';
     } else {
-      const fallbackIntent = artDirectionEngine.generateDesignIntent(ctx.layoutType || 'minimal');
+      // Defensive fallback only — every call site in ai-image-generation.service.ts now
+      // threads designLanguage into decoCtx, so this branch shouldn't fire in practice.
+      // Still passes designSpec (if present) so a grounded Design Intent is used instead
+      // of guessing from the id string, should some other caller reach this path.
+      const fallbackIntent = artDirectionEngine.generateDesignIntent(ctx.layoutType || 'minimal', undefined, undefined, ctx.designSpec);
       visualRecipe = artDirectionEngine.generateVisualRecipe(fallbackIntent, ctx.activeTheme || 'editorial_beauty');
       family = (fallbackIntent.family as LayoutFamily) || 'minimal';
     }
 
     // PHASE 3A: Thematic Mood Injection
-    // Inject textures/overlays dynamically via the VisualRecipe (TextureRecipe)
-    const moodDecorations = themeEngine.getMoodDecorations(visualRecipe.texture);
+    // Inject textures/overlays dynamically via the VisualRecipe (TextureRecipe).
+    // decorations.density gates this additive overlay (never the family's own
+    // structural decoration layers, which are untouched design DNA) — 'none'/'low'
+    // keeps the design clean, 'medium'/'high' allows the mood texture through. This
+    // is the first real, generic effect decorations.density has ever had; previously
+    // it was parsed by the LLM prompt but read nowhere downstream.
+    const decorationDensity = ctx.designSpec?.decorations?.density;
+    const moodDecorations = (decorationDensity === 'none' || decorationDensity === 'low')
+      ? []
+      : themeEngine.getMoodDecorations(visualRecipe.texture);
     overlayLayers = [...overlayLayers, ...moodDecorations];
-    
+
     overlayLayers.sort((a, b) => a.zIndex - b.zIndex);
 
     // Initialize LayoutEngine to calculate constraints for PrimitiveCtx
-    
+
     // Construct an estimated face BoundingBox from the vision result's Y coordinates
-    let faceBox: BoundingBox | undefined = undefined;
-    if (ctx.faceCoordinates && ctx.faceCoordinates.eyesYPercent) {
-      const faceY = Math.round(ctx.h * (ctx.faceCoordinates.eyesYPercent / 100));
-      // Assume face occupies roughly 60% of the canvas height and 50% of the width (centered)
-      const faceHeight = Math.round(ctx.h * 0.60);
-      const faceWidth = Math.round(ctx.w * 0.50);
-      const faceX = Math.round((ctx.w - faceWidth) / 2);
-      faceBox = { x: faceX, y: Math.max(0, faceY - 60), width: faceWidth, height: faceHeight };
-    }
+    // (Already extracted above for the optimizer)
 
     const layoutEngine = new LayoutEngine(ctx.w, ctx.h, faceBox);
     const isTensionEnabled = family === 'editorial';
     const behaviorProfile = (dsl as any)?.behavior;
     const constraints = layoutEngine.calculateConstraints(family, 'balanced', isTensionEnabled, behaviorProfile);
 
+    // Determinstic hash based on layoutType and rawName (acting as variant/tenant proxy)
+    const hashString = ctx.layoutType + '_' + (ctx.rawName || 'default');
+    let hash = 2166136261;
+    for (let i = 0; i < hashString.length; i++) {
+      hash ^= hashString.charCodeAt(i);
+      hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+    }
+    const rotationIndex = (hash >>> 0) % 4;
+
+    // Rotate Brand, Secondary, Accent, Depth. Background is explicitly locked.
+    const rotatableColors = [
+      ctx.validBrandColor,
+      ctx.validSecondaryColor,
+      ctx.validAccentColor || ctx.validBrandColor,
+      ctx.validDepthColor || ctx.validBrandColor
+    ];
+
+    const rBrand = rotatableColors[(0 + rotationIndex) % 4];
+    const rSecondary = rotatableColors[(1 + rotationIndex) % 4];
+    const rAccent = rotatableColors[(2 + rotationIndex) % 4];
+    const rDepth = rotatableColors[(3 + rotationIndex) % 4];
+
     const colorPalette: ColorPalette = {
-      brandColor: ctx.validBrandColor,
-      secondaryColor: ctx.validSecondaryColor,
-      backgroundColor: ctx.validBackgroundColor,
-      accentColor: ctx.validAccentColor,
-      depthColor: ctx.validDepthColor
+      brandColor: rBrand,
+      secondaryColor: rSecondary,
+      backgroundColor: ctx.validBackgroundColor, // Locked
+      accentColor: rAccent,
+      depthColor: rDepth
     };
 
     const colorHierarchy = colorEngine.resolveHierarchy(colorPalette, visualRecipe.color);
@@ -1069,12 +1127,12 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     };
 
     const layoutState = primitiveCtx.layoutState!;
-    layoutState.occupiedRegions.push({ 
+    layoutState.occupiedRegions.push({
       id: 'hero-image',
       role: 'image',
-      x: ctx.paddingX, 
-      y: ctx.paddingTop, 
-      width: ctx.innerW, 
+      x: ctx.paddingX,
+      y: ctx.paddingTop,
+      width: ctx.innerW,
       height: ctx.innerH,
       zIndex: 10
     });
@@ -1083,7 +1141,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       if (layer.type === 'decoration') {
         const componentName = (layer as IDSLDecorationLayer).component;
         if (!componentName) continue;
-        
+
         const renderedPrimitive = primitiveEngine.renderPrimitive(componentName, primitiveCtx, layer as IDSLDecorationLayer);
         if (renderedPrimitive) {
           console.log(`[Renderer Sprint] SUCCESS: Applied primitive decoration '${componentName}' to layout.`);
@@ -1114,7 +1172,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
         }
       } else if (layer.type === 'text') {
         const textLayer = layer as IDSLTextLayer;
-        
+
         // If the text layer defines a background component (e.g. editorial_sidebar, metric_panel), render it FIRST
         if (textLayer.component) {
           const renderedPrimitive = primitiveEngine.renderPrimitive(textLayer.component, primitiveCtx, textLayer);
@@ -1124,7 +1182,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
             console.error(`[Renderer Sprint] CRITICAL ERROR: Text Component '${textLayer.component}' not found in PrimitiveEngine!`);
           }
         }
-        
+
         // CONDITIONAL SCRIM REMOVED IN SPRINT 3.
         // We now rely on high-contrast Structural Containers (Cards/Pills) instead of muddy full-bleed gradients.
 

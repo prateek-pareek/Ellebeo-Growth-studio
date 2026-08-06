@@ -121,11 +121,19 @@ export type TypographyDominance = 'low' | 'medium' | 'high';
 
 export type DecorationDensity = 'none' | 'low' | 'medium' | 'high';
 
+export type DesignReadingFlow = 'z_pattern' | 'center_down' | 'circular' | 'center_outward' | 'diagonal' | 'bottom_left' | 'scattered';
+export type SceneElement = 'image' | 'headline' | 'body' | 'cta' | 'badge';
+export type WhitespaceFeel = 'tight' | 'balanced' | 'generous' | 'luxury';
+export type CompositionRhythm = 'compact' | 'standard' | 'relaxed';
+export type ContrastStrategy = 'high_impact' | 'soft_minimal' | 'tonal';
+export type DesignGroundingSource = 'mined_exact' | 'mined_family_stats' | 'llm_inferred';
+
 export interface ISemanticDesignSpec {
   composition: {
     hero: CompositionHero;
     balance: CompositionBalance;
     negativeSpace: NegativeSpace;
+    readingFlow?: DesignReadingFlow; // grounded reading flow, optional for back-compat with older callers
   };
   photo: {
     role: PhotoRole;
@@ -136,12 +144,43 @@ export interface ISemanticDesignSpec {
     hierarchy: TypographyHierarchy;
     dominance: TypographyDominance;
     headlineTreatment?: 'experimental' | 'standard';
+    alignment?: 'left' | 'center' | 'right';
   };
   decorations: {
     density: DecorationDensity;
   };
   style: {
     mood: string;
+  };
+  // What content leads/follows visually — lets the renderer decide sizing/ordering instead of guessing
+  hierarchy?: {
+    primaryElement: SceneElement;
+    secondaryElement?: SceneElement;
+    tertiaryElement?: SceneElement;
+  };
+  // Graded spacing feel — replaces the extremes-only negativeSpace enum for finer renderer control
+  spacing?: {
+    whitespaceFeel: WhitespaceFeel;
+    rhythm: CompositionRhythm;
+  };
+  // What should visually pop, and how
+  emphasis?: {
+    focalPoint: CompositionHero;
+    contrastStrategy: ContrastStrategy;
+  };
+  // 1-2 sentence human-readable design rationale (supersedes the bare "reasoning" string)
+  philosophy?: string;
+  // Where this spec's structural fields came from — lets downstream code trust mined data over LLM guesses
+  groundedIn?: {
+    source: DesignGroundingSource;
+    sampleFraction?: string; // e.g. "9/13" real mined samples agreeing on this reading flow
+    energy?: string; // raw mined visualLanguage.energy ("calm"/"energetic"/"youthful") — mapped to engine energy downstream
+  };
+  // Extensibility seam: a future BrandDNA Agent's output merges here before composition. No-op today.
+  brandOverrides?: {
+    primaryColor?: string;
+    secondaryColor?: string;
+    fontFamily?: { headline?: string; body?: string };
   };
 }
 
@@ -204,6 +243,9 @@ export interface TypographyRecipe {
 export interface PrimitiveRecipe {
   cardStyle: 'solid' | 'glass' | 'outlined' | 'floating' | 'none';
   borderStyle: 'none' | 'thin' | 'thick' | 'architectural';
+  paper_texture?: { opacity?: number; blendMode?: string };
+  split_seam_line?: { opacity?: number; strokeWidth?: number };
+  margin_notes?: { opacity?: number };
 }
 
 export interface TextureRecipe {

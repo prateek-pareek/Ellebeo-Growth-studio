@@ -77,6 +77,17 @@ export class CompositionEngine {
     return metadata;
   }
 
+  /**
+   * Builds the structural DSL for a design family variant. Every literal below (mask,
+   * anchor, zIndex, which primitive component) is genuine family DNA — a structural
+   * fact about this specific variant, not a per-generation creative choice, so it stays
+   * hardcoded here by design. Intent-driven values (alignment, whitespace/negativeSpace,
+   * photo treatment, typography scale, decoration density, mood) are deliberately NOT
+   * duplicated across these ~45 branches — they're applied once, generically, to every
+   * recipe (rigid or procedural) by DesignCompiler/GeometryCompiler downstream, which is
+   * what actually reads the Template Agent's Design Intent (see art-direction-engine.ts,
+   * design-compiler.ts, geometry-compiler.ts).
+   */
   public buildRecipe(layoutId: string, slideIndex: number, brandName: string): ICompiledLayoutDSL {
     const layers: IDSLSceneLayer[] = [];
     const recipeId = `${layoutId}_${slideIndex}`;
@@ -158,6 +169,49 @@ export class CompositionEngine {
         role: 'footnote',
         alignment: 'center',
         maxWidthPercent: 10
+      } as IDSLTextLayer);
+
+    } else if (layoutId === 'testimonial_z_pattern') {
+      // RECIPE: Testimonial Z-Pattern
+      // Avatar top left, large quote center right, name/title bottom left.
+      layers.push({
+        id: 'test_z_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'circle',
+        paddingPercent: 12,
+        anchor: 'top_left',
+        allowedAnchors: ['top_left', 'top_right']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'test_z_quote_mark',
+        type: 'decoration',
+        zIndex: 15,
+        component: 'quote_marks',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'test_z_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'center',
+        allowedAnchors: ['center'],
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 70
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'test_z_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_left',
+        role: 'tagline',
+        alignment: 'left',
+        maxWidthPercent: 40
       } as IDSLTextLayer);
 
     } else if (layoutId === 'split_vertical_stack') {
@@ -1577,6 +1631,7 @@ export class CompositionEngine {
       layers.push({ id: 'prem_qp_quote', type: 'decoration', zIndex: 16, component: 'pull_quote', anchor: 'center' } as IDSLDecorationLayer);
 
     } else if (layoutId === 'premium_cta_poster') {
+      layers.push({ id: 'prem_cta_bg', type: 'image', zIndex: 10, mask: 'full_bleed', paddingPercent: 0, anchor: 'center' } as IDSLImageLayer);
       layers.push({ id: 'prem_cta_title', type: 'text', zIndex: 30, anchor: 'center', role: 'heading', alignment: 'center', maxWidthPercent: 90 } as IDSLTextLayer);
       layers.push({ id: 'prem_cta_caption', type: 'text', zIndex: 31, anchor: 'bottom_center', role: 'footnote', alignment: 'center', maxWidthPercent: 50 } as IDSLTextLayer);
       layers.push({ id: 'prem_cta_badge', type: 'decoration', zIndex: 35, component: 'handmade_mark', anchor: 'top_right' } as IDSLDecorationLayer);

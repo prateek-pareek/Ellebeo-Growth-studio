@@ -102,12 +102,12 @@ export class VisionAnalysisChain {
         temperature: this.cfg.temperature,
         maxOutputTokens: this.cfg.maxTokens,
         apiKey: process.env['GEMINI_API_KEY'],
-      safetySettings: [
-        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-      ],
+        safetySettings: [
+          { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        ],
       });
     }
     return this.model;
@@ -129,7 +129,7 @@ export class VisionAnalysisChain {
     if (cachedResult) {
       try {
         const parsed = JSON.parse(cachedResult) as VisionAnalysisResult;
-          return { result: parsed, fromCache: true };
+        return { result: parsed, fromCache: true };
       } catch {
         // Corrupted cache — fall through to DB check
       }
