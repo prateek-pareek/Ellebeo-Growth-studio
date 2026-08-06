@@ -1245,8 +1245,10 @@ CRITICAL IMAGE REQUIREMENTS:
       const designTokens = this.themeEngine.resolveDesignTokens(visualRanking);
       const composition = this.compositionEngine.calculateComposition(designTokens, templateIntent as any, isFirst);
 
-      // NEW ARCHITECTURE: Pull semantic rules from the Art Direction Engine using the layout ID!
-      const intent = this.artDirectionEngine.generateDesignIntent(layoutType, index || 0, totalSlides || 1);
+      // NEW ARCHITECTURE: Pull semantic rules from the Art Direction Engine. When the Template
+      // Agent already produced a Design Intent (designSpec) for this exact selection, use it
+      // directly instead of re-guessing family/energy/balance/readingFlow from the id string.
+      const intent = this.artDirectionEngine.generateDesignIntent(layoutType, index || 0, totalSlides || 1, designSpec);
       const behavior = this.artDirectionEngine.mapIntentToBehavior(intent);
       const designLanguage = { intent, behavior };
       const geometryOut = this.geometryCompiler.compile(designLanguage, w, h, designSpec);
@@ -1395,6 +1397,7 @@ CRITICAL IMAGE REQUIREMENTS:
         injectedFeatures: composition.injectedFeatures,
         designTokens,
         designSpec,
+        designLanguage,
         typographyMetrics: geometryOut.typography,
         activeTheme,
       };

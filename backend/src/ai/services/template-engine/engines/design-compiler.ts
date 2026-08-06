@@ -78,15 +78,19 @@ export class DesignCompiler {
       }
     }
 
-    // 2. Composition Strategy Compiler — subtle whitespace adjustments
+    // 2. Composition Strategy Compiler — graded whitespace adjustments across the full
+    // enum (previously only 'massive'/'large' had any effect; 'medium'/'minimal' silently
+    // no-op'd even though the LLM picks them just as often).
     if (spec.composition) {
-      if (spec.composition.negativeSpace === 'massive') {
-        if (imageLayer) imageLayer.paddingPercent = Math.min(14, (imageLayer.paddingPercent || 8) + 3);
-        textLayers.forEach(t => t.maxWidthPercent = 50);
-      } else if (spec.composition.negativeSpace === 'large') {
-        if (imageLayer) imageLayer.paddingPercent = Math.min(12, (imageLayer.paddingPercent || 8) + 2);
-        textLayers.forEach(t => t.maxWidthPercent = 65);
-      }
+      const negativeSpaceRules: Record<string, { paddingBump: number; maxWidthPercent: number }> = {
+        minimal: { paddingBump: 0, maxWidthPercent: 85 },
+        medium: { paddingBump: 1, maxWidthPercent: 75 },
+        large: { paddingBump: 2, maxWidthPercent: 65 },
+        massive: { paddingBump: 3, maxWidthPercent: 50 },
+      };
+      const rule = negativeSpaceRules[spec.composition.negativeSpace] || negativeSpaceRules.medium;
+      if (imageLayer) imageLayer.paddingPercent = Math.min(14, (imageLayer.paddingPercent || 8) + rule.paddingBump);
+      textLayers.forEach(t => t.maxWidthPercent = rule.maxWidthPercent);
     }
 
     // 3. Typography Strategy Compiler (Behavioral Contrast & Dominance)
@@ -94,9 +98,13 @@ export class DesignCompiler {
       const heading = textLayers.find(t => t.role === 'heading');
       const tagline = textLayers.find(t => t.role === 'tagline');
       const body = textLayers.find(t => t.role === 'body');
-      
+
       if (heading) {
-        if (spec.typography.hierarchy === 'editorial') {
+        // 'editorial' and 'technical' hierarchies both read as deliberate/structured
+        // and benefit from the same asymmetrical-aware left-alignment sync; 'bold' and
+        // 'minimal' hierarchies are left at the template's own default alignment since
+        // forcing them left has no clear typographic justification.
+        if (spec.typography.hierarchy === 'editorial' || spec.typography.hierarchy === 'technical') {
           const isAsymmetrical = spec.composition?.balance === 'asymmetrical';
           heading.alignment = isAsymmetrical ? 'left' : heading.alignment || 'center';
 
@@ -116,17 +124,32 @@ export class DesignCompiler {
             else if (currentAnchor.includes('bottom')) heading.anchor = 'bottom_left';
             else heading.anchor = 'middle_left';
           }
+        }
 
-          if (spec.typography.headlineTreatment === 'experimental') {
-            heading.rotation = -90; // Rotate vertically
-            heading.anchor = 'middle_left'; // Push to the side
-            heading.alignment = 'center';
-          }
+        // Explicit alignment on the spec is a more direct signal than the
+        // hierarchy-inferred default above — it wins when present, on all
+        // three heading/tagline/body roles.
+        if (spec.typography.alignment) {
+          heading.alignment = spec.typography.alignment;
+          if (tagline) tagline.alignment = spec.typography.alignment;
+          if (body) body.alignment = spec.typography.alignment;
+        }
+
+        // headlineTreatment is independent of hierarchy — it previously only ever
+        // fired when hierarchy also happened to be 'editorial', silently dropping it
+        // for every other hierarchy value.
+        if (spec.typography.headlineTreatment === 'experimental') {
+          heading.rotation = -90; // Rotate vertically
+          heading.anchor = 'middle_left'; // Push to the side
+          heading.alignment = 'center';
         }
       }
     }
 
-    // 4. Decoration Strategy — preserve template integrity without unrequested auto-injections
+    // 4. Decoration Strategy — preserve template integrity; global decoration density
+    // (decorations.density) is applied one level up, in layout-renderers.ts, where the
+    // additive mood-texture overlay is composed — not here, so a family's own
+    // structural decoration layers (its design DNA) are never touched by this field.
     return compiledDsl;
   }
 }

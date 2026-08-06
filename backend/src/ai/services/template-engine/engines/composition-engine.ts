@@ -77,6 +77,17 @@ export class CompositionEngine {
     return metadata;
   }
 
+  /**
+   * Builds the structural DSL for a design family variant. Every literal below (mask,
+   * anchor, zIndex, which primitive component) is genuine family DNA — a structural
+   * fact about this specific variant, not a per-generation creative choice, so it stays
+   * hardcoded here by design. Intent-driven values (alignment, whitespace/negativeSpace,
+   * photo treatment, typography scale, decoration density, mood) are deliberately NOT
+   * duplicated across these ~45 branches — they're applied once, generically, to every
+   * recipe (rigid or procedural) by DesignCompiler/GeometryCompiler downstream, which is
+   * what actually reads the Template Agent's Design Intent (see art-direction-engine.ts,
+   * design-compiler.ts, geometry-compiler.ts).
+   */
   public buildRecipe(layoutId: string, slideIndex: number, brandName: string): ICompiledLayoutDSL {
     const layers: IDSLSceneLayer[] = [];
     const recipeId = `${layoutId}_${slideIndex}`;

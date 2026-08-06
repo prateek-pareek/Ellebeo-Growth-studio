@@ -235,9 +235,18 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
   universal_dynamic_base: async (ctx) => {
     let dsl = COMPILED_LAYOUTS[ctx.layoutType];
 
-    // Phase 2.5: Design Compiler takes semantic intent and mutates the DSL mathematically
+    // Phase 2.5: Design Compiler takes semantic intent and mutates the DSL mathematically.
+    // designLanguage (the generic family/energy-driven behavior profile) runs first as
+    // a baseline; designSpec runs second so the more specific, per-selection photo.role/
+    // treatment intent — grounded for this exact template — wins on imageLayer.paddingPercent/
+    // anchor rather than being silently clobbered by the generic behavior profile.
+    // Previously this compiler only ever ran against ctx.designLanguage here, so
+    // designSpec.photo never affected image geometry outside the decoration path.
     if (ctx.designLanguage && dsl) {
       dsl = designCompiler.compile(dsl, ctx.designLanguage);
+    }
+    if (ctx.designSpec && dsl) {
+      dsl = designCompiler.compile(dsl, ctx.designSpec);
     }
 
     // Phase 2.6: Composition Optimizer balances whitespace and assigns strict bounding boxes
@@ -1033,14 +1042,26 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       visualRecipe = artDirectionEngine.generateVisualRecipe(ctx.designLanguage.intent, ctx.activeTheme || 'editorial_beauty');
       family = (ctx.designLanguage.intent.family as LayoutFamily) || 'minimal';
     } else {
-      const fallbackIntent = artDirectionEngine.generateDesignIntent(ctx.layoutType || 'minimal');
+      // Defensive fallback only — every call site in ai-image-generation.service.ts now
+      // threads designLanguage into decoCtx, so this branch shouldn't fire in practice.
+      // Still passes designSpec (if present) so a grounded Design Intent is used instead
+      // of guessing from the id string, should some other caller reach this path.
+      const fallbackIntent = artDirectionEngine.generateDesignIntent(ctx.layoutType || 'minimal', undefined, undefined, ctx.designSpec);
       visualRecipe = artDirectionEngine.generateVisualRecipe(fallbackIntent, ctx.activeTheme || 'editorial_beauty');
       family = (fallbackIntent.family as LayoutFamily) || 'minimal';
     }
 
     // PHASE 3A: Thematic Mood Injection
-    // Inject textures/overlays dynamically via the VisualRecipe (TextureRecipe)
-    const moodDecorations = themeEngine.getMoodDecorations(visualRecipe.texture);
+    // Inject textures/overlays dynamically via the VisualRecipe (TextureRecipe).
+    // decorations.density gates this additive overlay (never the family's own
+    // structural decoration layers, which are untouched design DNA) — 'none'/'low'
+    // keeps the design clean, 'medium'/'high' allows the mood texture through. This
+    // is the first real, generic effect decorations.density has ever had; previously
+    // it was parsed by the LLM prompt but read nowhere downstream.
+    const decorationDensity = ctx.designSpec?.decorations?.density;
+    const moodDecorations = (decorationDensity === 'none' || decorationDensity === 'low')
+      ? []
+      : themeEngine.getMoodDecorations(visualRecipe.texture);
     overlayLayers = [...overlayLayers, ...moodDecorations];
 
     overlayLayers.sort((a, b) => a.zIndex - b.zIndex);
