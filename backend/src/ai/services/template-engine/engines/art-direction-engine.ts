@@ -18,7 +18,7 @@ export interface IDesignBehaviorProfile {
   verticalTextAllowance: 'allowed' | 'forced_on_tagline' | 'forbidden';
   textRotationAngle: number;
   secondaryTextOpacity: number;
-  
+
   gridColumns: number;
   negativeSpaceMultiplier: number;
   marginHugging: boolean;
@@ -27,7 +27,7 @@ export interface IDesignBehaviorProfile {
   cropIntent: 'tight_macro' | 'environmental_wide';
   focalPointOffset: string;
   zIndexReordering: string;
-  
+
   captionBarStyling: 'floating_pill' | 'ribbon' | 'none';
   borderRadius: number;
   dividerStrokeWeight: number;
@@ -50,15 +50,15 @@ export interface IDesignLanguage {
 // ─── 2. ART DIRECTION ENGINE ───
 
 export class ArtDirectionEngine {
-  
+
   /**
-   * Generates Semantic Design Intent from knowledge tags
+   * Generates Semantic Design Intent from knowledge tags and carousel rhythm
    */
-  public generateDesignIntent(layoutId: string): IDesignIntent {
+  public generateDesignIntent(layoutId: string, slideIndex?: number, totalSlides?: number): IDesignIntent {
     // 1. Procedural Layout Interception
     // Strip numeric suffixes from compiled procedural variants (e.g. editorial_hero_0 -> editorial_hero)
     const baseId = layoutId.replace(/_\d+$/, '');
-    
+
     let family = 'editorial';
     let energy = 'calm';
     let balance = 'symmetrical';
@@ -202,7 +202,7 @@ export class ArtDirectionEngine {
         foundKnowledge = true;
       }
     }
-    
+
     let whitespace: 'tight' | 'comfortable' | 'airy' | 'luxury' = 'comfortable';
     let mood: 'luxury' | 'organic' | 'clinical' | 'pop' | 'minimalist' = 'luxury';
     let visualPriority: 'typography_hero' | 'image_hero' | 'composition_hero' | 'cta_hero' = 'image_hero';
@@ -245,6 +245,40 @@ export class ArtDirectionEngine {
       console.warn(`[ArtDirectionEngine] No knowledge found for ${layoutId}. Falling back to default.`);
     }
 
+    // [PHASE 3: RHYTHM INJECTION] - Formalize the 4-slide musical rhythm
+    let textureIntensity = mood === 'organic' ? 'heavy' : (mood === 'minimalist' ? 'subtle' : 'none');
+    let density: 'none' | 'low' | 'medium' | 'high' = energy === 'bold' ? 'high' : 'low';
+
+    if (slideIndex !== undefined && totalSlides !== undefined && totalSlides > 1) {
+      const normalizedPos = slideIndex / (totalSlides - 1);
+
+      // Dense -> Open -> Medium -> Minimal (or custom based on position)
+      if (slideIndex === 0) {
+        // Cover Slide: Punchy, tight, dense
+        whitespace = 'tight';
+        energy = 'bold';
+        density = 'high';
+        textureIntensity = 'heavy';
+      } else if (slideIndex === totalSlides - 1) {
+        // Final Slide: Clean, airy CTA
+        whitespace = 'airy';
+        energy = 'minimal';
+        density = 'low';
+        textureIntensity = 'none';
+      } else if (normalizedPos <= 0.5) {
+        // Slide 2: Comfortable breather
+        whitespace = 'comfortable';
+        energy = 'structured';
+        density = 'medium';
+      } else {
+        // Slide 3: Luxury / Minimal
+        whitespace = 'luxury';
+        energy = 'playful';
+        density = 'medium';
+      }
+      console.log(`[ArtDirectionEngine] Applied Rhythm (Slide ${slideIndex + 1}/${totalSlides}) - Whitespace: ${whitespace}, Density: ${density}, Energy: ${energy}`);
+    }
+
     return {
       family,
       energy: energy as any,
@@ -255,8 +289,8 @@ export class ArtDirectionEngine {
       mood,
       primitives: {
         cards: cardStyle,
-        textureIntensity: mood === 'organic' ? 'heavy' : (mood === 'minimalist' ? 'subtle' : 'none'),
-        density: energy === 'bold' ? 'high' : 'low'
+        textureIntensity: textureIntensity as any,
+        density: density
       }
     };
   }
@@ -279,7 +313,7 @@ export class ArtDirectionEngine {
       verticalTextAllowance: 'forbidden',
       textRotationAngle: 0,
       secondaryTextOpacity: 1.0,
-      
+
       gridColumns: 12,
       negativeSpaceMultiplier: 1.0,
       marginHugging: false,
@@ -288,7 +322,7 @@ export class ArtDirectionEngine {
       cropIntent: 'environmental_wide',
       focalPointOffset: 'center',
       zIndexReordering: 'standard',
-      
+
       captionBarStyling: 'none',
       borderRadius: 0,
       dividerStrokeWeight: 1,
@@ -304,7 +338,7 @@ export class ArtDirectionEngine {
     };
 
     // Apply strict geometric overrides based on philosophical intent
-    
+
     if (intent.visualPriority === 'typography_hero') {
       profile.heroBaseFontSize = 140;
       profile.metadataBaseFontSize = 20;
@@ -316,8 +350,8 @@ export class ArtDirectionEngine {
     }
 
     if (intent.mood === 'luxury' || intent.family === 'editorial') {
-      profile.trackingHero = -0.02; 
-      profile.trackingMetadata = 0.15; 
+      profile.trackingHero = -0.02;
+      profile.trackingMetadata = 0.15;
       profile.lineHeightMultiplier = 0.85;
       profile.capitalizationRule = 'force_uppercase';
     } else if (intent.energy === 'bold') {
@@ -365,7 +399,7 @@ export class ArtDirectionEngine {
     const isLuxury = themeId.includes('beauty') || themeId.includes('luxury') || intent.mood === 'luxury';
     const isOrganic = themeId.includes('organic') || themeId.includes('wellness') || intent.mood === 'organic';
     const isClinical = themeId.includes('clinical') || themeId.includes('medical') || intent.mood === 'clinical';
-    
+
     const isBold = intent.energy === 'bold' || isPop;
 
     const color: ColorRecipe = {
@@ -384,7 +418,7 @@ export class ArtDirectionEngine {
 
     const texture: TextureRecipe = {
       style: 'none',
-      intensity: intent.primitives.textureIntensity === 'none' ? 'subtle' : intent.primitives.textureIntensity // fallback value for type safety, style 'none' overrides
+      intensity: intent.primitives.textureIntensity === 'none' ? 'subtle' : intent.primitives.textureIntensity
     };
 
     const typography: TypographyRecipe = {

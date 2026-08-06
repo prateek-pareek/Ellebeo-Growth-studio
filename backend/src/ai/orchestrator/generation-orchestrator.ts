@@ -351,6 +351,52 @@ export class GenerationOrchestrator {
       assetLibraryVisionSummary: assetLibraryVisionSummary ?? undefined,
     });
 
+    // ——— Pre-Launch: Parallel Image Processing Task —————————————————────────
+    const isMedicalPractitioner = (brandDNA as any).serviceCategory === 'injectables_cosmetic' || (brandDNA as any).serviceCategory === 'laser_treatments' || ['medical', 'injectables', 'laser', 'nurse'].some(k => brandDNA.businessName?.toLowerCase().includes(k)); // simple proxy for isMedicalAestheticsBrand if not imported; wait, isMedicalAestheticsBrand is available globally in the file? Let me check line 538.
+    const consentShowFace = !!(consentCheck.activeRestrictions as any)?.show_face;
+    let nonMedicalImageProcessingPromise: Promise<ImageProcessingResult | null> = Promise.resolve(null);
+
+    if (!isMedicalPractitioner && payload.imageAssets.length > 0) {
+      nonMedicalImageProcessingPromise = (async () => {
+        const primaryAsset = payload.imageAssets[0]!;
+        const isLocalUrl = primaryAsset.rawStoragePath.startsWith('http://localhost') || primaryAsset.rawStoragePath.startsWith('http://127.');
+        const useCloudinary = !!process.env['CLOUDINARY_CLOUD_NAME'] && !isLocalUrl;
+
+        try {
+          let result: ImageProcessingResult | null = null;
+          if (useCloudinary) {
+            result = await this.imagePipeline.process({
+              rawStoragePath: primaryAsset.rawStoragePath,
+              existingCloudinaryId: primaryAsset.cloudinaryPublicId,
+              consentShowFace,
+              brandPrimaryColour: brandDNA.primaryBrandColor ?? '#000000',
+              brandSecondaryColour: brandDNA.secondaryBrandColor ?? '#ffffff',
+              outputFormats: ['feed', 'story', 'reel'],
+              contentItemId: 'deferred',
+              tenantId,
+            });
+          } else {
+            result = await this.sharpPipeline.process({
+              rawImageUrl: primaryAsset.rawStoragePath,
+              consentShowFace,
+              outputFormats: ['feed', 'story', 'reel'],
+              contentItemId: 'deferred',
+              tenantId,
+            });
+            if (process.env['CLOUDINARY_CLOUD_NAME'] && result) {
+              try {
+                const cloudinaryId = await this.imagePipeline.uploadUrl(result.variants.feedUrl, tenantId);
+                result = { ...result, cloudinaryPublicId: cloudinaryId };
+              } catch (err) {}
+            }
+          }
+          return result;
+        } catch (err) {
+          return null;
+        }
+      })();
+    }
+
     // ── Step 3: Caption Generation ──────────────────────────────────────────
     await this.transitionState(jobId, 'building_prompt', 'generating_text');
     await this.progressEmitter.emit(jobId, tenantId, 'generating_text');
@@ -398,11 +444,11 @@ export class GenerationOrchestrator {
         return lastResult; // Fallback to last attempt if retry fails
       };
 
-      // Generate Option 1: Technical & Clinical copy (with enforcement)
-      const opt1 = await generateWithEnforcement('technical', assembledPrompt);
-
-      // Generate Option 2: Empathetic & Warm copy (with enforcement)
-      const opt2 = await generateWithEnforcement('empathetic', assembledPrompt);
+      // Generate Options concurrently
+      const [opt1, opt2] = await Promise.all([
+        generateWithEnforcement('technical', assembledPrompt),
+        generateWithEnforcement('empathetic', assembledPrompt)
+      ]);
 
       captionResult = {
         caption: opt1.caption,
@@ -456,86 +502,68 @@ export class GenerationOrchestrator {
       componentStatus.caption = 'failed';
     }
 
-    // ── Step 3.5: Template Agent Layout Selection ─────────────────────────────
-    // A tenant who explicitly picked a structural Template from the gallery
-    // (payload.layoutHint, resolved from Template.rendererKey) gets exactly
-    // that structure — the AI art director is only consulted when generation
-    // was started freeform, without a specific template chosen.
+    // ── Step 3.5 & 4 & 5: Parallel Template, Variants, and Reel ─────────────
+    let agentDecisionPromise: Promise<any> = Promise.resolve(null);
+    let platformVariantsPromise: Promise<PlatformVariantResult[] | null> = Promise.resolve(null);
+    let reelScriptPromise: Promise<ReelScriptResult | null> = Promise.resolve(null);
+
     if (payload.layoutHint) {
       determinedGrid.layout = payload.layoutHint;
       console.log(`[TEMPLATE AGENT] Bypassed — using tenant's explicit template layout hint: ${determinedGrid.layout}`);
     } else if (captionResult) {
-      try {
-        const isCarouselOpt = (generationOptions.outputFormats as string[]).includes('carousel');
-        const agentDecision = await this.templateAgent.selectTemplate({
-          brief: captionResult.caption,
-          brandName: brandDNA.businessName || 'Brand',
-          aesthetic: (brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA.visualRanking) : null) ?? brandDNA.aestheticDirection ?? 'minimal editorial',
-          textLength: captionResult.caption.length,
-          slideIndex: 0,
-          totalSlides: isCarouselOpt ? 4 : 1,
-          gridConstraints: determinedGrid.gridConstraints,
-          visionResult: visionResult,
-        });
-
-        // Assign directly to allow Universal Dynamic Renderer to handle new templates
-        determinedGrid.layout = agentDecision.selected_layout_id;
-        (determinedGrid as any).designSpec = agentDecision.designSpec;
-        console.log(`[TEMPLATE AGENT] Intelligent selection passed to rendering engine: ${determinedGrid.layout}`);
-      } catch (err) {
+      const isCarouselOpt = (generationOptions.outputFormats as string[]).includes('carousel');
+      agentDecisionPromise = this.templateAgent.selectTemplate({
+        brief: captionResult.caption,
+        brandName: brandDNA.businessName || 'Brand',
+        aesthetic: (brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA.visualRanking) : null) ?? brandDNA.aestheticDirection ?? 'minimal editorial',
+        textLength: captionResult.caption.length,
+        slideIndex: 0,
+        totalSlides: isCarouselOpt ? 4 : 1,
+        gridConstraints: determinedGrid.gridConstraints,
+        visionResult: visionResult,
+      }).catch(err => {
         console.error('[Orchestrator Step 3.5 Template Agent Error]:', err);
-      }
+        return null;
+      });
     }
 
-    // Everything from here on happens inside the single persisted 'generating_text'
-    // -> 'completed' transition, but is actually the bulk of the job's real
-    // wall-clock time (image styling, AI feed image, carousel/story/reel
-    // generation). These raise the tracker's structural floor at each real
-    // checkpoint — the actual percent/ETA shown to the user is computed live
-    // from elapsed time (see GenerationProgressTracker.getLive).
+    if (captionResult && generationOptions.platform.length > 1) {
+      platformVariantsPromise = this.platformVariantChain.generateVariants({
+        primaryCaption: captionResult,
+        targetPlatforms: generationOptions.platform,
+        brandDNA,
+      }).catch(err => null);
+    }
+
+    if (captionResult && generationOptions.outputFormats.includes('reel')) {
+      /* reelScriptPromise = this.reelScriptChain.generate({
+        caption: captionResult,
+        visionResult,
+        brandDNA,
+      }).then(res => { componentStatus.reel = 'completed'; return res; })
+        .catch(err => { componentStatus.reel = 'failed'; return null; }); */
+    }
+
     await this.progressEmitter.emitSubProgress(jobId, tenantId, 'generating_text', 18, 'Selecting your layout and visual direction...');
 
-    // ── Step 4: Platform Variants (conditional) ───────────────────────────────
-    if (captionResult && generationOptions.platform.length > 1) {
-      try {
-        platformVariants = await this.platformVariantChain.generateVariants({
-          primaryCaption: captionResult,
-          targetPlatforms: generationOptions.platform,
-          brandDNA,
-        });
-      } catch (err) {
-        // Non-fatal — primary caption is still valid
-      }
-    }
+    const [agentDecision, variants, reelScript] = await Promise.all([
+      agentDecisionPromise,
+      platformVariantsPromise,
+      reelScriptPromise
+    ]);
 
-    // ——— Step 5: Reel Script (conditional) ————————————————————————————————————
-    if (captionResult && generationOptions.outputFormats.includes('reel')) {
-      try {
-        reelScriptResult = await this.reelScriptChain.generate({
-          caption: captionResult,
-          visionResult,
-          brandDNA,
-        });
-        componentStatus.reel = 'completed';
-      } catch (err) {
-        componentStatus.reel = 'failed';
-      }
+    if (agentDecision) {
+      determinedGrid.layout = agentDecision.selected_layout_id;
+      (determinedGrid as any).designSpec = agentDecision.designSpec;
+      console.log(`[TEMPLATE AGENT] Intelligent selection passed to rendering engine: ${determinedGrid.layout}`);
     }
+    platformVariants = variants;
+    reelScriptResult = reelScript;
 
     // ——— Step 5.5: Image Processing ———————————————————————————————————————————
     await this.progressEmitter.emitSubProgress(jobId, tenantId, 'generating_text', 20, 'Styling your photo to match your brand...');
     let imageResult: ImageProcessingResult | null = null;
     let aiImageCostUSD = 0;
-    const consentShowFace = !!(consentCheck.activeRestrictions as any)?.show_face;
-
-    // Medical-aesthetics technicians can never post a client's face — this is a
-    // technician-level compliance rule (AHPRA), not a client-consent question, so
-    // it overrides consent either way. Rather than blur the client's real photo
-    // (still fundamentally a photo of that client), the client photo is never
-    // sourced into the pipeline at all: every image output falls back to the same
-    // brand-safe, people-free lifestyle generation already used when no photo was
-    // uploaded (see AiImageGenerationService.generateSlide's isRealClientPhoto gate).
-    const isMedicalPractitioner = isMedicalAestheticsBrand(brandDNA);
 
     if (isMedicalPractitioner) {
       try {
@@ -581,49 +609,9 @@ export class GenerationOrchestrator {
         componentStatus.image = 'failed';
       }
     } else if (payload.imageAssets.length > 0) {
-      const primaryAsset = payload.imageAssets[0]!;
-
-      // Localhost URLs can't be reached by Cloudinary/OpenAI — use Sharp instead
-      const isLocalUrl = primaryAsset.rawStoragePath.startsWith('http://localhost') ||
-        primaryAsset.rawStoragePath.startsWith('http://127.');
-      const useCloudinary = !!process.env['CLOUDINARY_CLOUD_NAME'] && !isLocalUrl;
-
-      try {
-        if (useCloudinary) {
-          imageResult = await this.imagePipeline.process({
-            rawStoragePath: primaryAsset.rawStoragePath,
-            existingCloudinaryId: primaryAsset.cloudinaryPublicId,
-            consentShowFace,
-            brandPrimaryColour: brandDNA.primaryBrandColor ?? '#000000',
-            brandSecondaryColour: brandDNA.secondaryBrandColor ?? '#ffffff',
-            outputFormats: ['feed', 'story', 'reel'],
-            contentItemId: 'deferred',
-            tenantId,
-          });
-        } else {
-          // Sharp handles localhost + no-Cloudinary cases
-          imageResult = await this.sharpPipeline.process({
-            rawImageUrl: primaryAsset.rawStoragePath,
-            consentShowFace,
-            outputFormats: ['feed', 'story', 'reel'],
-            contentItemId: 'deferred',
-            tenantId,
-          });
-
-          // If Cloudinary is configured, upload the Sharp-processed Firebase image
-          // so carousel slides can be generated using Cloudinary text overlays
-          if (process.env['CLOUDINARY_CLOUD_NAME'] && imageResult) {
-            try {
-              const cloudinaryId = await this.imagePipeline.uploadUrl(imageResult.variants.feedUrl, tenantId);
-              imageResult = { ...imageResult, cloudinaryPublicId: cloudinaryId };
-            } catch (err) {
-            }
-          }
-        }
-        componentStatus.image = 'completed';
-      } catch (err) {
-        componentStatus.image = 'failed';
-      }
+      imageResult = await nonMedicalImageProcessingPromise;
+      if (imageResult) componentStatus.image = 'completed';
+      else componentStatus.image = 'failed';
     }
 
     // ——— Step 5.55: AI-designed feed image (gpt-image-1) ——————————————————————

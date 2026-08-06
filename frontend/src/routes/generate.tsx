@@ -43,7 +43,7 @@ const GOALS: { id: Goal; name: string; help: string }[] = [
 
 const FORMATS: { id: Format; name: string; help: string }[] = [
   { id: "Carousel", name: "Carousel", help: "3–5 slides, swipeable." },
-  { id: "Reel", name: "Reel", help: "15–30s vertical video." },
+  // { id: "Reel", name: "Reel", help: "15–30s vertical video." },
   { id: "Story", name: "Story", help: "4-frame sequence, 24h." },
   { id: "Caption", name: "Caption", help: "Single image + caption." },
 ];

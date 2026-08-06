@@ -1,7 +1,7 @@
 import { IDSLDecorationLayer, IDSLTextLayer } from '../interfaces';
 import { LayoutConstraints } from './layout-engine';
 
-export type PrimitiveCategory = 'geometry' | 'layout' | 'effects' | 'typography';
+export type PrimitiveCategory = 'geometry' | 'layout' | 'effects' | 'typography' | 'illustration';
 
 export interface PrimitiveContext {
   w: number;
@@ -65,6 +65,28 @@ export class PrimitiveEngine {
       }
     };
 
+    this.registry['split_seam_line'] = {
+      category: 'geometry',
+      render: (ctx, layer) => {
+        const profile = ctx.recipe?.split_seam_line;
+        const strokeWidth = profile?.strokeWidth ?? 4;
+        const opacity = profile?.opacity ?? 1.0;
+        
+        // Find the split seam. Usually the image occupies one half.
+        // If there's an image block in layoutState, use its edge.
+        let splitX = ctx.w / 2;
+        if (ctx.layoutState && ctx.layoutState.occupiedRegions) {
+          const img = ctx.layoutState.occupiedRegions.find(r => r.role === 'image' && r.id !== 'hero-image');
+          if (img) {
+            splitX = (img.x < ctx.w / 2) ? img.x + img.width : img.x;
+          }
+        }
+        return `
+        <line x1="${splitX}" y1="0" x2="${splitX}" y2="${ctx.h}" stroke="${ctx.validBrandColor}" stroke-width="${strokeWidth}" opacity="${opacity}" />
+      `;
+      }
+    };
+
     this.registry['rounded_corners'] = {
       category: 'geometry',
       render: (ctx) => {
@@ -73,6 +95,17 @@ export class PrimitiveEngine {
         return `
           <rect x="${inset}" y="${inset}" width="${ctx.w - (inset * 2)}" height="${ctx.h - (inset * 2)}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1.5" rx="${radius}" opacity="0.4" />
         `;
+      }
+    };
+
+    this.registry['handmade_mark'] = {
+      category: 'effects',
+      render: (ctx, layer) => {
+        const color = ctx.colorHierarchy ? ctx.colorHierarchy.accent : ctx.validBrandColor;
+        return `
+        <!-- Abstract Handmade Mark (Brush Stroke) -->
+        <path d="M${ctx.w * 0.8},${ctx.h * 0.15} Q${ctx.w * 0.85},${ctx.h * 0.12} ${ctx.w * 0.9},${ctx.h * 0.16} T${ctx.w * 0.95},${ctx.h * 0.14}" fill="none" stroke="${color}" stroke-width="4" stroke-linecap="round" opacity="0.6" />
+      `;
       }
     };
 
@@ -289,6 +322,8 @@ export class PrimitiveEngine {
     this.registry['paper_texture'] = {
       category: 'effects',
       render: (ctx) => {
+        const profile = ctx.recipe?.paper_texture;
+        const opacity = profile?.opacity ?? 0.05;
         const blendMode = ctx.behavior?.colorBlendingMode || 'multiply';
         return `
         <defs>
@@ -299,8 +334,8 @@ export class PrimitiveEngine {
             </feDiffuseLighting>
           </filter>
         </defs>
-        <!-- Toned down from 0.4 to 0.15 to prevent washing out the image/colors -->
-        <rect width="100%" height="100%" opacity="0.15" style="mix-blend-mode: ${blendMode};" filter="url(#paperFilter)" />
+        <!-- Subtlety Rule: Texture should be noticed after 3-5 seconds, not immediately -->
+        <rect width="100%" height="100%" opacity="${opacity}" style="mix-blend-mode: ${blendMode};" filter="url(#paperFilter)" />
         `;
       }
     };
@@ -312,7 +347,7 @@ export class PrimitiveEngine {
         <circle cx="${ctx.w}" cy="${ctx.h / 2}" r="25" fill="${ctx.validBackgroundColor}" />
       `
     };
-    
+
     this.registry['paper_attachment'] = {
       category: 'effects',
       render: (ctx) => `
@@ -321,18 +356,6 @@ export class PrimitiveEngine {
           <rect x="0" y="0" width="160" height="35" fill="${ctx.validSecondaryColor}" opacity="0.9" filter="drop-shadow(1px 2px 3px rgba(0,0,0,0.1))" />
           <path d="M 0,0 L -3,8 L 1,17 L -2,25 L 0,35" fill="${ctx.validSecondaryColor}" />
           <path d="M 160,0 L 163,8 L 159,17 L 162,25 L 160,35" fill="${ctx.validSecondaryColor}" />
-        </g>
-      `
-    };
-
-    this.registry['editorial_badge'] = {
-      category: 'layout',
-      render: (ctx) => `
-        <g transform="translate(${ctx.w - 150}, ${ctx.constraints.safeY + 20})">
-          <!-- Generic editorial badge / starburst -->
-          <circle cx="60" cy="60" r="50" fill="${ctx.validBrandColor}" filter="drop-shadow(0 4px 6px rgba(0,0,0,0.15))" />
-          <path d="M 60 5 L 68 25 L 88 22 L 80 40 L 100 52 L 85 68 L 98 85 L 78 80 L 70 100 L 55 85 L 35 98 L 38 78 L 18 70 L 35 55 L 20 38 L 40 40 L 45 20 Z" fill="${ctx.validBrandColor}" opacity="0.9" />
-          <circle cx="60" cy="60" r="42" fill="none" stroke="${ctx.validSecondaryColor}" stroke-dasharray="2 4" stroke-width="1.5" />
         </g>
       `
     };
@@ -468,13 +491,16 @@ export class PrimitiveEngine {
 
     this.registry['floating_frame'] = {
       category: 'layout',
-      render: (ctx) => `
-        <!-- Generic floating frame (polaroid, glass card, etc) -->
-        <g transform="translate(${ctx.constraints.safeX + 20}, ${ctx.constraints.safeY + 20})">
-          <rect x="0" y="0" width="${ctx.w / 2}" height="${ctx.h / 1.5}" fill="${ctx.validBackgroundColor}" filter="drop-shadow(0 15px 30px rgba(0,0,0,0.2))" />
-          <rect x="20" y="20" width="${ctx.w / 2 - 40}" height="${ctx.h / 1.5 - 100}" fill="rgba(0,0,0,0.05)" />
-        </g>
-      `
+      render: (ctx) => {
+        const anchorPoint = ctx.layoutState?.occupiedRegions?.find(r => r.role === 'heading') || { x: ctx.w / 2 - 150, y: ctx.h / 2 - 100, width: 300, height: 200 };
+        const circleRadius = Math.max(anchorPoint.width, anchorPoint.height) * 0.7;
+        const color = ctx.colorHierarchy ? ctx.colorHierarchy.accent : ctx.validSecondaryColor;
+        
+        return `
+        <!-- Minimalist Circular Frame -->
+        <circle cx="${anchorPoint.x + anchorPoint.width/2}" cy="${anchorPoint.y + anchorPoint.height/2}" r="${circleRadius}" stroke="${color}" stroke-width="1.5" fill="none" opacity="0.6" />
+      `;
+      }
     };
     // ==========================================
     // SIGNATURE CONTRACT PRIMITIVES
@@ -542,7 +568,7 @@ export class PrimitiveEngine {
         </g>
       `
     };
-    
+
     this.registry['dominant_headline'] = {
       category: 'layout',
       render: (ctx) => `
@@ -575,7 +601,8 @@ export class PrimitiveEngine {
     // ==========================================
     // PHASE 2: DYNAMIC DECORATOR PRIMITIVES
     // ==========================================
-    this.registry['flower'] = { category: 'effects', render: (ctx) => `
+    this.registry['flower'] = {
+      category: 'effects', render: (ctx) => `
       <!-- Minimal Botanical Line Art (Brand Accent) -->
       <g transform="translate(${ctx.constraints.safeX + 20}, ${ctx.constraints.safeY + 20}) scale(0.6)" stroke="${ctx.validAccentColor || ctx.validBrandColor}" stroke-width="2" fill="none" opacity="0.8">
         <path d="M50 50 C 30 10, 10 30, 50 50 C 90 30, 70 10, 50 50 C 70 90, 90 70, 50 50 C 10 70, 30 90, 50 50 Z" />
@@ -583,7 +610,8 @@ export class PrimitiveEngine {
       </g>`
     };
 
-    this.registry['tape'] = { category: 'layout', render: (ctx) => `
+    this.registry['tape'] = {
+      category: 'layout', render: (ctx) => `
       <!-- Masking Tape Overlay -->
       <g transform="translate(${ctx.w / 2}, 30) rotate(-2)">
         <rect x="-80" y="0" width="160" height="35" fill="${ctx.validBackgroundColor}" opacity="0.85" filter="drop-shadow(0 2px 4px rgba(0,0,0,0.1))" />
@@ -591,12 +619,14 @@ export class PrimitiveEngine {
       </g>`
     };
 
-    this.registry['doodle'] = { category: 'effects', render: (ctx) => `
+    this.registry['doodle'] = {
+      category: 'effects', render: (ctx) => `
       <!-- Hand-drawn abstract swoosh -->
       <path d="M ${ctx.constraints.safeX + 40} ${ctx.h - ctx.constraints.safeY - 60} Q ${ctx.w / 2} ${ctx.h - ctx.constraints.safeY - 20}, ${ctx.w - ctx.constraints.safeX - 40} ${ctx.h - ctx.constraints.safeY - 80}" fill="none" stroke="${ctx.validAccentColor || ctx.validBrandColor}" stroke-width="3" stroke-linecap="round" opacity="0.7" />`
     };
 
-    this.registry['sparkle'] = { category: 'effects', render: (ctx) => `
+    this.registry['sparkle'] = {
+      category: 'effects', render: (ctx) => `
       <!-- Premium Sparkle/Star Accent -->
       <g transform="translate(${ctx.w - ctx.constraints.safeX - 60}, ${ctx.constraints.safeY + 40}) scale(0.8)" fill="${ctx.validAccentColor || ctx.validBrandColor}" opacity="0.9">
         <path d="M20 0 Q20 20 40 20 Q20 20 20 40 Q20 20 0 20 Q20 20 20 0 Z" />
@@ -604,12 +634,26 @@ export class PrimitiveEngine {
       </g>`
     };
 
-    this.registry['thin_border'] = { category: 'geometry', render: (ctx) => `
+    this.registry['quote_marks'] = {
+      category: 'typography',
+      render: (ctx, layer) => {
+        const color = ctx.colorHierarchy ? ctx.colorHierarchy.accent : ctx.validSecondaryColor;
+        const anchorPoint = ctx.layoutState?.occupiedRegions?.find(r => r.role === 'heading') || { x: ctx.w / 2, y: ctx.h / 2 };
+        return `
+        <!-- Minimalist Quotation Marks -->
+        <text x="${anchorPoint.x - 40}" y="${anchorPoint.y + 40}" font-family="Georgia, serif" font-size="120px" fill="${color}" opacity="0.4" style="pointer-events:none;">&ldquo;</text>
+      `;
+      }
+    };
+
+    this.registry['thin_border'] = {
+      category: 'geometry', render: (ctx) => `
       <!-- Museum Matte Thin Border -->
       <rect x="${ctx.constraints.safeX + 10}" y="${ctx.constraints.safeY + 10}" width="${ctx.w - (ctx.constraints.safeX + 10) * 2}" height="${ctx.h - (ctx.constraints.safeY + 10) * 2}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1" opacity="0.6" />`
     };
 
-    this.registry['geometric_badge'] = { category: 'geometry', render: (ctx) => `
+    this.registry['geometric_badge'] = {
+      category: 'geometry', render: (ctx) => `
       <!-- Geometric Circle Badge -->
       <g transform="translate(${ctx.w - ctx.constraints.safeX - 80}, ${ctx.h - ctx.constraints.safeY - 80})">
         <circle cx="0" cy="0" r="45" fill="${ctx.validSecondaryColor}" opacity="0.9" />
@@ -618,7 +662,8 @@ export class PrimitiveEngine {
       </g>`
     };
 
-    this.registry['metadata_label'] = { category: 'geometry', render: (ctx) => `
+    this.registry['metadata_label'] = {
+      category: 'geometry', render: (ctx) => `
       <!-- Minimal Metadata Label (Top Right) -->
       <g transform="translate(${ctx.w - ctx.constraints.safeX - 120}, ${ctx.constraints.safeY + 20})">
         <rect x="0" y="0" width="120" height="24" fill="${ctx.validBrandColor}" opacity="0.1" />
@@ -626,12 +671,14 @@ export class PrimitiveEngine {
       </g>`
     };
 
-    this.registry['quote_marks'] = { category: 'effects', render: (ctx) => `
+    this.registry['quote_marks'] = {
+      category: 'effects', render: (ctx) => `
       <!-- Oversized Editorial Quote Marks -->
       <text x="${ctx.constraints.safeX + 20}" y="${ctx.constraints.safeY + 80}" font-family="Georgia, serif" font-size="120" fill="${ctx.validAccentColor || ctx.validBrandColor}" opacity="0.2">"</text>`
     };
 
-    this.registry['minimal_grid'] = { category: 'geometry', render: (ctx) => `
+    this.registry['minimal_grid'] = {
+      category: 'geometry', render: (ctx) => `
       <!-- Architectural Minimal Grid Overlay -->
       <g opacity="0.1" stroke="${ctx.validBrandColor}" stroke-width="1">
         <line x1="${ctx.w * 0.33}" y1="0" x2="${ctx.w * 0.33}" y2="${ctx.h}" />
@@ -641,34 +688,37 @@ export class PrimitiveEngine {
       </g>`
     };
 
-    this.registry['geometric_shape'] = { category: 'geometry', render: (ctx, layer) => {
-      // Renders a sleek solid geometric block for quotes or offset accents
-      const size = 160;
-      const x = layer && layer.anchor && layer.anchor.includes('right') ? ctx.w - ctx.constraints.safeX - size : ctx.constraints.safeX;
-      const y = layer && layer.anchor && layer.anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - size : ctx.constraints.safeY;
-      return `
+    this.registry['geometric_shape'] = {
+      category: 'geometry', render: (ctx, layer) => {
+        // Renders a sleek solid geometric block for quotes or offset accents
+        const size = 160;
+        const x = layer && layer.anchor && layer.anchor.includes('right') ? ctx.w - ctx.constraints.safeX - size : ctx.constraints.safeX;
+        const y = layer && layer.anchor && layer.anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - size : ctx.constraints.safeY;
+        return `
       <!-- Solid Geometric Accent Shape -->
       <rect x="${x}" y="${y}" width="${size}" height="${size}" fill="${ctx.validAccentColor || ctx.validBrandColor}" opacity="0.1" />
       <rect x="${x + 20}" y="${y + 20}" width="${size - 40}" height="${size - 40}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="2" opacity="0.2" />`;
-    }};
+      }
+    };
 
     // ==========================================
     // PHASE 5: PREMIUM TEXT-ONLY DECORATORS
     // ==========================================
-    
-    this.registry['meteor_shower'] = { category: 'effects', render: (ctx) => {
-      // Find the CTA or Headline to point towards to guide reading flow
-      const targetRegion = ctx.layoutState?.occupiedRegions?.find(r => r.role === 'cta') || ctx.layoutState?.occupiedRegions?.find(r => r.role === 'heading');
-      
-      let tx = ctx.w - 150;
-      let ty = ctx.h * 0.7; // default
-      
-      if (targetRegion) {
-         tx = targetRegion.x + targetRegion.width;
-         ty = targetRegion.y + (targetRegion.height / 2);
-      }
-      
-      return `
+
+    this.registry['meteor_shower'] = {
+      category: 'effects', render: (ctx) => {
+        // Find the CTA or Headline to point towards to guide reading flow
+        const targetRegion = ctx.layoutState?.occupiedRegions?.find(r => r.role === 'cta') || ctx.layoutState?.occupiedRegions?.find(r => r.role === 'heading');
+
+        let tx = ctx.w - 150;
+        let ty = ctx.h * 0.7; // default
+
+        if (targetRegion) {
+          tx = targetRegion.x + targetRegion.width;
+          ty = targetRegion.y + (targetRegion.height / 2);
+        }
+
+        return `
       <!-- Premium Meteor Shower Accent (Anchored for Reading Flow) -->
       <g stroke="${ctx.validAccentColor || ctx.validBrandColor}" stroke-linecap="round" opacity="0.95">
         <line x1="${tx + 100}" y1="${ty - 200}" x2="${tx}" y2="${ty - 100}" opacity="0.6" stroke-width="2" />
@@ -679,35 +729,39 @@ export class PrimitiveEngine {
         <circle cx="${tx + 30}" cy="${ty}" r="4" fill="${ctx.validAccentColor || ctx.validBrandColor}" />
         <circle cx="${tx + 120}" cy="${ty + 40}" r="2" fill="${ctx.validAccentColor || ctx.validBrandColor}" opacity="0.6" />
       </g>`;
-    }};
+      }
+    };
 
-    this.registry['elegant_line_art'] = { category: 'geometry', render: (ctx) => {
-      return `
+    this.registry['elegant_line_art'] = {
+      category: 'geometry', render: (ctx) => {
+        return `
       <!-- Elegant Wavy Line Art -->
       <path d="M -50 ${ctx.h * 0.8} C ${ctx.w * 0.2} ${ctx.h * 0.9}, ${ctx.w * 0.3} ${ctx.h * 0.6}, ${ctx.w * 0.5} ${ctx.h * 0.7} S ${ctx.w * 0.8} ${ctx.h * 0.9}, ${ctx.w + 50} ${ctx.h * 0.85}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1.5" opacity="0.7" />
       <path d="M -50 ${ctx.h * 0.82} C ${ctx.w * 0.25} ${ctx.h * 0.95}, ${ctx.w * 0.35} ${ctx.h * 0.65}, ${ctx.w * 0.55} ${ctx.h * 0.75} S ${ctx.w * 0.85} ${ctx.h * 0.95}, ${ctx.w + 50} ${ctx.h * 0.87}" fill="none" stroke="${ctx.validAccentColor || ctx.validBrandColor}" stroke-width="1" opacity="0.9" />`;
-    }};
+      }
+    };
 
-    this.registry['premium_stars'] = { category: 'effects', render: (ctx) => {
-      const headlineRegion = ctx.layoutState?.occupiedRegions?.find(r => r.role === 'heading');
-      let sx1 = ctx.constraints.safeX + 50;
-      let sy1 = ctx.constraints.safeY + 80;
-      let sx2 = ctx.w - ctx.constraints.safeX - 80;
-      let sy2 = ctx.h * 0.6;
-      
-      if (headlineRegion) {
+    this.registry['premium_stars'] = {
+      category: 'effects', render: (ctx) => {
+        const headlineRegion = ctx.layoutState?.occupiedRegions?.find(r => r.role === 'heading');
+        let sx1 = ctx.constraints.safeX + 50;
+        let sy1 = ctx.constraints.safeY + 80;
+        let sx2 = ctx.w - ctx.constraints.safeX - 80;
+        let sy2 = ctx.h * 0.6;
+
+        if (headlineRegion) {
           // Anchor strategically around the headline bounding box
           sx1 = Math.max(ctx.constraints.safeX, headlineRegion.x - 40);
           sy1 = Math.max(ctx.constraints.safeY, headlineRegion.y - 40);
           sx2 = Math.min(ctx.w - ctx.constraints.safeX, headlineRegion.x + headlineRegion.width + 40);
           sy2 = Math.min(ctx.h - ctx.constraints.safeY, headlineRegion.y + headlineRegion.height + 40);
-      }
+        }
 
-      const drawStar = (x: number, y: number, r: number) => {
-         return `<path d="M ${x} ${y-r} Q ${x} ${y} ${x+r} ${y} Q ${x} ${y} ${x} ${y+r} Q ${x} ${y} ${x-r} ${y} Q ${x} ${y} ${x} ${y-r} Z" />`;
-      };
+        const drawStar = (x: number, y: number, r: number) => {
+          return `<path d="M ${x} ${y - r} Q ${x} ${y} ${x + r} ${y} Q ${x} ${y} ${x} ${y + r} Q ${x} ${y} ${x - r} ${y} Q ${x} ${y} ${x} ${y - r} Z" />`;
+        };
 
-      return `
+        return `
       <!-- Premium Four-Point Stars (Anchored to Focal Point) -->
       <g fill="${ctx.validAccentColor || ctx.validBrandColor}" opacity="1.0">
         ${drawStar(sx1, sy1, 24)}
@@ -715,39 +769,42 @@ export class PrimitiveEngine {
            ${drawStar(sx2, sy2, 16)}
         </g>
       </g>`;
-    }};
-
-    this.registry['abstract_rings'] = { category: 'geometry', render: (ctx) => {
-      // Find the headline region to anchor to
-      const headlineRegion = ctx.layoutState?.occupiedRegions?.find(r => r.role === 'heading' || r.role === 'ghost_headline');
-      
-      let cx = ctx.w / 2;
-      let cy = ctx.h / 2;
-      
-      if (headlineRegion && headlineRegion.opticalCenter) {
-         cx = headlineRegion.opticalCenter.x;
-         cy = headlineRegion.opticalCenter.y;
-      } else if (headlineRegion) {
-         cx = headlineRegion.x + (headlineRegion.width / 2);
-         cy = headlineRegion.y + (headlineRegion.height / 2);
-      } else {
-         cx = ctx.w - 100;
-         cy = ctx.h / 2;
       }
+    };
 
-      return `
+    this.registry['abstract_rings'] = {
+      category: 'geometry', render: (ctx) => {
+        // Find the headline region to anchor to
+        const headlineRegion = ctx.layoutState?.occupiedRegions?.find(r => r.role === 'heading' || r.role === 'ghost_headline');
+
+        let cx = ctx.w / 2;
+        let cy = ctx.h / 2;
+
+        if (headlineRegion && headlineRegion.opticalCenter) {
+          cx = headlineRegion.opticalCenter.x;
+          cy = headlineRegion.opticalCenter.y;
+        } else if (headlineRegion) {
+          cx = headlineRegion.x + (headlineRegion.width / 2);
+          cy = headlineRegion.y + (headlineRegion.height / 2);
+        } else {
+          cx = ctx.w - 100;
+          cy = ctx.h / 2;
+        }
+
+        return `
       <!-- Abstract Concentric Rings (Anchored as Compositional Base) -->
       <g transform="translate(${cx}, ${cy})" opacity="0.3">
         <circle cx="0" cy="0" r="${ctx.w * 0.45}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="2.5" />
         <circle cx="0" cy="0" r="${ctx.w * 0.6}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="3.5" stroke-dasharray="8 16" opacity="0.75" />
         <circle cx="0" cy="0" r="${ctx.w * 0.75}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1.5" opacity="0.5" />
       </g>`;
-    }};
+      }
+    };
 
     // ==========================================
     // SEMANTIC CATEGORY DELEGATES
     // ==========================================
-    
+
     this.registry['organic_accent'] = {
       category: 'effects',
       render: (ctx, layer) => {
@@ -778,9 +835,16 @@ export class PrimitiveEngine {
     this.registry['margin_notes'] = {
       category: 'typography',
       render: (ctx, layer) => {
-        const choices = ['vertical_label', 'running_header', 'metadata_label'];
-        const choice = choices[Math.floor(Math.random() * choices.length)];
-        return this.registry[choice] ? this.registry[choice].render(ctx, layer) : '';
+        const profile = ctx.recipe?.margin_notes;
+        const opacity = profile?.opacity ?? 0.8;
+        const xPos = ctx.constraints.safeX;
+        const yPos = ctx.h - ctx.constraints.safeY + 20; // Anchor bottom left inside margin
+        return `
+        <!-- Hand-written margin note -->
+        <text x="${xPos}" y="${yPos}" fill="${ctx.validBrandColor}" opacity="${opacity}" font-family="Georgia, serif" font-style="italic" font-size="14">
+          ( Notes &amp; Observations )
+        </text>
+      `;
       }
     };
 
@@ -826,99 +890,114 @@ export class PrimitiveEngine {
     };
 
     // CANVA-STYLE PREMIUM PRIMITIVES (Phase 3 Additions)
-    
-    this.registry['starburst_badge'] = { category: 'geometry', render: (ctx, layer) => {
-      // Draw a Canva-style 12-point starburst
-      const cx = layer && layer.anchor && layer.anchor.includes('right') ? ctx.w - ctx.constraints.safeX - 90 : ctx.constraints.safeX + 90;
-      const cy = layer && layer.anchor && layer.anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - 90 : ctx.constraints.safeY + 90;
-      let starPath = "";
-      const outerR = 60;
-      const innerR = 48;
-      const points = 12;
-      for (let i = 0; i < points * 2; i++) {
-        const radius = i % 2 === 0 ? outerR : innerR;
-        const angle = (Math.PI / points) * i;
-        const x = cx + radius * Math.sin(angle);
-        const y = cy - radius * Math.cos(angle);
-        starPath += (i === 0 ? "M " : "L ") + x + "," + y;
-      }
-      starPath += " Z";
-      
-      return `
+
+    this.registry['starburst_badge'] = {
+      category: 'geometry', render: (ctx, layer) => {
+        // Draw a Canva-style 12-point starburst
+        const cx = layer && layer.anchor && layer.anchor.includes('right') ? ctx.w - ctx.constraints.safeX - 90 : ctx.constraints.safeX + 90;
+        const cy = layer && layer.anchor && layer.anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - 90 : ctx.constraints.safeY + 90;
+        let starPath = "";
+        const outerR = 60;
+        const innerR = 48;
+        const points = 12;
+        for (let i = 0; i < points * 2; i++) {
+          const radius = i % 2 === 0 ? outerR : innerR;
+          const angle = (Math.PI / points) * i;
+          const x = cx + radius * Math.sin(angle);
+          const y = cy - radius * Math.cos(angle);
+          starPath += (i === 0 ? "M " : "L ") + x + "," + y;
+        }
+        starPath += " Z";
+
+        return `
       <!-- Canva-style Starburst Badge -->
       <g opacity="0.95">
         <path d="${starPath}" fill="${ctx.validAccentColor || ctx.validBrandColor}" stroke="${ctx.validSecondaryColor}" stroke-width="3" filter="drop-shadow(0px 4px 6px rgba(0,0,0,0.25))" />
         <circle cx="${cx}" cy="${cy}" r="${innerR - 6}" fill="none" stroke="${ctx.validSecondaryColor}" stroke-width="1" stroke-dasharray="2 4" />
       </g>`;
-    }};
+      }
+    };
 
-    this.registry['text_pill'] = { category: 'layout', render: (ctx, layer) => {
-      // Renders a simple pill shape behind CTA text
-      const y = layer && layer.anchor && layer.anchor.includes('top') ? ctx.constraints.safeY + 20 : ctx.h - ctx.constraints.safeY - 60;
-      return `
+    this.registry['text_pill'] = {
+      category: 'layout', render: (ctx, layer) => {
+        // Renders a simple pill shape behind CTA text
+        const y = layer && layer.anchor && layer.anchor.includes('top') ? ctx.constraints.safeY + 20 : ctx.h - ctx.constraints.safeY - 60;
+        return `
       <!-- Typography Pill Background -->
       <rect x="${ctx.w / 2 - 120}" y="${y}" width="240" height="46" rx="23" fill="${ctx.validAccentColor || ctx.validBrandColor}" opacity="0.9" filter="drop-shadow(0px 2px 4px rgba(0,0,0,0.15))" />`;
-    }};
+      }
+    };
 
-    this.registry['3d_emoji'] = { category: 'effects', render: (ctx, layer) => {
-      // AI sometimes requests "3d_emoji". We map this to the starburst so it renders beautifully.
-      return this.registry['starburst_badge'].render(ctx, layer);
-    }};
+    this.registry['3d_emoji'] = {
+      category: 'effects', render: (ctx, layer) => {
+        // AI sometimes requests "3d_emoji". We map this to the starburst so it renders beautifully.
+        return this.registry['starburst_badge'].render(ctx, layer);
+      }
+    };
 
     // --- TYPOGRAPHY PRIMITIVES ---
-    
-    this.registry['ghost_headline'] = { category: 'typography', render: (ctx, layer) => {
-      const text = (ctx as any).structuredText?.headline || "EDITORIAL";
-      
-      // Phase 3: Relative Anchor logic for Ghost Headline
-      let anchorY = ctx.h / 2 + 150;
-      if (layer?.attachTo && ctx.layoutState) {
-        const target = ctx.layoutState.occupiedRegions.find((r: any) => r.id === layer.attachTo);
-        if (target) {
-          anchorY = target.y + target.height + 80;
-        }
-      }
 
-      // Phase 5: Massive structural rhythm instead of faint centered text
-      // We push it slightly off-canvas to the left, massively scaled, very low opacity
-      return `
+    this.registry['ghost_headline'] = {
+      category: 'typography', render: (ctx, layer) => {
+        const text = (ctx as any).structuredText?.headline || "EDITORIAL";
+
+        // Phase 3: Relative Anchor logic for Ghost Headline
+        let anchorY = ctx.h / 2 + 150;
+        if (layer?.attachTo && ctx.layoutState) {
+          const target = ctx.layoutState.occupiedRegions.find((r: any) => r.id === layer.attachTo);
+          if (target) {
+            anchorY = target.y + target.height + 80;
+          }
+        }
+
+        // Phase 5: Massive structural rhythm instead of faint centered text
+        // We push it slightly off-canvas to the left, massively scaled, very low opacity
+        return `
       <!-- Ghost Headline (Structural) -->
       <text x="-40" y="${anchorY}" font-family="sans-serif" font-size="800" font-weight="900" fill="${ctx.validBrandColor}" opacity="0.04" text-anchor="start" letter-spacing="-10px" transform="scale(1, 1.2)">
         ${text.toUpperCase()}
       </text>`;
-    }};
+      }
+    };
 
-    this.registry['outline_headline'] = { category: 'typography', render: (ctx, layer) => {
-      const text = (ctx as any).structuredText?.headline || "ELEGANCE";
-      const y = layer && layer.anchor && layer.anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - 40 : ctx.constraints.safeY + 120;
-      return `
+    this.registry['outline_headline'] = {
+      category: 'typography', render: (ctx, layer) => {
+        const text = (ctx as any).structuredText?.headline || "ELEGANCE";
+        const y = layer && layer.anchor && layer.anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - 40 : ctx.constraints.safeY + 120;
+        return `
       <!-- Outline Headline -->
       <text x="${ctx.constraints.safeX}" y="${y}" font-family="sans-serif" font-size="140" font-weight="800" fill="none" stroke="${ctx.validBrandColor}" stroke-width="3" text-anchor="start">
         ${text.toUpperCase()}
       </text>`;
-    }};
+      }
+    };
 
-    this.registry['vertical_label'] = { category: 'typography', render: (ctx, layer) => {
-      const text = (ctx as any).rawName || "EDITORIAL";
-      return `
+    this.registry['vertical_label'] = {
+      category: 'typography', render: (ctx, layer) => {
+        const text = (ctx as any).rawName || "EDITORIAL";
+        return `
       <!-- Vertical Label -->
       <g transform="translate(${ctx.constraints.safeX + 20}, ${ctx.h - ctx.constraints.safeY}) rotate(-90)">
         <text x="0" y="0" font-family="sans-serif" font-size="14" font-weight="600" fill="${ctx.validBrandColor}" letter-spacing="4px" opacity="0.6">${text.toUpperCase()}</text>
       </g>`;
-    }};
+      }
+    };
 
-    this.registry['running_header'] = { category: 'typography', render: (ctx) => {
-      const text = (ctx as any).rawName || "EDITORIAL";
-      return `
+    this.registry['running_header'] = {
+      category: 'typography', render: (ctx) => {
+        const text = (ctx as any).rawName || "EDITORIAL";
+        return `
       <!-- Running Header -->
       <text x="${ctx.constraints.safeX}" y="${ctx.constraints.safeY - 10}" font-family="sans-serif" font-size="12" font-weight="500" fill="${ctx.validBrandColor}" letter-spacing="2px" opacity="0.5">
         ${text.toUpperCase()} // VOL. 1
       </text>`;
-    }};
+      }
+    };
 
-    this.registry['pull_quote'] = { category: 'typography', render: (ctx) => {
-      const text = (ctx as any).overlayText || "Design is intelligence made visible.";
-      return `
+    this.registry['pull_quote'] = {
+      category: 'typography', render: (ctx) => {
+        const text = (ctx as any).overlayText || "Design is intelligence made visible.";
+        return `
       <!-- Pull Quote -->
       <g transform="translate(${ctx.w / 2}, ${ctx.h / 2})">
         <text x="0" y="-40" font-family="Georgia, serif" font-size="160" fill="${ctx.validBrandColor}" opacity="0.1" text-anchor="middle">"</text>
@@ -926,92 +1005,108 @@ export class PrimitiveEngine {
           ${text}
         </text>
       </g>`;
-    }};
+      }
+    };
 
     // --- SHAPE PRIMITIVES ---
 
-    this.registry['glass_card'] = { category: 'geometry', render: (ctx, layer) => {
-      const w = 400;
-      const h = 250;
-      const x = ctx.constraints.safeX;
-      const y = ctx.h - ctx.constraints.safeY - h;
-      return `
+    this.registry['glass_card'] = {
+      category: 'geometry', render: (ctx, layer) => {
+        const w = 400;
+        const h = 250;
+        const x = ctx.constraints.safeX;
+        const y = ctx.h - ctx.constraints.safeY - h;
+        return `
       <!-- Glassmorphism Card -->
       <g transform="translate(${x}, ${y})">
         <rect x="0" y="0" width="${w}" height="${h}" rx="16" fill="${ctx.validSecondaryColor}" opacity="0.6" filter="blur(8px)" />
         <rect x="0" y="0" width="${w}" height="${h}" rx="16" fill="none" stroke="${ctx.validSecondaryColor}" stroke-width="1.5" opacity="0.8" />
       </g>`;
-    }};
+      }
+    };
 
-    this.registry['organic_blob'] = { category: 'geometry', render: (ctx, layer) => {
-      return `
+    this.registry['organic_blob'] = {
+      category: 'geometry', render: (ctx, layer) => {
+        return `
       <!-- Organic Blob -->
       <path d="M45.7,-76.3C58.9,-69.3,69.1,-55.3,77.3,-40.4C85.5,-25.5,91.7,-9.6,90.4,5.7C89,20.9,80.1,35.6,69.5,47.9C58.8,60.2,46.5,70.1,32.3,76.5C18.2,82.9,2.2,85.8,-13.2,83.5C-28.7,81.1,-43.5,73.5,-55.6,62.8C-67.6,52.1,-76.8,38.3,-82.4,22.8C-88,7.3,-89.9,-9.8,-85.1,-24.8C-80.4,-39.8,-69,-52.7,-55.2,-59.5C-41.4,-66.3,-25.2,-67.1,-9.5,-64.1C6.1,-61,22.3,-54.2,32.5,-60.7Z" transform="translate(${ctx.w * 0.8}, ${ctx.h * 0.2}) scale(4)" fill="${ctx.validBrandColor}" opacity="0.05" />`;
-    }};
+      }
+    };
 
-    this.registry['torn_paper'] = { category: 'geometry', render: (ctx) => {
-      return `
+    this.registry['torn_paper'] = {
+      category: 'geometry', render: (ctx) => {
+        return `
       <!-- Torn Paper Edge (Top) -->
       <path d="M0,0 L${ctx.w},0 L${ctx.w},40 Q${ctx.w * 0.75},10 ${ctx.w * 0.5},45 T0,30 Z" fill="${ctx.validSecondaryColor}" />`;
-    }};
+      }
+    };
 
-    this.registry['pill_tag'] = { category: 'geometry', render: (ctx, layer) => {
-      const text = "NEW IN";
-      return `
+    this.registry['pill_tag'] = {
+      category: 'geometry', render: (ctx, layer) => {
+        const text = "NEW IN";
+        return `
       <!-- Pill Tag -->
       <g transform="translate(${ctx.constraints.safeX}, ${ctx.constraints.safeY})">
         <rect x="0" y="0" width="80" height="28" rx="14" fill="${ctx.validBrandColor}" />
         <text x="40" y="18" font-family="sans-serif" font-size="10" font-weight="bold" fill="${ctx.validSecondaryColor}" text-anchor="middle" letter-spacing="1px">${text}</text>
       </g>`;
-    }};
+      }
+    };
 
     // --- LINE PRIMITIVES ---
 
-    this.registry['double_divider'] = { category: 'geometry', render: (ctx, layer) => {
-      const y = layer && layer.anchor && layer.anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY : ctx.constraints.safeY;
-      return `
+    this.registry['double_divider'] = {
+      category: 'geometry', render: (ctx, layer) => {
+        const y = layer && layer.anchor && layer.anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY : ctx.constraints.safeY;
+        return `
       <!-- Double Divider -->
       <g transform="translate(${ctx.constraints.safeX}, ${y})">
         <line x1="0" y1="0" x2="100" y2="0" stroke="${ctx.validBrandColor}" stroke-width="2" />
         <line x1="0" y1="6" x2="100" y2="6" stroke="${ctx.validBrandColor}" stroke-width="0.5" />
       </g>`;
-    }};
+      }
+    };
 
-    this.registry['margin_rule'] = { category: 'geometry', render: (ctx) => {
-      return `
+    this.registry['margin_rule'] = {
+      category: 'geometry', render: (ctx) => {
+        return `
       <!-- Editorial Margin Hairline Rule -->
       <g opacity="0.85">
         <line x1="${ctx.constraints.safeX / 2}" y1="${ctx.constraints.safeY}" x2="${ctx.constraints.safeX / 2}" y2="${ctx.h - ctx.constraints.safeY}" stroke="${ctx.validBrandColor}" stroke-width="0.75" />
         <rect x="${ctx.constraints.safeX / 2 - 2}" y="${ctx.constraints.safeY}" width="4" height="1" fill="${ctx.validBrandColor}" />
         <rect x="${ctx.constraints.safeX / 2 - 2}" y="${ctx.h - ctx.constraints.safeY}" width="4" height="1" fill="${ctx.validBrandColor}" />
       </g>`;
-    }};
-
-    this.registry['accent_rule'] = { category: 'geometry', render: (ctx, layer) => {
-      let y = layer && layer.anchor && layer.anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY : ctx.constraints.safeY;
-      let x = ctx.constraints.safeX;
-      
-      // Phase 3: Connect accent rule to text baseline if specified
-      if (layer?.attachTo && ctx.layoutState) {
-        const target = ctx.layoutState.occupiedRegions.find((r: any) => r.id === layer.attachTo);
-        if (target) {
-          y = (target.baseline || target.y + target.height) + (layer.attachOffset || 20);
-          x = target.x;
-        }
       }
+    };
 
-      return `
+    this.registry['accent_rule'] = {
+      category: 'geometry', render: (ctx, layer) => {
+        let y = layer && layer.anchor && layer.anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY : ctx.constraints.safeY;
+        let x = ctx.constraints.safeX;
+
+        // Phase 3: Connect accent rule to text baseline if specified
+        if (layer?.attachTo && ctx.layoutState) {
+          const target = ctx.layoutState.occupiedRegions.find((r: any) => r.id === layer.attachTo);
+          if (target) {
+            y = (target.baseline || target.y + target.height) + (layer.attachOffset || 20);
+            x = target.x;
+          }
+        }
+
+        return `
       <!-- Editorial Accent Rule -->
       <g transform="translate(${x}, ${y})">
         <line x1="0" y1="0" x2="80" y2="0" stroke="${ctx.validAccentColor || ctx.validBrandColor}" stroke-width="1" />
         <line x1="0" y1="4" x2="80" y2="4" stroke="${ctx.validAccentColor || ctx.validBrandColor}" stroke-width="0.5" opacity="0.5" />
       </g>`;
-    }};
+      }
+    };
 
     // --- TEXTURE PRIMITIVES ---
 
-    this.registry['noise_texture'] = { category: 'effects', render: (ctx) => {
-      return `
+    this.registry['noise_texture'] = {
+      category: 'effects', render: (ctx) => {
+        return `
       <!-- Subtle Noise Texture -->
       <filter id="noiseFilter">
         <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch" result="noise" />
@@ -1019,10 +1114,16 @@ export class PrimitiveEngine {
         <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0 0 0 0.08 0" in="noise" />
       </filter>
       <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" style="pointer-events:none;" filter="url(#noiseFilter)" />`;
-    }};
+      }
+    };
 
-    this.registry['paper_texture'] = { category: 'effects', render: (ctx) => {
-      return `
+    this.registry['paper_texture'] = {
+      category: 'effects', render: (ctx, layer) => {
+        const profile = ctx.recipe?.paper_texture;
+        const opacity = profile?.opacity ?? 0.05;
+        const blendMode = profile?.blendMode ?? 'multiply';
+        
+        return `
       <!-- Paper Texture -->
       <filter id="paperFilter">
         <feTurbulence type="fractalNoise" baseFrequency="0.04" result="noise" />
@@ -1033,11 +1134,13 @@ export class PrimitiveEngine {
         </feDiffuseLighting>
         <feBlend mode="multiply" in="SourceGraphic" in2="light" />
       </filter>
-      <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" fill="${ctx.validSecondaryColor}" filter="url(#paperFilter)" opacity="0.4" style="mix-blend-mode: multiply; pointer-events:none;" />`;
-    }};
+      <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" fill="${ctx.validSecondaryColor}" filter="url(#paperFilter)" opacity="${opacity}" style="mix-blend-mode: ${blendMode}; pointer-events:none;" />`;
+      }
+    };
 
-    this.registry['linen_texture'] = { category: 'effects', render: (ctx) => {
-      return `
+    this.registry['linen_texture'] = {
+      category: 'effects', render: (ctx) => {
+        return `
       <!-- Subtle Linen Texture -->
       <filter id="linenFilter">
         <!-- Linen has directional fibers, hence the asymmetric frequency -->
@@ -1045,10 +1148,12 @@ export class PrimitiveEngine {
         <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0   0.33 0.33 0.33 0 0   0.33 0.33 0.33 0 0   0 0 0 0.1 0" in="noise" result="coloredNoise" />
       </filter>
       <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" filter="url(#linenFilter)" style="pointer-events:none; mix-blend-mode: multiply;" />`;
-    }};
+      }
+    };
 
-    this.registry['light_leak'] = { category: 'effects', render: (ctx) => {
-      return `
+    this.registry['light_leak'] = {
+      category: 'effects', render: (ctx) => {
+        return `
       <!-- Light Leak Gradient -->
       <defs>
         <radialGradient id="lightLeakGrad" cx="0%" cy="0%" r="70%">
@@ -1057,11 +1162,13 @@ export class PrimitiveEngine {
         </radialGradient>
       </defs>
       <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" fill="url(#lightLeakGrad)" style="mix-blend-mode: screen;" />`;
-    }};
+      }
+    };
 
-    this.registry['soft_scrim'] = { category: 'effects', render: (ctx) => {
-      // Optional explicit soft scrim for editorial families, instead of a universal muddy default.
-      return `
+    this.registry['soft_scrim'] = {
+      category: 'effects', render: (ctx) => {
+        // Optional explicit soft scrim for editorial families, instead of a universal muddy default.
+        return `
       <!-- Soft Scrim Gradient -->
       <defs>
         <linearGradient id="softScrim" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -1070,7 +1177,8 @@ export class PrimitiveEngine {
         </linearGradient>
       </defs>
       <rect x="0" y="${ctx.h * 0.4}" width="${ctx.w}" height="${ctx.h * 0.6}" fill="url(#softScrim)" />`;
-    }};
+      }
+    };
 
     // Text Containers (Delegated to TypographyEngine)
     this.registry['solid_card'] = { category: 'geometry', render: () => '' };
@@ -1080,8 +1188,9 @@ export class PrimitiveEngine {
     // ==========================================
     // PHASE 3 & 4: CLINICAL AND EDUCATIONAL PRIMITIVES
     // ==========================================
-    this.registry['clinical_callout_box'] = { category: 'geometry', render: (ctx, layer) => {
-      return `
+    this.registry['clinical_callout_box'] = {
+      category: 'geometry', render: (ctx, layer) => {
+        return `
       <!-- Clinical Callout Box with Data / Analysis Style -->
       <g transform="translate(${ctx.constraints.safeX}, ${ctx.h / 2 - 40})">
         <rect x="0" y="0" width="360" height="220" fill="${ctx.validSecondaryColor}" opacity="1" filter="drop-shadow(0 15px 30px rgba(0,0,0,0.15))" />
@@ -1101,93 +1210,109 @@ export class PrimitiveEngine {
         <rect x="20" y="170" width="280" height="6" fill="${ctx.validBrandColor}" />
         <text x="20" y="195" font-family="monospace" font-size="10" fill="${ctx.validBrandColor}" opacity="0.6">HYDRATION 92%</text>
       </g>`;
-    }};
+      }
+    };
 
-    this.registry['step_badge'] = { category: 'geometry', render: (ctx, layer) => {
-      return `
+    this.registry['step_badge'] = {
+      category: 'geometry', render: (ctx, layer) => {
+        return `
       <!-- Clinical Step Badge (e.g., Step 1, Step 2) -->
       <g transform="translate(${ctx.constraints.safeX}, ${ctx.constraints.safeY})">
         <rect x="0" y="0" width="120" height="36" rx="18" fill="${ctx.validBrandColor}" />
         <text x="60" y="22" font-family="sans-serif" font-size="12" font-weight="bold" fill="${ctx.validSecondaryColor}" text-anchor="middle" letter-spacing="2px">STEP 01</text>
       </g>`;
-    }};
+      }
+    };
 
-    this.registry['large_numeral_bullet'] = { category: 'geometry', render: (ctx, layer) => {
-      return `
+    this.registry['large_numeral_bullet'] = {
+      category: 'geometry', render: (ctx, layer) => {
+        return `
       <!-- Educational Large Numeral Background -->
       <text x="${ctx.constraints.safeX}" y="${ctx.constraints.safeY + 180}" font-family="Georgia, serif" font-size="250" font-weight="900" fill="${ctx.validBrandColor}" opacity="0.08" text-anchor="start">
         1.
       </text>`;
-    }};
+      }
+    };
 
-    this.registry['myth_fact_badge'] = { category: 'geometry', render: (ctx, layer) => {
-      return `
+    this.registry['myth_fact_badge'] = {
+      category: 'geometry', render: (ctx, layer) => {
+        return `
       <!-- Educational Myth vs Fact Floating Badge -->
       <g transform="translate(${ctx.w / 2 - 100}, ${ctx.constraints.safeY})">
         <rect x="0" y="0" width="200" height="50" rx="25" fill="${ctx.validSecondaryColor}" stroke="${ctx.validBrandColor}" stroke-width="2" filter="drop-shadow(0 10px 20px rgba(0,0,0,0.1))" />
         <text x="100" y="30" font-family="sans-serif" font-size="14" font-weight="800" fill="${ctx.validBrandColor}" text-anchor="middle" letter-spacing="3px">MYTH VS FACT</text>
       </g>`;
-    }};
+      }
+    };
 
-    this.registry['quote_mark_accent'] = { category: 'effects', render: (ctx, layer) => {
-      return `
+    this.registry['quote_mark_accent'] = {
+      category: 'effects', render: (ctx, layer) => {
+        return `
       <!-- Centered Premium Quote Mark Background -->
       <text x="${ctx.w / 2}" y="${ctx.h / 2 + 100}" font-family="Georgia, serif" font-size="300" font-style="italic" fill="${ctx.validBrandColor}" opacity="0.08" text-anchor="middle">
         "
       </text>`;
-    }};
+      }
+    };
 
     // ─── SPLIT / COUNTDOWN PROMO / PRODUCT SHOWCASE PRIMITIVES ───
 
-    this.registry['split_seam_line'] = { category: 'layout', render: (ctx, layer) => {
-      // Thin accent line marking the seam between the photo band and the text block
-      const offsetPercent = layer && (layer as IDSLDecorationLayer).offsetPercent != null ? (layer as IDSLDecorationLayer).offsetPercent : 40;
-      const y = Math.round((offsetPercent / 100) * ctx.h);
-      return `
+    this.registry['split_seam_line'] = {
+      category: 'layout', render: (ctx, layer) => {
+        // Thin accent line marking the seam between the photo band and the text block
+        const offsetPercent = layer && (layer as IDSLDecorationLayer).offsetPercent != null ? (layer as IDSLDecorationLayer).offsetPercent : 40;
+        const y = Math.round((offsetPercent / 100) * ctx.h);
+        return `
       <!-- Split Family Seam Line (Architectural Divider) -->
       <g transform="translate(0, ${y})">
         <rect x="${ctx.constraints.safeX}" y="-4" width="${ctx.w - ctx.constraints.safeX * 2}" height="8" fill="${ctx.validBrandColor}" opacity="0.9" />
         <rect x="0" y="0" width="${ctx.w}" height="1" fill="${ctx.validBrandColor}" opacity="0.2" />
       </g>`;
-    }};
+      }
+    };
 
-    this.registry['countdown_urgency_badge'] = { category: 'geometry', render: (ctx, layer) => {
-      // Small rounded urgency/CTA badge, anchored near the layer's declared corner
-      const attachX = layer && layer.anchor && layer.anchor.includes('right') ? ctx.w - ctx.constraints.safeX - 130 : ctx.constraints.safeX;
-      const attachY = layer && layer.anchor && layer.anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - 40 : ctx.constraints.safeY;
-      return `
+    this.registry['countdown_urgency_badge'] = {
+      category: 'geometry', render: (ctx, layer) => {
+        // Small rounded urgency/CTA badge, anchored near the layer's declared corner
+        const attachX = layer && layer.anchor && layer.anchor.includes('right') ? ctx.w - ctx.constraints.safeX - 130 : ctx.constraints.safeX;
+        const attachY = layer && layer.anchor && layer.anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - 40 : ctx.constraints.safeY;
+        return `
       <!-- Countdown Promo Urgency Badge -->
       <g transform="translate(${attachX}, ${attachY})">
         <rect x="0" y="0" width="130" height="40" rx="20" fill="${ctx.validAccentColor || ctx.validBrandColor}" filter="drop-shadow(0 4px 8px rgba(0,0,0,0.2))" />
         <text x="65" y="25" font-family="sans-serif" font-size="13" font-weight="800" fill="${ctx.validBackgroundColor}" text-anchor="middle" letter-spacing="1.5px">LIMITED TIME</text>
       </g>`;
-    }};
+      }
+    };
 
-    this.registry['product_halo_ring'] = { category: 'geometry', render: (ctx, layer) => {
-      // Two concentric decorative rings behind a centered circle-masked product photo
-      const cx = ctx.w / 2;
-      const cy = ctx.h / 2;
-      const outerR = Math.round(Math.min(ctx.w, ctx.h) * 0.38);
-      const innerR = Math.round(Math.min(ctx.w, ctx.h) * 0.34);
-      return `
+    this.registry['product_halo_ring'] = {
+      category: 'geometry', render: (ctx, layer) => {
+        // Two concentric decorative rings behind a centered circle-masked product photo
+        const cx = ctx.w / 2;
+        const cy = ctx.h / 2;
+        const outerR = Math.round(Math.min(ctx.w, ctx.h) * 0.38);
+        const innerR = Math.round(Math.min(ctx.w, ctx.h) * 0.34);
+        return `
       <!-- Product Showcase Halo Ring -->
       <g opacity="0.9">
         <circle cx="${cx}" cy="${cy}" r="${outerR}" fill="none" stroke="${ctx.validSecondaryColor}" stroke-width="2" />
         <circle cx="${cx}" cy="${cy}" r="${innerR}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="1" stroke-dasharray="3 6" opacity="0.6" />
       </g>`;
-    }};
+      }
+    };
 
-    this.registry['transformation_arrow'] = { category: 'geometry', render: (ctx, layer) => {
-      // Bold directional arrow marking the seam between a before-photo and an
-      // after-photo, with small "BEFORE"/"AFTER" labels either side. Grounded
-      // in the "arrow" decoration tag seen across real mined before/after
-      // templates. Defaults to a vertical seam (side-by-side photos); pass
-      // offsetPercent near 50 to sit on a horizontal seam (stacked photos).
-      const orientation = layer?.orientation === 'horizontal' ? 'horizontal' : 'vertical';
-      const cx = ctx.w / 2;
-      const cy = ctx.h / 2;
-      if (orientation === 'horizontal') {
-        return `
+    this.registry['transformation_arrow'] = {
+      category: 'geometry', render: (ctx, layer) => {
+        // Bold directional arrow marking the seam between a before-photo and an
+        // after-photo, with small "BEFORE"/"AFTER" labels either side. Grounded
+        // in the "arrow" decoration tag seen across real mined before/after
+        // templates. Defaults to a vertical seam (side-by-side photos); pass
+        // offsetPercent near 50 to sit on a horizontal seam (stacked photos).
+        const orientation = layer?.orientation === 'horizontal' ? 'horizontal' : 'vertical';
+        const cx = ctx.w / 2;
+        const cy = ctx.h / 2;
+        if (orientation === 'horizontal') {
+          return `
         <!-- Before/After Transformation Arrow (horizontal seam) -->
         <g transform="translate(${cx}, ${cy})">
           <circle cx="0" cy="0" r="26" fill="${ctx.validBackgroundColor}" filter="drop-shadow(0 3px 6px rgba(0,0,0,0.25))" />
@@ -1195,8 +1320,8 @@ export class PrimitiveEngine {
         </g>
         <text x="${ctx.constraints.safeX}" y="${cy - 34}" font-family="sans-serif" font-size="11" font-weight="800" letter-spacing="2px" fill="${ctx.validBrandColor}" opacity="0.85">BEFORE</text>
         <text x="${ctx.w - ctx.constraints.safeX}" y="${cy + 46}" text-anchor="end" font-family="sans-serif" font-size="11" font-weight="800" letter-spacing="2px" fill="${ctx.validBrandColor}" opacity="0.85">AFTER</text>`;
-      }
-      return `
+        }
+        return `
       <!-- Before/After Transformation Arrow (vertical seam) -->
       <g transform="translate(${cx}, ${cy})">
         <circle cx="0" cy="0" r="26" fill="${ctx.validBackgroundColor}" filter="drop-shadow(0 3px 6px rgba(0,0,0,0.25))" />
@@ -1204,22 +1329,25 @@ export class PrimitiveEngine {
       </g>
       <text x="${cx - 40}" y="${ctx.constraints.safeY + 6}" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="800" letter-spacing="2px" fill="${ctx.validBrandColor}" opacity="0.85">BEFORE</text>
       <text x="${cx + 40}" y="${ctx.constraints.safeY + 6}" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="800" letter-spacing="2px" fill="${ctx.validBrandColor}" opacity="0.85">AFTER</text>`;
-    }};
-
-    this.registry['star_rating_row'] = { category: 'effects', render: (ctx, layer) => {
-      // Row of 5 filled stars, anchored near the layer's declared position.
-      // Grounded in the "star_rating" decoration tag seen across real mined
-      // testimonial templates.
-      const anchor = layer?.anchor || 'top_center';
-      const startX = anchor.includes('left') ? ctx.constraints.safeX : anchor.includes('right') ? ctx.w - ctx.constraints.safeX - 130 : ctx.w / 2 - 65;
-      const y = anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - 30 : ctx.constraints.safeY + 10;
-      const starPath = "M12 1 L15 8 L23 9 L17 15 L18 23 L12 19 L6 23 L7 15 L1 9 L9 8 Z";
-      let stars = '';
-      for (let i = 0; i < 5; i++) {
-        stars += `<g transform="translate(${startX + i * 26}, ${y}) scale(1.1)"><path d="${starPath}" fill="${ctx.validAccentColor || ctx.validBrandColor}" /></g>`;
       }
-      return `<!-- Testimonial Star Rating -->\n${stars}`;
-    }};
+    };
+
+    this.registry['star_rating_row'] = {
+      category: 'effects', render: (ctx, layer) => {
+        // Row of 5 filled stars, anchored near the layer's declared position.
+        // Grounded in the "star_rating" decoration tag seen across real mined
+        // testimonial templates.
+        const anchor = layer?.anchor || 'top_center';
+        const startX = anchor.includes('left') ? ctx.constraints.safeX : anchor.includes('right') ? ctx.w - ctx.constraints.safeX - 130 : ctx.w / 2 - 65;
+        const y = anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - 30 : ctx.constraints.safeY + 10;
+        const starPath = "M12 1 L15 8 L23 9 L17 15 L18 23 L12 19 L6 23 L7 15 L1 9 L9 8 Z";
+        let stars = '';
+        for (let i = 0; i < 5; i++) {
+          stars += `<g transform="translate(${startX + i * 26}, ${y}) scale(1.1)"><path d="${starPath}" fill="${ctx.validAccentColor || ctx.validBrandColor}" /></g>`;
+        }
+        return `<!-- Testimonial Star Rating -->\n${stars}`;
+      }
+    };
 
     // Pre-existing gap (not introduced this session): ThemeEngine.getMoodDecorations('luxury_black')
     // has always requested a decoration named 'dark_scrim', but only 'dark_scrim_overlay' was ever
@@ -1229,7 +1357,8 @@ export class PrimitiveEngine {
     // dropping its scrim (PrimitiveEngine.renderPrimitive() logs a warning and returns '', it does
     // not throw). Registering it here, matching the legacy version's exact visual (32% opacity
     // brand-color wash), makes 'luxury_black' actually do what it says for every family.
-    this.registry['dark_scrim'] = { category: 'effects', render: (ctx) => `
+    this.registry['dark_scrim'] = {
+      category: 'effects', render: (ctx) => `
       <!-- Luxury Black mood: full-canvas dark brand-color scrim. Toned down
            from 0.32 -> 0.15: at 0.32 it read as a heavy gray/black cover on
            warm/light-toned photos rather than a subtle mood shift. -->
@@ -1240,71 +1369,115 @@ export class PrimitiveEngine {
     // component but it was never registered — rendered as a red "MISSING COMPONENT" box.
     // Small stat/metric callout chip, anchor-aware to match how the recipe uses it
     // (anchor: 'bottom_center', offsetPercent: 10).
-    this.registry['metric_label'] = { category: 'geometry', render: (ctx, layer) => {
-      const anchor = layer?.anchor || 'bottom_center';
-      const offsetPercent = layer && (layer as IDSLDecorationLayer).offsetPercent != null ? (layer as IDSLDecorationLayer).offsetPercent : 10;
-      const cx = ctx.w / 2;
-      const y = anchor.includes('bottom')
-        ? ctx.h - Math.round((offsetPercent / 100) * ctx.h) - 30
-        : Math.round((offsetPercent / 100) * ctx.h);
-      return `
+    this.registry['metric_label'] = {
+      category: 'geometry', render: (ctx, layer) => {
+        const anchor = layer?.anchor || 'bottom_center';
+        const offsetPercent = layer && (layer as IDSLDecorationLayer).offsetPercent != null ? (layer as IDSLDecorationLayer).offsetPercent : 10;
+        const cx = ctx.w / 2;
+        const y = anchor.includes('bottom')
+          ? ctx.h - Math.round((offsetPercent / 100) * ctx.h) - 30
+          : Math.round((offsetPercent / 100) * ctx.h);
+        return `
       <!-- Clinical Benefits Grid: small metric/stat callout chip -->
       <g transform="translate(${cx - 90}, ${y})">
         <rect x="0" y="0" width="180" height="46" rx="23" fill="${ctx.validBrandColor}" filter="drop-shadow(0 6px 16px rgba(0,0,0,0.18))" />
         <text x="90" y="29" font-family="sans-serif" font-size="13" font-weight="800" fill="${ctx.validBackgroundColor}" text-anchor="middle" letter-spacing="2px">KEY BENEFIT</text>
       </g>`;
-    }};
+      }
+    };
 
+    // --- PHASE 5 MISSING PRIMITIVES (V2) ---
+    const addDeco = (name: string, svg: (ctx: any, layer: any) => string) => {
+      this.registry[name] = { category: 'illustration', render: svg };
+    };
+
+    addDeco('divider', (ctx) => `<line x1="${ctx.constraints.safeX}" y1="${ctx.h / 2}" x2="${ctx.w - ctx.constraints.safeX}" y2="${ctx.h / 2}" stroke="${ctx.validBrandColor}" stroke-width="2" opacity="0.5" />`);
+    addDeco('arrow', (ctx) => `<g transform="translate(${ctx.w / 2}, ${ctx.h / 2})"><line x1="0" y1="0" x2="50" y2="0" stroke="${ctx.validBrandColor}" stroke-width="2"/><polygon points="50,0 40,-5 40,5" fill="${ctx.validBrandColor}"/></g>`);
+
+    const vectorProxy = (ctx: any) => `<g transform="translate(${ctx.w / 2 - 25}, ${ctx.h / 2 - 25})"><rect width="50" height="50" rx="12" fill="${ctx.validSecondaryColor}" opacity="0.2"/><text x="25" y="35" text-anchor="middle" fill="${ctx.validBrandColor}" font-size="24">✦</text></g>`;
+
+    ['butterfly', 'floral', 'heart', 'disco_ball', 'doodle', 'speech_bubble', 'paper_clip', 'collage elements'].forEach(name => {
+      addDeco(name, vectorProxy);
+    });
+
+    this.registry['shadow'] = { category: 'effects', render: (ctx) => `<rect width="${ctx.w}" height="${ctx.h}" fill="#000000" opacity="0.2" filter="url(#premium_shadow)" />` };
+    this.registry['star_rating'] = { category: 'illustration', render: (ctx) => `<text x="${ctx.constraints.safeX}" y="${ctx.h / 2}" fill="${ctx.validBrandColor}" font-size="24">★★★★★</text>` };
+    this.registry['rounded_corners'] = { category: 'geometry', render: (ctx) => `<rect x="${ctx.constraints.safeX}" y="${ctx.constraints.safeY}" width="${ctx.w - ctx.constraints.safeX * 2}" height="${ctx.h - ctx.constraints.safeY * 2}" rx="24" fill="${ctx.validBrandColor}" opacity="0.1" />` };
+    this.registry['geometric_shape'] = { category: 'geometry', render: (ctx) => `<rect width="200" height="200" rx="24" fill="${ctx.validBrandColor}" opacity="0.1" />` };
+    this.registry['color_block'] = { category: 'geometry', render: (ctx) => `<rect width="200" height="200" rx="24" fill="${ctx.validBrandColor}" opacity="0.1" />` };
+
+    this.registry['polaroid'] = { category: 'geometry', render: (ctx) => `<g transform="translate(${ctx.w / 2 - 100}, ${ctx.h / 2 - 125})"><rect width="200" height="250" fill="#ffffff" filter="url(#premium_shadow)" /><rect x="10" y="10" width="180" height="180" fill="#000000" opacity="0.1" /></g>` };
+    this.registry['paper_tape'] = { category: 'geometry', render: (ctx) => `<g transform="translate(${ctx.w / 2 - 50}, 50) rotate(-2)"><rect width="100" height="25" fill="#fdfdfd" opacity="0.85" filter="url(#premium_shadow)" /></g>` };
+
+    this.registry['dotted border'] = { category: 'geometry', render: (ctx) => `<rect x="${ctx.constraints.safeX}" y="${ctx.constraints.safeY}" width="${ctx.w - ctx.constraints.safeX * 2}" height="${ctx.h - ctx.constraints.safeY * 2}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="2" stroke-dasharray="4 4" />` };
+    this.registry['dotted_border'] = this.registry['dotted border'];
+
+    this.registry['circular_frame'] = { category: 'geometry', render: (ctx) => {
+      const color = ctx.colorHierarchy ? ctx.colorHierarchy.accent : ctx.validBrandColor;
+      return `<circle cx="${ctx.w / 2}" cy="${ctx.h / 2}" r="200" fill="none" stroke="${color}" stroke-width="3" />`;
+    }};
+    this.registry['circle'] = this.registry['circular_frame'];
+
+    this.registry['film_strip'] = { category: 'illustration', render: (ctx) => `<g transform="translate(${ctx.constraints.safeX}, ${ctx.h / 2 - 50})"><rect width="200" height="100" fill="#111111" /><circle cx="15" cy="15" r="5" fill="#ffffff" /><circle cx="45" cy="15" r="5" fill="#ffffff" /><circle cx="15" cy="85" r="5" fill="#ffffff" /><circle cx="45" cy="85" r="5" fill="#ffffff" /></g>` };
+
+    const backgroundFiller = (ctx: any) => `<rect width="${ctx.w}" height="${ctx.h}" fill="${ctx.validSecondaryColor}" opacity="0.05" />`;
+    this.registry['geometric_background'] = { category: 'layout', render: backgroundFiller };
+    this.registry['striped_background'] = { category: 'layout', render: backgroundFiller };
+    this.registry['background_image'] = { category: 'layout', render: backgroundFiller };
+    this.registry['quotation_marks'] = { category: 'effects', render: (ctx) => `<text x="${ctx.constraints.safeX}" y="${ctx.constraints.safeY + 80}" font-family="serif" font-size="120px" font-weight="900" fill="${ctx.validBrandColor}" opacity="0.15">"</text>` };
     // ─── TRANSFORMATION FAMILY PRIMITIVES ───
 
-    this.registry['timeline_track'] = { category: 'layout', render: (ctx, layer) => {
-      // Horizontal progress line with 4 evenly-spaced milestone dots, the
-      // last one filled solid to read as "current/final step". Grounded in
-      // the "arrow"/"geometric_badge" step-guide decorations seen across real
-      // mined transformation templates (journey/process narrative, not a
-      // dual-photo split like before_after).
-      const offsetPercent = layer && (layer as IDSLDecorationLayer).offsetPercent != null ? (layer as IDSLDecorationLayer).offsetPercent : 50;
-      const y = Math.round((offsetPercent / 100) * ctx.h);
-      const x1 = ctx.constraints.safeX;
-      const x2 = ctx.w - ctx.constraints.safeX;
-      const steps = 4;
-      let dots = '';
-      for (let i = 0; i < steps; i++) {
-        const cx = x1 + ((x2 - x1) / (steps - 1)) * i;
-        const isLast = i === steps - 1;
-        dots += `<circle cx="${cx}" cy="${y}" r="${isLast ? 8 : 5}" fill="${isLast ? ctx.validBrandColor : ctx.validBackgroundColor}" stroke="${ctx.validBrandColor}" stroke-width="2" />`;
-      }
-      return `
+    this.registry['timeline_track'] = {
+      category: 'layout', render: (ctx, layer) => {
+        // Horizontal progress line with 4 evenly-spaced milestone dots, the
+        // last one filled solid to read as "current/final step". Grounded in
+        // the "arrow"/"geometric_badge" step-guide decorations seen across real
+        // mined transformation templates (journey/process narrative, not a
+        // dual-photo split like before_after).
+        const offsetPercent = layer && (layer as IDSLDecorationLayer).offsetPercent != null ? (layer as IDSLDecorationLayer).offsetPercent : 50;
+        const y = Math.round((offsetPercent / 100) * ctx.h);
+        const x1 = ctx.constraints.safeX;
+        const x2 = ctx.w - ctx.constraints.safeX;
+        const steps = 4;
+        let dots = '';
+        for (let i = 0; i < steps; i++) {
+          const cx = x1 + ((x2 - x1) / (steps - 1)) * i;
+          const isLast = i === steps - 1;
+          dots += `<circle cx="${cx}" cy="${y}" r="${isLast ? 8 : 5}" fill="${isLast ? ctx.validBrandColor : ctx.validBackgroundColor}" stroke="${ctx.validBrandColor}" stroke-width="2" />`;
+        }
+        return `
       <!-- Transformation Family Timeline Track -->
       <g>
         <line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="${ctx.validBrandColor}" stroke-width="1.5" opacity="0.35" />
         ${dots}
       </g>`;
-    }};
+      }
+    };
 
     // ─── POLAROID FAMILY PRIMITIVES ───
 
-    this.registry['polaroid_frame'] = { category: 'layout', render: (ctx, layer) => {
-      // Real white polaroid card border with a taller bottom caption strip,
-      // drawn as an SVG overlay on top of the plain-rectangle photo (the
-      // 'polaroid' image mask has no real pixel-clip implementation in the
-      // Sharp compositor — see universal_dynamic_base in layout-renderers.ts
-      // — so this decoration is what actually produces the polaroid look,
-      // same faking technique editorial_tape/floating_frame already use).
-      // Grounded in the "polaroid frame" decoration tag seen across real
-      // mined polaroid templates, with a slight rotation for the candid,
-      // overlapping-snapshot feel those samples describe.
-      const anchor = layer?.anchor || 'center';
-      const rotation = layer && (layer as IDSLDecorationLayer).offsetPercent != null ? ((layer as IDSLDecorationLayer).offsetPercent % 7) - 3 : -2;
-      const frameW = Math.round(ctx.w * 0.72);
-      const frameH = Math.round(ctx.h * 0.68);
-      const borderSide = Math.round(frameW * 0.045);
-      const borderBottom = Math.round(frameH * 0.14);
-      const cx = anchor.includes('left') ? ctx.constraints.safeX + frameW / 2 : anchor.includes('right') ? ctx.w - ctx.constraints.safeX - frameW / 2 : ctx.w / 2;
-      const cy = anchor.includes('top') ? ctx.constraints.safeY + frameH / 2 : anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - frameH / 2 : ctx.h / 2;
-      const totalH = frameH + borderBottom;
-      // 4 non-overlapping border strips (transparent center so the photo underneath shows through)
-      return `
+    this.registry['polaroid_frame'] = {
+      category: 'layout', render: (ctx, layer) => {
+        // Real white polaroid card border with a taller bottom caption strip,
+        // drawn as an SVG overlay on top of the plain-rectangle photo (the
+        // 'polaroid' image mask has no real pixel-clip implementation in the
+        // Sharp compositor — see universal_dynamic_base in layout-renderers.ts
+        // — so this decoration is what actually produces the polaroid look,
+        // same faking technique editorial_tape/floating_frame already use).
+        // Grounded in the "polaroid frame" decoration tag seen across real
+        // mined polaroid templates, with a slight rotation for the candid,
+        // overlapping-snapshot feel those samples describe.
+        const anchor = layer?.anchor || 'center';
+        const rotation = layer && (layer as IDSLDecorationLayer).offsetPercent != null ? ((layer as IDSLDecorationLayer).offsetPercent % 7) - 3 : -2;
+        const frameW = Math.round(ctx.w * 0.72);
+        const frameH = Math.round(ctx.h * 0.68);
+        const borderSide = Math.round(frameW * 0.045);
+        const borderBottom = Math.round(frameH * 0.14);
+        const cx = anchor.includes('left') ? ctx.constraints.safeX + frameW / 2 : anchor.includes('right') ? ctx.w - ctx.constraints.safeX - frameW / 2 : ctx.w / 2;
+        const cy = anchor.includes('top') ? ctx.constraints.safeY + frameH / 2 : anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - frameH / 2 : ctx.h / 2;
+        const totalH = frameH + borderBottom;
+        // 4 non-overlapping border strips (transparent center so the photo underneath shows through)
+        return `
       <!-- Polaroid Frame -->
       <g transform="translate(${cx - frameW / 2}, ${cy - frameH / 2}) rotate(${rotation}, ${frameW / 2}, ${frameH / 2})" filter="drop-shadow(0 10px 24px rgba(0,0,0,0.25))">
         <rect x="0" y="0" width="${frameW}" height="${borderSide}" fill="${ctx.validBackgroundColor}" />
@@ -1313,42 +1486,46 @@ export class PrimitiveEngine {
         <rect x="${frameW - borderSide}" y="0" width="${borderSide}" height="${totalH}" fill="${ctx.validBackgroundColor}" />
         <rect x="${borderSide}" y="${borderSide}" width="${frameW - borderSide * 2}" height="${frameH - borderSide}" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="1" />
       </g>`;
-    }};
+      }
+    };
 
     // ─── NOTIFICATION CARD FAMILY PRIMITIVES ───
 
-    this.registry['notification_icon_badge'] = { category: 'geometry', render: (ctx, layer) => {
-      // Small circular app-notification-style icon chip with a simple bell
-      // glyph. Grounded in the "icon_badge" decoration tag from the real
-      // mined notification_card sample, whose own designRules explicitly
-      // call for "icon badge at the top center of the card for emphasis".
-      const anchor = layer?.anchor || 'top_center';
-      const r = 34;
-      const cx = anchor.includes('left') ? ctx.constraints.safeX + r : anchor.includes('right') ? ctx.w - ctx.constraints.safeX - r : ctx.w / 2;
-      const cy = anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - r : ctx.constraints.safeY + r;
-      return `
+    this.registry['notification_icon_badge'] = {
+      category: 'geometry', render: (ctx, layer) => {
+        // Small circular app-notification-style icon chip with a simple bell
+        // glyph. Grounded in the "icon_badge" decoration tag from the real
+        // mined notification_card sample, whose own designRules explicitly
+        // call for "icon badge at the top center of the card for emphasis".
+        const anchor = layer?.anchor || 'top_center';
+        const r = 34;
+        const cx = anchor.includes('left') ? ctx.constraints.safeX + r : anchor.includes('right') ? ctx.w - ctx.constraints.safeX - r : ctx.w / 2;
+        const cy = anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - r : ctx.constraints.safeY + r;
+        return `
       <!-- Notification Card Icon Badge -->
       <g transform="translate(${cx}, ${cy})">
         <circle cx="0" cy="0" r="${r}" fill="${ctx.validBrandColor}" filter="drop-shadow(0 6px 14px rgba(0,0,0,0.2))" />
         <path d="M -10 4 Q -10 -10 0 -12 Q 10 -10 10 4 L 13 9 L -13 9 Z" fill="${ctx.validBackgroundColor}" />
         <circle cx="0" cy="13" r="3" fill="${ctx.validBackgroundColor}" />
       </g>`;
-    }};
+      }
+    };
 
     // ─── ANNOUNCEMENT FAMILY PRIMITIVES ───
 
-    this.registry['announcement_banner_ribbon'] = { category: 'layout', render: (ctx, layer) => {
-      // Solid brand-color banner ribbon with a small megaphone glyph.
-      // Grounded in the "megaphone graphic" decoration tag from the real
-      // mined announcement sample (the only real sample for this family) —
-      // its own designRules call for "a graphic element related to
-      // communication to reinforce the announcement theme".
-      const anchor = layer?.anchor || 'top_center';
-      const w = Math.round(ctx.w * 0.9);
-      const h = 64;
-      const x = (ctx.w - w) / 2;
-      const y = anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - h : ctx.constraints.safeY;
-      return `
+    this.registry['announcement_banner_ribbon'] = {
+      category: 'layout', render: (ctx, layer) => {
+        // Solid brand-color banner ribbon with a small megaphone glyph.
+        // Grounded in the "megaphone graphic" decoration tag from the real
+        // mined announcement sample (the only real sample for this family) —
+        // its own designRules call for "a graphic element related to
+        // communication to reinforce the announcement theme".
+        const anchor = layer?.anchor || 'top_center';
+        const w = Math.round(ctx.w * 0.9);
+        const h = 64;
+        const x = (ctx.w - w) / 2;
+        const y = anchor.includes('bottom') ? ctx.h - ctx.constraints.safeY - h : ctx.constraints.safeY;
+        return `
       <!-- Announcement Banner Ribbon -->
       <g transform="translate(${x}, ${y})">
         <rect x="0" y="0" width="${w}" height="${h}" fill="${ctx.validBrandColor}" filter="drop-shadow(0 6px 16px rgba(0,0,0,0.18))" />
@@ -1358,7 +1535,8 @@ export class PrimitiveEngine {
         </g>
         <text x="${w / 2 + 14}" y="${h / 2 + 5}" font-family="sans-serif" font-size="14" font-weight="800" fill="${ctx.validBackgroundColor}" text-anchor="middle" letter-spacing="2px">ANNOUNCEMENT</text>
       </g>`;
-    }};
+      }
+    };
   }
 
 

@@ -89,7 +89,9 @@ function compileTextOnly(k: IExtractedKnowledge, id: string): ICompiledLayoutDSL
 function compileTestimonial(k: IExtractedKnowledge, id: string): ICompiledLayoutDSL {
   const layers: IDSLSceneLayer[] = [];
   layers.push({ id: 'img', type: 'image', zIndex: 10, mask: 'circle', paddingPercent: 20, anchor: 'top_center', offsetPercent: 5 });
-  layers.push({ id: 'txt', type: 'text', zIndex: 30, role: 'heading', anchor: 'bottom_center', alignment: 'center', maxWidthPercent: 60, offsetPercent: 15 });
+  layers.push({ id: 'deco1', type: 'decoration', zIndex: 5, component: 'quotation_marks', anchor: 'top_left', offsetPercent: 5 });
+  layers.push({ id: 'txt', type: 'text', zIndex: 30, role: 'heading', anchor: 'center', alignment: 'center', maxWidthPercent: 60, offsetPercent: 10 });
+  layers.push({ id: 'deco2', type: 'decoration', zIndex: 40, component: 'star_rating', anchor: 'bottom_center', offsetPercent: 5 });
   return { schemaVersion: "1.0", layoutVersion: "1.0", id, base: "solid_canvas_full", layers };
 }
 

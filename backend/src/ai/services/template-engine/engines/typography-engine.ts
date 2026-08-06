@@ -136,8 +136,43 @@ export class TypographyEngine {
     }
 
     // Wrap text to determine actual lines and height BEFORE Y calculation
-    const escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, effectiveMaxW);
+    let escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, effectiveMaxW);
     let textHeight = escapedLines.length * lineHeight;
+
+    // VERTICAL OVERFLOW PROTECTION
+    if (layer.allocatedBox && textHeight > layer.allocatedBox.height) {
+      let attempts = 0;
+      let currentFontSize = style.fontSize;
+      const minFontSize = style.fontSize * 0.85; // Max 15% shrink
+      const originalLineHeightMultiplier = lineHeight / style.fontSize;
+      
+      while (textHeight > layer.allocatedBox.height && currentFontSize > minFontSize && attempts < 3) {
+        currentFontSize = Math.floor(currentFontSize * 0.95); // 5% shrink per iteration
+        lineHeight = Math.floor(currentFontSize * originalLineHeightMultiplier);
+        style.fontSize = currentFontSize;
+        escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, effectiveMaxW);
+        textHeight = escapedLines.length * lineHeight;
+        attempts++;
+      }
+      
+      // Fallback: Smart Shortening
+      if (textHeight > layer.allocatedBox.height) {
+        if (layer.role === 'body' || layer.role === 'tagline' || layer.role === 'footnote') {
+          // Drop last sentence or truncate
+          const sentences = textToWrap.split('. ');
+          if (sentences.length > 1) {
+            textToWrap = sentences.slice(0, sentences.length - 1).join('. ') + '.';
+          } else {
+            textToWrap = textToWrap.substring(0, Math.floor(textToWrap.length * 0.7)) + '...';
+          }
+        } else if (layer.role === 'heading') {
+           textToWrap = textToWrap.substring(0, Math.floor(textToWrap.length * 0.75)) + '...';
+        }
+        
+        escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, effectiveMaxW);
+        textHeight = escapedLines.length * lineHeight;
+      }
+    }
 
     let x = ctx.w / 2;
     let y = ctx.h / 2;
@@ -154,8 +189,17 @@ export class TypographyEngine {
       x = baseAnchorResult.x;
       y = baseAnchorResult.y;
 
-      const anchorStr = layer.anchor as string;
-      const isCenterAnchor = anchorStr.includes('center') || anchorStr.includes('top') || anchorStr.includes('bottom') || anchorStr.includes('middle');
+      // Non-negotiable Face Avoidance: Ensure text doesn't overlap facial regions
+      const targetBox = { x, y, width: effectiveMaxW, height: textHeight };
+      const resolvedBox = ctx.layoutEngine.resolveFaceCollision(targetBox, ctx.constraints, (ctx as any).family);
+      x = resolvedBox.x;
+      y = resolvedBox.y;
+      effectiveMaxW = resolvedBox.width;
+    
+    const anchorStr = (layer.anchor as string) || '';
+      // Fix bug: isCenterAnchor must check HORIZONTAL centering (_center, center, middle), 
+      // NOT vertical keywords like 'top' or 'bottom' which misclassified top_left / bottom_left as centered!
+      const isCenterAnchor = anchorStr.endsWith('_center') || anchorStr === 'center' || anchorStr === 'top_center' || anchorStr === 'bottom_center' || anchorStr === 'middle_center';
       
       if (anchor === 'middle') {
         if (layer.anchor.includes('left')) x = ctx.constraints.safeX + effectiveMaxW / 2;
@@ -171,13 +215,45 @@ export class TypographyEngine {
     }
 
     // PHASE 2.5: SMART COMPOSITION (No Shrinking, No Failing)
-    // If text bleeds off the bottom, we shift it up rather than shrinking the font.
-    // If it bleeds off the top, we push it down.
-    if (y + textHeight > ctx.h - ctx.constraints.safeY) {
-      y = ctx.h - ctx.constraints.safeY - textHeight;
+    
+    // 1. Vertical Validation & Clamping
+    // Dynamic reserve calculation based on canvas height (story vs square format)
+    const effectiveFooterReserve = ctx.h > 1300 ? Math.round(ctx.h * 0.20) : BRANDING_FOOTER_RESERVE_PX;
+    
+    // Sequential Y Stacking: Check if previous text regions already occupy space
+    // and push this layer below them to prevent text collision
+    if (!layer.allocatedBox && ctx.layoutState && ctx.layoutState.occupiedRegions.length > 0) {
+      const textRegions = ctx.layoutState.occupiedRegions.filter(r => r.role === 'heading' || r.role === 'tagline' || r.role === 'body' || r.role === 'footnote');
+      if (textRegions.length > 0) {
+        const lastTextRegion = textRegions[textRegions.length - 1];
+        const stackedY = lastTextRegion.y + (lastTextRegion.height || 0) + 30; // 30px inter-element gap
+        // Only stack if the new layer would collide with the previous one
+        if (Math.abs(y - lastTextRegion.y) < (lastTextRegion.height || 60) + 20) {
+          y = stackedY;
+        }
+      }
+    }
+    
+    if (y + textHeight > ctx.h - effectiveFooterReserve) {
+      y = ctx.h - textHeight - effectiveFooterReserve;
     }
     if (y < ctx.constraints.safeY) {
       y = ctx.constraints.safeY;
+    }
+
+    // 2. Horizontal Validation & Clamping
+    // The vertical clamp above doesn't fix horizontal overflow (boxX off the left/right edge).
+    // Clamp x to the safe area based on text-anchor mode.
+    const minX = ctx.constraints.safeX;
+    const maxX = ctx.w - ctx.constraints.safeX;
+    if (anchor === 'middle') {
+      x = Math.max(minX + effectiveMaxW / 2, Math.min(x, maxX - effectiveMaxW / 2));
+    } else if (anchor === 'end') {
+      x = Math.max(x, minX + effectiveMaxW);
+      x = Math.min(x, maxX);
+    } else {
+      x = Math.min(x, maxX - effectiveMaxW);
+      x = Math.max(x, minX);
     }
 
     let boxX = x;
@@ -279,6 +355,10 @@ export class TypographyEngine {
     let fontWeight = 'normal';
     let fontStyle = 'normal';
     let fill = ctx.dynamicTextColor;
+    // Use ColorHierarchy for brand-aware contrast (from BrandDNA palette)
+    if (ctx.colorHierarchy) {
+      fill = ctx.colorHierarchy.primaryText;
+    }
     let letterSpacing = 'normal';
     let fontFamily = `'${ctx.brandFont}', sans-serif`;
 
@@ -333,16 +413,16 @@ export class TypographyEngine {
       fontWeight = weightMap[tokens.headlineWeight] || '700';
       letterSpacing = trackingMap[tokens.tracking] || '0em';
       layerObj.capitalizationRule = tokens.casing;
-      fill = ctx.dynamicTextColor; // Could map contrast here
+      fill = ctx.colorHierarchy ? ctx.colorHierarchy.primaryText : ctx.dynamicTextColor;
     } else if (role === 'body') {
       fontWeight = weightMap[tokens.bodyWeight] || '400';
-      fill = ctx.dynamicTextColor;
+      fill = ctx.colorHierarchy ? ctx.colorHierarchy.secondaryText : ctx.dynamicTextColor;
     } else if (role === 'tagline' || role === 'footnote') {
       // Metadata is usually slightly bolder and wider than body, but smaller
       fontWeight = weightMap[tokens.bodyWeight] === 'light' ? '400' : '600';
       letterSpacing = trackingMap['wide'];
       layerObj.capitalizationRule = tokens.casing;
-      fill = ctx.validSecondaryColor || ctx.dynamicTextColor;
+      fill = ctx.colorHierarchy ? ctx.colorHierarchy.secondaryText : (ctx.validSecondaryColor || ctx.dynamicTextColor);
     }
 
     // Inject serif font if the brand font is an editorial serif and it requires support
@@ -366,13 +446,16 @@ export class TypographyEngine {
     }
 
     // DYNAMIC CLAMPING: Prevent single long words from bleeding off the canvas
-    const longestWord = text.split(/\s+/).reduce((a, b) => a.length > b.length ? a : b, '');
+    // Split by whitespace and hyphens to handle compound words like PRESS-POINT
+    const words = text.split(/[\s\-]+/);
+    const longestWord = words.reduce((a, b) => a.length > b.length ? a : b, '');
     if (longestWord.length > 0) {
       let layerMaxWidth = ctx.constraints.contentMaxWidth;
       if ((layer as any).maxWidthPercent) layerMaxWidth = Math.round(ctx.w * ((layer as any).maxWidthPercent / 100));
       const maxAvailableWidth = Math.min(layerMaxWidth, ctx.constraints.contentMaxWidth);
       
-      const maxFontSizeForLongestWord = maxAvailableWidth / (longestWord.length * 0.52);
+      // Use realistic char ratio (0.62 for uppercase bold headlines)
+      const maxFontSizeForLongestWord = maxAvailableWidth / (longestWord.length * 0.62);
       if (fontSize > maxFontSizeForLongestWord) {
         fontSize = Math.floor(maxFontSizeForLongestWord);
       }
@@ -385,7 +468,8 @@ export class TypographyEngine {
    * Handles text wrapping based on layout constraints and DSL layer bounds.
    */
   private wrapText(text: string, fontSize: number, layer: IDSLTextLayer, ctx: TypographyContext, resolvedMaxWidth?: number): string[] {
-    const estimatedCharWidth = fontSize * 0.52;
+    // Realistic character width multiplier for uppercase/bold fonts
+    const estimatedCharWidth = fontSize * 0.62;
     
     let layerMaxWidth = resolvedMaxWidth || ctx.constraints.contentMaxWidth;
     if (!resolvedMaxWidth && (layer as any).maxWidthPercent) {
@@ -393,7 +477,7 @@ export class TypographyEngine {
     }
 
     const maxAvailableWidth = Math.min(layerMaxWidth, ctx.constraints.contentMaxWidth);
-    let maxCharsPerLine = Math.max(10, Math.floor(maxAvailableWidth / estimatedCharWidth));
+    let maxCharsPerLine = Math.max(8, Math.floor(maxAvailableWidth / estimatedCharWidth));
     
     // BEHAVIORAL DESIGN: Dominance Stacking
     // Premium editorial design forces massive headlines to stack vertically rather than stretch wide.

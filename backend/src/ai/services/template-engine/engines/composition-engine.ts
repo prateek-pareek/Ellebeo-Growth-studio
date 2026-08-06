@@ -160,6 +160,49 @@ export class CompositionEngine {
         maxWidthPercent: 10
       } as IDSLTextLayer);
 
+    } else if (layoutId === 'testimonial_z_pattern') {
+      // RECIPE: Testimonial Z-Pattern
+      // Avatar top left, large quote center right, name/title bottom left.
+      layers.push({
+        id: 'test_z_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'circle',
+        paddingPercent: 12,
+        anchor: 'top_left',
+        allowedAnchors: ['top_left', 'top_right']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'test_z_quote_mark',
+        type: 'decoration',
+        zIndex: 15,
+        component: 'quote_marks',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'test_z_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'center',
+        allowedAnchors: ['center'],
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 70
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'test_z_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_left',
+        role: 'tagline',
+        alignment: 'left',
+        maxWidthPercent: 40
+      } as IDSLTextLayer);
+
     } else if (layoutId === 'split_vertical_stack') {
       // RECIPE: Split - Vertical Stack
       // Heading block on top ~40%, circle-masked photo filling the bottom ~40-95%
@@ -1577,6 +1620,7 @@ export class CompositionEngine {
       layers.push({ id: 'prem_qp_quote', type: 'decoration', zIndex: 16, component: 'pull_quote', anchor: 'center' } as IDSLDecorationLayer);
 
     } else if (layoutId === 'premium_cta_poster') {
+      layers.push({ id: 'prem_cta_bg', type: 'image', zIndex: 10, mask: 'full_bleed', paddingPercent: 0, anchor: 'center' } as IDSLImageLayer);
       layers.push({ id: 'prem_cta_title', type: 'text', zIndex: 30, anchor: 'center', role: 'heading', alignment: 'center', maxWidthPercent: 90 } as IDSLTextLayer);
       layers.push({ id: 'prem_cta_caption', type: 'text', zIndex: 31, anchor: 'bottom_center', role: 'footnote', alignment: 'center', maxWidthPercent: 50 } as IDSLTextLayer);
       layers.push({ id: 'prem_cta_badge', type: 'decoration', zIndex: 35, component: 'handmade_mark', anchor: 'top_right' } as IDSLDecorationLayer);

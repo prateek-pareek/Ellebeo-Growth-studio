@@ -204,6 +204,9 @@ export interface TypographyRecipe {
 export interface PrimitiveRecipe {
   cardStyle: 'solid' | 'glass' | 'outlined' | 'floating' | 'none';
   borderStyle: 'none' | 'thin' | 'thick' | 'architectural';
+  paper_texture?: { opacity?: number; blendMode?: string };
+  split_seam_line?: { opacity?: number; strokeWidth?: number };
+  margin_notes?: { opacity?: number };
 }
 
 export interface TextureRecipe {

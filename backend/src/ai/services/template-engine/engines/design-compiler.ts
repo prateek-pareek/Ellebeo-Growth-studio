@@ -117,24 +117,12 @@ export class DesignCompiler {
             else heading.anchor = 'middle_left';
           }
 
-          // BEHAVIORAL DOMINANCE: Inject massive font scaling overrides
-          (heading as any).fontSize = 140;
-
           if (spec.typography.headlineTreatment === 'experimental') {
             heading.rotation = -90; // Rotate vertically
             heading.anchor = 'middle_left'; // Push to the side
             heading.alignment = 'center';
           }
         }
-      }
-      
-      if (tagline && spec.typography.hierarchy === 'editorial') {
-        // BEHAVIORAL CONTRAST: Tiny subheadline against the massive headline
-        (tagline as any).fontSize = 18;
-      }
-      
-      if (body && spec.typography.hierarchy === 'editorial') {
-        (body as any).fontSize = 22;
       }
     }
 
