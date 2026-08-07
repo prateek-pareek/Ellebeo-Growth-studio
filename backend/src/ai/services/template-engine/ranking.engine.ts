@@ -56,6 +56,20 @@ export class RankingEngine {
         score -= 50; // Heavily penalize full-bleed for long text, forcing framed/split layouts
       }
       
+      // 3.5 Semantic Trait Scoring (Weight: +25 for visualPriority)
+      if (context.requiredTraits && context.requiredTraits.visualPriority) {
+        const vp = context.requiredTraits.visualPriority;
+        if (vp === 'image_hero' && (template.id.includes('hero') || template.id.includes('portrait'))) {
+          score += 25;
+        } else if (vp === 'typography_hero' && (template.id.includes('quote') || template.id.includes('text') || template.id.includes('editorial') || template.textDensity === 'high')) {
+          score += 25;
+        } else if (vp === 'composition_hero' && (template.id.includes('split') || template.id.includes('grid') || template.id.includes('collage') || template.id.includes('composition'))) {
+          score += 25;
+        } else if (vp === 'cta_hero' && template.id.includes('cta')) {
+          score += 25;
+        }
+      }
+
       // 4. Random Jitter (Weight: +0 to +8)
       // This ensures that when 50 templates match perfectly, we get a rotating organic mix of top candidates instead of the exact same 8 every time.
       const jitter = Math.floor(Math.random() * 8);

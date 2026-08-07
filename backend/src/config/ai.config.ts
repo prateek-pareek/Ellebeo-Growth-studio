@@ -25,7 +25,7 @@ export const AI_CONFIG = {
     },
     vision: {
       provider: 'openai' as const,
-      modelId: 'gemini-pro-latest',
+      modelId: 'gemini-2.5-flash',
       temperature: 0.2,       // low — vision output should be factual
       maxTokens: 512,
       timeoutMs: 45_000,

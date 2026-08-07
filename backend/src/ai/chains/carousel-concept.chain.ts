@@ -13,6 +13,7 @@ import { buildBrandVoiceBlock, type BrandVoiceContext } from '../config/brand-vo
 export interface CarouselSlideConcept {
   index: number;
   title: string;       // Slide list label, e.g. "01 · Cover"
+  slideType?: string;  // Semantic type, e.g. "HOOK", "PROBLEM", "SOLUTION"
   headline: string;    // Massive hero text (max 6 words)
   subheadline?: string; // Optional supporting text (max 12 words)
   cta?: string;        // Optional call to action (max 4 words)
@@ -49,6 +50,7 @@ export class CarouselConceptChain {
     businessGoal: string;
     brandName: string;
     slideCount?: number;
+    semanticFlow?: import('../services/narrative-planner.service').SemanticSlide[];
     brandVoice?: BrandVoiceContext;
   }): Promise<CarouselConceptResult> {
     const {
@@ -59,6 +61,7 @@ export class CarouselConceptChain {
       businessGoal,
       brandName,
       slideCount = 4,
+      semanticFlow = [],
       brandVoice,
     } = params;
 
@@ -74,39 +77,23 @@ You MUST follow these strict Content Density constraints:
 - cta: 2-4 words MAX (Optional)
 CRITICAL BRAND CONTENT RULE for Body Slides:
 - Ensure all body slides closely follow the provided Narrative Template. Do not deviate.
+- Set the slideType JSON property strictly to the [Type] provided in the Narrative Template.
 NEVER inject variable placeholders, hex codes, or technical IDs.
 NEVER write marketing paragraphs. Treat copy as a precise design object.
 Return ONLY valid JSON, no markdown, no explanation.`;
 
-    const getNarrativeTemplate = (goal: string, count: number): string => {
-      const g = goal.toLowerCase();
-      let slides: string[] = [];
-      
-      // Slide 1: Hook
-      slides.push(`- Slide 1: Cover — 3 WORDS MAX (e.g. "Reveal Your Glow" using hook: "${hookSentence}")`);
-      
-      // Body Slides
-      if (count === 3) {
-        slides.push(`- Slide 2: Context — 3 WORDS MAX (e.g. "Massage. Release. Restore.")`);
-      } else if (count >= 4) {
-        slides.push(`- Slide 2: Context — 3 WORDS MAX (e.g. "Targeted. Botanical. Care.")`);
-        slides.push(`- Slide 3: Value — 3 WORDS MAX (e.g. "Safe. Proven. Glow.")`);
-        
-        // If 5 slides, duplicate the context slide logic for slide 4 (shifting the others down)
-        if (count === 5) {
-           const valSlide = slides.pop()!;
-           slides.push(`- Slide 3: Deep Dive — 3 WORDS MAX (e.g. "Pure. Raw. Ingredients.")`);
-           slides.push(valSlide.replace('Slide 3', 'Slide 4'));
-        }
-      }
-      
-      // CTA Slide
-      slides.push(`- Slide ${count}: CTA — 2 WORDS MAX (e.g. "Book Now" using CTA: "${callToAction}")`);
-      
-      return slides.join('\\n');
-    };
-
-    const narrativeTemplate = getNarrativeTemplate(businessGoal, count);
+    let narrativeTemplate = '';
+    if (semanticFlow.length > 0) {
+      narrativeTemplate = semanticFlow.map((slide, idx) => {
+        let desc = slide.description;
+        if (idx === 0) desc = desc.replace('using hook', `using hook: "${hookSentence}"`);
+        if (idx === semanticFlow.length - 1) desc = desc.replace('using CTA', `using cta: "${callToAction}"`);
+        return `- Slide ${idx + 1}: [Type: ${slide.slideType}] ${desc}`;
+      }).join('\n');
+    } else {
+      // Fallback if semanticFlow isn't passed
+      narrativeTemplate = `- Slide 1: [Type: HOOK] Cover\n- Slide 2: [Type: CONTEXT] Context\n- Slide ${count}: [Type: CTA] Call to Action`;
+    }
 
     const userPrompt = `Create ${count} carousel slide concepts for this beauty appointment post.
 
@@ -120,10 +107,10 @@ ${narrativeTemplate}
 Return exactly this JSON shape:
 {
   "concepts": [
-    { "index": 1, "title": "01 · Cover", "headline": "Reveal Your Glow", "subheadline": "Ayurvedic Facial Therapy", "cta": "" },
-    { "index": 2, "title": "02 · The technique", "headline": "Deep Hydration", "subheadline": "Using active botanicals specific to our holistic approach", "cta": "" },
-    { "index": 3, "title": "03 · The result", "headline": "Glass Skin", "subheadline": "Safe, proven results with zero downtime", "cta": "" },
-    { "index": 4, "title": "04 · Book now", "headline": "Claim Your Slot", "subheadline": "", "cta": "Book via Link" }
+    { "index": 1, "slideType": "HOOK", "title": "01 · Cover", "headline": "Reveal Your Glow", "subheadline": "Ayurvedic Facial Therapy", "cta": "" },
+    { "index": 2, "slideType": "PROBLEM", "title": "02 · The technique", "headline": "Deep Hydration", "subheadline": "Using active botanicals specific to our holistic approach", "cta": "" },
+    { "index": 3, "slideType": "EXPLANATION", "title": "03 · The result", "headline": "Glass Skin", "subheadline": "Safe, proven results with zero downtime", "cta": "" },
+    { "index": 4, "slideType": "CTA", "title": "04 · Book now", "headline": "Claim Your Slot", "subheadline": "", "cta": "Book via Link" }
   ]
 }`;
 
@@ -146,6 +133,7 @@ Return exactly this JSON shape:
         const enrichedConcepts: CarouselSlideConcept[] = parsed.concepts.slice(0, 5).map((c: any) => ({
           index: c.index,
           title: c.title,
+          slideType: c.slideType || 'UNKNOWN',
           headline: c.headline || '',
           subheadline: c.subheadline || '',
           cta: c.cta || '',
@@ -153,18 +141,24 @@ Return exactly this JSON shape:
         }));
         return { concepts: enrichedConcepts };
       }
-    } catch {
-      // fallback below
+      return JSON.parse(cleaned) as CarouselConceptResult;
+    } catch (e) {
+      console.error('[CarouselConceptChain] Error generating slide concepts:', e);
+      // Dynamic fallback
+      const fallbackConcepts: CarouselSlideConcept[] = [];
+      fallbackConcepts.push({ index: 1, slideType: 'HOOK', title: '01 · Cover', headline: 'Reveal Your Glow', subheadline: 'Expert Care', cta: '', overlayText: 'Reveal Your Glow' });
+      if (count >= 3) {
+        fallbackConcepts.push({ index: 2, slideType: 'PROBLEM', title: '02 · Context', headline: 'Deep Hydration', subheadline: 'Using active botanicals', cta: '', overlayText: 'Deep Hydration' });
+      }
+      if (count >= 4) {
+        fallbackConcepts.push({ index: 3, slideType: 'EXPLANATION', title: '03 · Deep Dive', headline: 'Glass Skin', subheadline: 'Safe, proven results', cta: '', overlayText: 'Glass Skin' });
+      }
+      if (count === 5) {
+        fallbackConcepts.push({ index: 4, slideType: 'PRO_TIP', title: '04 · Value', headline: 'Zero Downtime', subheadline: 'Return to work immediately', cta: '', overlayText: 'Zero Downtime' });
+      }
+      fallbackConcepts.push({ index: count, slideType: 'CTA', title: `0${count} · Book now`, headline: 'Claim Your Slot', subheadline: '', cta: 'Book via Link', overlayText: 'Claim Your Slot' });
+      
+      return { concepts: fallbackConcepts };
     }
-
-    // Fallback: deterministic 4-slide structure
-    return {
-      concepts: [
-        { index: 1, title: '01 · Cover', headline: hookSentence.slice(0, 40), subheadline: 'See the transformation', cta: '', overlayText: hookSentence.slice(0, 40) },
-        { index: 2, title: '02 · The service', headline: serviceName.slice(0, 40), subheadline: 'Our signature approach', cta: '', overlayText: serviceName.slice(0, 40) },
-        { index: 3, title: '03 · The result', headline: 'The Result', subheadline: 'Flawless execution', cta: '', overlayText: 'The Result' },
-        { index: 4, title: '04 · Book now', headline: 'Book Today', subheadline: '', cta: callToAction.slice(0, 40), overlayText: callToAction.slice(0, 40) },
-      ],
-    };
   }
 }

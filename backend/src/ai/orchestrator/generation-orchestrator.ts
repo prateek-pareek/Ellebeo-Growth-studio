@@ -34,7 +34,7 @@ import type { GenerationJobPayload } from '../types/job-payload.types';
 import type { GenerationResult, ComponentStatus } from '../types/generation-result.types';
 import type { VisionAnalysisResult, CaptionGenerationResult, ReelScriptResult, PlatformVariantResult, ImageProcessingResult, VoiceoverResult } from '../types/chain-output.types';
 import { validateStateTransition } from '../types/job-payload.types';
-import type { JobState } from '../types/job-payload.types';
+import type { JobState, BusinessGoalType } from '../types/job-payload.types';
 
 function getTemplateIntent(pillar: string): 'educational' | 'promotion' | 'testimonial' | 'before_after' | 'brand_story' {
   switch (pillar) {
@@ -58,6 +58,7 @@ import { MoodboardVisionChain } from '../chains/moodboard-vision.chain';
 import { AssetLibraryVisionChain, type AssetLibraryItemInput } from '../chains/asset-library-vision.chain';
 import { TemplateAgentService } from '../services/template-agent.service';
 import { ImageEnhancementService } from '../services/image-enhancement.service';
+import { NarrativePlannerService } from '../services/narrative-planner.service';
 
 type NotifyFn = (dto: {
   tenantId: string;
@@ -98,6 +99,7 @@ export class GenerationOrchestrator {
   private readonly assetLibraryVisionChain: AssetLibraryVisionChain;
   private readonly templateAgent: TemplateAgentService;
   private readonly imageEnhancementService: ImageEnhancementService;
+  private readonly narrativePlanner: NarrativePlannerService;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -138,6 +140,7 @@ export class GenerationOrchestrator {
     this.assetLibraryVisionChain = new AssetLibraryVisionChain();
     this.templateAgent = new TemplateAgentService();
     this.imageEnhancementService = new ImageEnhancementService();
+    this.narrativePlanner = new NarrativePlannerService();
   }
 
   // --------------------------------------------------------------------------
@@ -232,6 +235,10 @@ export class GenerationOrchestrator {
         const imageUrl = (process.env['CLOUDINARY_CLOUD_NAME'] && primaryImage.cloudinaryPublicId)
           ? `https://res.cloudinary.com/${process.env['CLOUDINARY_CLOUD_NAME']}/image/upload/${primaryImage.cloudinaryPublicId}`
           : primaryImage.rawStoragePath;
+        if (imageUrl.includes('firebasestorage.app') && !imageUrl.includes('token=')) {
+          console.warn(`[Vision Task] The imageUrl is a Firebase Storage URL without a public download token. GPT Vision will likely fail with a 403 Forbidden: ${imageUrl}`);
+        }
+        
         const visionAnalysis = await this.visionChain.analyse({
           imageUrl,
           storagePath: primaryImage.rawStoragePath,
@@ -239,7 +246,8 @@ export class GenerationOrchestrator {
           cachedResult: primaryImage.visionAnalysisCache,
         });
         visionResult = visionAnalysis.result;
-      } catch {
+      } catch (error: any) {
+        console.error(`[Vision Task] Vision extraction failed silently. faceCoordinates will be undefined. Error: ${error?.message || error}`);
         // Non-fatal — caption still generated from appointment context
       }
     })();
@@ -760,6 +768,8 @@ ${consentShowFace
     if (isCarousel && captionResult) {
       await this.progressEmitter.emitSubProgress(jobId, tenantId, 'generating_text', 24, 'Building your carousel slides...');
       try {
+        const narrativeRecipe = this.narrativePlanner.getRecipe(payload.businessGoal as BusinessGoalType);
+
         const conceptResult = await this.carouselConceptChain.generate({
           hookSentence: captionResult.hookSentence || captionResult.caption.slice(0, 80),
           callToAction: captionResult.callToAction || 'Book your appointment today',
@@ -767,7 +777,8 @@ ${consentShowFace
           clientFirstName: appointment?.client?.firstName ?? undefined,
           businessGoal: payload.businessGoal,
           brandName: brandDNA.businessName,
-          slideCount: 4,
+          slideCount: narrativeRecipe.slideCount,
+          semanticFlow: narrativeRecipe.semanticFlow,
           brandVoice: extractBrandVoice(brandDNA),
         });
 
@@ -788,6 +799,7 @@ ${consentShowFace
             afterPhotoUrl,
             beforePhotoUrl,
             concepts: conceptResult.concepts,
+            semanticFlow: narrativeRecipe.semanticFlow,
             tenantId,
             businessName: brandDNA.businessName,
             brandColor: brandDNA.primaryBrandColor ?? '#1a1a1a',
