@@ -1016,7 +1016,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       const optFamily = (ctx.designLanguage?.intent?.family as any) || 'minimal';
       const behaviorProfile = (dsl as any)?.behavior;
       const constraints = layoutEngine.calculateConstraints(optFamily, 'balanced', false, behaviorProfile);
-      dsl = optimizer.optimize(dsl, constraints, ctx.w, ctx.h, faceBox, ctx.designLanguage?.intent?.visualPriority);
+      dsl = optimizer.optimize(dsl, constraints, ctx.w, ctx.h, faceBox, ctx.designLanguage?.intent?.visualPriority, ctx.structuredText);
     }
 
     if (!dsl || !dsl.layers) return '';

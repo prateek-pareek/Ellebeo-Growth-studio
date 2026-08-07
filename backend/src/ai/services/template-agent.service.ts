@@ -159,6 +159,10 @@ export class TemplateAgentService {
     templateIntent?: 'educational' | 'promotion' | 'testimonial' | 'before_after' | 'brand_story';
     slideType?: string;
     requiredTraits?: import('../services/narrative-planner.service').SemanticSlide['requiredTraits'];
+    /** True if an earlier slide in this same carousel/story already used the triptych photo split. */
+    triptychAlreadyUsed?: boolean;
+    /** Extensibility seam for a future BrandDNA Agent — no-op today unless populated. */
+    brandDNA?: any;
   }): Promise<{ selected_layout_id: string; reasoning: string; designSpec?: import('./template-engine/interfaces').ISemanticDesignSpec }> {
 
     const context: ITemplateContext & { slideType?: string; requiredTraits?: any } = {
@@ -204,9 +208,21 @@ export class TemplateAgentService {
       this.logger.log(`[Stage 4] Reduced to Top ${topCandidates.length} candidates for AI Art Director.`);
 
       // Stage 5: LLM Art Director
-      const candidateSummary = topCandidates.map(c =>
-        `- ID: ${c.id}\n  Concept: ${c.concept}\n  Why it fits: Ranked highly for ${context.aesthetic} aesthetic.`
-      ).join('\n\n');
+      // Ground each shortlisted candidate in real mined data BEFORE prompting, so the
+      // LLM cites real facts instead of inventing structural fields.
+      const groundingByCandidate = new Map<string, ICandidateGrounding>();
+      for (const c of topCandidates) {
+        const grounding = this.groundCandidate(c);
+        if (grounding) groundingByCandidate.set(c.id, grounding);
+      }
+
+      const candidateSummary = topCandidates.map(c => {
+        const grounding = groundingByCandidate.get(c.id);
+        const groundingLine = grounding
+          ? `\n  REAL MINED DATA (${grounding.source}${grounding.sampleFraction ? `, ${grounding.sampleFraction} samples` : ''}): balance=${grounding.balance}, readingFlow=${grounding.readingFlow}, energy=${grounding.energy}${grounding.decorationTypes?.length ? `, decorations=[${grounding.decorationTypes.join(', ')}]` : ''}${grounding.designRules?.length ? `, rules=[${grounding.designRules.join('; ')}]` : ''}`
+          : '';
+        return `- ID: ${c.id}\n  Concept: ${c.concept}\n  Why it fits: Ranked highly for ${context.aesthetic} aesthetic.${groundingLine}`;
+      }).join('\n\n');
 
       const systemPrompt = `
 You are an elite Visual Art Director.
@@ -226,6 +242,7 @@ CONTEXT:
 - Previously Used Layouts: ${params.excludeLayouts?.join(', ') || 'None'}
 ${params.gridConstraints ? `- GRID CONSTRAINTS: ${params.gridConstraints}` : ''}
 ${context.visionResult?.suitabilityScores ? `- PHOTO SUITABILITY: Technical Quality=${context.visionResult.suitabilityScores.technicalQuality}/100, Brand Compatibility=${context.visionResult.suitabilityScores.brandCompatibility}/100. CRITICAL: If Brand Compatibility is low (<50), choose a layout with heavy masks to hide the background.` : ''}
+${params.triptychAlreadyUsed ? `- TRIPTYCH ALREADY USED: An earlier slide in this carousel already used the 3-panel triptych photo split. Do NOT set photo.imageExecution="triptych" again — pick "standard" so slides don't all look visually identical.` : ''}
 
 BRIEF FOR THIS SLIDE:
 ${context.brief || 'Standard beautifully aesthetic post.'}
@@ -236,7 +253,7 @@ ${candidateSummary}
 INSTRUCTIONS:
 1. Select ONE layout ID from the shortlist above that flawlessly matches the Brand Aesthetic and Brief.
 2. Author a complete 'designSpec' (full schema below) describing composition, typography, hierarchy, spacing, alignment, visual emphasis, and your design philosophy for THIS specific slide.
-   - CRITICAL: If the image is a high quality portrait, and the aesthetic allows modern layouts, set 'photo.imageExecution = "triptych"' to slice the image into 3 vertical elegant panels.
+   - EXCEPTION, use rarely: 'photo.imageExecution = "triptych"' slices the image into 3 vertical panels. This is a deliberate, occasional stylistic choice for ONE slide at most in a whole carousel/story — not a default. Only pick it when the brief specifically calls for a fashion-editorial, multi-angle, or "process/journey" feel AND no earlier slide has used it (see TRIPTYCH ALREADY USED below). Default to "standard" otherwise, even for portrait photos.
    - Per the GROUNDING RULE above, set composition.balance and composition.readingFlow to match the cited REAL MINED DATA when present.
 3. Return strictly in valid JSON format.
 
