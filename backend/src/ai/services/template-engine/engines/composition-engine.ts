@@ -17,7 +17,8 @@ export class CompositionEngine {
   public calculateComposition(
     tokens: CompositionTokens | DesignTokens,
     intent: TemplateIntent,
-    isFirstSlide: boolean
+    isFirstSlide: boolean,
+    faceCoordinates?: { eyesYPercent: number; mouthYPercent?: number; }
   ): CompositionMetadata {
 
     // Helper to determine if we are using new or legacy tokens

@@ -63,8 +63,8 @@ export class GeometryCompiler {
     // enum ('medium' previously no-op'd) and now also covers 'editorial'/'technical'
     // hierarchies, not just 'bold'/'minimal'.
     const baseScale = canvasWidth;
-    let heroSize = behavior.heroBaseFontSize;
-    let bodySize = behavior.bodyBaseFontSize;
+    let heroSize = Math.round(behavior.heroBaseFontSize * (behavior.typographyScaleMultiplier || 1.0));
+    let bodySize = Math.round(behavior.bodyBaseFontSize * (behavior.typographyScaleMultiplier || 1.0));
 
     const dominanceScale: Record<string, number> = { low: 0.7, medium: 1.0, high: 1.3 };
     heroSize = Math.round(heroSize * (dominanceScale[designSpec?.typography?.dominance || 'medium'] ?? 1.0));

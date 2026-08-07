@@ -71,7 +71,7 @@ export class PrimitiveEngine {
         const profile = ctx.recipe?.split_seam_line;
         const strokeWidth = profile?.strokeWidth ?? 4;
         const opacity = profile?.opacity ?? 1.0;
-        
+
         // Find the split seam. Usually the image occupies one half.
         // If there's an image block in layoutState, use its edge.
         let splitX = ctx.w / 2;
@@ -306,7 +306,7 @@ export class PrimitiveEngine {
     this.registry['noise_texture'] = {
       category: 'effects',
       render: (ctx) => {
-        const intensity = ctx.behavior?.noiseIntensity || 0.15;
+        const intensity = ctx.behavior?.noiseIntensity || 0.20;
         return `
         <defs>
           <filter id="noiseFilter">
@@ -323,7 +323,7 @@ export class PrimitiveEngine {
       category: 'effects',
       render: (ctx) => {
         const profile = ctx.recipe?.paper_texture;
-        const opacity = profile?.opacity ?? 0.05;
+        const opacity = profile?.opacity ?? 0.20;
         const blendMode = ctx.behavior?.colorBlendingMode || 'multiply';
         return `
         <defs>
@@ -382,7 +382,7 @@ export class PrimitiveEngine {
         <!-- High-end film grain texture simulation -->
         <filter id="film_grain">
           <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch" />
-          <feColorMatrix type="matrix" values="1 0 0 0 0, 0 1 0 0 0, 0 0 1 0 0, 0 0 0 0.08 0" />
+          <feColorMatrix type="matrix" values="1 0 0 0 0, 0 1 0 0 0, 0 0 1 0 0, 0 0 0 0.20 0" />
         </filter>
         <rect width="100%" height="100%" filter="url(#film_grain)" style="mix-blend-mode: multiply;" pointer-events="none" />
       `
@@ -495,10 +495,10 @@ export class PrimitiveEngine {
         const anchorPoint = ctx.layoutState?.occupiedRegions?.find(r => r.role === 'heading') || { x: ctx.w / 2 - 150, y: ctx.h / 2 - 100, width: 300, height: 200 };
         const circleRadius = Math.max(anchorPoint.width, anchorPoint.height) * 0.7;
         const color = ctx.colorHierarchy ? ctx.colorHierarchy.accent : ctx.validSecondaryColor;
-        
+
         return `
         <!-- Minimalist Circular Frame -->
-        <circle cx="${anchorPoint.x + anchorPoint.width/2}" cy="${anchorPoint.y + anchorPoint.height/2}" r="${circleRadius}" stroke="${color}" stroke-width="1.5" fill="none" opacity="0.6" />
+        <circle cx="${anchorPoint.x + anchorPoint.width / 2}" cy="${anchorPoint.y + anchorPoint.height / 2}" r="${circleRadius}" stroke="${color}" stroke-width="1.5" fill="none" opacity="0.6" />
       `;
       }
     };
@@ -1111,7 +1111,7 @@ export class PrimitiveEngine {
       <filter id="noiseFilter">
         <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch" result="noise" />
         <!-- Convert to monochromatic noise -->
-        <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0 0 0 0.08 0" in="noise" />
+        <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0 0 0 0.20 0" in="noise" />
       </filter>
       <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" style="pointer-events:none;" filter="url(#noiseFilter)" />`;
       }
@@ -1120,9 +1120,9 @@ export class PrimitiveEngine {
     this.registry['paper_texture'] = {
       category: 'effects', render: (ctx, layer) => {
         const profile = ctx.recipe?.paper_texture;
-        const opacity = profile?.opacity ?? 0.05;
+        const opacity = profile?.opacity ?? 0.45;
         const blendMode = profile?.blendMode ?? 'multiply';
-        
+
         return `
       <!-- Paper Texture -->
       <filter id="paperFilter">
@@ -1412,10 +1412,12 @@ export class PrimitiveEngine {
     this.registry['dotted border'] = { category: 'geometry', render: (ctx) => `<rect x="${ctx.constraints.safeX}" y="${ctx.constraints.safeY}" width="${ctx.w - ctx.constraints.safeX * 2}" height="${ctx.h - ctx.constraints.safeY * 2}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="2" stroke-dasharray="4 4" />` };
     this.registry['dotted_border'] = this.registry['dotted border'];
 
-    this.registry['circular_frame'] = { category: 'geometry', render: (ctx) => {
-      const color = ctx.colorHierarchy ? ctx.colorHierarchy.accent : ctx.validBrandColor;
-      return `<circle cx="${ctx.w / 2}" cy="${ctx.h / 2}" r="200" fill="none" stroke="${color}" stroke-width="3" />`;
-    }};
+    this.registry['circular_frame'] = {
+      category: 'geometry', render: (ctx) => {
+        const color = ctx.colorHierarchy ? ctx.colorHierarchy.accent : ctx.validBrandColor;
+        return `<circle cx="${ctx.w / 2}" cy="${ctx.h / 2}" r="200" fill="none" stroke="${color}" stroke-width="3" />`;
+      }
+    };
     this.registry['circle'] = this.registry['circular_frame'];
 
     this.registry['film_strip'] = { category: 'illustration', render: (ctx) => `<g transform="translate(${ctx.constraints.safeX}, ${ctx.h / 2 - 50})"><rect width="200" height="100" fill="#111111" /><circle cx="15" cy="15" r="5" fill="#ffffff" /><circle cx="45" cy="15" r="5" fill="#ffffff" /><circle cx="15" cy="85" r="5" fill="#ffffff" /><circle cx="45" cy="85" r="5" fill="#ffffff" /></g>` };
@@ -1540,12 +1542,81 @@ export class PrimitiveEngine {
   }
 
 
+  /**
+   * Helper to extract the primary hex/rgb color from an SVG string for contrast analysis
+   */
+  private extractDominantColor(svg: string, fallback: string): string {
+    const match = svg.match(/fill="([^"]+)"/);
+    if (match && match[1] !== 'none' && match[1].startsWith('#')) {
+      return match[1];
+    }
+    const strokeMatch = svg.match(/stroke="([^"]+)"/);
+    if (strokeMatch && strokeMatch[1] !== 'none' && strokeMatch[1].startsWith('#')) {
+      return strokeMatch[1];
+    }
+    return fallback;
+  }
+
+  /**
+   * Simple relative luminance calculation for contrast scoring
+   */
+  private getLuminance(hexColor: string): number {
+    if (!hexColor || !hexColor.startsWith('#')) return 128; // Fallback mid-tone
+    let hex = hexColor.replace('#', '');
+    if (hex.length === 3) hex = hex.split('').map(char => char + char).join('');
+    if (hex.length !== 6) return 128;
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    return 0.299 * r + 0.587 * g + 0.114 * b;
+  }
+
   public renderPrimitive(name: string, ctx: PrimitiveContext, layer?: IDSLDecorationLayer | IDSLTextLayer): string {
     const primitive = this.registry[name];
     if (!primitive) {
       console.warn(`[PrimitiveEngine] Warning: Primitive '${name}' not found.`);
       return '';
     }
-    return primitive.render(ctx, layer);
+    
+    let rawSvg = primitive.render(ctx, layer);
+    if (!rawSvg.trim()) return '';
+
+    // ==========================================
+    // PRIMITIVE VISIBILITY ENGINE
+    // ==========================================
+    
+    const dominantColor = this.extractDominantColor(rawSvg, ctx.validBrandColor);
+    const bgColor = ctx.validBackgroundColor; 
+    
+    const primLum = this.getLuminance(dominantColor);
+    const bgLum = this.getLuminance(bgColor);
+    const contrast = Math.abs(primLum - bgLum);
+    
+    let visibility = 'HIGH';
+    let autoAdjusted = 'NO';
+    let adjustments: string[] = [];
+    
+    if (contrast < 45) {
+       visibility = 'LOW';
+       autoAdjusted = 'YES';
+       
+       // Inject adaptive drop-shadow to separate primitive from similar background
+       const shadowOpacity = bgLum > 180 ? '0.2' : '0.4';
+       rawSvg = `<g filter="drop-shadow(0 4px 12px rgba(0,0,0,${shadowOpacity}))">${rawSvg}</g>`;
+       adjustments.push('Shadow: enabled (strong)');
+       
+    } else if (contrast < 80) {
+       visibility = 'MEDIUM';
+       autoAdjusted = 'YES';
+       
+       // Inject soft shadow for subtle separation
+       const shadowOpacity = bgLum > 180 ? '0.1' : '0.2';
+       rawSvg = `<g filter="drop-shadow(0 2px 6px rgba(0,0,0,${shadowOpacity}))">${rawSvg}</g>`;
+       adjustments.push('Shadow: enabled (soft)');
+    }
+
+    console.log(`[PrimitiveEngine] Primitive: ${name} | Contrast: ${contrast.toFixed(1)} | Visibility: ${visibility} | Auto adjusted: ${autoAdjusted} ${adjustments.length ? '| ' + adjustments.join(', ') : ''}`);
+
+    return rawSvg;
   }
 }

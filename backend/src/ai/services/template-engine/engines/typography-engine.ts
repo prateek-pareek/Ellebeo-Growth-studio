@@ -56,22 +56,32 @@ export class TypographyEngine {
   constructor() {
     this.fontRegistry = new FontRegistry();
   }
-  
+
   /**
    * Main text rendering entry point that handles wrapping, styling, and safe-zone collision
    */
   public renderTextLayer(ctx: TypographyContext, layer: IDSLTextLayer): string {
     // 1. Map text layer ID to structured text fields if available
-    let rawText = ctx.overlayText || '';
+    let rawText = '';
 
-    if (ctx.structuredText) {
-      if (layer.id === 'headline' && ctx.structuredText.headline) rawText = ctx.structuredText.headline;
-      else if (layer.id === 'subheadline' && ctx.structuredText.subheadline) rawText = ctx.structuredText.subheadline;
-      else if (layer.id === 'cta' && ctx.structuredText.cta) rawText = ctx.structuredText.cta;
-      else if (layer.role === 'heading' && ctx.structuredText.headline) rawText = ctx.structuredText.headline;
-      else if (layer.role === 'tagline' && ctx.structuredText.subheadline) rawText = ctx.structuredText.subheadline;
-      else if (layer.role === 'footnote' && ctx.structuredText.cta) rawText = ctx.structuredText.cta;
-      else if (layer.role === 'body' && !ctx.overlayText && ctx.structuredText.headline) rawText = ctx.structuredText.headline;
+    if (ctx.structuredText && (ctx.structuredText.headline || ctx.structuredText.subheadline || ctx.structuredText.cta)) {
+      if (layer.id === 'headline' || layer.role === 'heading') rawText = ctx.structuredText.headline || '';
+      else if (layer.id === 'subheadline' || layer.role === 'tagline') rawText = ctx.structuredText.subheadline || '';
+      else if (layer.id === 'cta' || layer.role === 'footnote') rawText = ctx.structuredText.cta || '';
+      else if (layer.role === 'body') {
+        let overlay = ctx.overlayText || '';
+        if (ctx.structuredText.headline && overlay.includes(ctx.structuredText.headline)) {
+          overlay = overlay.replace(ctx.structuredText.headline, '').trim();
+        }
+        rawText = ctx.structuredText.subheadline || overlay;
+      }
+
+      // Deduplication safeguard: Prevent the CTA/Tagline from rendering the exact same massive string as the Headline
+      if (layer.role !== 'heading' && ctx.structuredText.headline && rawText === ctx.structuredText.headline) {
+        rawText = '';
+      }
+    } else {
+      rawText = ctx.overlayText || '';
     }
 
     if (!rawText) return '';
@@ -86,7 +96,7 @@ export class TypographyEngine {
     const isHeroHeading = layer.role === 'heading';
     // Remove "first word" chunking; we'll do balanced line splitting later in wrapText
     let textToWrap = rawText;
-    
+
     // 2. Resolve Base Style
     const style = this.resolveStyle(layer, ctx, textToWrap);
 
@@ -120,19 +130,19 @@ export class TypographyEngine {
 
     // If we don't have a rigid allocated box, dynamically constrain the width based on the anchor position
     if (!layer.allocatedBox) {
-        const tempAnchor = ctx.layoutEngine.resolveAnchor(layer.anchor, 0, 0, ctx.constraints);
-        if (anchor === 'start') {
-            const availableW = (ctx.w - ctx.constraints.safeX) - tempAnchor.x;
-            if (availableW > 100 && availableW < effectiveMaxW) effectiveMaxW = availableW;
-        } else if (anchor === 'middle') {
-            const distToLeft = tempAnchor.x - ctx.constraints.safeX;
-            const distToRight = (ctx.w - ctx.constraints.safeX) - tempAnchor.x;
-            const availableW = Math.min(distToLeft, distToRight) * 2;
-            if (availableW > 100 && availableW < effectiveMaxW) effectiveMaxW = availableW;
-        } else if (anchor === 'end') {
-            const availableW = tempAnchor.x - ctx.constraints.safeX;
-            if (availableW > 100 && availableW < effectiveMaxW) effectiveMaxW = availableW;
-        }
+      const tempAnchor = ctx.layoutEngine.resolveAnchor(layer.anchor, 0, 0, ctx.constraints);
+      if (anchor === 'start') {
+        const availableW = (ctx.w - ctx.constraints.safeX) - tempAnchor.x;
+        if (availableW > 100 && availableW < effectiveMaxW) effectiveMaxW = availableW;
+      } else if (anchor === 'middle') {
+        const distToLeft = tempAnchor.x - ctx.constraints.safeX;
+        const distToRight = (ctx.w - ctx.constraints.safeX) - tempAnchor.x;
+        const availableW = Math.min(distToLeft, distToRight) * 2;
+        if (availableW > 100 && availableW < effectiveMaxW) effectiveMaxW = availableW;
+      } else if (anchor === 'end') {
+        const availableW = tempAnchor.x - ctx.constraints.safeX;
+        if (availableW > 100 && availableW < effectiveMaxW) effectiveMaxW = availableW;
+      }
     }
 
     // Wrap text to determine actual lines and height BEFORE Y calculation
@@ -143,35 +153,20 @@ export class TypographyEngine {
     if (layer.allocatedBox && textHeight > layer.allocatedBox.height) {
       let attempts = 0;
       let currentFontSize = style.fontSize;
-      const minFontSize = style.fontSize * 0.85; // Max 15% shrink
+      const minFontSize = style.fontSize * 0.40; // Max 60% shrink
       const originalLineHeightMultiplier = lineHeight / style.fontSize;
-      
-      while (textHeight > layer.allocatedBox.height && currentFontSize > minFontSize && attempts < 3) {
-        currentFontSize = Math.floor(currentFontSize * 0.95); // 5% shrink per iteration
+
+      while (textHeight > layer.allocatedBox.height && currentFontSize > minFontSize && attempts < 10) {
+        currentFontSize = Math.floor(currentFontSize * 0.90); // 10% shrink per iteration
         lineHeight = Math.floor(currentFontSize * originalLineHeightMultiplier);
         style.fontSize = currentFontSize;
         escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, effectiveMaxW);
         textHeight = escapedLines.length * lineHeight;
         attempts++;
       }
-      
-      // Fallback: Smart Shortening
-      if (textHeight > layer.allocatedBox.height) {
-        if (layer.role === 'body' || layer.role === 'tagline' || layer.role === 'footnote') {
-          // Drop last sentence or truncate
-          const sentences = textToWrap.split('. ');
-          if (sentences.length > 1) {
-            textToWrap = sentences.slice(0, sentences.length - 1).join('. ') + '.';
-          } else {
-            textToWrap = textToWrap.substring(0, Math.floor(textToWrap.length * 0.7)) + '...';
-          }
-        } else if (layer.role === 'heading') {
-           textToWrap = textToWrap.substring(0, Math.floor(textToWrap.length * 0.75)) + '...';
-        }
-        
-        escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, effectiveMaxW);
-        textHeight = escapedLines.length * lineHeight;
-      }
+
+      // If it still overflows after maximum shrinkage, we gracefully accept the overflow instead of mutating the copy.
+      // We do NOT truncate the string with '...'.
     }
 
     let x = ctx.w / 2;
@@ -180,7 +175,7 @@ export class TypographyEngine {
     if (layer.allocatedBox) {
       x = layer.allocatedBox.x;
       y = layer.allocatedBox.y;
-      
+
       // Adjust X for SVG text-anchor relative to the box left edge
       if (anchor === 'middle') x = layer.allocatedBox.x + layer.allocatedBox.width / 2;
       if (anchor === 'end') x = layer.allocatedBox.x + layer.allocatedBox.width;
@@ -195,12 +190,12 @@ export class TypographyEngine {
       x = resolvedBox.x;
       y = resolvedBox.y;
       effectiveMaxW = resolvedBox.width;
-    
-    const anchorStr = (layer.anchor as string) || '';
+
+      const anchorStr = (layer.anchor as string) || '';
       // Fix bug: isCenterAnchor must check HORIZONTAL centering (_center, center, middle), 
       // NOT vertical keywords like 'top' or 'bottom' which misclassified top_left / bottom_left as centered!
       const isCenterAnchor = anchorStr.endsWith('_center') || anchorStr === 'center' || anchorStr === 'top_center' || anchorStr === 'bottom_center' || anchorStr === 'middle_center';
-      
+
       if (anchor === 'middle') {
         if (layer.anchor.includes('left')) x = ctx.constraints.safeX + effectiveMaxW / 2;
         else if (layer.anchor.includes('right')) x = ctx.w - ctx.constraints.safeX - effectiveMaxW / 2;
@@ -215,11 +210,11 @@ export class TypographyEngine {
     }
 
     // PHASE 2.5: SMART COMPOSITION (No Shrinking, No Failing)
-    
+
     // 1. Vertical Validation & Clamping
     // Dynamic reserve calculation based on canvas height (story vs square format)
     const effectiveFooterReserve = ctx.h > 1300 ? Math.round(ctx.h * 0.20) : BRANDING_FOOTER_RESERVE_PX;
-    
+
     // Sequential Y Stacking: Check if previous text regions already occupy space
     // and push this layer below them to prevent text collision
     if (!layer.allocatedBox && ctx.layoutState && ctx.layoutState.occupiedRegions.length > 0) {
@@ -233,7 +228,7 @@ export class TypographyEngine {
         }
       }
     }
-    
+
     if (y + textHeight > ctx.h - effectiveFooterReserve) {
       y = ctx.h - textHeight - effectiveFooterReserve;
     }
@@ -281,69 +276,69 @@ export class TypographyEngine {
     let finalSvg = '';
 
     // Geometry locked. Get Font metrics for baseline.
-      const fontBehavior = this.fontRegistry.getBehavior(ctx.brandFont);
-      const baselineRatio = fontBehavior.baseline || 0.75;
-      const baselineY = y + style.fontSize * baselineRatio;
+    const fontBehavior = this.fontRegistry.getBehavior(ctx.brandFont);
+    const baselineRatio = fontBehavior.baseline || 0.75;
+    const baselineY = y + style.fontSize * baselineRatio;
 
-      // 5. Generate SVG
-      const content = escapedLines.map((line: string, idx: number) => {
-        return `<tspan x="${x}" dy="${idx === 0 ? 0 : lineHeight}">${line}</tspan>`;
-      }).join('');
+    // 5. Generate SVG
+    const content = escapedLines.map((line: string, idx: number) => {
+      return `<tspan x="${x}" dy="${idx === 0 ? 0 : lineHeight}">${line}</tspan>`;
+    }).join('');
 
-      let strokeAddition = '';
-      if (layer.role === 'heading' && fontBehavior.requiresFauxStrokeForDominance) {
-        strokeAddition = ` stroke="${style.fill}" stroke-width="2" stroke-linejoin="round" `;
+    let strokeAddition = '';
+    if (layer.role === 'heading' && fontBehavior.requiresFauxStrokeForDominance) {
+      strokeAddition = ` stroke="${style.fill}" stroke-width="2" stroke-linejoin="round" `;
+    }
+
+    let transformStr = '';
+    if (layer.rotation) {
+      transformStr = ` transform="rotate(${layer.rotation} ${x} ${baselineY})"`;
+    }
+
+    let opacityStr = '';
+    if ((layer as any).opacity !== undefined) {
+      opacityStr = ` opacity="${(layer as any).opacity}"`;
+    }
+    let containerSvg = '';
+    if (layer.component === 'pill_label' || layer.component === 'solid_card' || layer.component === 'inset_card') {
+      const padX = layer.component === 'pill_label' ? 24 : 40;
+      const padY = layer.component === 'pill_label' ? 12 : 30;
+      const radius = layer.component === 'pill_label' ? (textHeight + padY * 2) / 2 : (layer.component === 'inset_card' ? 8 : 0);
+
+      let bgFill = '#FFFFFF';
+      if (ctx.colorHierarchy) {
+        bgFill = layer.role === 'heading' ? ctx.colorHierarchy.cardSurface : ctx.colorHierarchy.accent;
+        // Ensure text contrasts with the new background
+        style.fill = layer.role === 'heading' ? ctx.colorHierarchy.primaryText : ctx.colorHierarchy.primaryBackground;
       }
 
-      let transformStr = '';
-      if (layer.rotation) {
-        transformStr = ` transform="rotate(${layer.rotation} ${x} ${baselineY})"`;
-      }
-
-      let opacityStr = '';
-      if ((layer as any).opacity !== undefined) {
-        opacityStr = ` opacity="${(layer as any).opacity}"`;
-      }
-      let containerSvg = '';
-      if (layer.component === 'pill_label' || layer.component === 'solid_card' || layer.component === 'inset_card') {
-        const padX = layer.component === 'pill_label' ? 24 : 40;
-        const padY = layer.component === 'pill_label' ? 12 : 30;
-        const radius = layer.component === 'pill_label' ? (textHeight + padY * 2) / 2 : (layer.component === 'inset_card' ? 8 : 0);
-        
-        let bgFill = '#FFFFFF';
-        if (ctx.colorHierarchy) {
-           bgFill = layer.role === 'heading' ? ctx.colorHierarchy.cardSurface : ctx.colorHierarchy.accent;
-           // Ensure text contrasts with the new background
-           style.fill = layer.role === 'heading' ? ctx.colorHierarchy.primaryText : ctx.colorHierarchy.primaryBackground;
-        }
-
-        containerSvg = `
+      containerSvg = `
           <!-- Structural Container: ${layer.component} -->
           <rect x="${boxX - padX}" y="${y - padY}" width="${effectiveMaxW + padX * 2}" height="${textHeight + padY * 2}" rx="${radius}" fill="${bgFill}" filter="url(#premium_shadow)" />
         `;
-      }
+    }
 
-      finalSvg = `${containerSvg}<text x="${x}" y="${baselineY}" text-anchor="${anchor}" class="overlay-text" style="font-family: ${style.fontFamily}; font-size: ${style.fontSize}px; fill: ${style.fill}; font-weight: ${style.fontWeight}; font-style: ${style.fontStyle}; letter-spacing: ${style.letterSpacing};" filter="url(#premium_shadow)"${strokeAddition}${transformStr}${opacityStr}>${content}</text>`;
+    finalSvg = `${containerSvg}<text x="${x}" y="${baselineY}" text-anchor="${anchor}" class="overlay-text" style="font-family: ${style.fontFamily}; font-size: ${style.fontSize}px; fill: ${style.fill}; font-weight: ${style.fontWeight}; font-style: ${style.fontStyle}; letter-spacing: ${style.letterSpacing};" filter="url(#premium_shadow)"${strokeAddition}${transformStr}${opacityStr}>${content}</text>`;
 
-      // Write to Shared Layout State
-      if (ctx.layoutState) {
-        ctx.layoutState.occupiedRegions.push({
-          id: layer.id,
-          role: layer.role,
-          x: boxX,
-          y: y,
-          width: maxW,
-          height: textHeight,
-          baseline: baselineY,
-          fontSize: style.fontSize,
-          lineHeight: lineHeight,
-          zIndex: layer.zIndex,
-          visualWeight: style.fontWeight,
-          opticalCenter: { x: boxX + maxW / 2, y: y + textHeight / 2 }
-        });
-      }
+    // Write to Shared Layout State
+    if (ctx.layoutState) {
+      ctx.layoutState.occupiedRegions.push({
+        id: layer.id,
+        role: layer.role,
+        x: boxX,
+        y: y,
+        width: maxW,
+        height: textHeight,
+        baseline: baselineY,
+        fontSize: style.fontSize,
+        lineHeight: lineHeight,
+        zIndex: layer.zIndex,
+        visualWeight: style.fontWeight,
+        opticalCenter: { x: boxX + maxW / 2, y: y + textHeight / 2 }
+      });
+    }
 
-      return finalSvg;
+    return finalSvg;
   }
 
   /**
@@ -369,7 +364,7 @@ export class TypographyEngine {
     if (layerObj.fontSize) {
       fontSize = layerObj.fontSize;
     }
-    
+
     if (layerObj.tracking !== undefined) {
       letterSpacing = `${layerObj.tracking}em`;
     }
@@ -453,7 +448,7 @@ export class TypographyEngine {
       let layerMaxWidth = ctx.constraints.contentMaxWidth;
       if ((layer as any).maxWidthPercent) layerMaxWidth = Math.round(ctx.w * ((layer as any).maxWidthPercent / 100));
       const maxAvailableWidth = Math.min(layerMaxWidth, ctx.constraints.contentMaxWidth);
-      
+
       // Use realistic char ratio (0.62 for uppercase bold headlines)
       const maxFontSizeForLongestWord = maxAvailableWidth / (longestWord.length * 0.62);
       if (fontSize > maxFontSizeForLongestWord) {
@@ -470,7 +465,7 @@ export class TypographyEngine {
   private wrapText(text: string, fontSize: number, layer: IDSLTextLayer, ctx: TypographyContext, resolvedMaxWidth?: number): string[] {
     // Realistic character width multiplier for uppercase/bold fonts
     const estimatedCharWidth = fontSize * 0.62;
-    
+
     let layerMaxWidth = resolvedMaxWidth || ctx.constraints.contentMaxWidth;
     if (!resolvedMaxWidth && (layer as any).maxWidthPercent) {
       layerMaxWidth = Math.round(ctx.w * ((layer as any).maxWidthPercent / 100));
@@ -478,7 +473,7 @@ export class TypographyEngine {
 
     const maxAvailableWidth = Math.min(layerMaxWidth, ctx.constraints.contentMaxWidth);
     let maxCharsPerLine = Math.max(8, Math.floor(maxAvailableWidth / estimatedCharWidth));
-    
+
     // BEHAVIORAL DESIGN: Dominance Stacking
     // Premium editorial design forces massive headlines to stack vertically rather than stretch wide.
     if (layer.role === 'heading') {
@@ -488,7 +483,7 @@ export class TypographyEngine {
         maxCharsPerLine = Math.min(maxCharsPerLine, 18);
       }
     }
-    
+
     const words = text.split(/\s+/);
     let smartLines: string[] = [];
 
@@ -507,10 +502,10 @@ export class TypographyEngine {
           bestSplitIndex = i;
         }
       }
-      
+
       const line1 = words.slice(0, bestSplitIndex + 1).join(' ');
       const line2 = words.slice(bestSplitIndex + 1).join(' ');
-      
+
       if (line1.length <= maxCharsPerLine && line2.length <= maxCharsPerLine) {
         smartLines = [line1, line2];
       }
@@ -538,7 +533,7 @@ export class TypographyEngine {
       .replace(/'/g, '&apos;');
 
     const esc = ctx.escapeXml || defaultEscape;
-    
+
     return smartLines.map(line => {
       let transformed = line;
       const casingRule = (layer as any).capitalizationRule || ctx.typographyTokens?.casing || 'natural';
@@ -554,7 +549,7 @@ export class TypographyEngine {
   // ==========================================
   // TYPOGRAPHY PRIMITIVES
   // ==========================================
-  
+
   public renderOversizedIndex(index: string, ctx: TypographyContext): string {
     const { safeX, safeY } = ctx.constraints;
     return `

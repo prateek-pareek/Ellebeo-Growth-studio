@@ -14,7 +14,7 @@ import type { VisionAnalysisResult } from '../types/chain-output.types';
 import type { ModelRouter } from '../orchestrator/model-router';
 import { wrapSystemPrompt } from '../config/platform-system-prompt';
 
-const VISION_PROMPT_VERSION = 'v2.3';
+const VISION_PROMPT_VERSION = 'v2.4';
 
 // Zod-validated output schema enforcer (inline for strict mode)
 function parseVisionOutput(raw: string): VisionAnalysisResult {
@@ -53,7 +53,12 @@ function parseVisionOutput(raw: string): VisionAnalysisResult {
         eyesYPercent: coords.eyesYPercent,
         mouthYPercent: coords.mouthYPercent
       };
+      console.log(`[Vision Model] Successfully extracted face coordinates: Eyes at ${coords.eyesYPercent}%, Mouth at ${coords.mouthYPercent}%`);
+    } else {
+      console.log(`[Vision Model] GPT returned malformed faceCoordinates:`, coords);
     }
+  } else {
+    console.log(`[Vision Model] No faceCoordinates detected by GPT in this image.`);
   }
 
   if (!result.servicePerformed) {
@@ -129,7 +134,13 @@ export class VisionAnalysisChain {
     if (cachedResult) {
       try {
         const parsed = JSON.parse(cachedResult) as VisionAnalysisResult;
-        return { result: parsed, fromCache: true };
+        if (parsed.faceCoordinates) {
+          console.log(`[Vision Model] CACHE HIT: Successfully extracted face coordinates: Eyes at ${parsed.faceCoordinates.eyesYPercent}%, Mouth at ${parsed.faceCoordinates.mouthYPercent}%`);
+          return { result: parsed, fromCache: true };
+        } else {
+          console.log(`[Vision Model] CACHE HIT: No faceCoordinates detected in cached result. Forcing re-evaluation...`);
+          // Fall through to re-evaluation
+        }
       } catch {
         // Corrupted cache — fall through to DB check
       }
@@ -225,7 +236,14 @@ Be specific. Vague answers like 'hair was coloured' or 'skin looks better' are u
         return null;
       }
 
-      return record.result as unknown as VisionAnalysisResult;
+      const parsed = record.result as unknown as VisionAnalysisResult;
+      if (parsed.faceCoordinates) {
+        console.log(`[Vision Model] DB CACHE HIT: Successfully extracted face coordinates: Eyes at ${parsed.faceCoordinates.eyesYPercent}%, Mouth at ${parsed.faceCoordinates.mouthYPercent}%`);
+        return parsed;
+      } else {
+        console.log(`[Vision Model] DB CACHE HIT: No faceCoordinates detected in cached result. INVALIDATING DB CACHE...`);
+        return null;
+      }
     } catch {
       return null;
     }

@@ -48,6 +48,12 @@ export interface ITemplateContext {
   templateIntent?: 'educational' | 'promotion' | 'testimonial' | 'before_after' | 'brand_story';
   visualRanking?: string[];
   activeTheme?: string;
+  slideType?: string;
+  requiredTraits?: {
+    visualPriority?: string;
+    energy?: string;
+    readingFlow?: string;
+  };
 }
 
 export interface ITemplateRetriever {
