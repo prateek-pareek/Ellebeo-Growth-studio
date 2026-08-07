@@ -114,6 +114,49 @@ export class ColorCompositionEngine {
     return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
   }
 
+  private getContrastRatio(hex1: string, hex2: string): number {
+    const l1 = this.getLuminance(this.cleanHex(hex1));
+    const l2 = this.getLuminance(this.cleanHex(hex2));
+    const lighter = Math.max(l1, l2);
+    const darker = Math.min(l1, l2);
+    return (lighter + 0.05) / (darker + 0.05);
+  }
+
+  public resolveForegroundColor(surfaceHex: string, palette: ColorPalette): string {
+    const brand = this.cleanHex(palette.brandColor || '#CBBFB1');
+    const secondary = this.cleanHex(palette.secondaryColor || '#F6EEE4');
+    const accent = this.cleanHex(palette.accentColor || brand);
+    const depth = this.cleanHex(palette.depthColor || '#111111');
+
+    const candidates = [
+      { color: depth, role: 'Depth' },
+      { color: brand, role: 'Primary' },
+      { color: accent, role: 'Accent' },
+      { color: secondary, role: 'Secondary' }
+    ];
+
+    let bestContrast = 0;
+    let bestColor = '#FFFFFF';
+
+    for (const candidate of candidates) {
+      const contrast = this.getContrastRatio(surfaceHex, candidate.color);
+      if (contrast > bestContrast) {
+        bestContrast = contrast;
+        bestColor = candidate.color;
+      }
+    }
+
+    // WCAG AA for normal text is 4.5:1. For large text/graphics, 3.0:1 is acceptable.
+    // If our best semantic color passes the minimum threshold, use it.
+    if (bestContrast >= 3.0) {
+      return bestColor;
+    }
+
+    // Emergency fallback: pure white or pure black
+    const surfaceLum = this.getLuminance(this.cleanHex(surfaceHex));
+    return surfaceLum > 0.5 ? '#111111' : '#FFFFFF';
+  }
+
   private isWhite(hex: string): boolean {
     return hex.toUpperCase() === '#FFFFFF' || this.getLuminance(hex) > 0.95;
   }

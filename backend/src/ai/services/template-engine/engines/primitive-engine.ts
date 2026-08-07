@@ -132,7 +132,7 @@ export class PrimitiveEngine {
         const padding = ctx.behavior?.dividerPadding || 60;
         return `
           <line x1="${ctx.w / 2 - padding}" y1="${ctx.h / 2 + 100}" x2="${ctx.w / 2 + padding}" y2="${ctx.h / 2 + 100}" stroke="${ctx.validBrandColor}" stroke-width="${weight}" opacity="0.5" />
-          <circle cx="${ctx.w / 2}" cy="${ctx.h / 2 + 100}" r="${weight * 2}" fill="${ctx.validBackgroundColor}" stroke="${ctx.validBrandColor}" stroke-width="${weight}" />
+          <circle cx="${ctx.w / 2}" cy="${ctx.h / 2 + 100}" r="${weight * 2}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="${weight}" />
         `;
       }
     };
@@ -149,7 +149,7 @@ export class PrimitiveEngine {
           <circle cx="0" cy="0" r="55" fill="${ctx.validSecondaryColor}" stroke="${ctx.validBrandColor}" stroke-width="1.5" stroke-dasharray="2 4" />
           <path id="badge-curve" d="M -40,0 A 40,40 0 1,1 40,0 A 40,40 0 1,1 -40,0" fill="none" />
           <!-- SVG <textPath> can be added in typography-engine, but we draw a small icon or text here -->
-          <circle cx="0" cy="0" r="40" fill="${ctx.validBackgroundColor}" fill-opacity="0.9" />
+          <circle cx="0" cy="0" r="40" fill="${ctx.validSecondaryColor}" fill-opacity="0.95" />
           <text x="0" y="5" font-family="serif" font-style="italic" font-size="14" fill="${ctx.validBrandColor}" text-anchor="middle">NEW</text>
         </g>
         `;
@@ -295,7 +295,7 @@ export class PrimitiveEngine {
     this.registry['film_sprockets'] = {
       category: 'effects',
       render: (ctx) => `
-        <g fill="${ctx.validBackgroundColor}" opacity="0.7">
+        <g fill="${ctx.validSecondaryColor}" opacity="0.6">
           ${Array.from({ length: 20 }).map((_, i) => `<rect x="15" y="${i * 60 + 20}" width="12" height="30" rx="2" />`).join('')}
           ${Array.from({ length: 20 }).map((_, i) => `<rect x="${ctx.w - 27}" y="${i * 60 + 20}" width="12" height="30" rx="2" />`).join('')}
         </g>
@@ -393,8 +393,8 @@ export class PrimitiveEngine {
       render: (ctx) => `
         <!-- Semi-transparent masking tape holding up the image -->
         <g transform="translate(${ctx.w / 2}, ${ctx.constraints.safeY - 10}) rotate(-3)">
-          <rect x="-60" y="-15" width="120" height="30" fill="${ctx.validBackgroundColor}" opacity="0.9" filter="drop-shadow(0 2px 4px rgba(0,0,0,0.2))" />
-          <rect x="-60" y="-15" width="120" height="30" fill="${ctx.validBrandColor}" opacity="0.1" />
+          <rect x="-60" y="-15" width="120" height="30" fill="#FFFFFF" opacity="0.85" filter="drop-shadow(0 2px 4px rgba(0,0,0,0.2))" />
+          <rect x="-60" y="-15" width="120" height="30" fill="${ctx.validBrandColor}" opacity="0.05" />
           <!-- Jagged edges -->
           <path d="M-60 -15 L-57 -5 L-60 5 L-58 15 M60 -15 L57 -5 L60 5 L58 15" stroke="${ctx.validSecondaryColor}" stroke-width="2" fill="none" opacity="0.5" />
         </g>
@@ -563,8 +563,8 @@ export class PrimitiveEngine {
         <!-- Carousel Swipe Indicator -->
         <g transform="translate(${ctx.w - ctx.constraints.safeX - 60}, ${ctx.h - ctx.constraints.safeY - 20})">
           <circle cx="0" cy="0" r="25" fill="${ctx.validBrandColor}" opacity="0.9" />
-          <path d="M 5,-8 L 13,0 L 5,8" fill="none" stroke="${ctx.validBackgroundColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-          <line x1="-12" y1="0" x2="12" y2="0" stroke="${ctx.validBackgroundColor}" stroke-width="2" stroke-linecap="round" />
+          <path d="M 5,-8 L 13,0 L 5,8" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          <line x1="-12" y1="0" x2="12" y2="0" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" />
         </g>
       `
     };
@@ -614,7 +614,7 @@ export class PrimitiveEngine {
       category: 'layout', render: (ctx) => `
       <!-- Masking Tape Overlay -->
       <g transform="translate(${ctx.w / 2}, 30) rotate(-2)">
-        <rect x="-80" y="0" width="160" height="35" fill="${ctx.validBackgroundColor}" opacity="0.85" filter="drop-shadow(0 2px 4px rgba(0,0,0,0.1))" />
+        <rect x="-80" y="0" width="160" height="35" fill="#FFFFFF" opacity="0.85" filter="drop-shadow(0 2px 4px rgba(0,0,0,0.1))" />
         <path d="M-80 0 Q-75 17 -80 35 M80 0 Q75 17 80 35" stroke="${ctx.validSecondaryColor}" stroke-width="1.5" fill="none" opacity="0.3" />
       </g>`
     };

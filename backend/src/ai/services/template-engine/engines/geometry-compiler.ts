@@ -60,34 +60,62 @@ export class GeometryCompiler {
 
     const contentMaxWidth = canvasWidth - (safeX * 2);
 
-    // 2. TYPOGRAPHY SCALING (Proportional Strategy)
-    const baseScale = canvasWidth;
+    // 2. TYPOGRAPHY SCALING (Top-Down Hierarchy Curve Strategy)
     let heroSize = Math.round(behavior.heroBaseFontSize * (behavior.typographyScaleMultiplier || 1.0));
-    let bodySize = Math.round(behavior.bodyBaseFontSize * (behavior.typographyScaleMultiplier || 1.0));
 
-    if (designSpec?.typography?.dominance === 'high') {
-      heroSize = Math.round(heroSize * 1.3);
-    } else if (designSpec?.typography?.dominance === 'low') {
-      heroSize = Math.round(heroSize * 0.7);
+    // A. Visual Dominance (Modify Hero Size based on Priority)
+    let dominanceScale = 1.0;
+    if (designSpec?.typography?.dominance === 'high' || designSpec?.composition?.visualPriority === 'typography_hero') {
+      dominanceScale = 1.35;
+    } else if (designSpec?.typography?.dominance === 'low' || designSpec?.composition?.visualPriority === 'image_hero') {
+      dominanceScale = 0.75;
+    } else if (designSpec?.composition?.visualPriority === 'cta_hero') {
+      dominanceScale = 0.85; // CTA takes priority, typography yields slightly
+    }
+    
+    heroSize = Math.round(heroSize * dominanceScale);
+
+    // B. Typography Hierarchy Curve (Determine derivatives from Hero)
+    let curve = { primary: 0.45, secondary: 0.30, body: 0.18, metadata: 0.12 };
+    let trackingHero: string | number = behavior.trackingHero;
+    let trackingMetadata: string | number = behavior.trackingMetadata;
+
+    if (designSpec?.typography?.hierarchy === 'editorial') {
+      heroSize = Math.round(heroSize * 1.3); // Editorials have massive heroes
+      curve = { primary: 0.45, secondary: 0.30, body: 0.18, metadata: 0.12 };
+      trackingHero = 'wide';
+    } else if (designSpec?.typography?.hierarchy === 'bold') {
+      heroSize = Math.round(heroSize * 1.15);
+      curve = { primary: 0.50, secondary: 0.35, body: 0.22, metadata: 0.15 };
+      trackingHero = 'tight';
+    } else if (designSpec?.typography?.hierarchy === 'minimal') {
+      heroSize = Math.round(heroSize * 0.9);
+      curve = { primary: 0.55, secondary: 0.40, body: 0.28, metadata: 0.16 };
+      trackingHero = 'standard';
+    } else if (designSpec?.typography?.hierarchy === 'technical') {
+      curve = { primary: 0.50, secondary: 0.35, body: 0.25, metadata: 0.15 };
+      trackingHero = 'standard';
     }
 
-    if (designSpec?.typography?.hierarchy === 'bold') {
-      bodySize = Math.round(bodySize * 1.2);
-    } else if (designSpec?.typography?.hierarchy === 'minimal') {
-      bodySize = Math.round(bodySize * 0.8);
+    // Minimum body size clamp for accessibility
+    let bodySize = Math.round(heroSize * curve.body);
+    if (bodySize < 20) {
+      bodySize = 20;
+      // Recalculate hero to maintain proportion if body was clamped
+      heroSize = Math.round(bodySize / curve.body);
     }
 
     const typography = {
       heroSize: heroSize,
-      primarySize: Math.round(bodySize * 1.5),
-      secondarySize: Math.round(bodySize * 1.2),
+      primarySize: Math.round(heroSize * curve.primary),
+      secondarySize: Math.round(heroSize * curve.secondary),
       bodySize: bodySize,
-      metadataSize: behavior.metadataBaseFontSize,
+      metadataSize: Math.round(heroSize * curve.metadata),
       
       heroLineHeight: behavior.lineHeightMultiplier,
       bodyLineHeight: behavior.lineHeightMultiplier,
-      heroTracking: `${behavior.trackingHero}em`,
-      metadataTracking: `${behavior.trackingMetadata}em`,
+      heroTracking: typeof trackingHero === 'number' ? `${trackingHero}em` : trackingHero,
+      metadataTracking: typeof trackingMetadata === 'number' ? `${trackingMetadata}em` : trackingMetadata,
     };
 
     // 3. ALIGNMENT (Composition Strategy)

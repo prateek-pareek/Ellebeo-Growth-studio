@@ -27,7 +27,7 @@ export const AI_CONFIG = {
       provider: 'openai' as const,
       modelId: 'gemini-2.5-flash',
       temperature: 0.2,       // low — vision output should be factual
-      maxTokens: 512,
+      maxTokens: 2048,
       timeoutMs: 45_000,
     },
     reelScript: {

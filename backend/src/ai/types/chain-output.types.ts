@@ -27,6 +27,15 @@ export interface VisionAnalysisResult {
     brandCompatibility: number;
     composition: number;
   };
+  
+  // ==========================================
+  // FUTURE EXTENSIBILITY (PHASE 2)
+  // ==========================================
+  safeZones?: Array<{ x: number; y: number; width: number; height: number; type?: string }>;
+  whitespaceRegions?: Array<{ x: number; y: number; width: number; height: number }>;
+  focalPoint?: { x: number; y: number; description?: string };
+  dominantColors?: string[];
+  compositionType?: string;
 }
 
 // ---------------------------------------------------------------------------

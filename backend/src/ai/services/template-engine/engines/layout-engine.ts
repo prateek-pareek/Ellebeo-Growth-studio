@@ -286,6 +286,121 @@ export class LayoutEngine {
   }
 
   /**
+   * Generates all maximal empty rectangles (candidate regions) in the canvas by subtracting obstacles.
+   */
+  public generateCandidateRegions(constraints: LayoutConstraints, occupiedRegions: BoundingBox[] = []): BoundingBox[] {
+    const safeZone: BoundingBox = {
+      x: constraints.safeX,
+      y: constraints.safeY,
+      width: this.canvasWidth - (constraints.safeX * 2),
+      height: this.canvasHeight - (constraints.safeY * 2)
+    };
+
+    let candidates = [safeZone];
+    const obstacles = [...occupiedRegions];
+
+    // Add face box as an obstacle with a halo
+    if (this.faceBox) {
+      const halo = 40; // Default face halo
+      obstacles.push({
+        x: Math.max(0, this.faceBox.x - halo),
+        y: Math.max(0, this.faceBox.y - halo),
+        width: this.faceBox.width + (halo * 2),
+        height: this.faceBox.height + (halo * 2)
+      });
+    }
+
+    for (const obs of obstacles) {
+      let nextCandidates: BoundingBox[] = [];
+      for (const c of candidates) {
+        const overlapX = obs.x < c.x + c.width && obs.x + obs.width > c.x;
+        const overlapY = obs.y < c.y + c.height && obs.y + obs.height > c.y;
+
+        if (overlapX && overlapY) {
+          // Split candidate into up to 4 sub-rectangles avoiding the obstacle
+          if (obs.y > c.y) {
+            nextCandidates.push({ x: c.x, y: c.y, width: c.width, height: obs.y - c.y });
+          }
+          if (obs.y + obs.height < c.y + c.height) {
+            nextCandidates.push({ x: c.x, y: obs.y + obs.height, width: c.width, height: (c.y + c.height) - (obs.y + obs.height) });
+          }
+          if (obs.x > c.x) {
+            nextCandidates.push({ x: c.x, y: c.y, width: obs.x - c.x, height: c.height });
+          }
+          if (obs.x + obs.width < c.x + c.width) {
+            nextCandidates.push({ x: obs.x + obs.width, y: c.y, width: (c.x + c.width) - (obs.x + obs.width), height: c.height });
+          }
+        } else {
+          nextCandidates.push(c);
+        }
+      }
+      
+      // Filter subsumed rectangles
+      candidates = nextCandidates.filter((c1, i, arr) => {
+        // Is c1 strictly contained in any other rectangle c2?
+        return !arr.some((c2, j) => 
+          i !== j &&
+          c1.x >= c2.x &&
+          c1.y >= c2.y &&
+          c1.x + c1.width <= c2.x + c2.width &&
+          c1.y + c1.height <= c2.y + c2.height
+        );
+      });
+    }
+
+    // Filter out candidates that are too small to be useful (e.g. height < 80)
+    return candidates.filter(c => c.height >= 80 && c.width >= 100);
+  }
+
+  /**
+   * Evaluates a candidate region based on semantic intent and returns a score.
+   */
+  public scoreRegion(
+    candidate: BoundingBox, 
+    intent: { readingFlow?: string; visualPriority?: string; role?: string },
+    layerHeight: number
+  ): number {
+    let score = 10.0;
+    
+    // 1. Whitespace Quality (Size)
+    // Larger regions are generally better, especially for heroes
+    const area = candidate.width * candidate.height;
+    const canvasArea = this.canvasWidth * this.canvasHeight;
+    score += (area / canvasArea) * 5.0; // Bonus up to +5
+
+    // 2. Face Safety is inherently guaranteed by generateCandidateRegions
+
+    // 3. Reading Flow
+    const isTopHalf = candidate.y < this.canvasHeight / 2;
+    const isBottomHalf = candidate.y + candidate.height > this.canvasHeight / 2;
+    const isLeftHalf = candidate.x < this.canvasWidth / 2;
+    
+    if (intent.readingFlow === 'z_pattern') {
+      if (intent.role === 'heading' && isTopHalf && isLeftHalf) score += 3.0;
+      if (intent.role === 'footnote' && isBottomHalf) score += 3.0;
+    } else if (intent.readingFlow === 'center_down') {
+      const isCentered = candidate.x + (candidate.width / 2) > (this.canvasWidth / 2) - 100 &&
+                         candidate.x + (candidate.width / 2) < (this.canvasWidth / 2) + 100;
+      if (isCentered) score += 2.0;
+      if (intent.role === 'heading' && isTopHalf) score += 2.0;
+    }
+
+    // 4. Role-specific heuristics
+    if (intent.role === 'heading') {
+      if (candidate.height < layerHeight) score -= 10.0; // Cannot fit
+      // Headings prefer top/middle
+      if (isBottomHalf && !isTopHalf) score -= 2.0; 
+    }
+
+    if (intent.role === 'footnote' || intent.role === 'tagline') {
+      // Secondary elements usually don't want to float at the very top unless it's a specific layout
+      if (isTopHalf && !isBottomHalf) score -= 1.0;
+    }
+
+    return score;
+  }
+
+  /**
    * Resolves absolute X, Y coordinates from semantic layout anchors using Whitespace Topology.
    */
   public resolveAnchor(
@@ -325,7 +440,8 @@ export class LayoutEngine {
    */
   public allocateRegions(
     behavior: { imageBleedExtent?: string; readingJourney?: string },
-    constraints: LayoutConstraints
+    constraints: LayoutConstraints,
+    visualPriority: string = 'image_hero'
   ): { imageRegion: BoundingBox; textRegion: BoundingBox } {
     const isZPattern = behavior.readingJourney === 'z_pattern';
     
@@ -333,8 +449,18 @@ export class LayoutEngine {
     let imageRegion: BoundingBox = { x: 0, y: 0, width: this.canvasWidth, height: this.canvasHeight };
     let textRegion: BoundingBox = { x: constraints.safeX, y: constraints.safeY, width: constraints.contentMaxWidth, height: this.canvasHeight - constraints.safeY * 2 };
 
+    // Phase 6: Dynamic Typography Scaling
+    // Maximum Text Area = Visual Priority × Whitespace × Image Importance
+    let textRatio = 0.50; // Base 50/50 split
+    if (visualPriority === 'typography_hero') textRatio = 0.65;
+    else if (visualPriority === 'image_hero') textRatio = 0.30;
+    else if (visualPriority === 'cta_hero') textRatio = 0.55;
+
+    // Introduce slight randomness or saliency-based jitter to the ratio so it feels organic
+    textRatio += (Math.random() * 0.08) - 0.04;
+
     if (behavior.imageBleedExtent === 'asymmetrical_65') {
-      const splitW = Math.floor(this.canvasWidth * (isZPattern ? 0.65 : 0.35));
+      const splitW = Math.floor(this.canvasWidth * (isZPattern ? textRatio : (1.0 - textRatio)));
       if (isZPattern) {
         // Image on Left, Text on Right
         imageRegion = { x: 0, y: 0, width: splitW, height: this.canvasHeight };

@@ -21,6 +21,7 @@ export interface TypographyContext {
   typographyTokens?: TypographyTokens; // NEW ARCHITECTURE
   layoutState?: import('../interfaces').ILayoutState;
   colorHierarchy?: import('./color-composition-engine').ColorHierarchy;
+  designSpec?: import('../interfaces').ISemanticDesignSpec;
   typographyMetrics?: {
     heroSize: number;
     primarySize: number;
@@ -48,7 +49,7 @@ export interface TypographyContext {
 // dip into it. This engine has no access to that behavior profile to compute
 // the exact figure, so reserve generously for the worst case instead of
 // precisely replicating cross-file math here.
-const BRANDING_FOOTER_RESERVE_PX = 300;
+const BRANDING_FOOTER_RESERVE_PX = 120;
 
 export class TypographyEngine {
   private fontRegistry: FontRegistry;
@@ -85,6 +86,19 @@ export class TypographyEngine {
     }
 
     if (!rawText) return '';
+
+    // STRICT DEDUPLICATION SAFEGUARD:
+    // If the pipeline passes down a single flat string (overlayText) and this layout has multiple
+    // text layers (e.g. heading + footnote), they will BOTH fall back to the exact same string.
+    // We check our LayoutState and abort if we've already rendered this exact string on this slide.
+    if (ctx.layoutState?.renderedStrings?.includes(rawText)) {
+      return '';
+    }
+    
+    // Register the string so subsequent layers on this slide don't duplicate it
+    if (ctx.layoutState && ctx.layoutState.renderedStrings) {
+      ctx.layoutState.renderedStrings.push(rawText);
+    }
 
     const casingRule = (layer as any).capitalizationRule || ctx.typographyTokens?.casing || 'natural';
     if (casingRule === 'force_uppercase') {
@@ -221,7 +235,17 @@ export class TypographyEngine {
       const textRegions = ctx.layoutState.occupiedRegions.filter(r => r.role === 'heading' || r.role === 'tagline' || r.role === 'body' || r.role === 'footnote');
       if (textRegions.length > 0) {
         const lastTextRegion = textRegions[textRegions.length - 1];
-        const stackedY = lastTextRegion.y + (lastTextRegion.height || 0) + 30; // 30px inter-element gap
+        
+        // Vertical Rhythm & Cluster Spacing (DesignSpec Driven)
+        let rhythmMultiplier = 0.6;
+        if (ctx.designSpec?.composition?.negativeSpace === 'large' || ctx.designSpec?.composition?.negativeSpace === 'massive') {
+          rhythmMultiplier = 1.5; // Huge breathing room between elements
+        } else if (ctx.designSpec?.composition?.negativeSpace === 'minimal') {
+          rhythmMultiplier = 0.3; // Tight clustering
+        }
+
+        const interElementGap = Math.round(style.fontSize * rhythmMultiplier); // Rhythmic gap based on font size
+        const stackedY = lastTextRegion.y + (lastTextRegion.height || 0) + interElementGap;
         // Only stack if the new layer would collide with the previous one
         if (Math.abs(y - lastTextRegion.y) < (lastTextRegion.height || 60) + 20) {
           y = stackedY;
@@ -341,6 +365,140 @@ export class TypographyEngine {
     return finalSvg;
   }
 
+  public renderTextGroupLayer(ctx: TypographyContext, groupLayer: import('../interfaces').IDSLTextGroupLayer): string {
+    let groupSvg = '';
+    let currentLocalY = 0;
+    let groupMaxWidth = 0;
+    
+    interface ChildRenderData {
+      svg: string;
+      localY: number;
+      localX: number;
+      width: number;
+      height: number;
+    }
+    
+    const childrenData: ChildRenderData[] = [];
+    const maxW = groupLayer.maxWidthPercent ? Math.round(ctx.w * (groupLayer.maxWidthPercent / 100)) : ctx.constraints.contentMaxWidth;
+
+    // 1. Process each child text layer to calculate local layout
+    for (const child of groupLayer.children) {
+      // Resolve text content first (same logic as single layer)
+      let rawText = '';
+      if (ctx.structuredText && (ctx.structuredText.headline || ctx.structuredText.subheadline || ctx.structuredText.cta)) {
+        if (child.role === 'heading') rawText = ctx.structuredText.headline || '';
+        else if (child.role === 'tagline') rawText = ctx.structuredText.subheadline || '';
+        else if (child.role === 'footnote') rawText = ctx.structuredText.cta || '';
+        else if (child.role === 'body') {
+          let overlay = ctx.overlayText || '';
+          if (ctx.structuredText.headline && overlay.includes(ctx.structuredText.headline)) {
+            overlay = overlay.replace(ctx.structuredText.headline, '').trim();
+          }
+          rawText = ctx.structuredText.subheadline || overlay;
+        }
+        if (child.role !== 'heading' && ctx.structuredText.headline && rawText === ctx.structuredText.headline) {
+          rawText = ''; // Deduplication
+        }
+      } else {
+        rawText = ctx.overlayText || '';
+      }
+
+      if (!rawText || ctx.layoutState?.renderedStrings?.includes(rawText)) continue;
+      if (ctx.layoutState && ctx.layoutState.renderedStrings) {
+        ctx.layoutState.renderedStrings.push(rawText);
+      }
+
+      const style = this.resolveStyle(child, ctx, rawText);
+      let lineHeightMultiplier = 1.35;
+      if ((child as any).lineHeight !== undefined) lineHeightMultiplier = (child as any).lineHeight;
+      else if (child.role === 'heading') lineHeightMultiplier = ctx.typographyMetrics?.heroLineHeight || 1.18;
+      else if (child.role === 'body') lineHeightMultiplier = ctx.typographyMetrics?.bodyLineHeight || 1.35;
+      
+      const escapedLines = this.wrapText(rawText, style.fontSize, child, ctx, maxW);
+      const lineHeight = Math.round(style.fontSize * lineHeightMultiplier);
+      const textHeight = escapedLines.length * lineHeight;
+      const childMaxW = Math.min(...escapedLines.map(l => l.length * (style.fontSize * 0.6))); // Rough width estimation
+
+      if (childMaxW > groupMaxWidth) groupMaxWidth = childMaxW;
+
+      let childSvg = `<text font-family="${style.fontFamily}" font-size="${style.fontSize}px" font-weight="${style.fontWeight}" font-style="${style.fontStyle}" fill="${style.fill}" letter-spacing="${style.letterSpacing}" text-anchor="${groupLayer.alignment === 'center' ? 'middle' : groupLayer.alignment === 'right' ? 'end' : 'start'}">`;
+      for (let i = 0; i < escapedLines.length; i++) {
+        const line = escapedLines[i];
+        let dx = '0';
+        if (groupLayer.alignment === 'center') dx = '50%';
+        else if (groupLayer.alignment === 'right') dx = '100%';
+        childSvg += `<tspan x="${dx}" dy="${i === 0 ? '1em' : lineHeight}">${ctx.escapeXml ? ctx.escapeXml(line) : line}</tspan>`;
+      }
+      childSvg += `</text>`;
+
+      childrenData.push({
+        svg: childSvg,
+        localY: currentLocalY,
+        localX: 0,
+        width: childMaxW,
+        height: textHeight
+      });
+
+      // Add inter-element rhythmic gap for next child
+      const interElementGap = Math.round(style.fontSize * 0.6);
+      currentLocalY += textHeight + interElementGap;
+    }
+
+    if (childrenData.length === 0) return '';
+
+    // Remove the trailing gap from the total height
+    const lastChild = childrenData[childrenData.length - 1];
+    const totalGroupHeight = lastChild.localY + lastChild.height;
+
+    // 2. Global Positioning for the ENTIRE Group
+    const baseAnchorResult = ctx.layoutEngine.resolveAnchor(groupLayer.anchor, 0, totalGroupHeight, ctx.constraints);
+    let x = baseAnchorResult.x;
+    let y = baseAnchorResult.y;
+
+    const targetBox = { x, y, width: groupMaxWidth, height: totalGroupHeight };
+    const resolvedBox = ctx.layoutEngine.resolveFaceCollision(targetBox, ctx.constraints, (ctx as any).family);
+    x = resolvedBox.x;
+    y = resolvedBox.y;
+    groupMaxWidth = resolvedBox.width;
+
+    // Alignment offsets relative to the anchor
+    const anchorStr = (groupLayer.anchor as string) || '';
+    const isCenterAnchor = anchorStr.endsWith('_center') || anchorStr === 'center' || anchorStr === 'top_center' || anchorStr === 'bottom_center' || anchorStr === 'middle_center';
+    
+    if (groupLayer.alignment === 'center') {
+      if (groupLayer.anchor.includes('left')) x = ctx.constraints.safeX + groupMaxWidth / 2;
+      else if (groupLayer.anchor.includes('right')) x = ctx.w - ctx.constraints.safeX - groupMaxWidth / 2;
+      else x = ctx.w / 2;
+    } else if (groupLayer.alignment === 'right') {
+      if (groupLayer.anchor.includes('left')) x = ctx.constraints.safeX + groupMaxWidth;
+      else if (isCenterAnchor) x = ctx.w / 2 + groupMaxWidth / 2;
+      else x = ctx.w - ctx.constraints.safeX;
+    } else if (groupLayer.alignment === 'left') {
+      if (isCenterAnchor) x = ctx.w / 2 - groupMaxWidth / 2;
+    }
+
+    // 3. Render the group
+    groupSvg += `<g transform="translate(${x}, ${y})">`;
+    for (const child of childrenData) {
+      groupSvg += `<g transform="translate(0, ${child.localY})">${child.svg}</g>`;
+    }
+    groupSvg += `</g>`;
+
+    // 4. Update Layout State
+    if (ctx.layoutState) {
+      ctx.layoutState.occupiedRegions.push({
+        id: groupLayer.id,
+        role: groupLayer.role,
+        x, y,
+        width: groupMaxWidth,
+        height: totalGroupHeight,
+        zIndex: groupLayer.zIndex
+      });
+    }
+
+    return groupSvg;
+  }
+
   /**
    * Resolves the font properties depending on the typographical system, layer role, and DSL properties.
    */
@@ -373,7 +531,9 @@ export class TypographyEngine {
     if (!layerObj.fontSize) {
       if (role === 'heading') {
         fontSize = ctx.typographyMetrics ? ctx.typographyMetrics.heroSize : 72;
-      } else if (role === 'tagline' || role === 'footnote') {
+      } else if (role === 'tagline') {
+        fontSize = ctx.typographyMetrics ? ctx.typographyMetrics.secondarySize : 24;
+      } else if (role === 'footnote') {
         fontSize = ctx.typographyMetrics ? ctx.typographyMetrics.metadataSize : 16;
       } else if (role === 'body') {
         fontSize = ctx.typographyMetrics ? ctx.typographyMetrics.bodySize : 18;

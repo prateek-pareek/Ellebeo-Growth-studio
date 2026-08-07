@@ -92,8 +92,8 @@ export class CompositionEngine {
 
     } else if (layoutId === 'editorial_portrait_hero') {
       layers.push({ id: 'port_image', type: 'image', zIndex: 10, mask: 'rectangle', anchor: 'top_center', paddingPercent: 5, allowedAnchors: ['top_center'] } as IDSLImageLayer);
-      layers.push({ id: 'port_title', type: 'text', zIndex: 30, anchor: 'center', role: 'heading', alignment: 'center', maxWidthPercent: 80 } as IDSLTextLayer);
-      layers.push({ id: 'port_caption', type: 'text', zIndex: 31, anchor: 'bottom_center', role: 'tagline', alignment: 'center', maxWidthPercent: 60 } as IDSLTextLayer);
+      layers.push({ id: 'port_title', type: 'text', zIndex: 30, anchor: 'center', role: 'heading', alignment: 'center', maxWidthPercent: 85 } as IDSLTextLayer);
+      layers.push({ id: 'port_caption', type: 'text', zIndex: 31, anchor: 'bottom_center', role: 'tagline', alignment: 'center', maxWidthPercent: 80 } as IDSLTextLayer);
 
     } else if (layoutId === 'editorial_split') {
       layers.push({ id: 'split_image', type: 'image', zIndex: 10, mask: 'rectangle', anchor: 'middle_left', paddingPercent: 0 } as IDSLImageLayer);
@@ -1623,7 +1623,8 @@ export class CompositionEngine {
     } else if (layoutId === 'premium_cta_poster') {
       layers.push({ id: 'prem_cta_bg', type: 'image', zIndex: 10, mask: 'full_bleed', paddingPercent: 0, anchor: 'center' } as IDSLImageLayer);
       layers.push({ id: 'prem_cta_title', type: 'text', zIndex: 30, anchor: 'center', role: 'heading', alignment: 'center', maxWidthPercent: 90 } as IDSLTextLayer);
-      layers.push({ id: 'prem_cta_caption', type: 'text', zIndex: 31, anchor: 'bottom_center', role: 'footnote', alignment: 'center', maxWidthPercent: 50 } as IDSLTextLayer);
+      // Upgraded role from footnote to body to ensure CTA is highly visible and legible.
+      layers.push({ id: 'prem_cta_caption', type: 'text', zIndex: 31, anchor: 'bottom_center', role: 'body', alignment: 'center', maxWidthPercent: 80 } as IDSLTextLayer);
       layers.push({ id: 'prem_cta_badge', type: 'decoration', zIndex: 35, component: 'handmade_mark', anchor: 'top_right' } as IDSLDecorationLayer);
 
       // ==========================================

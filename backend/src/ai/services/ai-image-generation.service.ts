@@ -29,6 +29,7 @@ import { ThemeEngine } from './template-engine/engines/theme-engine';
 import { CompositionEngine, TemplateIntent } from './template-engine/engines/composition-engine';
 import { ArtDirectionEngine } from './template-engine/engines/art-direction-engine';
 import { GeometryCompiler } from './template-engine/engines/geometry-compiler';
+import { ColorCompositionEngine } from './template-engine/engines/color-composition-engine';
 
 const openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
 
@@ -306,6 +307,7 @@ export class AiImageGenerationService {
   private readonly themeEngine: ThemeEngine;
   private readonly compositionEngine: CompositionEngine;
   private readonly artDirectionEngine: ArtDirectionEngine;
+  private readonly colorCompositionEngine: ColorCompositionEngine;
   private readonly geometryCompiler: GeometryCompiler;
 
   constructor() {
@@ -313,6 +315,7 @@ export class AiImageGenerationService {
     this.themeEngine = new ThemeEngine();
     this.compositionEngine = new CompositionEngine();
     this.artDirectionEngine = new ArtDirectionEngine();
+    this.colorCompositionEngine = new ColorCompositionEngine();
     this.geometryCompiler = new GeometryCompiler();
   }
 
@@ -1339,13 +1342,21 @@ CRITICAL IMAGE REQUIREMENTS:
       const surfaceLuminance = getLuminance(textSurfaceColor);
       const isLightSurface = surfaceLuminance > 150; 
       
-      // If the surface is light, always use the Depth color (e.g. charcoal black #393939) for text.
-      // Only fall back to Background Color (light) if the surface is dark.
-      let dynamicTextColor = isLightSurface ? depthBrandColor : validBackgroundColor;
+      const colorPalette = {
+        brandColor: validBrandColor,
+        secondaryColor: validSecondaryColor,
+        backgroundColor: validBackgroundColor,
+        accentColor: validAccentColor,
+        depthColor: validDepthColor,
+        textColor: validDepthColor,
+      };
 
+      // Use semantic color resolution to guarantee contrast and brand compliance
+      let dynamicTextColor = isLightSurface ? validDepthColor : this.colorCompositionEngine.resolveForegroundColor(textSurfaceColor, colorPalette);
+      
       const footerLuminance = getLuminance(validSecondaryColor);
       const isLightFooter = footerLuminance > 150;
-      const dynamicFooterTextColor = isLightFooter ? depthBrandColor : validBackgroundColor;
+      const dynamicFooterTextColor = isLightFooter ? validDepthColor : this.colorCompositionEngine.resolveForegroundColor(validSecondaryColor, colorPalette);
 
       let posterTextColor = '#FFFFFF';
       try {
@@ -1467,7 +1478,7 @@ CRITICAL IMAGE REQUIREMENTS:
               ${brandFontFace}
               ${bodyFontFace}
               
-              .overlay-text { font-family: '${brandFont}', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 38px; font-weight: 800; letter-spacing: ${headingLetterSpacing}; line-height: 1.3; }
+              .overlay-text { font-family: '${brandFont}', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
               .text-centered { text-anchor: middle; }
               .text-left { text-anchor: start; }
               .footer-bg { fill: ${validSecondaryColor}; }

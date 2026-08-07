@@ -44,7 +44,7 @@ export class CompositionOptimizer {
     }
 
     const isZPattern = dsl.id.includes('z_pattern');
-    const regions = layoutEngine.allocateRegions({ imageBleedExtent, readingJourney: isZPattern ? 'z_pattern' : 'linear' }, constraints);
+    const regions = layoutEngine.allocateRegions({ imageBleedExtent, readingJourney: isZPattern ? 'z_pattern' : 'linear' }, constraints, visualPriority);
 
     // Store regions in the DSL for Renderers to use
     optimized.canvasRegions = regions;
@@ -64,53 +64,87 @@ export class CompositionOptimizer {
       let estimatedHeight = 120;
       if (txtLayer.role === 'heading') estimatedHeight = 300;
       else if (txtLayer.role === 'body') estimatedHeight = 180;
+      else if (txtLayer.role === 'footnote') estimatedHeight = 80;
 
-      let targetRegion: any = regions.textRegion;
-      let x = 0, y = 0;
-
-      // If this is a secondary element and we have a heading, cluster it
-      if (headingBox && txtLayer.role !== 'heading' && !txtLayer.anchor?.includes('bottom_edge')) {
-        // Cluster relative to heading
-        x = headingBox.x;
-        // Stack below the heading
-        y = headingBox.y + headingBox.height + 20;
-
-        // If the heading was centered, keep this centered
-        if (txtLayer.anchor === 'center' || txtLayer.anchor?.includes('center')) {
-          // Leave x as is, TypograpyEngine handles center text-anchor internally
-        }
-      } else {
-        // Primary placement (Heading) using Semantic Whitespace Topology
-        const anchorResult = layoutEngine.resolveAnchor(
-          txtLayer.anchor || 'middle_left',
-          0,
-          estimatedHeight,
-          constraints,
-          targetRegion
-        );
-        x = anchorResult.x;
-        y = anchorResult.y;
-      }
-
-      // Allocate strict bounding box inside textRegion
-      txtLayer.allocatedBox = {
-        x,
-        y,
-        width: regions.textRegion.width,
-        height: estimatedHeight
+      const intent = {
+        readingFlow: isZPattern ? 'z_pattern' : 'center_down',
+        visualPriority,
+        role: txtLayer.role
       };
 
-      const family = (dsl as any).id?.split('_')[0] || 'minimal';
-      const originalY = txtLayer.allocatedBox.y;
-      txtLayer.allocatedBox = layoutEngine.resolveFaceCollision(txtLayer.allocatedBox, constraints, family as any);
-      
-      if (txtLayer.allocatedBox.y !== originalY) {
-        console.log(`[CompositionOptimizer] Text collision detected with face box! Moved '${txtLayer.role}' text from Y=${originalY} to Y=${txtLayer.allocatedBox.y}`);
+      let placed = false;
+      const faceHalo = 40;
+      const fBox = (layoutEngine as any).faceBox;
+
+      // 1. Constraint Stack: Try to stack directly below the previous anchor (if secondary)
+      if (headingBox && txtLayer.role !== 'heading' && !txtLayer.anchor?.includes('bottom_edge')) {
+        const candidateStackBox = {
+          x: headingBox.x,
+          y: headingBox.y + headingBox.height + 20,
+          width: headingBox.width,
+          height: estimatedHeight
+        };
+
+        // Check face collision
+        let hitFace = false;
+        if (fBox) {
+          const fx = Math.max(0, fBox.x - faceHalo);
+          const fy = Math.max(0, fBox.y - faceHalo);
+          const fw = fBox.width + (faceHalo * 2);
+          const fh = fBox.height + (faceHalo * 2);
+
+          const overlapX = candidateStackBox.x < fx + fw && candidateStackBox.x + candidateStackBox.width > fx;
+          const overlapY = candidateStackBox.y < fy + fh && candidateStackBox.y + candidateStackBox.height > fy;
+          hitFace = overlapX && overlapY;
+        }
+
+        const hitBottom = candidateStackBox.y + candidateStackBox.height > canvasHeight - constraints.safeY;
+
+        if (!hitFace && !hitBottom) {
+          txtLayer.allocatedBox = candidateStackBox;
+          placed = true;
+          // Daisy chain: next element stacks below this one
+          headingBox = txtLayer.allocatedBox;
+        } else {
+          console.log(`[CompositionOptimizer] Stack blocked for '${txtLayer.role}'. HitFace: ${hitFace}, HitBottom: ${hitBottom}. Breaking to new candidate region.`);
+        }
       }
 
-      if (txtLayer.role === 'heading') {
-        headingBox = txtLayer.allocatedBox;
+      // 2. Score & Place (Max Score Allocation)
+      if (!placed) {
+        const candidates = layoutEngine.generateCandidateRegions(constraints, (optimized as any)._occupied || []);
+        let bestCandidate: any = null;
+        let bestScore = -999;
+
+        for (const c of candidates) {
+          const score = layoutEngine.scoreRegion(c, intent, estimatedHeight);
+          if (score > bestScore) {
+            bestScore = score;
+            bestCandidate = c;
+          }
+        }
+
+        if (bestCandidate) {
+          txtLayer.allocatedBox = {
+            x: bestCandidate.x,
+            y: bestCandidate.y,
+            width: bestCandidate.width,
+            height: estimatedHeight
+          };
+          console.log(`[CompositionOptimizer] Allocated '${txtLayer.role}' to Region { x: ${Math.round(bestCandidate.x)}, y: ${Math.round(bestCandidate.y)} } with score ${bestScore}`);
+        } else {
+          txtLayer.allocatedBox = { x: constraints.safeX, y: constraints.safeY, width: 300, height: estimatedHeight };
+          console.warn(`[CompositionOptimizer] No valid candidate regions for '${txtLayer.role}'. Used fallback.`);
+        }
+
+        if (txtLayer.role === 'heading' || txtLayer.role === 'footnote') {
+          headingBox = txtLayer.allocatedBox;
+        }
       }
+
+      // Reserve this specific allocated box so future candidate regions subtract it
+      if (!(optimized as any)._occupied) (optimized as any)._occupied = [];
+      (optimized as any)._occupied.push(txtLayer.allocatedBox);
     }
 
     // Balance Checks: Is whitespace balanced? Does the headline overpower?

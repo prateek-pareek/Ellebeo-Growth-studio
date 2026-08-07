@@ -76,6 +76,10 @@ export class DesignCompiler {
       if (spec.photo.treatment === 'floating') {
         imageLayer.paddingPercent = Math.min(14, (imageLayer.paddingPercent || 8) + 2);
       }
+
+      if (spec.photo.imageExecution === 'triptych') {
+        imageLayer.layoutMode = 'triptych';
+      }
     }
 
     // 2. Composition Strategy Compiler — subtle whitespace adjustments
@@ -126,7 +130,37 @@ export class DesignCompiler {
       }
     }
 
-    // 4. Decoration Strategy — preserve template integrity without unrequested auto-injections
+    // 4. Decoration Strategy — Enforce Decoration Policy based on density
+    if (spec.decorations) {
+      let allowedCount = 5;
+      let opacityMultiplier = 1.0;
+
+      if (spec.decorations.density === 'none' || spec.decorations.density === 'low') {
+        allowedCount = 0;
+        opacityMultiplier = 0.0;
+      } else if (spec.decorations.density === 'medium') {
+        allowedCount = 1;
+        opacityMultiplier = 0.7;
+      } else if (spec.decorations.density === 'high') {
+        allowedCount = 3;
+        opacityMultiplier = 1.2;
+      }
+
+      let currentDecoCount = 0;
+      compiledDsl.layers = compiledDsl.layers.filter(layer => {
+        if (layer.type === 'decoration') {
+          // Allow functional/structural borders, but limit heavy noise/shapes
+          const isStructural = ['structural_border', 'thin_divider', 'divider'].includes(layer.component || '');
+          if (!isStructural) {
+            currentDecoCount++;
+            if (currentDecoCount > allowedCount) return false;
+            // Optionally mutate opacity if the layer supported it, for now we just filter count
+          }
+        }
+        return true;
+      });
+    }
+
     return compiledDsl;
   }
 }

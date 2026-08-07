@@ -138,11 +138,13 @@ JSON SCHEMA:
       "imageExecution": "standard" // Can be "triptych" for multi-panel splits
     },
     "typography": {
-      "hierarchy": "editorial",
+      "hierarchy": "editorial", // Must be exactly one of: "editorial", "bold", "minimal", "technical"
       "dominance": "high",
       "headlineTreatment": "standard"
     },
-    "decorations": { "density": "medium" },
+    "decorations": { 
+      "density": "medium" // Must be exactly one of: "none", "low", "medium", "high"
+    },
     "style": { "mood": "warm_paper" // Must be exactly one of: "warm_paper", "luxury_black", "clinical_white", "vibrant_pop" }
   }
 }

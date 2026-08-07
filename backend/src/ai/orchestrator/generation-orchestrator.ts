@@ -235,9 +235,7 @@ export class GenerationOrchestrator {
         const imageUrl = (process.env['CLOUDINARY_CLOUD_NAME'] && primaryImage.cloudinaryPublicId)
           ? `https://res.cloudinary.com/${process.env['CLOUDINARY_CLOUD_NAME']}/image/upload/${primaryImage.cloudinaryPublicId}`
           : primaryImage.rawStoragePath;
-        if (imageUrl.includes('firebasestorage.app') && !imageUrl.includes('token=')) {
-          console.warn(`[Vision Task] The imageUrl is a Firebase Storage URL without a public download token. GPT Vision will likely fail with a 403 Forbidden: ${imageUrl}`);
-        }
+        
         
         const visionAnalysis = await this.visionChain.analyse({
           imageUrl,

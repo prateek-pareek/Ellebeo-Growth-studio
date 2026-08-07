@@ -263,9 +263,42 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
       const imageLayer = dsl.layers.find(l => l.type === 'image') as IDSLImageLayer;
 
       if (imageLayer) {
+        if (imageLayer.layoutMode === 'triptych') {
+          // CANVA-STYLE TRIPTYCH: Split the photo into 3 distinct vertical panels
+          const panelW = Math.floor(ctx.w * 0.28);
+          const gap = Math.floor(ctx.w * 0.04);
+          const startX = Math.floor((ctx.w - (panelW * 3 + gap * 2)) / 2);
+          const panelH = Math.floor(ctx.h * 0.75);
+          const startY = Math.floor((ctx.h - panelH) / 2);
+
+          const fullPhoto = await processPortraitFit(ctx.imageBuffer, ctx.w, ctx.h, ctx.validBackgroundColor);
+
+          const extractPanel = async (x: number) => {
+            return sharp(fullPhoto).extract({ left: x, top: startY, width: panelW, height: panelH }).toBuffer();
+          };
+
+          const p1 = await extractPanel(startX);
+          const p2 = await extractPanel(startX + panelW + gap);
+          const p3 = await extractPanel(startX + (panelW + gap) * 2);
+
+          const baseImageBuffer = await sharp({
+            create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validBackgroundColor },
+          }).composite([
+            { input: p1, top: startY, left: startX },
+            { input: p2, top: startY, left: startX + panelW + gap },
+            { input: p3, top: startY, left: startX + (panelW + gap) * 2 },
+          ]).png().toBuffer();
+
+          return {
+            baseImage: sharp(baseImageBuffer),
+            compositeTop: dsl.canvasRegions ? dsl.canvasRegions.textRegion.y : 0,
+            compositeBottom: 0,
+            compositeLeft: dsl.canvasRegions ? dsl.canvasRegions.textRegion.x : 0,
+            compositeRight: ctx.w - (dsl.canvasRegions ? dsl.canvasRegions.textRegion.x + dsl.canvasRegions.textRegion.width : ctx.w)
+          };
+        }
+
         // AI ART DIRECTION UPGRADE: Region-Based Extraction
-        // If the optimizer successfully allocated rigorous Image and Text Regions,
-        // use those explicit mathematical coordinates.
         if (dsl.canvasRegions && (!imageLayer.mask || imageLayer.mask === 'rectangle' || imageLayer.mask === 'split')) {
           const region = dsl.canvasRegions.imageRegion;
 
@@ -995,10 +1028,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       const faceWidth = Math.round(ctx.w * 0.45);
       const faceX = Math.round((ctx.w - faceWidth) / 2);
       faceBox = { x: faceX, y: faceTop, width: faceWidth, height: faceHeight };
-      
       console.log(`[LayoutRenderer] Applied GPT face coordinates. Computed FaceBox for avoidance:`, faceBox);
-    } else {
-      console.log(`[LayoutRenderer] No faceCoordinates provided to renderer. Text will not dodge faces.`);
     }
 
     // Phase 2.6: Composition Optimizer
@@ -1101,7 +1131,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       validBackgroundColor: ctx.validBackgroundColor,
       constraints,
       behavior: behaviorProfile,
-      layoutState: { occupiedRegions: [], family },
+      layoutState: { occupiedRegions: [], family, renderedStrings: [] },
       colorHierarchy,
       recipe: visualRecipe.primitive
     };
@@ -1175,9 +1205,24 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           colorHierarchy,
           designTokens: ctx.designTokens,
           typographyMetrics: ctx.typographyMetrics,
+          designSpec: ctx.designSpec,
           escapeXml: (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
         };
         svg += typographyEngine.renderTextLayer(typoCtx, textLayer);
+      } else if (layer.type === 'text_group') {
+        const textGroupLayer = layer as import('../services/template-engine/interfaces').IDSLTextGroupLayer;
+        const typoCtx: import('../services/template-engine/engines/typography-engine').TypographyContext = {
+          ...ctx,
+          constraints,
+          layoutEngine,
+          layoutState,
+          colorHierarchy,
+          designTokens: ctx.designTokens,
+          typographyMetrics: ctx.typographyMetrics,
+          designSpec: ctx.designSpec,
+          escapeXml: (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
+        };
+        svg += typographyEngine.renderTextGroupLayer(typoCtx, textGroupLayer);
       }
     }
 
