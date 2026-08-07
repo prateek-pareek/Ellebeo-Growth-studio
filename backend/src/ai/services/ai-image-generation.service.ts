@@ -704,7 +704,8 @@ CRITICAL IMAGE REQUIREMENTS:
   async generateCarousel(params: {
     afterPhotoUrl: string;
     beforePhotoUrl?: string;
-    concepts: Array<{ index: number; title: string; overlayText: string; headline?: string; subheadline?: string; cta?: string; }>;
+    concepts: Array<{ index: number; title: string; overlayText: string; headline?: string; subheadline?: string; cta?: string; slideType?: string; }>;
+    semanticFlow?: import('./narrative-planner.service').SemanticSlide[];
     tenantId: string;
     businessName: string;
     brandColor: string;
@@ -755,6 +756,8 @@ CRITICAL IMAGE REQUIREMENTS:
          continue;
       }
 
+      const semanticSlide = params.semanticFlow?.find(s => s.slideType === concept.slideType);
+      
       const decision = await this.templateAgent.selectTemplate({
         brief: concept.overlayText || 'Slide',
         brandName: params.businessName || 'Brand',
@@ -764,7 +767,9 @@ CRITICAL IMAGE REQUIREMENTS:
         totalSlides: total,
         visionResult: visionResultStub,
         excludeLayouts: uniqueLayoutsForSlides,
-        templateIntent
+        templateIntent,
+        slideType: concept.slideType,
+        requiredTraits: semanticSlide?.requiredTraits
       });
       agentDecisions.push(decision);
       uniqueLayoutsForSlides.push(decision.selected_layout_id);
@@ -1243,10 +1248,10 @@ CRITICAL IMAGE REQUIREMENTS:
       // True Passepartout Layout Calculations using dynamic borders (Now driven by Whitespace Strategy)
       // ── Step 0: Resolve Design Tokens & Composition Metadata ──
       const designTokens = this.themeEngine.resolveDesignTokens(visualRanking);
-      const composition = this.compositionEngine.calculateComposition(designTokens, templateIntent as any, isFirst);
+      const composition = this.compositionEngine.calculateComposition(designTokens, templateIntent as any, isFirst, visionResult?.faceCoordinates);
 
       // NEW ARCHITECTURE: Pull semantic rules from the Art Direction Engine using the layout ID!
-      const intent = this.artDirectionEngine.generateDesignIntent(layoutType, index || 0, totalSlides || 1);
+      const intent = this.artDirectionEngine.generateDesignIntent(layoutType, Math.max(0, (index || 1) - 1), totalSlides || 1);
       const behavior = this.artDirectionEngine.mapIntentToBehavior(intent);
       const designLanguage = { intent, behavior };
       const geometryOut = this.geometryCompiler.compile(designLanguage, w, h, designSpec);
@@ -1380,7 +1385,13 @@ CRITICAL IMAGE REQUIREMENTS:
         faceCoordinates: visionResult?.faceCoordinates,
         activeTheme,
       };
-      const textPanelSvg = hasText && template.textTemplate
+      // STRICT ARCHITECTURAL OWNERSHIP:
+      // If this layout is driven by the modern DSL (layout_v2_ or dynamically compiled),
+      // the DSL Typography Engine has absolute ownership over text rendering.
+      // We explicitly disable the legacy text renderer here to prevent duplication.
+      const isDslLayout = computedLayoutType.startsWith('layout_v2_') || computedLayoutType.startsWith('auto_') || !!COMPILED_LAYOUTS[computedLayoutType];
+
+      const textPanelSvg = (hasText && template.textTemplate && !isDslLayout)
         ? (TEXT_TEMPLATES[template.textTemplate]?.(textCtx) ?? '')
         : '';
 

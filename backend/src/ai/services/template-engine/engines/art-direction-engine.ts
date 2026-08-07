@@ -12,6 +12,7 @@ export interface IDesignBehaviorProfile {
   trackingHero: number;
   trackingMetadata: number;
   lineHeightMultiplier: number;
+  typographyScaleMultiplier: number;
   capitalizationRule: 'force_lowercase' | 'force_uppercase' | 'none';
   paragraphIndentation: boolean;
   orphanControl: boolean;
@@ -52,12 +53,25 @@ export interface IDesignLanguage {
 export class ArtDirectionEngine {
 
   /**
+   * Normalizes a layout ID by stripping environment prefixes (e.g., auto_, layout_v2_)
+   * and numeric suffixes to extract the pure semantic design family.
+   */
+  public normalizeFamilyId(layoutId: string): string {
+    // 1. Strip dynamic and environment prefixes
+    let normalized = layoutId.replace(/^(layout_v2_|auto_)/, '');
+    
+    // 2. Strip numeric suffixes from compiled procedural variants (e.g. editorial_hero_0 -> editorial_hero)
+    normalized = normalized.replace(/_\d+$/, '');
+    
+    return normalized;
+  }
+
+  /**
    * Generates Semantic Design Intent from knowledge tags and carousel rhythm
    */
   public generateDesignIntent(layoutId: string, slideIndex?: number, totalSlides?: number): IDesignIntent {
     // 1. Procedural Layout Interception
-    // Strip numeric suffixes from compiled procedural variants (e.g. editorial_hero_0 -> editorial_hero)
-    const baseId = layoutId.replace(/_\d+$/, '');
+    const baseId = this.normalizeFamilyId(layoutId);
 
     let family = 'editorial';
     let energy = 'calm';
@@ -307,6 +321,7 @@ export class ArtDirectionEngine {
       trackingHero: 0,
       trackingMetadata: 0,
       lineHeightMultiplier: 1.1,
+      typographyScaleMultiplier: 1.0,
       capitalizationRule: 'none',
       paragraphIndentation: false,
       orphanControl: true,
@@ -345,8 +360,16 @@ export class ArtDirectionEngine {
       profile.bodyBaseFontSize = 28;
       profile.elementOverlapAllowed = true;
       profile.marginHugging = true;
+      profile.typographyScaleMultiplier = 1.3;
     } else {
       profile.heroBaseFontSize = 100;
+      if (intent.visualPriority === 'image_hero') {
+        profile.typographyScaleMultiplier = 0.65;
+      } else if (intent.visualPriority === 'composition_hero') {
+        profile.typographyScaleMultiplier = 0.9;
+      } else if (intent.visualPriority === 'cta_hero') {
+        profile.typographyScaleMultiplier = 1.1;
+      }
     }
 
     if (intent.mood === 'luxury' || intent.family === 'editorial') {

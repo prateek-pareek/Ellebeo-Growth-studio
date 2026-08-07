@@ -12,7 +12,7 @@ import { registerDynamicLayout } from '../config/layout-renderers';
 @Injectable()
 export class TemplateAgentService {
   private logger = new Logger(TemplateAgentService.name);
-  
+
   private retriever: MetadataRetriever;
   private hardConstraintEngine: HardConstraintEngine;
   private rankingEngine: RankingEngine;
@@ -42,9 +42,11 @@ export class TemplateAgentService {
     visionResult?: import('../types/chain-output.types').VisionAnalysisResult | null;
     excludeLayouts?: string[];
     templateIntent?: 'educational' | 'promotion' | 'testimonial' | 'before_after' | 'brand_story';
+    slideType?: string;
+    requiredTraits?: import('../services/narrative-planner.service').SemanticSlide['requiredTraits'];
   }): Promise<{ selected_layout_id: string; reasoning: string; designSpec?: import('./template-engine/interfaces').ISemanticDesignSpec }> {
 
-    const context: ITemplateContext = {
+    const context: ITemplateContext & { slideType?: string; requiredTraits?: any } = {
       brief: params.brief,
       brandName: params.brandName,
       aesthetic: params.aesthetic,
@@ -52,7 +54,9 @@ export class TemplateAgentService {
       slideIndex: params.slideIndex,
       totalSlides: params.totalSlides,
       visionResult: params.visionResult,
-      templateIntent: params.templateIntent
+      templateIntent: params.templateIntent,
+      slideType: params.slideType,
+      requiredTraits: params.requiredTraits
     };
 
     try {
@@ -85,11 +89,11 @@ export class TemplateAgentService {
       this.logger.log(`[Stage 4] Reduced to Top ${topCandidates.length} candidates for AI Art Director.`);
 
       // Stage 5: LLM Art Director
-      const candidateSummary = topCandidates.map(c => 
+      const candidateSummary = topCandidates.map(c =>
         `- ID: ${c.id}\n  Concept: ${c.concept}\n  Why it fits: Ranked highly for ${context.aesthetic} aesthetic.`
       ).join('\n\n');
 
-const systemPrompt = `
+      const systemPrompt = `
 You are an elite Visual Art Director.
 We have mathematically narrowed down our layout library to the absolute Top ${topCandidates.length} candidates. These candidates represent specific, semantically distinct structural variants (e.g. "editorial_magazine_cover", "minimalist_offset_quote", "clinical_split").
 Your ONLY job is to select the single best structural variant from this shortlist based strictly on the provided Brand Aesthetic and visual storytelling for the given brief.
@@ -100,6 +104,7 @@ CRITICAL DESIGN RULE: You MUST rotate across different Design Families (e.g., if
 CONTEXT:
 - Brand Aesthetic: ${context.aesthetic}
 - Slide Position: ${context.slideIndex + 1} of ${context.totalSlides}
+- Semantic Slide Type: ${context.slideType || 'UNKNOWN'} (e.g. HOOK, PROBLEM, SOLUTION, CLIENT_QUOTE, CTA)
 - Overlay Text Length: ${context.textLength} characters
 - Previously Used Layouts: ${params.excludeLayouts?.join(', ') || 'None'}
 ${params.gridConstraints ? `- GRID CONSTRAINTS: ${params.gridConstraints}` : ''}
@@ -158,7 +163,7 @@ JSON SCHEMA:
         new HumanMessage("Please return the selected layout id as a JSON object.")
       ]);
       const content = typeof res.content === 'string' ? res.content : JSON.stringify(res.content);
-      
+
       let cleaned = content.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
       let decision: any;
       try {
@@ -170,22 +175,22 @@ JSON SCHEMA:
       }
 
       // Ensure the LLM didn't hallucinate an ID outside the shortlist
-      const chosenCandidate = topCandidates.find(c => c.id === decision.selected_layout_id) 
+      const chosenCandidate = topCandidates.find(c => c.id === decision.selected_layout_id)
         ? topCandidates.find(c => c.id === decision.selected_layout_id)!
         : topCandidates[0]; // Fallback to the mathematically highest ranked if LLM hallucinates
-        
+
       const finalId = chosenCandidate.id;
       let returnedLayoutId = finalId;
 
       this.logger.log(`[Stage 5] AI Art Director finalized: ${finalId} - Reason: ${decision.reasoning}`);
 
       if (chosenCandidate.type === 'procedural') {
-         const dsl = this.layoutAssembler.compileFamilyToDSL(finalId, params.slideIndex, params.brandName);
-         registerDynamicLayout(dsl);
-         returnedLayoutId = dsl.id;
-         this.logger.log(`[Stage 5] Compiled procedural family ${finalId} into variant ${returnedLayoutId}`);
+        const dsl = this.layoutAssembler.compileFamilyToDSL(finalId, params.slideIndex, params.brandName);
+        registerDynamicLayout(dsl);
+        returnedLayoutId = dsl.id;
+        this.logger.log(`[Stage 5] Compiled procedural family ${finalId} into variant ${returnedLayoutId}`);
       }
-      
+
       // Tell the Diversity Engine to penalize this layout for future runs
       this.diversityEngine.recordUsage(finalId);
 

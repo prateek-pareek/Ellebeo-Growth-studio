@@ -995,6 +995,10 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       const faceWidth = Math.round(ctx.w * 0.45);
       const faceX = Math.round((ctx.w - faceWidth) / 2);
       faceBox = { x: faceX, y: faceTop, width: faceWidth, height: faceHeight };
+      
+      console.log(`[LayoutRenderer] Applied GPT face coordinates. Computed FaceBox for avoidance:`, faceBox);
+    } else {
+      console.log(`[LayoutRenderer] No faceCoordinates provided to renderer. Text will not dodge faces.`);
     }
 
     // Phase 2.6: Composition Optimizer
@@ -1003,7 +1007,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       const optFamily = (ctx.designLanguage?.intent?.family as any) || 'minimal';
       const behaviorProfile = (dsl as any)?.behavior;
       const constraints = layoutEngine.calculateConstraints(optFamily, 'balanced', false, behaviorProfile);
-      dsl = optimizer.optimize(dsl, constraints, ctx.w, ctx.h);
+      dsl = optimizer.optimize(dsl, constraints, ctx.w, ctx.h, faceBox, ctx.designLanguage?.intent?.visualPriority);
     }
 
     if (!dsl || !dsl.layers) return '';
@@ -1044,6 +1048,8 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     overlayLayers = [...overlayLayers, ...moodDecorations];
 
     overlayLayers.sort((a, b) => a.zIndex - b.zIndex);
+
+
 
     // Initialize LayoutEngine to calculate constraints for PrimitiveCtx
 

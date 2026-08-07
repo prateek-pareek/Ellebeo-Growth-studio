@@ -62,8 +62,8 @@ export class GeometryCompiler {
 
     // 2. TYPOGRAPHY SCALING (Proportional Strategy)
     const baseScale = canvasWidth;
-    let heroSize = behavior.heroBaseFontSize;
-    let bodySize = behavior.bodyBaseFontSize;
+    let heroSize = Math.round(behavior.heroBaseFontSize * (behavior.typographyScaleMultiplier || 1.0));
+    let bodySize = Math.round(behavior.bodyBaseFontSize * (behavior.typographyScaleMultiplier || 1.0));
 
     if (designSpec?.typography?.dominance === 'high') {
       heroSize = Math.round(heroSize * 1.3);
