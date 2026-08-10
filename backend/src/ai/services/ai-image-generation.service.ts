@@ -1353,6 +1353,14 @@ CRITICAL IMAGE REQUIREMENTS:
       console.log(`[FaceBox] Protected zone x=${faceX} y=${faceTop}-${faceBottom} w=${faceWidth} (eyes=${eyesY}, mouth=${mouthY}, x%=${coords.faceCenterXPercent ?? 'n/a'})`);
     }
 
+      // Subject mass (face + upper body) — text must clear the client image, not only eyes
+      const subjectBox = faceBox
+        ? LayoutEngine.expandFaceToSubject(faceBox, w, h)
+        : undefined;
+      if (subjectBox) {
+        console.log(`[SubjectBox] Cleared client image mass x=${subjectBox.x} y=${subjectBox.y} w=${subjectBox.width} h=${subjectBox.height}`);
+      }
+
       // Step 3 (Plan): Single Optimizer Pass
       let rawDsl = COMPILED_LAYOUTS[computedLayoutType];
       let optimizedDsl: any = undefined;
@@ -1367,7 +1375,7 @@ CRITICAL IMAGE REQUIREMENTS:
           rawDsl = designCompiler.compile(rawDsl, designSpec);
         }
 
-        const layoutEngine = new LayoutEngine(w, h, faceBox);
+        const layoutEngine = new LayoutEngine(w, h, faceBox, subjectBox);
         const optFamily = (designLanguage?.intent?.family as any) || 'minimal';
         const behaviorProfile = (rawDsl as any)?.behavior;
         const constraints = layoutEngine.calculateConstraints(optFamily, 'balanced', false, behaviorProfile);
@@ -1394,6 +1402,7 @@ CRITICAL IMAGE REQUIREMENTS:
           designLanguage?.intent?.visualPriority,
           logoBox,
           geometryOut.typography,
+          subjectBox,
         );
       }
 
@@ -1412,6 +1421,7 @@ CRITICAL IMAGE REQUIREMENTS:
         designLanguage,
         faceCoordinates: visionResult?.faceCoordinates,
         faceBox,
+        subjectBox,
         optimizedDsl
       });
       let baseImage = baseResult.baseImage;
@@ -1531,6 +1541,7 @@ CRITICAL IMAGE REQUIREMENTS:
         logoUrl,
         faceCoordinates: visionResult?.faceCoordinates,
         faceBox,
+        subjectBox,
         injectedFeatures: composition.injectedFeatures,
         designTokens,
         designSpec,

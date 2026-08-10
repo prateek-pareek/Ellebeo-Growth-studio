@@ -52,6 +52,11 @@ export class TypographyEngine {
    * Main text rendering entry point that handles wrapping, styling, and safe-zone collision
    */
   public renderTextLayer(ctx: TypographyContext, layer: IDSLTextLayer): string {
+    // Composition optimizer may omit secondary copy to protect premium hierarchy / photo
+    if ((layer as any)._omitForComposition || (layer as any).opacity === 0) {
+      return '';
+    }
+
     // 1. Map text layer ID to structured text fields if available
     let rawText = '';
 
@@ -166,16 +171,22 @@ export class TypographyEngine {
     let escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, effectiveMaxW, trackingEm);
     let textHeight = escapedLines.length * lineHeight;
 
-    // VERTICAL OVERFLOW PROTECTION — shrink first, then hard-cap lines to the box.
-    // Accepting overflow previously let headlines clip through the footer / canvas edge.
+    // VERTICAL OVERFLOW PROTECTION
+    // Headlines may shrink modestly; secondary/tagline must NOT crush to fit —
+    // truncate or omit instead (preserves premium visual communication).
     if (layer.allocatedBox && textHeight > layer.allocatedBox.height) {
+      const isSecondary = layer.role === 'tagline' || layer.role === 'body' || layer.role === 'footnote';
       let attempts = 0;
       let currentFontSize = style.fontSize;
-      const minFontSize = Math.max(18, style.fontSize * 0.45);
+      // Secondary: allow at most ~12% shrink. Heading: up to ~30%.
+      const minFontSize = isSecondary
+        ? Math.max(18, Math.round(style.fontSize * 0.88))
+        : Math.max(22, Math.round(style.fontSize * 0.70));
       const originalLineHeightMultiplier = lineHeight / style.fontSize;
+      const maxAttempts = isSecondary ? 4 : 10;
 
-      while (textHeight > layer.allocatedBox.height && currentFontSize > minFontSize && attempts < 12) {
-        currentFontSize = Math.floor(currentFontSize * 0.90);
+      while (textHeight > layer.allocatedBox.height && currentFontSize > minFontSize && attempts < maxAttempts) {
+        currentFontSize = Math.floor(currentFontSize * (isSecondary ? 0.96 : 0.90));
         lineHeight = Math.max(1, Math.floor(currentFontSize * originalLineHeightMultiplier));
         style.fontSize = currentFontSize;
         escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, effectiveMaxW, trackingEm);
@@ -185,14 +196,22 @@ export class TypographyEngine {
 
       if (textHeight > layer.allocatedBox.height && lineHeight > 0) {
         const maxLines = Math.max(1, Math.floor(layer.allocatedBox.height / lineHeight));
-        if (escapedLines.length > maxLines) {
-          escapedLines = escapedLines.slice(0, maxLines);
-          const last = escapedLines[maxLines - 1] || '';
+        // Premium: taglines stay ≤2 lines; bodies ≤3; never wall-of-text
+        const roleCap = layer.role === 'tagline' ? 2 : layer.role === 'heading' ? 4 : 3;
+        const capped = Math.min(maxLines, roleCap);
+        if (escapedLines.length > capped) {
+          escapedLines = escapedLines.slice(0, capped);
+          const last = escapedLines[capped - 1] || '';
           if (last && !last.endsWith('…') && !last.endsWith('...')) {
-            escapedLines[maxLines - 1] = last.replace(/[.,;:\s]+$/, '') + '…';
+            escapedLines[capped - 1] = last.replace(/[.,;:\s]+$/, '') + '…';
           }
           textHeight = escapedLines.length * lineHeight;
         }
+      }
+
+      // Still oversized secondary → omit entirely (better than micro-type on the photo)
+      if (isSecondary && textHeight > layer.allocatedBox.height * 1.05) {
+        return '';
       }
     }
 
@@ -268,28 +287,30 @@ export class TypographyEngine {
         const lastTextRegion = textRegions[textRegions.length - 1];
         
         // Vertical Rhythm & Cluster Spacing (DesignSpec Driven)
-        let rhythmMultiplier = 0.6;
-        if (ctx.layoutState?.family === 'typography_hero') rhythmMultiplier = 0.4;
-        else if (ctx.layoutState?.family === 'image_hero') rhythmMultiplier = 0.8;
+        // Premium compositions need breathing room between headline and tagline
+        let rhythmMultiplier = 0.85;
+        if (ctx.layoutState?.family === 'typography_hero') rhythmMultiplier = 0.55;
+        else if (ctx.layoutState?.family === 'image_hero' || ctx.designSpec?.composition?.visualPriority === 'image_hero') {
+          rhythmMultiplier = 1.05;
+        }
         
         const isStoryRhythm = ctx.h > ctx.w;
-        if (isStoryRhythm) rhythmMultiplier *= 0.75;
+        if (isStoryRhythm) rhythmMultiplier *= 0.85;
 
         if (ctx.designSpec?.composition?.negativeSpace === 'large' || ctx.designSpec?.composition?.negativeSpace === 'massive') {
-          rhythmMultiplier *= 1.5; // Huge breathing room between elements
+          rhythmMultiplier *= 1.45;
         } else if (ctx.designSpec?.composition?.negativeSpace === 'minimal') {
-          rhythmMultiplier *= 0.5; // Tight clustering
+          rhythmMultiplier *= 0.65;
         }
 
-        // Density affects rhythm too
         const density = ctx.designSpec?.decorations?.density || 'medium';
-        if (density === 'high') rhythmMultiplier *= 0.7;
-        if (density === 'low' || density === 'none') rhythmMultiplier *= 1.3;
+        if (density === 'high') rhythmMultiplier *= 0.75;
+        if (density === 'low' || density === 'none') rhythmMultiplier *= 1.25;
 
-        const interElementGap = Math.round(style.fontSize * rhythmMultiplier); // Rhythmic gap based on font size
+        const interElementGap = Math.max(18, Math.round(style.fontSize * rhythmMultiplier));
         const stackedY = lastTextRegion.y + (lastTextRegion.height || 0) + interElementGap;
-        // Only stack if the new layer would collide with the previous one
-        if (Math.abs(y - lastTextRegion.y) < (lastTextRegion.height || 60) + 20) {
+        // Stack if we'd collide OR land inside the previous cluster's vertical band
+        if (Math.abs(y - lastTextRegion.y) < (lastTextRegion.height || 60) + interElementGap) {
           y = stackedY;
         }
       }
@@ -312,12 +333,15 @@ export class TypographyEngine {
     // draw through the footer or off the top safe edge.
     const availableHeight = (ctx.h - bottomClearance) - Math.max(y, ctx.constraints.safeY);
     if (textHeight > availableHeight && availableHeight > 0) {
+      const isSecondary = layer.role === 'tagline' || layer.role === 'body' || layer.role === 'footnote';
       const originalLineHeightMultiplier = lineHeight / Math.max(1, style.fontSize);
       let currentFontSize = style.fontSize;
-      const minFontSize = Math.max(18, style.fontSize * 0.45);
+      const minFontSize = isSecondary
+        ? Math.max(18, Math.round(style.fontSize * 0.88))
+        : Math.max(22, Math.round(style.fontSize * 0.70));
       let attempts = 0;
-      while (textHeight > availableHeight && currentFontSize > minFontSize && attempts < 10) {
-        currentFontSize = Math.floor(currentFontSize * 0.90);
+      while (textHeight > availableHeight && currentFontSize > minFontSize && attempts < (isSecondary ? 4 : 8)) {
+        currentFontSize = Math.floor(currentFontSize * (isSecondary ? 0.96 : 0.90));
         lineHeight = Math.max(1, Math.floor(currentFontSize * originalLineHeightMultiplier));
         style.fontSize = currentFontSize;
         escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, effectiveMaxW, trackingEm);
@@ -325,9 +349,13 @@ export class TypographyEngine {
         attempts++;
       }
       if (textHeight > availableHeight && lineHeight > 0) {
-        const maxLines = Math.max(1, Math.floor(availableHeight / lineHeight));
+        const roleCap = layer.role === 'tagline' ? 2 : layer.role === 'heading' ? 4 : 3;
+        const maxLines = Math.min(roleCap, Math.max(1, Math.floor(availableHeight / lineHeight)));
         escapedLines = escapedLines.slice(0, maxLines);
         textHeight = escapedLines.length * lineHeight;
+      }
+      if (isSecondary && textHeight > availableHeight) {
+        return '';
       }
       if (y + textHeight > ctx.h - bottomClearance) {
         y = Math.max(ctx.constraints.safeY, ctx.h - textHeight - bottomClearance);
@@ -442,24 +470,28 @@ export class TypographyEngine {
   }
 
   public renderTextGroupLayer(ctx: TypographyContext, groupLayer: import('../interfaces').IDSLTextGroupLayer): string {
-    let groupSvg = '';
-    let currentLocalY = 0;
-    let groupMaxWidth = 0;
-    
+    if ((groupLayer as any)._omitForComposition) return '';
+
     interface ChildRenderData {
+      role: string;
       svg: string;
       localY: number;
-      localX: number;
       width: number;
       height: number;
+      fontSize: number;
     }
-    
-    const childrenData: ChildRenderData[] = [];
-    const maxW = groupLayer.maxWidthPercent ? Math.round(ctx.w * (groupLayer.maxWidthPercent / 100)) : ctx.constraints.contentMaxWidth;
 
-    // 1. Process each child text layer to calculate local layout
-    for (const child of groupLayer.children) {
-      // Resolve text content first (same logic as single layer)
+    const childrenData: ChildRenderData[] = [];
+    const family = (ctx.layoutState?.family as any) || 'minimal';
+    const isImageHero = family === 'image_hero' || ctx.designSpec?.composition?.visualPriority === 'image_hero';
+    const maxW = groupLayer.allocatedBox
+      ? groupLayer.allocatedBox.width
+      : (groupLayer.maxWidthPercent
+        ? Math.round(ctx.w * (groupLayer.maxWidthPercent / 100))
+        : ctx.constraints.contentMaxWidth);
+
+    // Premium group rhythm: headline → breathing gap → quiet secondary
+    const resolveChildText = (child: import('../interfaces').IDSLTextLayer): string => {
       let rawText = '';
       if (ctx.structuredText && (ctx.structuredText.headline || ctx.structuredText.subheadline || ctx.structuredText.cta)) {
         if (child.role === 'heading') rawText = ctx.structuredText.headline || '';
@@ -473,130 +505,213 @@ export class TypographyEngine {
           rawText = ctx.structuredText.subheadline || overlay;
         }
         if (child.role !== 'heading' && ctx.structuredText.headline && rawText === ctx.structuredText.headline) {
-          rawText = ''; // Deduplication
+          rawText = '';
         }
       } else {
         rawText = ctx.overlayText || '';
       }
+      return rawText;
+    };
 
+    // Pass 1: measure children at intended sizes (no premature shrink)
+    type Measured = {
+      child: import('../interfaces').IDSLTextLayer;
+      rawText: string;
+      style: ReturnType<TypographyEngine['resolveStyle']>;
+      lines: string[];
+      lineHeight: number;
+      height: number;
+      width: number;
+    };
+    const measured: Measured[] = [];
+
+    for (const child of groupLayer.children) {
+      if ((child as any)._omitForComposition) continue;
+      const rawText = resolveChildText(child);
       if (!rawText || ctx.layoutState?.renderedStrings?.includes(rawText)) continue;
-      if (ctx.layoutState && ctx.layoutState.renderedStrings) {
-        ctx.layoutState.renderedStrings.push(rawText);
-      }
 
       const style = this.resolveStyle(child, ctx, rawText);
-      let lineHeightMultiplier = 1.35;
+      let lineHeightMultiplier = 1.3;
       if ((child as any).lineHeight !== undefined) lineHeightMultiplier = (child as any).lineHeight;
-      else if (child.role === 'heading') lineHeightMultiplier = ctx.typographyMetrics?.heroLineHeight || 1.18;
+      else if (child.role === 'heading') lineHeightMultiplier = ctx.typographyMetrics?.heroLineHeight || 1.15;
       else if (child.role === 'body') lineHeightMultiplier = ctx.typographyMetrics?.bodyLineHeight || 1.35;
-      
-      const isStoryLHChild = ctx.h > ctx.w;
-      if (isStoryLHChild && child.role === 'heading') lineHeightMultiplier *= 1.2;
-      
-      const trackingEm = this.parseTrackingEm(style.letterSpacing);
-      const escapedLines = this.wrapText(rawText, style.fontSize, child, ctx, maxW, trackingEm);
-      const lineHeight = Math.round(style.fontSize * lineHeightMultiplier);
-      const textHeight = escapedLines.length * lineHeight;
-      const charW = style.fontSize * (0.58 + Math.max(0, trackingEm));
-      const childMaxW = Math.min(...escapedLines.map(l => Math.max(1, l.replace(/&[a-z]+;/gi, ' ').length) * charW));
+      else if (child.role === 'tagline') lineHeightMultiplier = 1.25;
 
-      if (childMaxW > groupMaxWidth) groupMaxWidth = childMaxW;
+      const trackingEm = this.parseTrackingEm(style.letterSpacing);
+      let lines = this.wrapText(rawText, style.fontSize, child, ctx, maxW, trackingEm);
+      // Cap secondary to 2 lines inside a group — keeps the cluster premium
+      if ((child.role === 'tagline' || child.role === 'body') && lines.length > 2) {
+        lines = lines.slice(0, 2);
+        const last = lines[1] || '';
+        if (last && !last.endsWith('…')) lines[1] = last.replace(/[.,;:\s]+$/, '') + '…';
+      }
+      if (child.role === 'heading' && lines.length > 3) {
+        lines = lines.slice(0, 3);
+      }
+
+      const lineHeight = Math.round(style.fontSize * lineHeightMultiplier);
+      const height = lines.length * lineHeight;
+      const charW = style.fontSize * (0.58 + Math.max(0, trackingEm));
+      const width = Math.max(...lines.map(l => Math.max(1, l.replace(/&[a-z]+;/gi, ' ').length) * charW));
+
+      measured.push({ child, rawText, style, lines, lineHeight, height, width });
+    }
+
+    if (measured.length === 0) return '';
+
+    const gapFor = (fontSize: number, role: string) => {
+      let mult = isImageHero ? 0.95 : 0.75;
+      if (ctx.designSpec?.composition?.negativeSpace === 'large' || ctx.designSpec?.composition?.negativeSpace === 'massive') {
+        mult *= 1.35;
+      }
+      if (role === 'heading') mult *= 1.1;
+      return Math.max(20, Math.round(fontSize * mult));
+    };
+
+    const computeStack = (items: Measured[]) => {
+      let y = 0;
+      let maxWidth = 0;
+      const positions: { y: number; gapAfter: number }[] = [];
+      for (let i = 0; i < items.length; i++) {
+        positions.push({ y, gapAfter: i < items.length - 1 ? gapFor(items[i].style.fontSize, items[i].child.role) : 0 });
+        maxWidth = Math.max(maxWidth, items[i].width);
+        y += items[i].height + (i < items.length - 1 ? gapFor(items[i].style.fontSize, items[i].child.role) : 0);
+      }
+      return { totalHeight: y, maxWidth, positions };
+    };
+
+    // Pass 2: if group overflows budget, drop secondary children BEFORE shrinking
+    const footerReserve = Math.max(ctx.constraints.margins.bottom, BRANDING_FOOTER_RESERVE_PX) + FOOTER_GAP_PX;
+    let maxAllowedHeight = groupLayer.allocatedBox
+      ? groupLayer.allocatedBox.height
+      : (ctx.h - footerReserve - ctx.constraints.safeY);
+
+    let active = [...measured];
+    let stack = computeStack(active);
+
+    while (stack.totalHeight > maxAllowedHeight && active.length > 1) {
+      const dropIdx = active.findIndex(m => m.child.role === 'body' || m.child.role === 'tagline' || m.child.role === 'footnote');
+      if (dropIdx < 0) break;
+      console.log(`[TypographyEngine] Group: omitting ${active[dropIdx].child.role} to preserve premium cluster`);
+      active.splice(dropIdx, 1);
+      stack = computeStack(active);
+    }
+
+    // Mild uniform shrink only as last resort (never below 85%)
+    let groupScale = 1.0;
+    if (stack.totalHeight > maxAllowedHeight && stack.totalHeight > 0) {
+      groupScale = Math.max(0.85, maxAllowedHeight / stack.totalHeight);
+      stack.totalHeight *= groupScale;
+      stack.maxWidth *= groupScale;
+    }
+
+    // Register rendered strings for active children only
+    for (const m of active) {
+      if (ctx.layoutState?.renderedStrings) ctx.layoutState.renderedStrings.push(m.rawText);
+    }
+
+    // Build child SVG at local coords (text already escaped by wrapText)
+    let currentLocalY = 0;
+    for (let i = 0; i < active.length; i++) {
+      const m = active[i];
+      const fontSize = Math.round(m.style.fontSize * groupScale);
+      const lineHeight = Math.max(1, Math.round(m.lineHeight * groupScale));
+      const height = m.lines.length * lineHeight;
+      const width = m.width * groupScale;
 
       let opacityStr = '';
-      if (style.opacity !== undefined && style.opacity !== 1.0) opacityStr = ` opacity="${style.opacity}"`;
+      if (m.style.opacity !== undefined && m.style.opacity !== 1.0) opacityStr = ` opacity="${m.style.opacity}"`;
 
-      let childSvg = `<text font-family="${style.fontFamily}" font-size="${style.fontSize}px" font-weight="${style.fontWeight}" font-style="${style.fontStyle}" fill="${style.fill}" letter-spacing="${style.letterSpacing}" text-anchor="${groupLayer.alignment === 'center' ? 'middle' : groupLayer.alignment === 'right' ? 'end' : 'start'}"${opacityStr}>`;
-      for (let i = 0; i < escapedLines.length; i++) {
-        const line = escapedLines[i];
-        let dx = '0';
-        if (groupLayer.alignment === 'center') dx = '50%';
-        else if (groupLayer.alignment === 'right') dx = '100%';
-        childSvg += `<tspan x="${dx}" dy="${i === 0 ? '1em' : lineHeight}">${ctx.escapeXml ? ctx.escapeXml(line) : line}</tspan>`;
+      const anchor = groupLayer.alignment === 'center' ? 'middle' : groupLayer.alignment === 'right' ? 'end' : 'start';
+      let childSvg = `<text font-family="${m.style.fontFamily}" font-size="${fontSize}px" font-weight="${m.style.fontWeight}" font-style="${m.style.fontStyle}" fill="${m.style.fill}" letter-spacing="${m.style.letterSpacing}" text-anchor="${anchor}"${opacityStr}>`;
+      for (let li = 0; li < m.lines.length; li++) {
+        childSvg += `<tspan x="0" dy="${li === 0 ? 0 : lineHeight}">${m.lines[li]}</tspan>`;
       }
       childSvg += `</text>`;
 
       childrenData.push({
+        role: m.child.role,
         svg: childSvg,
         localY: currentLocalY,
-        localX: 0,
-        width: childMaxW,
-        height: textHeight
+        width,
+        height,
+        fontSize,
       });
 
-      // Add inter-element rhythmic gap for next child
-      let rhythmMult = 0.6;
-      if (ctx.layoutState?.family === 'typography_hero') rhythmMult = 0.4;
-      else if (ctx.layoutState?.family === 'image_hero') rhythmMult = 0.8;
-      
-      const isStoryGap = ctx.h > ctx.w;
-      if (isStoryGap) rhythmMult *= 0.75;
-      
-      const interElementGap = Math.round(style.fontSize * rhythmMult);
-      currentLocalY += textHeight + interElementGap;
+      const gap = i < active.length - 1 ? Math.round(gapFor(m.style.fontSize, m.child.role) * groupScale) : 0;
+      currentLocalY += height + gap;
     }
 
-    if (childrenData.length === 0) return '';
+    const totalGroupHeight = currentLocalY;
+    let groupMaxWidth = Math.max(...childrenData.map(c => c.width), stack.maxWidth);
 
-    // Remove the trailing gap from the total height
-    const lastChild = childrenData[childrenData.length - 1];
-    let totalGroupHeight = lastChild.localY + lastChild.height;
-
-    // GLOBAL GROUP SHRINKAGE: Ensure text doesn't overflow canvas vertically while perfectly preserving the Golden Ratio hierarchy
-    let groupShrinkageMultiplier = 1.0;
-    const effectiveFooterReserve = ctx.h > 1300 ? Math.round(ctx.h * 0.20) : 120;
-    const maxAllowedHeight = groupLayer.allocatedBox ? groupLayer.allocatedBox.height : (ctx.h - effectiveFooterReserve - ctx.constraints.safeY);
-
-    if (totalGroupHeight > maxAllowedHeight) {
-      groupShrinkageMultiplier = maxAllowedHeight / totalGroupHeight;
-      if (groupShrinkageMultiplier < 0.5) groupShrinkageMultiplier = 0.5; // Cap maximum shrinkage
-      totalGroupHeight *= groupShrinkageMultiplier;
-      groupMaxWidth *= groupShrinkageMultiplier;
+    // Global group placement
+    let x: number;
+    let y: number;
+    if (groupLayer.allocatedBox) {
+      x = groupLayer.allocatedBox.x;
+      y = groupLayer.allocatedBox.y;
+      if (groupLayer.alignment === 'center') x = groupLayer.allocatedBox.x + groupLayer.allocatedBox.width / 2;
+      else if (groupLayer.alignment === 'right') x = groupLayer.allocatedBox.x + groupLayer.allocatedBox.width;
+    } else {
+      const baseAnchorResult = ctx.layoutEngine.resolveAnchor(groupLayer.anchor, 0, totalGroupHeight, ctx.constraints);
+      x = baseAnchorResult.x;
+      y = baseAnchorResult.y;
     }
 
-    // 2. Global Positioning for the ENTIRE Group
-    const baseAnchorResult = ctx.layoutEngine.resolveAnchor(groupLayer.anchor, 0, totalGroupHeight, ctx.constraints);
-    let x = baseAnchorResult.x;
-    let y = baseAnchorResult.y;
-
-    const targetBox = { x, y, width: groupMaxWidth, height: totalGroupHeight };
-    const resolvedBox = ctx.layoutEngine.resolveFaceCollision(targetBox, ctx.constraints, (ctx as any).family);
-    x = resolvedBox.x;
+    const targetBox = {
+      x: groupLayer.alignment === 'center' ? x - groupMaxWidth / 2 : groupLayer.alignment === 'right' ? x - groupMaxWidth : x,
+      y,
+      width: groupMaxWidth,
+      height: totalGroupHeight,
+    };
+    const resolvedBox = ctx.layoutEngine.resolveFaceCollision(targetBox, ctx.constraints, family);
     y = resolvedBox.y;
     groupMaxWidth = resolvedBox.width;
+    if (groupLayer.alignment === 'center') x = resolvedBox.x + resolvedBox.width / 2;
+    else if (groupLayer.alignment === 'right') x = resolvedBox.x + resolvedBox.width;
+    else x = resolvedBox.x;
 
-    // Alignment offsets relative to the anchor
-    const anchorStr = (groupLayer.anchor as string) || '';
-    const isCenterAnchor = anchorStr.endsWith('_center') || anchorStr === 'center' || anchorStr === 'top_center' || anchorStr === 'bottom_center' || anchorStr === 'middle_center';
-    
-    if (groupLayer.alignment === 'center') {
-      if (groupLayer.anchor.includes('left')) x = ctx.constraints.safeX + groupMaxWidth / 2;
-      else if (groupLayer.anchor.includes('right')) x = ctx.w - ctx.constraints.safeX - groupMaxWidth / 2;
-      else x = ctx.w / 2;
-    } else if (groupLayer.alignment === 'right') {
-      if (groupLayer.anchor.includes('left')) x = ctx.constraints.safeX + groupMaxWidth;
-      else if (isCenterAnchor) x = ctx.w / 2 + groupMaxWidth / 2;
-      else x = ctx.w - ctx.constraints.safeX;
-    } else if (groupLayer.alignment === 'left') {
-      if (isCenterAnchor) x = ctx.w / 2 - groupMaxWidth / 2;
+    // Keep clear of footer
+    const bottomClearance = footerReserve;
+    if (y + totalGroupHeight > ctx.h - bottomClearance) {
+      y = Math.max(ctx.constraints.safeY, ctx.h - totalGroupHeight - bottomClearance);
+    }
+    if (y < ctx.constraints.safeY) y = ctx.constraints.safeY;
+
+    // Alignment offsets for non-allocated anchors
+    if (!groupLayer.allocatedBox) {
+      const anchorStr = (groupLayer.anchor as string) || '';
+      const isCenterAnchor = anchorStr.endsWith('_center') || anchorStr === 'center' || anchorStr === 'top_center' || anchorStr === 'bottom_center' || anchorStr === 'middle_center';
+      if (groupLayer.alignment === 'center') {
+        if (groupLayer.anchor.includes('left')) x = ctx.constraints.safeX + groupMaxWidth / 2;
+        else if (groupLayer.anchor.includes('right')) x = ctx.w - ctx.constraints.safeX - groupMaxWidth / 2;
+        else x = ctx.w / 2;
+      } else if (groupLayer.alignment === 'right') {
+        if (groupLayer.anchor.includes('left')) x = ctx.constraints.safeX + groupMaxWidth;
+        else if (isCenterAnchor) x = ctx.w / 2 + groupMaxWidth / 2;
+        else x = ctx.w - ctx.constraints.safeX;
+      } else if (groupLayer.alignment === 'left') {
+        if (isCenterAnchor) x = ctx.w / 2 - groupMaxWidth / 2;
+      }
     }
 
-    // 3. Render the group
-    const scaleStr = groupShrinkageMultiplier !== 1.0 ? ` scale(${groupShrinkageMultiplier})` : '';
-    groupSvg += `<g transform="translate(${x}, ${y})${scaleStr}">`;
+    let groupSvg = `<g transform="translate(${x}, ${y})">`;
     for (const child of childrenData) {
       groupSvg += `<g transform="translate(0, ${child.localY})">${child.svg}</g>`;
     }
     groupSvg += `</g>`;
 
-    // 4. Update Layout State
     if (ctx.layoutState) {
+      const boxX = groupLayer.alignment === 'center' ? x - groupMaxWidth / 2 : groupLayer.alignment === 'right' ? x - groupMaxWidth : x;
       ctx.layoutState.occupiedRegions.push({
         id: groupLayer.id,
         role: groupLayer.role,
-        x, y,
+        x: boxX,
+        y,
         width: groupMaxWidth,
         height: totalGroupHeight,
-        zIndex: groupLayer.zIndex
+        zIndex: groupLayer.zIndex,
       });
     }
 
@@ -916,6 +1031,12 @@ export class TypographyEngine {
       smartLines = smartLines.slice(0, 4);
       const last = smartLines[3] || '';
       if (last && !last.endsWith('…')) smartLines[3] = last.replace(/[.,;:\s]+$/, '') + '…';
+    }
+    // Taglines stay short — long wrapping secondary kills premium feel
+    if (layer.role === 'tagline' && smartLines.length > 2) {
+      smartLines = smartLines.slice(0, 2);
+      const last = smartLines[1] || '';
+      if (last && !last.endsWith('…')) smartLines[1] = last.replace(/[.,;:\s]+$/, '') + '…';
     }
 
     const defaultEscape = (str: string) => str

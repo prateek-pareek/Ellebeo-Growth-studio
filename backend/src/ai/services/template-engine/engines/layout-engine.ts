@@ -35,13 +35,40 @@ export class LayoutEngine {
   private canvasWidth: number;
   private canvasHeight: number;
   private faceBox?: BoundingBox;
+  /** Broader subject/body mass — text should clear this, not only eyes/mouth. */
+  private subjectBox?: BoundingBox;
   private isStory: boolean;
 
-  constructor(canvasWidth: number, canvasHeight: number, faceBox?: BoundingBox) {
+  constructor(canvasWidth: number, canvasHeight: number, faceBox?: BoundingBox, subjectBox?: BoundingBox) {
     this.canvasWidth = canvasWidth;
     this.canvasHeight = canvasHeight;
     this.faceBox = faceBox;
-    this.isStory = (canvasHeight / canvasWidth) > 1.3; // Detect 9:16 or similar vertical layouts
+    this.subjectBox = subjectBox || (faceBox ? LayoutEngine.expandFaceToSubject(faceBox, canvasWidth, canvasHeight) : undefined);
+    this.isStory = (canvasHeight / canvasWidth) > 1.3;
+  }
+
+  /**
+   * Expand facial landmarks into a subject protection zone (shoulders / upper torso)
+   * so type clears the client image, not only the face rectangle.
+   */
+  public static expandFaceToSubject(face: BoundingBox, canvasW: number, canvasH: number): BoundingBox {
+    const footerReserve = Math.round(canvasH * 0.12);
+    const extendDown = Math.round(Math.max(face.height * 1.75, canvasH * 0.22));
+    const extendUp = Math.round(face.height * 0.2);
+    const widen = Math.round(face.width * 0.18);
+    const y = Math.max(0, face.y - extendUp);
+    const bottom = Math.min(canvasH - footerReserve, face.y + face.height + extendDown);
+    const x = Math.max(0, face.x - widen);
+    const width = Math.min(canvasW - x, face.width + widen * 2);
+    return { x, y, width, height: Math.max(face.height, bottom - y) };
+  }
+
+  public getSubjectBox(): BoundingBox | undefined {
+    return this.subjectBox;
+  }
+
+  public getFaceBox(): BoundingBox | undefined {
+    return this.faceBox;
   }
 
   private getGeometrySignature(family: LayoutFamily): GeometrySignature {
@@ -171,17 +198,19 @@ export class LayoutEngine {
    * Returns a new Y coordinate that pushes the element into a safe zone.
    */
   public resolveFaceCollision(targetBox: BoundingBox, constraints: LayoutConstraints, family: LayoutFamily = 'minimal'): BoundingBox {
-    if (!this.faceBox) return targetBox; // No face, no collision
+    // Prefer the broader subject mass; fall back to face-only.
+    const protectedBox = this.subjectBox || this.faceBox;
+    if (!protectedBox) return targetBox;
 
     const signature = this.getGeometrySignature(family);
     
-    // Calculate the protected halo around the face
+    // Calculate the protected halo around the subject/face
     const halo = signature.faceHaloPadding;
     const faceSafeZone: BoundingBox = {
-      x: this.faceBox.x - halo,
-      y: this.faceBox.y - halo,
-      width: this.faceBox.width + (halo * 2),
-      height: this.faceBox.height + (halo * 2)
+      x: protectedBox.x - halo,
+      y: protectedBox.y - halo,
+      width: protectedBox.width + (halo * 2),
+      height: protectedBox.height + (halo * 2)
     };
     
     // Check intersection
@@ -260,12 +289,13 @@ export class LayoutEngine {
 
     let semanticRegion = { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 
-    // Resolve Face Collision strictly within this semantic quadrant
-    if (this.faceBox) {
-       const faceX = this.faceBox.x;
-       const faceY = this.faceBox.y;
-       const faceW = this.faceBox.width;
-       const faceH = this.faceBox.height;
+    // Resolve Face / Subject Collision strictly within this semantic quadrant
+    const obstacle = this.subjectBox || this.faceBox;
+    if (obstacle) {
+       const faceX = obstacle.x;
+       const faceY = obstacle.y;
+       const faceW = obstacle.width;
+       const faceH = obstacle.height;
 
        const overlapX = faceX < minX + semanticRegion.width && faceX + faceW > minX;
        const overlapY = faceY < minY + semanticRegion.height && faceY + faceH > minY;
@@ -317,9 +347,18 @@ export class LayoutEngine {
     let candidates = [safeZone];
     const obstacles = [...occupiedRegions];
 
-    // Add face box as an obstacle with a halo
-    if (this.faceBox) {
-      const halo = 40; // Default face halo
+    // Subject mass (face + torso) is the primary obstacle — clears client image, not just eyes
+    const subject = this.subjectBox || this.faceBox;
+    if (subject) {
+      const halo = 56;
+      obstacles.push({
+        x: Math.max(0, subject.x - halo),
+        y: Math.max(0, subject.y - halo),
+        width: subject.width + (halo * 2),
+        height: subject.height + (halo * 2)
+      });
+    } else if (this.faceBox) {
+      const halo = 40;
       obstacles.push({
         x: Math.max(0, this.faceBox.x - halo),
         y: Math.max(0, this.faceBox.y - halo),
@@ -381,17 +420,43 @@ export class LayoutEngine {
     let score = 10.0;
     
     // 1. Whitespace Quality (Size)
-    // Larger regions are generally better, especially for heroes
     const area = candidate.width * candidate.height;
     const canvasArea = this.canvasWidth * this.canvasHeight;
-    score += (area / canvasArea) * 2.0; // Reduced from +5 to let intent dominate
+    score += (area / canvasArea) * 2.0;
 
-    // 2. Face Safety is inherently guaranteed by generateCandidateRegions
+    // 2. Subject clearance — prefer pockets away from the client image mass
+    const subject = this.subjectBox || this.faceBox;
+    if (subject) {
+      const cMidY = candidate.y + candidate.height / 2;
+      const cMidX = candidate.x + candidate.width / 2;
+      const sMidY = subject.y + subject.height / 2;
+      const sMidX = subject.x + subject.width / 2;
+      const normDist = Math.hypot(cMidX - sMidX, cMidY - sMidY) / Math.hypot(this.canvasWidth, this.canvasHeight);
+      score += normDist * 8.0;
+
+      // Strong preference for clear bands above/below the subject (visual communication)
+      const aboveSubject = candidate.y + Math.min(layerHeight, candidate.height) <= subject.y - 12;
+      const belowSubject = candidate.y >= subject.y + subject.height + 12;
+      const besideSubject =
+        (candidate.x + candidate.width <= subject.x - 12) ||
+        (candidate.x >= subject.x + subject.width + 12);
+
+      if (intent.visualPriority === 'image_hero') {
+        if (aboveSubject || belowSubject) score += 7.0;
+        else if (besideSubject) score += 4.0;
+        else score -= 6.0; // overlapping subject vertical band = covering the photo
+      } else {
+        if (aboveSubject || belowSubject) score += 3.0;
+        else if (besideSubject) score += 2.0;
+      }
+    }
 
     // 3. Reading Flow
     const isTopHalf = candidate.y < this.canvasHeight / 2;
     const isBottomHalf = candidate.y + candidate.height > this.canvasHeight / 2;
     const isLeftHalf = candidate.x < this.canvasWidth / 2;
+    const topBand = candidate.y < this.canvasHeight * 0.28;
+    const bottomBand = candidate.y + Math.min(layerHeight, candidate.height) > this.canvasHeight * 0.72;
     
     if (intent.readingFlow === 'z_pattern') {
       if (intent.role === 'heading' && isTopHalf && isLeftHalf) score += 6.0;
@@ -399,24 +464,28 @@ export class LayoutEngine {
     } else if (intent.readingFlow === 'center_down') {
       const isCentered = candidate.x + (candidate.width / 2) > (this.canvasWidth / 2) - 100 &&
                          candidate.x + (candidate.width / 2) < (this.canvasWidth / 2) + 100;
-      if (isCentered) {
+      if (intent.visualPriority === 'image_hero') {
+        // Image-first: prefer edge/band placement over dead-center overlay
+        if (topBand || bottomBand || !isCentered) score += 4.0;
+        else score -= 2.0;
+      } else if (isCentered) {
         score += 6.0;
       } else {
-        score -= 5.0; // Heavy penalty for off-center candidates when center_anchored requested
+        score -= 5.0;
       }
       if (intent.role === 'heading' && isTopHalf) score += 3.0;
     }
 
     // 4. Role-specific heuristics
-    if (intent.role === 'heading') {
-      if (candidate.height < layerHeight) score -= 10.0; // Cannot fit
-      // Headings prefer top/middle
-      if (isBottomHalf && !isTopHalf) score -= 2.0; 
+    if (intent.role === 'heading' || intent.role === 'group') {
+      if (candidate.height < layerHeight) score -= 10.0;
+      if (isBottomHalf && !isTopHalf && intent.visualPriority !== 'image_hero') score -= 2.0;
+      if (intent.visualPriority === 'image_hero' && topBand) score += 2.5;
     }
 
     if (intent.role === 'footnote' || intent.role === 'tagline') {
-      // Secondary elements usually don't want to float at the very top unless it's a specific layout
       if (isTopHalf && !isBottomHalf) score -= 1.0;
+      if (bottomBand) score += 2.0;
     }
 
     return score;

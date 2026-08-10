@@ -107,6 +107,7 @@ export type BaseCtx = {
   designLanguage?: IDesignLanguage;
   faceCoordinates?: { eyesYPercent: number; mouthYPercent: number; };
   faceBox?: any;
+  subjectBox?: any;
   optimizedDsl?: any;
 };
 
@@ -870,6 +871,7 @@ export type DecoCtx = {
   structuredText?: { headline?: string; subheadline?: string; cta?: string; };
   typographyMetrics?: any;
   faceBox?: any;
+  subjectBox?: any;
   optimizedDsl?: any;
   activeTheme?: string;
   visualRanking?: string[];
@@ -1004,7 +1006,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     // Construct an estimated face BoundingBox from the vision result's Y coordinates
     // (Already extracted above for the optimizer)
 
-    const layoutEngine = new LayoutEngine(ctx.w, ctx.h, ctx.faceBox);
+    const layoutEngine = new LayoutEngine(ctx.w, ctx.h, ctx.faceBox, ctx.subjectBox);
     const isTensionEnabled = family === 'editorial';
     const behaviorProfile = (dsl as any)?.behavior;
     const constraints = layoutEngine.calculateConstraints(family, 'balanced', isTensionEnabled, behaviorProfile);
