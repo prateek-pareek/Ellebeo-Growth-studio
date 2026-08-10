@@ -212,30 +212,41 @@ export class TypographyEngine {
     let y = ctx.h / 2;
 
     if (layer.allocatedBox) {
+      // HARD LOCK: QC already chose this pocket. Do not re-anchor or face-nudge —
+      // that was moving type onto the photo and causing "random" placement.
       x = layer.allocatedBox.x;
       y = layer.allocatedBox.y;
+      effectiveMaxW = Math.min(effectiveMaxW, layer.allocatedBox.width);
 
-      // Adjust X for SVG text-anchor relative to the box left edge
       if (anchor === 'middle') x = layer.allocatedBox.x + layer.allocatedBox.width / 2;
       if (anchor === 'end') x = layer.allocatedBox.x + layer.allocatedBox.width;
 
-      // CRITICAL: allocatedBox used to skip face avoidance entirely, so headlines
-      // from the optimizer still landed on eyes/mouth. Always resolve collisions.
-      const faceResolved = ctx.layoutEngine.resolveFaceCollision(
-        { x: layer.allocatedBox.x, y: layer.allocatedBox.y, width: effectiveMaxW, height: textHeight },
-        ctx.constraints,
-        (ctx.layoutState?.family as any) || 'minimal'
-      );
-      if (faceResolved.y !== layer.allocatedBox.y || faceResolved.x !== layer.allocatedBox.x || faceResolved.width !== effectiveMaxW) {
-        y = faceResolved.y;
-        effectiveMaxW = faceResolved.width;
-        if (anchor === 'middle') x = faceResolved.x + faceResolved.width / 2;
-        else if (anchor === 'end') x = faceResolved.x + faceResolved.width;
-        else x = faceResolved.x;
-        // Re-wrap if width was shrunk to clear the face
-        if (faceResolved.width < layer.allocatedBox.width - 8) {
+      // Fit content inside the allocated pocket only (scale/wrap), never relocate
+      const pocketH = layer.allocatedBox.height;
+      if (textHeight > pocketH && pocketH > 0) {
+        const isSecondary = layer.role === 'tagline' || layer.role === 'body' || layer.role === 'footnote';
+        const originalLineHeightMultiplier = lineHeight / Math.max(1, style.fontSize);
+        let currentFontSize = style.fontSize;
+        const minFontSize = isSecondary
+          ? Math.max(18, Math.round(ctx.h * 0.018))
+          : Math.max(Math.round(ctx.h * 0.038), Math.round(style.fontSize * 0.82));
+        let attempts = 0;
+        while (textHeight > pocketH && currentFontSize > minFontSize && attempts < 8) {
+          currentFontSize = Math.floor(currentFontSize * 0.92);
+          lineHeight = Math.max(1, Math.floor(currentFontSize * originalLineHeightMultiplier));
+          style.fontSize = currentFontSize;
           escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, effectiveMaxW, trackingEm);
           textHeight = escapedLines.length * lineHeight;
+          attempts++;
+        }
+        if (textHeight > pocketH && lineHeight > 0) {
+          const roleCap = layer.role === 'tagline' ? 2 : layer.role === 'heading' ? 4 : 3;
+          const maxLines = Math.min(roleCap, Math.max(1, Math.floor(pocketH / lineHeight)));
+          escapedLines = escapedLines.slice(0, maxLines);
+          textHeight = escapedLines.length * lineHeight;
+        }
+        if (isSecondary && textHeight > pocketH * 1.02) {
+          return '';
         }
       }
     } else {
@@ -243,7 +254,7 @@ export class TypographyEngine {
       x = baseAnchorResult.x;
       y = baseAnchorResult.y;
 
-      // Non-negotiable Face Avoidance: Ensure text doesn't overlap facial regions
+      // Face avoidance only when optimizer did not allocate a pocket
       const targetBox = { x, y, width: effectiveMaxW, height: textHeight };
       const resolvedBox = ctx.layoutEngine.resolveFaceCollision(targetBox, ctx.constraints, (ctx.layoutState?.family as any) || 'minimal');
       x = resolvedBox.x;
@@ -251,8 +262,6 @@ export class TypographyEngine {
       effectiveMaxW = resolvedBox.width;
 
       const anchorStr = (layer.anchor as string) || '';
-      // Fix bug: isCenterAnchor must check HORIZONTAL centering (_center, center, middle), 
-      // NOT vertical keywords like 'top' or 'bottom' which misclassified top_left / bottom_left as centered!
       const isCenterAnchor = anchorStr.endsWith('_center') || anchorStr === 'center' || anchorStr === 'top_center' || anchorStr === 'bottom_center' || anchorStr === 'middle_center';
 
       if (anchor === 'middle') {
@@ -271,9 +280,7 @@ export class TypographyEngine {
     // PHASE 2.5: SMART COMPOSITION (No Shrinking, No Failing)
 
     // 1. Vertical Validation & Clamping
-    // We now respect the LayoutEngine's constraints directly instead of artificially clamping
-    // Sequential Y Stacking: Check if previous text regions already occupy space
-    // and push this layer below them to prevent text collision
+    // Sequential Y Stacking: only when no allocated pocket (optimizer owns stacking)
     if (!layer.allocatedBox && ctx.layoutState && ctx.layoutState.occupiedRegions.length > 0) {
       const textRegions = ctx.layoutState.occupiedRegions.filter(r => r.role === 'heading' || r.role === 'tagline' || r.role === 'body' || r.role === 'footnote');
       if (textRegions.length > 0) {
@@ -310,21 +317,33 @@ export class TypographyEngine {
     }
 
     // Keep clear of the pinned branding footer AND the layout margin.
+    // When allocatedBox is set, clamp INSIDE the pocket — never slide to another band.
     const bottomClearance = Math.max(
       ctx.constraints.margins.bottom,
       BRANDING_FOOTER_RESERVE_PX
     ) + FOOTER_GAP_PX;
 
-    if (y + textHeight > ctx.h - bottomClearance) {
-      y = ctx.h - textHeight - bottomClearance;
-    }
-    if (y < ctx.constraints.safeY) {
-      y = ctx.constraints.safeY;
+    if (layer.allocatedBox) {
+      const pocketTop = Math.max(layer.allocatedBox.y, ctx.constraints.safeY);
+      const pocketBottom = Math.min(
+        layer.allocatedBox.y + layer.allocatedBox.height,
+        ctx.h - bottomClearance,
+      );
+      y = Math.max(pocketTop, Math.min(y, Math.max(pocketTop, pocketBottom - textHeight)));
+    } else {
+      if (y + textHeight > ctx.h - bottomClearance) {
+        y = ctx.h - textHeight - bottomClearance;
+      }
+      if (y < ctx.constraints.safeY) {
+        y = ctx.constraints.safeY;
+      }
     }
 
     // If the box still can't fit after clamping, shrink/cap again so we never
     // draw through the footer or off the top safe edge.
-    const availableHeight = (ctx.h - bottomClearance) - Math.max(y, ctx.constraints.safeY);
+    const availableHeight = layer.allocatedBox
+      ? Math.max(0, Math.min(layer.allocatedBox.y + layer.allocatedBox.height, ctx.h - bottomClearance) - Math.max(y, ctx.constraints.safeY))
+      : ((ctx.h - bottomClearance) - Math.max(y, ctx.constraints.safeY));
     if (textHeight > availableHeight && availableHeight > 0) {
       const isSecondary = layer.role === 'tagline' || layer.role === 'body' || layer.role === 'footnote';
       const originalLineHeightMultiplier = lineHeight / Math.max(1, style.fontSize);
@@ -350,14 +369,16 @@ export class TypographyEngine {
       if (isSecondary && textHeight > availableHeight) {
         return '';
       }
-      if (y + textHeight > ctx.h - bottomClearance) {
+      if (!layer.allocatedBox && y + textHeight > ctx.h - bottomClearance) {
         y = Math.max(ctx.constraints.safeY, ctx.h - textHeight - bottomClearance);
       }
     }
 
-    // 2. Horizontal Validation & Clamping — STRICT (no 20px bleed that clips "Pull…")
-    const minX = ctx.constraints.safeX;
-    const maxX = ctx.w - ctx.constraints.safeX;
+    // 2. Horizontal Validation & Clamping — STRICT safe margins
+    const minX = Math.max(ctx.constraints.safeX, layer.allocatedBox ? layer.allocatedBox.x : ctx.constraints.safeX);
+    const maxX = layer.allocatedBox
+      ? Math.min(ctx.w - ctx.constraints.safeX, layer.allocatedBox.x + layer.allocatedBox.width)
+      : (ctx.w - ctx.constraints.safeX);
     if (anchor === 'middle') {
       x = Math.max(minX + effectiveMaxW / 2, Math.min(x, maxX - effectiveMaxW / 2));
     } else if (anchor === 'end') {
@@ -658,43 +679,67 @@ export class TypographyEngine {
     const totalGroupHeight = currentLocalY;
     let groupMaxWidth = Math.max(...childrenData.map(c => c.width), stack.maxWidth);
 
-    // Global group placement
+    // Global group placement — lock to allocated pocket; never face-nudge off it
     let x: number;
     let y: number;
     if (groupLayer.allocatedBox) {
       x = groupLayer.allocatedBox.x;
       y = groupLayer.allocatedBox.y;
+      groupMaxWidth = Math.min(groupMaxWidth, groupLayer.allocatedBox.width);
       if (groupLayer.alignment === 'center') x = groupLayer.allocatedBox.x + groupLayer.allocatedBox.width / 2;
       else if (groupLayer.alignment === 'right') x = groupLayer.allocatedBox.x + groupLayer.allocatedBox.width;
+
+      // Fit inside pocket height only — do not relocate to another band
+      const pocketH = groupLayer.allocatedBox.height;
+      if (totalGroupHeight > pocketH && pocketH > 0 && groupScale > 0.82) {
+        const fitScale = Math.max(0.82, pocketH / totalGroupHeight);
+        // Children already rendered; clamp Y inside pocket instead of reflowing mid-render
+        const pocketBottom = groupLayer.allocatedBox.y + pocketH;
+        y = Math.min(y, Math.max(groupLayer.allocatedBox.y, pocketBottom - totalGroupHeight));
+        if (fitScale < groupScale) {
+          console.warn(`[TypographyEngine] Group '${groupLayer.id}' exceeds allocated pocket — clamped in-place (scale hint=${fitScale.toFixed(2)})`);
+        }
+      }
     } else {
       const baseAnchorResult = ctx.layoutEngine.resolveAnchor(groupLayer.anchor, 0, totalGroupHeight, ctx.constraints);
       x = baseAnchorResult.x;
       y = baseAnchorResult.y;
+
+      const targetBox = {
+        x: groupLayer.alignment === 'center' ? x - groupMaxWidth / 2 : groupLayer.alignment === 'right' ? x - groupMaxWidth : x,
+        y,
+        width: groupMaxWidth,
+        height: totalGroupHeight,
+      };
+      const resolvedBox = ctx.layoutEngine.resolveFaceCollision(targetBox, ctx.constraints, family);
+      y = resolvedBox.y;
+      groupMaxWidth = resolvedBox.width;
+      if (groupLayer.alignment === 'center') x = resolvedBox.x + resolvedBox.width / 2;
+      else if (groupLayer.alignment === 'right') x = resolvedBox.x + resolvedBox.width;
+      else x = resolvedBox.x;
     }
 
-    const targetBox = {
-      x: groupLayer.alignment === 'center' ? x - groupMaxWidth / 2 : groupLayer.alignment === 'right' ? x - groupMaxWidth : x,
-      y,
-      width: groupMaxWidth,
-      height: totalGroupHeight,
-    };
-    const resolvedBox = ctx.layoutEngine.resolveFaceCollision(targetBox, ctx.constraints, family);
-    y = resolvedBox.y;
-    groupMaxWidth = resolvedBox.width;
-    if (groupLayer.alignment === 'center') x = resolvedBox.x + resolvedBox.width / 2;
-    else if (groupLayer.alignment === 'right') x = resolvedBox.x + resolvedBox.width;
-    else x = resolvedBox.x;
-
-    // Keep clear of footer — never clip
+    // Keep clear of footer — never clip; with allocatedBox stay inside pocket
     const bottomClearance = footerReserve;
-    if (y + totalGroupHeight > ctx.h - bottomClearance) {
-      y = Math.max(ctx.constraints.safeY, ctx.h - totalGroupHeight - bottomClearance);
+    if (groupLayer.allocatedBox) {
+      const pocketTop = Math.max(groupLayer.allocatedBox.y, ctx.constraints.safeY);
+      const pocketBottom = Math.min(
+        groupLayer.allocatedBox.y + groupLayer.allocatedBox.height,
+        ctx.h - bottomClearance,
+      );
+      y = Math.max(pocketTop, Math.min(y, Math.max(pocketTop, pocketBottom - totalGroupHeight)));
+    } else {
+      if (y + totalGroupHeight > ctx.h - bottomClearance) {
+        y = Math.max(ctx.constraints.safeY, ctx.h - totalGroupHeight - bottomClearance);
+      }
+      if (y < ctx.constraints.safeY) y = ctx.constraints.safeY;
     }
-    if (y < ctx.constraints.safeY) y = ctx.constraints.safeY;
 
-    // Strict horizontal clamp (Stage 3 relocate bounds)
-    const minX = ctx.constraints.safeX;
-    const maxSafeX = ctx.w - ctx.constraints.safeX;
+    // Strict horizontal clamp — respect allocated pocket + canvas safe margins
+    const minX = Math.max(ctx.constraints.safeX, groupLayer.allocatedBox ? groupLayer.allocatedBox.x : ctx.constraints.safeX);
+    const maxSafeX = groupLayer.allocatedBox
+      ? Math.min(ctx.w - ctx.constraints.safeX, groupLayer.allocatedBox.x + groupLayer.allocatedBox.width)
+      : (ctx.w - ctx.constraints.safeX);
     if (groupLayer.alignment === 'center') {
       x = Math.max(minX + groupMaxWidth / 2, Math.min(x, maxSafeX - groupMaxWidth / 2));
     } else if (groupLayer.alignment === 'right') {

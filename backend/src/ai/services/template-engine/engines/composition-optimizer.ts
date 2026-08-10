@@ -72,8 +72,8 @@ export class CompositionOptimizer {
       if (layer.allowedAnchors && layer.allowedAnchors.length > 0) {
         const preferred = this.preferredAnchorsForFlow(flow, priority, layer.allowedAnchors);
         const pool = preferred.length > 0 ? preferred : layer.allowedAnchors;
-        const randomIndex = Math.floor(Math.random() * pool.length);
-        (layer as any).anchor = pool[randomIndex];
+        // Deterministic: first preferred — never Math.random (was fighting QC placement)
+        (layer as any).anchor = pool[0];
       }
 
       // image_hero: slightly narrower text so photo dominates — type stays large
@@ -94,12 +94,16 @@ export class CompositionOptimizer {
       imageBleedExtent = 'asymmetrical_65';
     } else if (dsl.id.includes('split') || flow === 'left_right') {
       imageBleedExtent = 'split_50';
+    } else if (priority === 'image_hero' || priority === 'cta_hero') {
+      // Keep photo full-bleed but allocate a dedicated text band (top/bottom)
+      imageBleedExtent = 'full_bleed_band';
     }
 
     const regions = layoutEngine.allocateRegions(
       { imageBleedExtent, readingJourney: flow === 'z_pattern' ? 'z_pattern' : 'linear' },
       constraints,
       priority,
+      subjectBox || faceBox,
     );
     optimized.canvasRegions = regions;
 
@@ -135,8 +139,54 @@ export class CompositionOptimizer {
     const subjectHaloRatio = 0.035;
     const subjectHalo = Math.round(Math.min(canvasW, canvasHeight) * subjectHaloRatio);
 
-    const obstacles = logoBox ? [logoBox] : [];
-    const candidates = layoutEngine.generateCandidateRegions(constraints, obstacles);
+    // Obstacles: logo + protected subjects + photo core when text has a dedicated band/panel
+    const obstacles: BoundingBox[] = logoBox ? [logoBox] : [];
+    const textPanelDistinct =
+      regions.textRegion
+      && (regions.imageRegion.width < canvasW - 2
+        || regions.textRegion.height < canvasHeight * 0.55);
+
+    if (textPanelDistinct) {
+      // Treat everything outside the text band as an obstacle so candidates stay in negative space
+      const tr = regions.textRegion;
+      // Top strip above text band
+      if (tr.y > constraints.safeY) {
+        obstacles.push({ x: 0, y: 0, width: canvasW, height: tr.y });
+      }
+      // Bottom strip below text band
+      const belowY = tr.y + tr.height;
+      if (belowY < canvasHeight) {
+        obstacles.push({ x: 0, y: belowY, width: canvasW, height: canvasHeight - belowY });
+      }
+      // Side strips outside text band
+      if (tr.x > 0) {
+        obstacles.push({ x: 0, y: tr.y, width: tr.x, height: tr.height });
+      }
+      if (tr.x + tr.width < canvasW) {
+        obstacles.push({
+          x: tr.x + tr.width,
+          y: tr.y,
+          width: canvasW - (tr.x + tr.width),
+          height: tr.height,
+        });
+      }
+    }
+
+    let candidates = layoutEngine.generateCandidateRegions(constraints, obstacles);
+    // Prefer candidates that intersect the dedicated text region
+    if (regions.textRegion) {
+      const tr = regions.textRegion;
+      const intersecting = candidates.filter(c =>
+        c.x < tr.x + tr.width && c.x + c.width > tr.x
+        && c.y < tr.y + tr.height && c.y + c.height > tr.y,
+      ).map(c => ({
+        x: Math.max(c.x, tr.x),
+        y: Math.max(c.y, tr.y),
+        width: Math.min(c.x + c.width, tr.x + tr.width) - Math.max(c.x, tr.x),
+        height: Math.min(c.y + c.height, tr.y + tr.height) - Math.max(c.y, tr.y),
+      })).filter(c => c.width >= 100 && c.height >= 60);
+      if (intersecting.length > 0) candidates = intersecting;
+    }
 
     const hitsSubject = (region: BoundingBox, heightNeed: number) => {
       const subjects = protectedSubjects.length ? protectedSubjects : (sBox ? [sBox] : []);
@@ -185,26 +235,36 @@ export class CompositionOptimizer {
     }
 
     if (!groupRegion) {
-      // Last-resort pocket above or below subject
+      // Last resort: use dedicated textRegion band (never random mid-photo)
+      const tr = regions.textRegion;
       groupRegion = {
-        x: constraints.safeX,
-        y: constraints.safeY,
-        width: Math.round(constraints.contentMaxWidth * wrapWidthFactor),
-        height: totalGroupHeight,
+        x: tr?.x ?? constraints.safeX,
+        y: tr?.y ?? constraints.safeY,
+        width: Math.round((tr?.width ?? constraints.contentMaxWidth) * wrapWidthFactor),
+        height: Math.min(totalGroupHeight, tr?.height ?? totalGroupHeight),
       };
-      if (sBox && hitsSubject(groupRegion, totalGroupHeight)) {
-        const below = sBox.y + sBox.height + subjectHalo;
-        if (below + totalGroupHeight < canvasHeight - constraints.margins.bottom) {
-          groupRegion.y = below;
-        } else {
-          groupRegion.y = constraints.safeY;
-        }
+      if (sBox && hitsSubject(groupRegion, totalGroupHeight) && tr) {
+        // Flip to opposite band if subject occupies preferred band
+        const altY = tr.y < canvasHeight / 2
+          ? Math.max(constraints.safeY, canvasHeight - constraints.margins.bottom - totalGroupHeight)
+          : constraints.safeY;
+        groupRegion.y = altY;
       }
+    }
+
+    // Clamp group into textRegion if present
+    if (regions.textRegion && groupRegion) {
+      const tr = regions.textRegion;
+      groupRegion = {
+        x: Math.max(tr.x, Math.min(groupRegion.x, tr.x + tr.width - Math.min(groupRegion.width, tr.width))),
+        y: Math.max(tr.y, Math.min(groupRegion.y, tr.y + tr.height - Math.min(groupRegion.height, tr.height))),
+        width: Math.min(groupRegion.width, tr.width),
+        height: Math.min(groupRegion.height || totalGroupHeight, tr.height),
+      };
     }
 
     let currentY = groupRegion.y;
     const canvasWidth = constraints.safeX * 2 + constraints.contentMaxWidth;
-    const family = (dsl as any)?.family || 'minimal';
     const regionWidth = Math.round(groupRegion.width * wrapWidthFactor);
 
     for (const layer of groupedTextLayers) {
@@ -219,12 +279,18 @@ export class CompositionOptimizer {
         width,
         height: estimatedHeights[layer.id],
       };
-      box = layoutEngine.resolveFaceCollision(box, constraints, family);
-      // Strict canvas clamp — never clip
+      // Stay inside the chosen pocket — do NOT face-nudge out of allocated negative space
       box = this.clampBoxToSafe(box, constraints, canvasW, canvasHeight);
+      if (regions.textRegion) {
+        box = this.clampBoxToRegion(box, regions.textRegion);
+      }
       layer.allocatedBox = box;
       (layer as any)._groupScale = groupScale;
       (layer as any)._estimatedFontSize = estimatedFontSizes[layer.id] * groupScale;
+      // CTA / last-slide contrast: card behind text when over photo
+      if (priority === 'cta_hero' && layer.role === 'heading') {
+        (layer as any).component = (layer as any).component || 'solid_card';
+      }
       currentY = box.y + box.height + clusterGap;
     }
 
@@ -235,8 +301,10 @@ export class CompositionOptimizer {
         width: regionWidth,
         height: Math.min(totalGroupHeight, groupRegion.height || totalGroupHeight),
       };
-      box = layoutEngine.resolveFaceCollision(box, constraints, family);
       box = this.clampBoxToSafe(box, constraints, canvasW, canvasHeight);
+      if (regions.textRegion) {
+        box = this.clampBoxToRegion(box, regions.textRegion);
+      }
       group.allocatedBox = box;
       (group as any)._groupScale = groupScale;
       (group as any)._wrapWidthFactor = wrapWidthFactor;
@@ -245,22 +313,24 @@ export class CompositionOptimizer {
 
     for (const layer of structuralLayers) {
       const h = Math.round(canvasHeight * 0.045);
-      if (layer.anchor && layer.anchor !== 'bottom_edge' && layer.anchor !== 'corners') {
-        let { x, y } = layoutEngine.resolveAnchor(layer.anchor, 0, h, constraints);
-        x = Math.max(constraints.safeX, x);
-        const width = Math.min(Math.round(canvasW * 0.35), canvasWidth - constraints.safeX - x);
-        let box: BoundingBox = { x, y, width, height: h };
-        box = layoutEngine.resolveFaceCollision(box, constraints, family);
-        layer.allocatedBox = this.clampBoxToSafe(box, constraints, canvasW, canvasHeight);
-      } else {
-        let x = groupRegion.x;
-        x = Math.max(constraints.safeX, x);
-        const width = Math.min(regionWidth, canvasWidth - constraints.safeX - x);
-        let box: BoundingBox = { x, y: currentY, width, height: h };
-        box = layoutEngine.resolveFaceCollision(box, constraints, family);
-        layer.allocatedBox = this.clampBoxToSafe(box, constraints, canvasW, canvasHeight);
-        currentY = layer.allocatedBox.y + h + clusterGap;
+      // Stack from the text cluster — do not re-resolve random anchors
+      let x = groupRegion.x;
+      x = Math.max(constraints.safeX, x);
+      const width = Math.min(regionWidth, canvasWidth - constraints.safeX - x);
+      let box: BoundingBox = { x, y: currentY, width, height: h };
+      box = this.clampBoxToSafe(box, constraints, canvasW, canvasHeight);
+      if (regions.textRegion) {
+        box = this.clampBoxToRegion(box, regions.textRegion);
       }
+      layer.allocatedBox = box;
+      if (layer.role === 'cta') {
+        (layer as any).component = (layer as any).component || 'pill_label';
+        (layer as any)._estimatedFontSize = Math.max(
+          canvasHeight * 0.028,
+          (typographyMetrics?.primarySize || canvasHeight * 0.035) * 0.85,
+        );
+      }
+      currentY = layer.allocatedBox.y + h + clusterGap;
     }
 
     // Final VISUAL QUALITY gate — geometric fit alone is not acceptance
@@ -352,6 +422,17 @@ export class CompositionOptimizer {
     height = Math.min(height, maxY - constraints.safeY);
     x = Math.max(constraints.safeX, Math.min(x, maxX - width));
     y = Math.max(constraints.safeY, Math.min(y, maxY - height));
+    return { x, y, width, height };
+  }
+
+  private clampBoxToRegion(box: BoundingBox, region: BoundingBox): BoundingBox {
+    const maxX = region.x + region.width;
+    const maxY = region.y + region.height;
+    let { x, y, width, height } = box;
+    width = Math.min(width, region.width);
+    height = Math.min(height, region.height);
+    x = Math.max(region.x, Math.min(x, maxX - width));
+    y = Math.max(region.y, Math.min(y, maxY - height));
     return { x, y, width, height };
   }
 }

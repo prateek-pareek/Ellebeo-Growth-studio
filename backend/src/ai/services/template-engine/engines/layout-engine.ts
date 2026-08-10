@@ -215,21 +215,24 @@ export class LayoutEngine {
 
     let safeX = tension ? Math.round(signature.baseMarginX * 0.3) : Math.round(signature.baseMarginX * multiplier);
     let safeY = tension ? Math.round(signature.baseMarginY * 0.3) : Math.round(signature.baseMarginY * multiplier);
+
+    // Consistent safe margins for all text / UI — never hug the edge
+    const MIN_SAFE = Math.round(Math.min(this.canvasWidth, this.canvasHeight) * 0.045);
+    safeX = Math.max(MIN_SAFE, safeX);
+    safeY = Math.max(MIN_SAFE, safeY);
     
     let bottomMargin = safeY;
     if (this.isStory) {
-      // 15% footer reserve for Instagram Story UI (P1 Fix)
       bottomMargin = Math.max(safeY, Math.round(this.canvasHeight * 0.15));
     } else {
-      // Feed: keep clear of the pinned branding footer strip (~70–96px)
       bottomMargin = Math.max(safeY, 110);
     }
 
     if (behavior && behavior.marginHugging) {
-      safeX = 10;
-      safeY = 10;
-      // Still reserve the branding footer so hugged layouts don't collide with it
-      bottomMargin = this.isStory ? Math.max(10, Math.round(this.canvasHeight * 0.12)) : 96;
+      // Still keep a readable inset — "hugging" must not mean edge-clipped type
+      safeX = Math.max(Math.round(MIN_SAFE * 0.85), 36);
+      safeY = Math.max(Math.round(MIN_SAFE * 0.85), 36);
+      bottomMargin = this.isStory ? Math.max(safeY, Math.round(this.canvasHeight * 0.12)) : Math.max(96, safeY);
     }
 
     // Apply Density (from ArtDirection Engine) to text width constraints
@@ -606,12 +609,14 @@ export class LayoutEngine {
 
   /**
    * Deterministically allocates canvas space into non-overlapping regions for Image and Text.
-   * This ensures text never floats randomly over photo content unless explicitly designed (full bleed).
+   * For image_hero / cta_hero full-bleed, keeps the photo full-bleed but reserves a text band
+   * in negative space (top or bottom) so type does not land randomly on the subject.
    */
   public allocateRegions(
     behavior: { imageBleedExtent?: string; readingJourney?: string },
     constraints: LayoutConstraints,
-    visualPriority: string = 'image_hero'
+    visualPriority: string = 'image_hero',
+    subjectHint?: BoundingBox,
   ): { imageRegion: BoundingBox; textRegion: BoundingBox } {
     const isZPattern = behavior.readingJourney === 'z_pattern';
     
@@ -619,24 +624,17 @@ export class LayoutEngine {
     let imageRegion: BoundingBox = { x: 0, y: 0, width: this.canvasWidth, height: this.canvasHeight };
     let textRegion: BoundingBox = { x: constraints.safeX, y: constraints.safeY, width: constraints.contentMaxWidth, height: this.canvasHeight - constraints.safeY * 2 };
 
-    // Phase 6: Dynamic Typography Scaling
-    // Maximum Text Area = Visual Priority × Whitespace × Image Importance
-    let textRatio = 0.50; // Base 50/50 split
+    let textRatio = 0.50;
     if (visualPriority === 'typography_hero') textRatio = 0.65;
     else if (visualPriority === 'image_hero') textRatio = 0.30;
-    else if (visualPriority === 'cta_hero') textRatio = 0.55;
-
-    // Introduce slight randomness or saliency-based jitter to the ratio so it feels organic
-    textRatio += (Math.random() * 0.08) - 0.04;
+    else if (visualPriority === 'cta_hero') textRatio = 0.42;
 
     if (behavior.imageBleedExtent === 'asymmetrical_65') {
       const splitW = Math.floor(this.canvasWidth * (isZPattern ? textRatio : (1.0 - textRatio)));
       if (isZPattern) {
-        // Image on Left, Text on Right
         imageRegion = { x: 0, y: 0, width: splitW, height: this.canvasHeight };
         textRegion = { x: splitW + 40, y: constraints.safeY, width: (this.canvasWidth - splitW) - 40 - constraints.safeX, height: this.canvasHeight - constraints.safeY * 2 };
       } else {
-        // Text on Left, Image on Right
         imageRegion = { x: this.canvasWidth - splitW, y: 0, width: splitW, height: this.canvasHeight };
         textRegion = { x: constraints.safeX, y: constraints.safeY, width: (this.canvasWidth - splitW) - 40 - constraints.safeX, height: this.canvasHeight - constraints.safeY * 2 };
       }
@@ -648,6 +646,39 @@ export class LayoutEngine {
       } else {
         imageRegion = { x: splitW, y: 0, width: splitW, height: this.canvasHeight };
         textRegion = { x: constraints.safeX, y: constraints.safeY, width: splitW - 40 - constraints.safeX, height: this.canvasHeight - constraints.safeY * 2 };
+      }
+    } else if (
+      behavior.imageBleedExtent === 'full_bleed_band'
+      || visualPriority === 'image_hero'
+      || visualPriority === 'cta_hero'
+    ) {
+      // Photo stays full-bleed; text is constrained to a safe band away from the subject
+      imageRegion = { x: 0, y: 0, width: this.canvasWidth, height: this.canvasHeight };
+      const bandRatio = visualPriority === 'cta_hero' ? 0.34 : 0.28;
+      const bandH = Math.max(
+        Math.round(this.canvasHeight * bandRatio),
+        Math.round(constraints.safeY + this.canvasHeight * 0.18),
+      );
+      const subjectCy = subjectHint
+        ? subjectHint.y + subjectHint.height / 2
+        : this.canvasHeight * 0.45;
+      // Prefer the band farther from the subject mass
+      const preferBottom = subjectCy < this.canvasHeight * 0.55;
+      if (preferBottom) {
+        const y = this.canvasHeight - constraints.margins.bottom - bandH;
+        textRegion = {
+          x: constraints.safeX,
+          y: Math.max(constraints.safeY, y),
+          width: constraints.contentMaxWidth,
+          height: bandH,
+        };
+      } else {
+        textRegion = {
+          x: constraints.safeX,
+          y: constraints.safeY,
+          width: constraints.contentMaxWidth,
+          height: bandH,
+        };
       }
     }
 

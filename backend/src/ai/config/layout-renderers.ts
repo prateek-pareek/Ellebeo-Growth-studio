@@ -27,6 +27,21 @@ const primitiveEngine = new PrimitiveEngine();
 const typographyEngine = new TypographyEngine();
 const artDirectionEngine = new ArtDirectionEngine();
 
+function getLuminanceSafe(hex: string): number {
+  try {
+    const cleaned = hex.replace('#', '');
+    const rgb = parseInt(cleaned.length === 3
+      ? cleaned.split('').map(c => c + c).join('')
+      : cleaned, 16);
+    const r = (rgb >> 16) & 0xff;
+    const g = (rgb >> 8) & 0xff;
+    const b = rgb & 0xff;
+    return 0.299 * r + 0.587 * g + 0.114 * b;
+  } catch {
+    return 128;
+  }
+}
+
 export const COMPILED_LAYOUTS: Record<string, ICompiledLayoutDSL> = { ...compiledLayouts } as any;
 
 import { ColorCompositionEngine, ColorPalette } from '../services/template-engine/engines/color-composition-engine';
@@ -1089,15 +1104,21 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     };
 
     const layoutState = primitiveCtx.layoutState!;
-    layoutState.occupiedRegions.push({
-      id: 'hero-image',
-      role: 'image',
-      x: ctx.paddingX,
-      y: ctx.paddingTop,
-      width: ctx.innerW,
-      height: ctx.innerH,
-      zIndex: 10
-    });
+    // Do not seed a fake full-frame hero-image occupied region — that lied about free space
+    // for any fallback path without allocatedBox.
+
+    // Text-band readability scrim: when type sits in a dedicated band over the photo
+    const textBand = (dsl as any)?.canvasRegions?.textRegion;
+    const priority = ctx.designLanguage?.intent?.visualPriority || ctx.designSpec?.composition?.visualPriority;
+    if (textBand && (priority === 'image_hero' || priority === 'cta_hero' || priority === 'composition_hero')) {
+      const pad = 16;
+      const scrimOpacity = priority === 'cta_hero' ? 0.55 : 0.42;
+      const scrimFill = (ctx.validDepthColor && getLuminanceSafe(ctx.validDepthColor) < 140)
+        ? ctx.validDepthColor
+        : '#0A0A0A';
+      svg += `<rect x="${Math.max(0, textBand.x - pad)}" y="${Math.max(0, textBand.y - pad)}" width="${textBand.width + pad * 2}" height="${textBand.height + pad * 2}" fill="${scrimFill}" fill-opacity="${scrimOpacity}" rx="12" />`;
+    }
+
     // Iteratively render each layer using the Primitive Engine
     for (const layer of overlayLayers) {
       if (layer.type === 'decoration') {

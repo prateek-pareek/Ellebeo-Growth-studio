@@ -56,7 +56,7 @@ export class CompositionQualityController {
   /** Minimum heading size as fraction of canvas height — even for image_hero. */
   private static readonly MIN_HEADING_RATIO = 0.038;
   /** Absolute floor ratio for secondary type */
-  private static readonly MIN_SECONDARY_RATIO = 0.018;
+  private static readonly MIN_SECONDARY_RATIO = 0.022;
   /** Heading must be at least this × secondary height (hierarchy) */
   private static readonly MIN_HIERARCHY_RATIO = 1.55;
   /** Soft fail below this score; critical issues always fail */

@@ -360,7 +360,7 @@ export class AiImageGenerationService {
     logoUrl?: string;
     logoPosition?: 'bottom_right' | 'bottom_left' | 'top_right' | 'top_left';
     designSpec?: import('./template-engine/interfaces').ISemanticDesignSpec;
-  }): Promise<{ url: string; variants?: { gemini?: string; dalle?: string } }> {
+  }): Promise<{ url: string; variants?: { gemini?: string; dalle?: string }; compositionFailed?: boolean; failReason?: string }> {
     const {
       photoUrl, beforePhotoUrl, overlayText, headline, subheadline, cta, index, isFirst, isLast, isBeforePhoto,
       tenantId, businessName, brandColor,
@@ -391,7 +391,7 @@ export class AiImageGenerationService {
     // Fast-path: Skip AI image generation entirely for text-only editorial layouts
     if (layoutType === 'text_only_editorial') {
       console.log(`[TEXT ONLY EDITORIAL] Bypassing AI image generator for slide ${index} and creating solid brand colored tile.`);
-      const brandedBase64 = await this.overlayBrandingAndText({
+      const overlayResult = await this.overlayBrandingAndText({
         base64Image: '',
         overlayText,
         headline,
@@ -419,8 +419,8 @@ export class AiImageGenerationService {
         logoUrl,
         logoPosition,
       });
-      const url = await uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
-      return { url };
+      const url = await uploadBase64ToFirebase(overlayResult.base64, tenantId, `slide_${index}`);
+      return { url, compositionFailed: overlayResult.compositionFailed, failReason: overlayResult.failReason };
     }
 
     let cleanPrompt = '';
@@ -432,7 +432,7 @@ export class AiImageGenerationService {
       console.log(`[PASS-THROUGH SHARP COMPOSITOR] Bypassing AI image editor for slide ${index} to guarantee 100% client face preservation.`);
       imageBuffer = await downloadImageAsBuffer(photoUrl);
       const base64Image = imageBuffer.toString('base64');
-      const brandedBase64 = await this.overlayBrandingAndText({
+      const overlayResult = await this.overlayBrandingAndText({
         base64Image,
         overlayText,
         headline,
@@ -460,15 +460,15 @@ export class AiImageGenerationService {
         logoUrl,
         logoPosition,
       });
-      const url = await uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
-      return { url };
+      const url = await uploadBase64ToFirebase(overlayResult.base64, tenantId, `slide_${index}`);
+      return { url, compositionFailed: overlayResult.compositionFailed, failReason: overlayResult.failReason };
     }
 
     // Bypass AI image generation entirely for procedural text-only families
     if (layoutType === 'text_palette_minimal' || !photoUrl && layoutType?.includes('text_')) {
       // Create a minimal 1x1 transparent pixel base64. The renderer will cover it with SVG backgrounds.
       const transparent1x1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
-      const brandedBase64 = await this.overlayBrandingAndText({
+      const overlayResult = await this.overlayBrandingAndText({
         base64Image: transparent1x1,
         overlayText,
         headline,
@@ -496,8 +496,13 @@ export class AiImageGenerationService {
         visionResult,
         designSpec,
       });
-      const url = await uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
-      return { url, variants: { gemini: url, dalle: url } };
+      const url = await uploadBase64ToFirebase(overlayResult.base64, tenantId, `slide_${index}`);
+      return {
+        url,
+        variants: { gemini: url, dalle: url },
+        compositionFailed: overlayResult.compositionFailed,
+        failReason: overlayResult.failReason,
+      };
     }
 
     // Compile dynamic lifestyle/studio assets for non-booking educational/moodboard posts
@@ -621,7 +626,7 @@ CRITICAL IMAGE REQUIREMENTS:
     if (!base64) throw new Error(`OpenAI image generation failed completely for slide ${index}`);
 
     // Apply branding/text overlay to both models' images
-    const brandedBase64 = await this.overlayBrandingAndText({
+    const overlayResult = await this.overlayBrandingAndText({
       base64Image: base64,
       overlayText,
       headline,
@@ -653,7 +658,7 @@ CRITICAL IMAGE REQUIREMENTS:
     });
 
     // Upload primary image
-    const primaryUrl = await uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}_primary`);
+    const primaryUrl = await uploadBase64ToFirebase(overlayResult.base64, tenantId, `slide_${index}_primary`);
 
     // If both models generated images, also upload the alternative
     let variants: { gemini?: string; dalle?: string } | undefined;
@@ -676,7 +681,7 @@ CRITICAL IMAGE REQUIREMENTS:
         altOverlayText = overlayText.toUpperCase() !== overlayText ? overlayText.toUpperCase() : overlayText.toLowerCase();
       }
 
-      const brandedAltBase64 = await this.overlayBrandingAndText({
+      const altOverlayResult = await this.overlayBrandingAndText({
         base64Image: altBase64,
         overlayText: altOverlayText,
         isFirst,
@@ -701,7 +706,7 @@ CRITICAL IMAGE REQUIREMENTS:
         designSpec,
       });
 
-      const altUrl = await uploadBase64ToFirebase(brandedAltBase64, tenantId, `slide_${index}_alt`);
+      const altUrl = await uploadBase64ToFirebase(altOverlayResult.base64, tenantId, `slide_${index}_alt`);
 
       // Return both variants for technician choice
       variants = {
@@ -710,7 +715,12 @@ CRITICAL IMAGE REQUIREMENTS:
       };
     }
 
-    return { url: primaryUrl, variants };
+    return {
+      url: primaryUrl,
+      variants,
+      compositionFailed: overlayResult.compositionFailed,
+      failReason: overlayResult.failReason,
+    };
   }
 
   async generateCarousel(params: {
@@ -825,39 +835,54 @@ CRITICAL IMAGE REQUIREMENTS:
         // Let the AI Art Director's choice apply to the last slide too
 
         try {
-          const result = await this.generateSlide({
-            photoUrl: photoUrl || '',
-            beforePhotoUrl,
-            overlayText: concept.overlayText,
-            headline: concept.headline,
-            subheadline: concept.subheadline,
-            cta: concept.cta,
-            title: concept.title,
-            index: concept.index,
-            isFirst,
-            isLast,
-            isBeforePhoto: usingBefore,
-            outputSize: '1024x1024',
-            customPrompt: brief?.artDirectorPrompt,
-            ...rest,
-            brandColor: rest.brandColor,
-            secondaryColor: rest.secondaryColor,
-            totalSlides: total,
-            layoutType: currentSlideLayout,
-            visualRanking,
-            capitalizationRule,
-            footerBrandToggle,
-            generatorModel,
-            logoUrl: params.logoUrl,
-            logoPosition: params.logoPosition,
-            backgroundBrandColor,
-            accentBrandColor,
-            depthBrandColor,
-            moodboardVisionSummary,
-            visionResult: (usingBefore && visionResultBefore) ? visionResultBefore : (visionResult ?? visionResultStub),
-            templateIntent,
-            designSpec: agentDecisions[i].designSpec,
-          });
+          const MAX_SLIDE_ATTEMPTS = 3;
+          let result: Awaited<ReturnType<AiImageGenerationService['generateSlide']>> | null = null;
+          let attemptLayout = currentSlideLayout;
+          for (let attempt = 0; attempt < MAX_SLIDE_ATTEMPTS; attempt++) {
+            if (attempt > 0) {
+              const fallbackPool = layoutPool.filter(id => id !== attemptLayout);
+              attemptLayout = fallbackPool[Math.floor(((concept.index || i) + attempt) % Math.max(1, fallbackPool.length))] || attemptLayout;
+              console.warn(`[SlideQC] Regenerating slide ${concept.index} attempt ${attempt + 1} with layout '${attemptLayout}' (prev fail: ${result?.failReason || 'unknown'})`);
+            }
+            result = await this.generateSlide({
+              photoUrl: photoUrl || '',
+              beforePhotoUrl,
+              overlayText: concept.overlayText,
+              headline: concept.headline,
+              subheadline: concept.subheadline,
+              cta: concept.cta || (isLast ? 'Book now' : undefined),
+              title: concept.title,
+              index: concept.index,
+              isFirst,
+              isLast,
+              isBeforePhoto: usingBefore,
+              outputSize: '1024x1024',
+              customPrompt: brief?.artDirectorPrompt,
+              ...rest,
+              brandColor: rest.brandColor,
+              secondaryColor: rest.secondaryColor,
+              totalSlides: total,
+              layoutType: attemptLayout,
+              visualRanking,
+              capitalizationRule,
+              footerBrandToggle,
+              generatorModel,
+              logoUrl: params.logoUrl,
+              logoPosition: params.logoPosition,
+              backgroundBrandColor,
+              accentBrandColor,
+              depthBrandColor,
+              moodboardVisionSummary,
+              visionResult: (usingBefore && visionResultBefore) ? visionResultBefore : (visionResult ?? visionResultStub),
+              templateIntent,
+              designSpec: agentDecisions[i].designSpec,
+            });
+            if (!result.compositionFailed) break;
+          }
+          if (!result || result.compositionFailed) {
+            console.error(`[SlideQC] Slide ${concept.index} still failed after retries (${result?.failReason}). Excluding from carousel.`);
+            return null;
+          }
           return {
             url: result.url,
             title: concept.title,
@@ -988,39 +1013,54 @@ CRITICAL IMAGE REQUIREMENTS:
         }
 
         try {
-          const result = await this.generateSlide({
-            photoUrl: photoUrl || '',
-            beforePhotoUrl,
-            overlayText: frame.overlayText,
-            headline: frame.headline,
-            subheadline: frame.subheadline,
-            cta: frame.cta,
-            title: frame.title,
-            index: frame.index,
-            isFirst,
-            isLast,
-            isBeforePhoto: usingBefore,
-            outputSize: '1080x1920',
-            customPrompt: brief?.artDirectorPrompt,
-            ...rest,
-            brandColor: rest.brandColor,
-            secondaryColor: rest.secondaryColor,
-            totalSlides: total,
-            layoutType: currentSlideLayout,
-            visualRanking,
-            capitalizationRule,
-            footerBrandToggle,
-            generatorModel,
-            logoUrl: params.logoUrl,
-            logoPosition: params.logoPosition,
-            backgroundBrandColor,
-            accentBrandColor,
-            depthBrandColor,
-            moodboardVisionSummary,
-            visionResult: (usingBefore && visionResultBefore) ? visionResultBefore : (visionResult ?? visionResultStub),
-            templateIntent: mappedIntent,
-            designSpec: agentDecisions[i].designSpec,
-          });
+          const MAX_FRAME_ATTEMPTS = 3;
+          let result: Awaited<ReturnType<AiImageGenerationService['generateSlide']>> | null = null;
+          let attemptLayout = currentSlideLayout;
+          for (let attempt = 0; attempt < MAX_FRAME_ATTEMPTS; attempt++) {
+            if (attempt > 0) {
+              const fallbackPool = layoutPool.filter(id => id !== attemptLayout);
+              attemptLayout = fallbackPool[Math.floor(((frame.index || i) + attempt) % Math.max(1, fallbackPool.length))] || attemptLayout;
+              console.warn(`[SlideQC] Regenerating frame ${frame.index} attempt ${attempt + 1} with layout '${attemptLayout}'`);
+            }
+            result = await this.generateSlide({
+              photoUrl: photoUrl || '',
+              beforePhotoUrl,
+              overlayText: frame.overlayText,
+              headline: frame.headline,
+              subheadline: frame.subheadline,
+              cta: frame.cta || (isLast ? 'Book now' : undefined),
+              title: frame.title,
+              index: frame.index,
+              isFirst,
+              isLast,
+              isBeforePhoto: usingBefore,
+              outputSize: '1080x1920',
+              customPrompt: brief?.artDirectorPrompt,
+              ...rest,
+              brandColor: rest.brandColor,
+              secondaryColor: rest.secondaryColor,
+              totalSlides: total,
+              layoutType: attemptLayout,
+              visualRanking,
+              capitalizationRule,
+              footerBrandToggle,
+              generatorModel,
+              logoUrl: params.logoUrl,
+              logoPosition: params.logoPosition,
+              backgroundBrandColor,
+              accentBrandColor,
+              depthBrandColor,
+              moodboardVisionSummary,
+              visionResult: (usingBefore && visionResultBefore) ? visionResultBefore : (visionResult ?? visionResultStub),
+              templateIntent: mappedIntent,
+              designSpec: agentDecisions[i].designSpec,
+            });
+            if (!result.compositionFailed) break;
+          }
+          if (!result || result.compositionFailed) {
+            console.error(`[SlideQC] Frame ${frame.index} still failed after retries. Excluding.`);
+            return null;
+          }
           return {
             url: result.url,
             title: frame.title,
@@ -1069,7 +1109,7 @@ CRITICAL IMAGE REQUIREMENTS:
     visionResult?: VisionAnalysisResult;
     templateIntent?: any;
     designSpec?: import('./template-engine/interfaces').ISemanticDesignSpec;
-  }): Promise<string> {
+  }): Promise<{ base64: string; compositionFailed: boolean; failReason?: string }> {
     const {
       base64Image,
       overlayText,
@@ -1278,6 +1318,11 @@ CRITICAL IMAGE REQUIREMENTS:
 
       // NEW ARCHITECTURE: Pull semantic rules from the Art Direction Engine using the layout ID!
       const intent = this.artDirectionEngine.generateDesignIntent(layoutType, Math.max(0, (index || 1) - 1), totalSlides || 1);
+      // Final slide must be a clear CTA composition
+      if (isLast) {
+        intent.visualPriority = 'cta_hero';
+        intent.readingFlow = intent.readingFlow || 'center_down';
+      }
       const behavior = this.artDirectionEngine.mapIntentToBehavior(intent);
       const designLanguage = { intent, behavior };
       const geometryOut = this.geometryCompiler.compile(designLanguage, w, h, designSpec);
@@ -1393,7 +1438,26 @@ CRITICAL IMAGE REQUIREMENTS:
       // Step 3 (Plan): Optimizer + visual QC gate; alternate layout if gate fails
       let rawDsl = COMPILED_LAYOUTS[computedLayoutType];
       let optimizedDsl: any = undefined;
+      let compositionFailed = false;
+      let failReason: string | undefined;
       const compositionQC = new CompositionQualityController();
+
+      // CTA slides must have explicit CTA copy
+      let effectiveCta = cta;
+      let effectiveHeadline = headline;
+      let effectiveSubheadline = subheadline;
+      if (isLast) {
+        if (!effectiveCta || !String(effectiveCta).trim()) {
+          effectiveCta = 'Book now';
+        }
+        if (!effectiveHeadline || !String(effectiveHeadline).trim()) {
+          effectiveHeadline = overlayText?.split(/\s+/).slice(0, 5).join(' ') || 'Ready when you are';
+        }
+      }
+      if (!effectiveHeadline && !overlayText) {
+        compositionFailed = true;
+        failReason = 'missing_headline';
+      }
 
       const runOptimize = (_layoutId: string, dslIn: any) => {
         let dslWork = JSON.parse(JSON.stringify(dslIn));
@@ -1430,7 +1494,7 @@ CRITICAL IMAGE REQUIREMENTS:
           geometryOut.typography,
           subjectBox,
           designLanguage?.intent?.readingFlow,
-          { headline, subheadline, cta },
+          { headline: effectiveHeadline, subheadline: effectiveSubheadline, cta: effectiveCta },
           additionalSubjects,
         );
       };
@@ -1465,10 +1529,24 @@ CRITICAL IMAGE REQUIREMENTS:
             }
           }
           if (optResult.suggestLayoutChange) {
-            console.warn(`[CompositionQC] No alternate passed visual gate — using best-effort '${computedLayoutType}'`);
+            compositionFailed = true;
+            failReason = failReason || `visual_gate:${(optimizedDsl as any)?._compositionMeta?.qualityIssues?.join(',') || 'exhausted'}`;
+            console.warn(`[CompositionQC] No alternate passed visual gate — marking slide failed for regenerate`);
           }
         } else if (optResult.fitActions.length) {
           console.log(`[CompositionQC] Fit cascade: ${optResult.fitActions.join(' | ')}`);
+        }
+
+        // Incomplete slide: heading pocket missing or empty content
+        const textLayers = (optimizedDsl?.layers || []).filter((l: any) => l.type === 'text' || l.type === 'text_group');
+        const hasHeadingBox = textLayers.some((l: any) =>
+          (l.role === 'heading' || (l.children || []).some((c: any) => c.role === 'heading'))
+          && l.allocatedBox
+          && !(l as any)._omitForComposition,
+        );
+        if (textLayers.length > 0 && !hasHeadingBox && (effectiveHeadline || overlayText)) {
+          compositionFailed = true;
+          failReason = failReason || 'missing_heading_allocation';
         }
       }
 
@@ -1525,11 +1603,15 @@ CRITICAL IMAGE REQUIREMENTS:
 
       let textSurfaceColor = isFullBleed ? validBrandColor : validBackgroundColor;
 
-      // Split / Inset layout detection: if the image region doesn't span the full canvas, text sits on background
-      const dslInstance = COMPILED_LAYOUTS[computedLayoutType];
-      if (dslInstance && dslInstance.canvasRegions && dslInstance.canvasRegions.imageRegion && dslInstance.canvasRegions.imageRegion.width < w) {
+      // Split / Inset / band layout: prefer optimized regions (not raw compiled JSON)
+      const activeRegions = optimizedDsl?.canvasRegions || COMPILED_LAYOUTS[computedLayoutType]?.canvasRegions;
+      if (activeRegions?.imageRegion && activeRegions.imageRegion.width < w) {
         textSurfaceColor = validBackgroundColor;
         isFullBleed = false;
+      }
+      // Full-bleed with text band: surface for ink is the photo — keep high-contrast poster ink
+      if (activeRegions?.textRegion && activeRegions.textRegion.height < h * 0.55) {
+        isFullBleed = true;
       }
 
       const surfaceLuminance = getLuminance(textSurfaceColor);
@@ -1615,7 +1697,7 @@ CRITICAL IMAGE REQUIREMENTS:
         layoutType: computedLayoutType, w, h, paddingX, paddingTop, paddingBottom, innerW, innerH,
         validBrandColor, validSecondaryColor, validBackgroundColor, validAccentColor, validDepthColor, brandFont, rawName, photoDataUri,
         escapedLines, dyOffset, dynamicFontSize, dynamicTextColor, overlayText: finalOverlayText, maxLength,
-        structuredText: { headline, subheadline, cta },
+        structuredText: { headline: effectiveHeadline, subheadline: effectiveSubheadline, cta: effectiveCta },
         visionResult: visionResult,
         logoUrl,
         faceCoordinates: visionResult?.faceCoordinates,
@@ -1796,10 +1878,14 @@ CRITICAL IMAGE REQUIREMENTS:
         console.warn('[Sharp Finish Control Warning] Could not apply grain texture, falling back to clean image:', noiseErr);
       }
 
-      return compositeBuffer.toString('base64');
+      return {
+        base64: compositeBuffer.toString('base64'),
+        compositionFailed,
+        failReason,
+      };
     } catch (err) {
       console.error('Failed to apply Sharp text overlay. Returning raw model output:', err);
-      return base64Image;
+      return { base64: base64Image, compositionFailed: true, failReason: 'overlay_exception' };
     }
   }
 }
