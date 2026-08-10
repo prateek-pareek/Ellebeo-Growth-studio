@@ -63,14 +63,18 @@ export class GeometryCompiler {
     // 2. TYPOGRAPHY SCALING (Top-Down Hierarchy Curve Strategy)
     let heroSize = Math.round(behavior.heroBaseFontSize * (behavior.typographyScaleMultiplier || 1.0));
 
-    // A. Visual Dominance (Modify Hero Size based on Priority)
+    // A. Visual Dominance — placement priority, not micro-type punishment
+    // Prefer designLanguage intent; fall back to designSpec composition tags.
+    const visualPriority =
+      intent?.visualPriority || designSpec?.composition?.visualPriority;
     let dominanceScale = 1.0;
-    if (designSpec?.typography?.dominance === 'high' || designSpec?.composition?.visualPriority === 'typography_hero') {
-      dominanceScale = 1.35;
-    } else if (designSpec?.typography?.dominance === 'low' || designSpec?.composition?.visualPriority === 'image_hero') {
-      dominanceScale = 0.75;
-    } else if (designSpec?.composition?.visualPriority === 'cta_hero') {
-      dominanceScale = 0.85; // CTA takes priority, typography yields slightly
+    if (designSpec?.typography?.dominance === 'high' || visualPriority === 'typography_hero') {
+      dominanceScale = 1.25;
+    } else if (designSpec?.typography?.dominance === 'low' || visualPriority === 'image_hero') {
+      // Slight yield only — image_hero wins frame via bands, type stays readable
+      dominanceScale = 0.94;
+    } else if (visualPriority === 'cta_hero') {
+      dominanceScale = 0.9;
     }
     
     heroSize = Math.round(heroSize * dominanceScale);
@@ -97,14 +101,12 @@ export class GeometryCompiler {
       trackingHero = 'standard';
     }
 
-    // Hard cap so stacked multipliers (typography_hero × editorial × dominance)
-    // cannot blow past shared-template scale. Feed ~10% of canvas height;
-    // image-first layouts stay smaller so the photo remains the hero.
+    // Hard caps: image_hero still keeps readable presence (~7–9% of canvas)
     const isStory = canvasHeight > canvasWidth;
-    const imageFirst = designSpec?.composition?.visualPriority === 'image_hero';
-    const maxHeroRatio = imageFirst ? (isStory ? 0.055 : 0.075) : (isStory ? 0.08 : 0.10);
+    const imageFirst = visualPriority === 'image_hero';
+    const maxHeroRatio = imageFirst ? (isStory ? 0.075 : 0.09) : (isStory ? 0.09 : 0.11);
     const maxHero = Math.round(canvasHeight * maxHeroRatio);
-    const minHero = isStory ? 42 : 36;
+    const minHero = Math.round(canvasHeight * (imageFirst ? 0.04 : 0.038));
     heroSize = Math.max(minHero, Math.min(heroSize, maxHero));
 
     // Recalculate body from clamped hero so hierarchy stays proportional

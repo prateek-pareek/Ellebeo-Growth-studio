@@ -31,8 +31,9 @@ import { ArtDirectionEngine } from './template-engine/engines/art-direction-engi
 import { GeometryCompiler } from './template-engine/engines/geometry-compiler';
 import { ColorCompositionEngine } from './template-engine/engines/color-composition-engine';
 import { DesignCompiler } from './template-engine/engines/design-compiler';
-import { LayoutEngine } from './template-engine/engines/layout-engine';
+import { LayoutEngine, BoundingBox } from './template-engine/engines/layout-engine';
 import { CompositionOptimizer } from './template-engine/engines/composition-optimizer';
+import { CompositionQualityController } from './template-engine/engines/composition-quality-controller';
 
 const openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
 
@@ -1353,6 +1354,31 @@ CRITICAL IMAGE REQUIREMENTS:
       console.log(`[FaceBox] Protected zone x=${faceX} y=${faceTop}-${faceBottom} w=${faceWidth} (eyes=${eyesY}, mouth=${mouthY}, x%=${coords.faceCenterXPercent ?? 'n/a'})`);
     }
 
+      // Map vision protected subjects (products, hands, treatment areas, …) onto canvas
+      const containScale = Math.min(w / originalW, h / originalH);
+      const subjectDrawnW = Math.round(originalW * containScale);
+      const subjectDrawnH = Math.round(originalH * containScale);
+      const subjectOffsetX = Math.round((w - subjectDrawnW) / 2);
+      const subjectOffsetY = Math.round((h - subjectDrawnH) / 2);
+
+      const additionalSubjects: BoundingBox[] = [];
+      if (Array.isArray(visionResult?.protectedSubjects)) {
+        for (const sub of visionResult.protectedSubjects) {
+          if (sub.type === 'face' && faceBox) continue; // face already expanded via subjectBox
+          additionalSubjects.push(
+            LayoutEngine.mapPercentBoxToCanvas(
+              {
+                centerXPercent: sub.centerXPercent,
+                centerYPercent: sub.centerYPercent,
+                widthPercent: sub.widthPercent,
+                heightPercent: sub.heightPercent,
+              },
+              w, h, subjectDrawnW, subjectDrawnH, subjectOffsetX, subjectOffsetY,
+            ),
+          );
+        }
+      }
+
       // Subject mass (face + upper body) — text must clear the client image, not only eyes
       const subjectBox = faceBox
         ? LayoutEngine.expandFaceToSubject(faceBox, w, h)
@@ -1360,31 +1386,31 @@ CRITICAL IMAGE REQUIREMENTS:
       if (subjectBox) {
         console.log(`[SubjectBox] Cleared client image mass x=${subjectBox.x} y=${subjectBox.y} w=${subjectBox.width} h=${subjectBox.height}`);
       }
+      if (additionalSubjects.length) {
+        console.log(`[ProtectedSubjects] ${additionalSubjects.length} additional visual subject(s) protected`);
+      }
 
-      // Step 3 (Plan): Single Optimizer Pass
+      // Step 3 (Plan): Optimizer + visual QC gate; alternate layout if gate fails
       let rawDsl = COMPILED_LAYOUTS[computedLayoutType];
       let optimizedDsl: any = undefined;
-      
-      if (rawDsl) {
-        // Design Compiler mutates the DSL mathematically first
-        const designCompiler = new DesignCompiler();
-        if (designLanguage) {
-          rawDsl = designCompiler.compile(rawDsl, designLanguage);
-        }
-        if (designSpec) {
-          rawDsl = designCompiler.compile(rawDsl, designSpec);
-        }
+      const compositionQC = new CompositionQualityController();
 
-        const layoutEngine = new LayoutEngine(w, h, faceBox, subjectBox);
+      const runOptimize = (_layoutId: string, dslIn: any) => {
+        let dslWork = JSON.parse(JSON.stringify(dslIn));
+        const designCompiler = new DesignCompiler();
+        if (designLanguage) dslWork = designCompiler.compile(dslWork, designLanguage);
+        if (designSpec) dslWork = designCompiler.compile(dslWork, designSpec);
+
+        const layoutEngine = new LayoutEngine(w, h, faceBox, subjectBox, additionalSubjects);
         const optFamily = (designLanguage?.intent?.family as any) || 'minimal';
-        const behaviorProfile = (rawDsl as any)?.behavior;
+        const behaviorProfile = (dslWork as any)?.behavior;
         const constraints = layoutEngine.calculateConstraints(optFamily, 'balanced', false, behaviorProfile);
-        
+
         let logoBox: any = undefined;
         if (logoUrl) {
           const logoW = 150;
           const logoH = 150;
-          let lx = w - logoW - 30; // default bottom_right
+          let lx = w - logoW - 30;
           let ly = h - logoH - 30;
           if (logoPosition === 'bottom_left') { lx = 30; }
           else if (logoPosition === 'top_right') { ly = 30; }
@@ -1393,8 +1419,8 @@ CRITICAL IMAGE REQUIREMENTS:
         }
 
         const optimizer = new CompositionOptimizer();
-        const optResult = optimizer.optimizeWithMeta(
-          rawDsl,
+        return optimizer.optimizeWithMeta(
+          dslWork,
           constraints,
           w,
           h,
@@ -1405,10 +1431,42 @@ CRITICAL IMAGE REQUIREMENTS:
           subjectBox,
           designLanguage?.intent?.readingFlow,
           { headline, subheadline, cta },
+          additionalSubjects,
         );
+      };
+
+      if (rawDsl) {
+        let optResult = runOptimize(computedLayoutType, rawDsl);
         optimizedDsl = optResult.dsl;
+
         if (optResult.suggestLayoutChange) {
-          console.warn(`[CompositionQC] Layout '${computedLayoutType}' exhausted wrap→scale→move. Actions: ${optResult.fitActions.join(' | ')}`);
+          console.warn(`[CompositionQC] Layout '${computedLayoutType}' failed visual gate. Trying alternates… Actions: ${optResult.fitActions.join(' | ')}`);
+          const alternates = compositionQC.suggestAlternateLayouts(
+            computedLayoutType,
+            Object.keys(COMPILED_LAYOUTS),
+            {
+              visualPriority: designLanguage?.intent?.visualPriority,
+              readingFlow: designLanguage?.intent?.readingFlow,
+              family: designLanguage?.intent?.family,
+            },
+            4,
+          );
+          for (const altId of alternates) {
+            const altDsl = COMPILED_LAYOUTS[altId];
+            if (!altDsl) continue;
+            const altResult = runOptimize(altId, altDsl);
+            console.log(`[CompositionQC] Alternate '${altId}' → suggestChange=${altResult.suggestLayoutChange} actions=${altResult.fitActions.slice(-2).join(';')}`);
+            if (!altResult.suggestLayoutChange) {
+              computedLayoutType = altId;
+              optimizedDsl = altResult.dsl;
+              optResult = altResult;
+              console.log(`[CompositionQC] Accepted alternate arrangement '${altId}'`);
+              break;
+            }
+          }
+          if (optResult.suggestLayoutChange) {
+            console.warn(`[CompositionQC] No alternate passed visual gate — using best-effort '${computedLayoutType}'`);
+          }
         } else if (optResult.fitActions.length) {
           console.log(`[CompositionQC] Fit cascade: ${optResult.fitActions.join(' | ')}`);
         }
@@ -1430,6 +1488,7 @@ CRITICAL IMAGE REQUIREMENTS:
         faceCoordinates: visionResult?.faceCoordinates,
         faceBox,
         subjectBox,
+        additionalSubjects,
         optimizedDsl
       });
       let baseImage = baseResult.baseImage;
@@ -1562,6 +1621,7 @@ CRITICAL IMAGE REQUIREMENTS:
         faceCoordinates: visionResult?.faceCoordinates,
         faceBox,
         subjectBox,
+        additionalSubjects,
         injectedFeatures: composition.injectedFeatures,
         designTokens,
         designSpec,

@@ -110,6 +110,7 @@ export type BaseCtx = {
   faceCoordinates?: { eyesYPercent: number; mouthYPercent: number; };
   faceBox?: any;
   subjectBox?: any;
+  additionalSubjects?: any[];
   optimizedDsl?: any;
 };
 
@@ -874,6 +875,7 @@ export type DecoCtx = {
   typographyMetrics?: any;
   faceBox?: any;
   subjectBox?: any;
+  additionalSubjects?: any[];
   optimizedDsl?: any;
   activeTheme?: string;
   visualRanking?: string[];
@@ -1008,7 +1010,13 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     // Construct an estimated face BoundingBox from the vision result's Y coordinates
     // (Already extracted above for the optimizer)
 
-    const layoutEngine = new LayoutEngine(ctx.w, ctx.h, ctx.faceBox, ctx.subjectBox);
+    const layoutEngine = new LayoutEngine(
+      ctx.w,
+      ctx.h,
+      ctx.faceBox,
+      ctx.subjectBox,
+      ctx.additionalSubjects || [],
+    );
     const isTensionEnabled = family === 'editorial';
     const behaviorProfile = (dsl as any)?.behavior;
     const constraints = layoutEngine.calculateConstraints(family, 'balanced', isTensionEnabled, behaviorProfile);
@@ -1151,6 +1159,8 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           typographyMetrics: ctx.typographyMetrics,
           typographyTokens: designRecipe.typography,
           designSpec: ctx.designSpec,
+          designLanguage: ctx.designLanguage,
+          visualPriority: ctx.designLanguage?.intent?.visualPriority || ctx.designSpec?.composition?.visualPriority,
           escapeXml: (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
         };
         svg += typographyEngine.renderTextLayer(typoCtx, textLayer);
@@ -1166,6 +1176,8 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           typographyMetrics: ctx.typographyMetrics,
           typographyTokens: designRecipe.typography,
           designSpec: ctx.designSpec,
+          designLanguage: ctx.designLanguage,
+          visualPriority: ctx.designLanguage?.intent?.visualPriority || ctx.designSpec?.composition?.visualPriority,
           escapeXml: (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
         };
         svg += typographyEngine.renderTextGroupLayer(typoCtx, textGroupLayer);

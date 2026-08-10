@@ -26,6 +26,17 @@ export interface VisionAnalysisResult {
     /** Approximate face width as % of image width. */
     faceWidthPercent?: number;
   };
+  /**
+   * Protected visual subjects beyond faces — products, hands, treatment areas, tools, etc.
+   * Percentages are relative to the source image (0–100).
+   */
+  protectedSubjects?: Array<{
+    type: 'face' | 'product' | 'hands' | 'treatment_area' | 'tool' | 'body' | 'other';
+    centerXPercent: number;
+    centerYPercent: number;
+    widthPercent: number;
+    heightPercent: number;
+  }>;
   suitabilityScores: {
     technicalQuality: number;
     brandCompatibility: number;

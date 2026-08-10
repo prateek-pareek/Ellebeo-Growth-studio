@@ -22,6 +22,8 @@ export interface TypographyContext {
   layoutState?: import('../interfaces').ILayoutState;
   colorHierarchy?: import('./color-composition-engine').ColorHierarchy;
   designSpec?: import('../interfaces').ISemanticDesignSpec;
+  designLanguage?: { intent?: { visualPriority?: string } };
+  visualPriority?: string;
   typographyMetrics?: {
     heroSize: number;
     primarySize: number;
@@ -867,11 +869,16 @@ export class TypographyEngine {
       fontSize = Math.round(fontSize * 1.06);
     }
 
-    // Absolute canvas cap (shared-template territory: ~36–108px on 1080 feeds)
+    // Absolute canvas cap — image_hero still keeps readable presence
     if (role === 'heading') {
-      const imageFirst = ctx.designSpec?.composition?.visualPriority === 'image_hero';
-      const maxPx = Math.round(ctx.h * (imageFirst ? (isStorySize ? 0.055 : 0.075) : (isStorySize ? 0.08 : 0.10)));
+      const imageFirst =
+        ctx.visualPriority === 'image_hero'
+        || ctx.designLanguage?.intent?.visualPriority === 'image_hero'
+        || ctx.designSpec?.composition?.visualPriority === 'image_hero';
+      const maxPx = Math.round(ctx.h * (imageFirst ? (isStorySize ? 0.075 : 0.09) : (isStorySize ? 0.09 : 0.11)));
+      const minPx = Math.round(ctx.h * 0.038);
       if (fontSize > maxPx) fontSize = maxPx;
+      if (fontSize < minPx) fontSize = minPx;
     }
 
     // HEADLINE TREATMENTS: Semantic intent overrides for typography

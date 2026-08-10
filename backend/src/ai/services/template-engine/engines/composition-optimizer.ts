@@ -39,10 +39,11 @@ export class CompositionOptimizer {
     subjectBox?: BoundingBox,
     readingFlow?: ReadingFlow,
     content?: ContentBundle,
+    additionalSubjects?: BoundingBox[],
   ): ICompiledLayoutDSL {
     return this.optimizeWithMeta(
       dsl, constraints, canvasW, canvasHeight, faceBox, visualPriority,
-      logoBox, typographyMetrics, subjectBox, readingFlow, content,
+      logoBox, typographyMetrics, subjectBox, readingFlow, content, additionalSubjects,
     ).dsl;
   }
 
@@ -58,6 +59,7 @@ export class CompositionOptimizer {
     subjectBox?: BoundingBox,
     readingFlow?: ReadingFlow,
     content?: ContentBundle,
+    additionalSubjects: BoundingBox[] = [],
   ): OptimizeResult {
     let optimized = JSON.parse(JSON.stringify(dsl)) as ICompiledLayoutDSL;
     if (!optimized.layers) return { dsl: optimized, suggestLayoutChange: false, fitActions: [] };
@@ -68,17 +70,16 @@ export class CompositionOptimizer {
 
     for (const layer of optimized.layers) {
       if (layer.allowedAnchors && layer.allowedAnchors.length > 0) {
-        // Prefer anchors that match reading flow instead of pure random
         const preferred = this.preferredAnchorsForFlow(flow, priority, layer.allowedAnchors);
         const pool = preferred.length > 0 ? preferred : layer.allowedAnchors;
         const randomIndex = Math.floor(Math.random() * pool.length);
         (layer as any).anchor = pool[randomIndex];
       }
 
+      // image_hero: slightly narrower text so photo dominates — type stays large
       if (priority === 'image_hero' && layer.type === 'text') {
         const textLayer = layer as IDSLTextLayer;
-        // Cap as ratio of content — leaves photo dominant
-        if (textLayer.maxWidthPercent > 55) textLayer.maxWidthPercent = 55;
+        if (textLayer.maxWidthPercent > 58) textLayer.maxWidthPercent = 58;
       } else if (priority === 'typography_hero' && layer.type === 'text') {
         const textLayer = layer as IDSLTextLayer;
         if (!textLayer.maxWidthPercent || textLayer.maxWidthPercent < 70) {
@@ -87,7 +88,7 @@ export class CompositionOptimizer {
       }
     }
 
-    const layoutEngine = new LayoutEngine(canvasW, canvasHeight, faceBox, subjectBox);
+    const layoutEngine = new LayoutEngine(canvasW, canvasHeight, faceBox, subjectBox, additionalSubjects);
     let imageBleedExtent = 'full_bleed';
     if (flow === 'z_pattern' || dsl.id.includes('asymmetrical')) {
       imageBleedExtent = 'asymmetrical_65';
@@ -121,27 +122,36 @@ export class CompositionOptimizer {
 
     const estimated = this.qc.estimateGroupHeight(roleTexts, typographyMetrics, canvasHeight, priority);
     let estimatedHeights: Record<string, number> = {};
+    const estimatedFontSizes: Record<string, number> = {};
     groupedTextLayers.forEach((l, i) => {
       estimatedHeights[l.id] = estimated.heights[i] || estimated.heights[0] || Math.round(canvasHeight * 0.06);
+      estimatedFontSizes[l.id] = estimated.fontSizes[i] || typographyMetrics?.heroSize || canvasHeight * 0.05;
     });
     let totalGroupHeight = estimated.total;
     const clusterGap = estimated.gap;
 
+    const protectedSubjects = layoutEngine.getProtectedSubjects();
     const sBox = layoutEngine.getSubjectBox() || layoutEngine.getFaceBox();
-    const subjectHaloRatio = 0.04;
+    const subjectHaloRatio = 0.035;
     const subjectHalo = Math.round(Math.min(canvasW, canvasHeight) * subjectHaloRatio);
 
     const obstacles = logoBox ? [logoBox] : [];
     const candidates = layoutEngine.generateCandidateRegions(constraints, obstacles);
 
     const hitsSubject = (region: BoundingBox, heightNeed: number) => {
-      if (!sBox) return false;
-      const fx = Math.max(0, sBox.x - subjectHalo);
-      const fy = Math.max(0, sBox.y - subjectHalo);
-      const fw = sBox.width + subjectHalo * 2;
-      const fh = sBox.height + subjectHalo * 2;
-      return region.x < fx + fw && region.x + region.width > fx
-        && region.y < fy + fh && region.y + heightNeed > fy;
+      const subjects = protectedSubjects.length ? protectedSubjects : (sBox ? [sBox] : []);
+      if (subjects.length === 0) return false;
+      for (const sub of subjects) {
+        const fx = Math.max(0, sub.x - subjectHalo);
+        const fy = Math.max(0, sub.y - subjectHalo);
+        const fw = sub.width + subjectHalo * 2;
+        const fh = sub.height + subjectHalo * 2;
+        if (region.x < fx + fw && region.x + region.width > fx
+          && region.y < fy + fh && region.y + heightNeed > fy) {
+          return true;
+        }
+      }
+      return false;
     };
 
     const fit = this.qc.fitGroupIntoSafeRegions({
@@ -214,6 +224,7 @@ export class CompositionOptimizer {
       box = this.clampBoxToSafe(box, constraints, canvasW, canvasHeight);
       layer.allocatedBox = box;
       (layer as any)._groupScale = groupScale;
+      (layer as any)._estimatedFontSize = estimatedFontSizes[layer.id] * groupScale;
       currentY = box.y + box.height + clusterGap;
     }
 
@@ -252,55 +263,59 @@ export class CompositionOptimizer {
       }
     }
 
-    // Adaptive QC loop
-    let { score, issues } = this.qc.scoreComposition({
-      boxes: allTextLayers.map(l => ({ role: l.role, box: l.allocatedBox, omitted: !!(l as any)._omitForComposition })),
+    // Final VISUAL QUALITY gate — geometric fit alone is not acceptance
+    const quality = this.qc.evaluateVisualQuality({
+      boxes: allTextLayers.map(l => ({
+        role: l.role,
+        box: l.allocatedBox,
+        omitted: !!(l as any)._omitForComposition,
+        fontSize: (l as any)._estimatedFontSize
+          || (l.role === 'heading' ? typographyMetrics?.heroSize : typographyMetrics?.primarySize)
+          || canvasHeight * 0.04,
+      })),
       constraints,
       canvasW,
       canvasH: canvasHeight,
-      subjectBox: sBox,
+      subjectBoxes: protectedSubjects,
       intent: { visualPriority: priority, readingFlow: flow },
+      groupScale,
     });
 
-    let attempts = 0;
-    while (score < 7.0 && attempts < 3) {
-      for (const txt of allTextLayers) {
-        if (!txt.allocatedBox) continue;
-        if (issues.includes('subject_overlap') || issues.includes('canvas_clip')) {
-          txt.allocatedBox = layoutEngine.resolveFaceCollision(txt.allocatedBox, constraints, family);
-          txt.allocatedBox = this.clampBoxToSafe(txt.allocatedBox, constraints, canvasW, canvasHeight);
-        }
-        if (issues.includes('hierarchy_inversion') && txt.role === 'tagline' && txt.allocatedBox) {
-          txt.allocatedBox.height = Math.round(txt.allocatedBox.height * 0.85);
-        }
+    let suggestLayoutChange = fit.suggestLayoutChange || !groupRegion;
+    const allFitActions = [...fitActions];
+
+    if (!quality.pass) {
+      allFitActions.push(`quality_reject:score=${quality.score.toFixed(1)};issues=${quality.issues.join(',')}`);
+      // Do not auto-accept a geometrically packed but visually weak result
+      suggestLayoutChange = true;
+      for (const group of textGroupLayers) {
+        (group as any)._suggestLayoutChange = true;
       }
-      const next = this.qc.scoreComposition({
-        boxes: allTextLayers.map(l => ({ role: l.role, box: l.allocatedBox })),
-        constraints,
-        canvasW,
-        canvasH: canvasHeight,
-        subjectBox: sBox,
-        intent: { visualPriority: priority, readingFlow: flow },
-      });
-      score = next.score;
-      issues = next.issues;
-      attempts++;
+      console.warn(
+        `[CompositionQC] Visual gate FAILED (score=${quality.score.toFixed(1)}). ` +
+        `Critical=${quality.critical.join('|') || 'none'} Issues=${quality.issues.join('|')}. Triggering alternate layout.`,
+      );
+    } else {
+      allFitActions.push(`quality_pass:score=${quality.score.toFixed(1)}`);
     }
 
     (optimized as any)._compositionMeta = {
-      suggestLayoutChange: fit.suggestLayoutChange,
-      fitActions,
+      suggestLayoutChange,
+      fitActions: allFitActions,
       readingFlow: flow,
       visualPriority: priority,
       groupScale,
       wrapWidthFactor,
-      qualityScore: score,
+      qualityScore: quality.score,
+      qualityIssues: quality.issues,
+      qualityCritical: quality.critical,
+      qualityMetrics: quality.metrics,
     };
 
     return {
       dsl: optimized,
-      suggestLayoutChange: fit.suggestLayoutChange,
-      fitActions,
+      suggestLayoutChange,
+      fitActions: allFitActions,
     };
   }
 

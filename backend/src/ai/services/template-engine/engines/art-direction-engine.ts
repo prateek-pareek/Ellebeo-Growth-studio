@@ -355,18 +355,20 @@ export class ArtDirectionEngine {
     // Apply strict geometric overrides based on philosophical intent
 
     if (intent.visualPriority === 'typography_hero') {
-      profile.heroBaseFontSize = 110; // was 140 — shared templates sit closer to ~72–96
+      profile.heroBaseFontSize = 110;
       profile.metadataBaseFontSize = 20;
       profile.bodyBaseFontSize = 28;
-      profile.elementOverlapAllowed = false; // never cover faces for type drama
+      profile.elementOverlapAllowed = false;
       profile.marginHugging = true;
-      profile.typographyScaleMultiplier = 1.15; // was 1.3
+      profile.typographyScaleMultiplier = 1.15;
     } else {
-      profile.heroBaseFontSize = 84; // was 100
+      profile.heroBaseFontSize = 84;
+      // image_hero = photo owns the FRAME via placement/whitespace, NOT micro-type.
+      // Type stays readable and present; it simply sits in clear bands.
       if (intent.visualPriority === 'image_hero') {
-        profile.typographyScaleMultiplier = 0.70;
+        profile.typographyScaleMultiplier = 0.94;
       } else if (intent.visualPriority === 'composition_hero') {
-        profile.typographyScaleMultiplier = 0.85;
+        profile.typographyScaleMultiplier = 0.9;
       } else if (intent.visualPriority === 'cta_hero') {
         profile.typographyScaleMultiplier = 0.95;
       }

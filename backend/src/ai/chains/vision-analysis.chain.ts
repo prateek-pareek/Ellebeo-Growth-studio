@@ -15,7 +15,7 @@ import type { ModelRouter } from '../orchestrator/model-router';
 import { wrapSystemPrompt } from '../config/platform-system-prompt';
 import { firebaseStorage } from '../../config/firebase.client';
 
-const VISION_PROMPT_VERSION = 'v2.5';
+const VISION_PROMPT_VERSION = 'v2.6';
 
 // Zod-validated output schema enforcer (inline for strict mode)
 function parseVisionOutput(raw: string): VisionAnalysisResult {
@@ -64,6 +64,29 @@ function parseVisionOutput(raw: string): VisionAnalysisResult {
     }
   } else {
     console.log(`[Vision Model] No faceCoordinates detected by GPT in this image.`);
+  }
+
+  if (Array.isArray(obj['protectedSubjects'])) {
+    const parsedSubjects = (obj['protectedSubjects'] as any[])
+      .map((s) => ({
+        type: String(s?.type || 'other') as any,
+        centerXPercent: Number(s?.centerXPercent),
+        centerYPercent: Number(s?.centerYPercent),
+        widthPercent: Number(s?.widthPercent),
+        heightPercent: Number(s?.heightPercent),
+      }))
+      .filter(s =>
+        Number.isFinite(s.centerXPercent) &&
+        Number.isFinite(s.centerYPercent) &&
+        Number.isFinite(s.widthPercent) &&
+        Number.isFinite(s.heightPercent) &&
+        s.widthPercent > 3 &&
+        s.heightPercent > 3
+      );
+    if (parsedSubjects.length > 0) {
+      result.protectedSubjects = parsedSubjects;
+      console.log(`[Vision Model] Protected subjects: ${parsedSubjects.map(s => s.type).join(', ')}`);
+    }
   }
 
   if (!result.servicePerformed) {
@@ -242,6 +265,10 @@ Return ONLY valid JSON — no markdown, no explanation, no preamble.`;
     "faceCenterXPercent": 50,
     "faceWidthPercent": 35
   },
+  "protectedSubjects": [
+    { "type": "face", "centerXPercent": 50, "centerYPercent": 38, "widthPercent": 35, "heightPercent": 40 },
+    { "type": "product", "centerXPercent": 72, "centerYPercent": 70, "widthPercent": 20, "heightPercent": 25 }
+  ],
   "settingDetected": "salon chair|nail table|treatment bed|studio|outdoor|home — be specific",
   "framingType": "macro|portrait|wide|unknown — macro is very close up, portrait is head/shoulders, wide is full body/room",
   "suitabilityScores": {
@@ -252,6 +279,7 @@ Return ONLY valid JSON — no markdown, no explanation, no preamble.`;
 }
 
 If facesDetected is true, you MUST include faceCoordinates. Imagine a grid from 0–100 on both axes (0 = top/left, 100 = bottom/right). Estimate eyesYPercent and mouthYPercent to the nearest 5%. Also estimate faceCenterXPercent (horizontal center of the face) and faceWidthPercent (how wide the face is relative to the frame — typically 25–45 for portraits, wider for macros). If no face is detected, omit faceCoordinates entirely.
+Also return protectedSubjects: every visually important region that text must NOT cover — faces, products/bottles, hands, nails/treatment areas, tools, body focal zones. Use type from: face|product|hands|treatment_area|tool|body|other. Give centerX/Y and width/height as % of the image. Include 1–4 subjects. Omit empty array if nothing meaningful.
 CRITICAL: Score technicalQuality (0-100) on sharpness, exposure, and noise. Score brandCompatibility (0-100) purely on the background and setting (is it a messy peeling wall/distracting=20, or a clean luxury salon/aesthetic=95?). Score composition (0-100) on framing and subject placement.
 Be specific. Vague answers like 'hair was coloured' or 'skin looks better' are useless. Use the technical vocabulary a professional technician would use.`,
         },

@@ -37,14 +37,30 @@ export class LayoutEngine {
   private faceBox?: BoundingBox;
   /** Broader subject/body mass — text should clear this, not only eyes/mouth. */
   private subjectBox?: BoundingBox;
+  /** All protected visual subjects (face, product, hands, treatment area, etc.) */
+  private protectedSubjects: BoundingBox[] = [];
   private isStory: boolean;
 
-  constructor(canvasWidth: number, canvasHeight: number, faceBox?: BoundingBox, subjectBox?: BoundingBox) {
+  constructor(
+    canvasWidth: number,
+    canvasHeight: number,
+    faceBox?: BoundingBox,
+    subjectBox?: BoundingBox,
+    additionalSubjects: BoundingBox[] = [],
+  ) {
     this.canvasWidth = canvasWidth;
     this.canvasHeight = canvasHeight;
     this.faceBox = faceBox;
     this.subjectBox = subjectBox || (faceBox ? LayoutEngine.expandFaceToSubject(faceBox, canvasWidth, canvasHeight) : undefined);
     this.isStory = (canvasHeight / canvasWidth) > 1.3;
+
+    const subjects: BoundingBox[] = [];
+    if (this.subjectBox) subjects.push(this.subjectBox);
+    else if (faceBox) subjects.push(faceBox);
+    for (const s of additionalSubjects) {
+      if (s && s.width > 0 && s.height > 0) subjects.push(s);
+    }
+    this.protectedSubjects = LayoutEngine.mergeOverlappingBoxes(subjects);
   }
 
   /**
@@ -63,12 +79,74 @@ export class LayoutEngine {
     return { x, y, width, height: Math.max(face.height, bottom - y) };
   }
 
+  /** Merge overlapping boxes into unions — scalable multi-subject protection. */
+  public static mergeOverlappingBoxes(boxes: BoundingBox[]): BoundingBox[] {
+    if (boxes.length <= 1) return boxes.slice();
+    const result: BoundingBox[] = boxes.map(b => ({ ...b }));
+    let merged = true;
+    while (merged) {
+      merged = false;
+      for (let i = 0; i < result.length; i++) {
+        for (let j = i + 1; j < result.length; j++) {
+          const a = result[i];
+          const b = result[j];
+          const overlap =
+            a.x < b.x + b.width && a.x + a.width > b.x &&
+            a.y < b.y + b.height && a.y + a.height > b.y;
+          // Also merge if nearly adjacent (small gap)
+          const gapX = Math.max(0, Math.max(b.x - (a.x + a.width), a.x - (b.x + b.width)));
+          const gapY = Math.max(0, Math.max(b.y - (a.y + a.height), a.y - (b.y + b.height)));
+          const near = gapX < 24 && gapY < 24 &&
+            (a.x < b.x + b.width + 24 && a.x + a.width + 24 > b.x) &&
+            (a.y < b.y + b.height + 24 && a.y + a.height + 24 > b.y);
+          if (overlap || near) {
+            const x = Math.min(a.x, b.x);
+            const y = Math.min(a.y, b.y);
+            const right = Math.max(a.x + a.width, b.x + b.width);
+            const bottom = Math.max(a.y + a.height, b.y + b.height);
+            result[i] = { x, y, width: right - x, height: bottom - y };
+            result.splice(j, 1);
+            merged = true;
+            break;
+          }
+        }
+        if (merged) break;
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Map a %-based vision subject box onto canvas coords for fit:contain letterboxing.
+   */
+  public static mapPercentBoxToCanvas(
+    pct: { centerXPercent: number; centerYPercent: number; widthPercent: number; heightPercent: number },
+    canvasW: number,
+    canvasH: number,
+    drawnW: number,
+    drawnH: number,
+    offsetX: number,
+    offsetY: number,
+  ): BoundingBox {
+    const w = Math.round(drawnW * (Math.min(90, Math.max(8, pct.widthPercent)) / 100));
+    const h = Math.round(drawnH * (Math.min(90, Math.max(8, pct.heightPercent)) / 100));
+    const cx = offsetX + (pct.centerXPercent / 100) * drawnW;
+    const cy = offsetY + (pct.centerYPercent / 100) * drawnH;
+    const x = Math.max(0, Math.min(canvasW - w, Math.round(cx - w / 2)));
+    const y = Math.max(0, Math.min(canvasH - h, Math.round(cy - h / 2)));
+    return { x, y, width: w, height: h };
+  }
+
   public getSubjectBox(): BoundingBox | undefined {
     return this.subjectBox;
   }
 
   public getFaceBox(): BoundingBox | undefined {
     return this.faceBox;
+  }
+
+  public getProtectedSubjects(): BoundingBox[] {
+    return this.protectedSubjects;
   }
 
   private getGeometrySignature(family: LayoutFamily): GeometrySignature {
@@ -198,75 +276,74 @@ export class LayoutEngine {
    * Returns a new Y coordinate that pushes the element into a safe zone.
    */
   public resolveFaceCollision(targetBox: BoundingBox, constraints: LayoutConstraints, family: LayoutFamily = 'minimal'): BoundingBox {
-    // Prefer the broader subject mass; fall back to face-only.
-    const protectedBox = this.subjectBox || this.faceBox;
-    if (!protectedBox) return targetBox;
+    const subjects = this.protectedSubjects.length
+      ? this.protectedSubjects
+      : (this.subjectBox || this.faceBox ? [this.subjectBox || this.faceBox!] : []);
+    if (subjects.length === 0) return targetBox;
 
     const signature = this.getGeometrySignature(family);
-    
-    // Calculate the protected halo around the subject/face
-    const halo = signature.faceHaloPadding;
-    const faceSafeZone: BoundingBox = {
-      x: protectedBox.x - halo,
-      y: protectedBox.y - halo,
-      width: protectedBox.width + (halo * 2),
-      height: protectedBox.height + (halo * 2)
-    };
-    
-    // Check intersection
-    const overlapsX = targetBox.x < faceSafeZone.x + faceSafeZone.width && targetBox.x + targetBox.width > faceSafeZone.x;
-    const overlapsY = targetBox.y < faceSafeZone.y + faceSafeZone.height && targetBox.y + targetBox.height > faceSafeZone.y;
+    let current = { ...targetBox };
 
-    if (!(overlapsX && overlapsY)) return targetBox; // No collision with halo
+    for (const protectedBox of subjects) {
+      const halo = signature.faceHaloPadding;
+      const faceSafeZone: BoundingBox = {
+        x: protectedBox.x - halo,
+        y: protectedBox.y - halo,
+        width: protectedBox.width + (halo * 2),
+        height: protectedBox.height + (halo * 2),
+      };
 
-    // allowHeroOverlap only softens the response (prefer shrink over large Y jumps);
-    // it must never leave text covering the facial safe zone.
+      const overlapsX = current.x < faceSafeZone.x + faceSafeZone.width && current.x + current.width > faceSafeZone.x;
+      const overlapsY = current.y < faceSafeZone.y + faceSafeZone.height && current.y + current.height > faceSafeZone.y;
+      if (!(overlapsX && overlapsY)) continue;
 
-    // Constraint Solver Degradation sequence:
-    // 1. Shrink width to sit beside the face
-    const remainingWidthLeft = faceSafeZone.x - targetBox.x;
-    if (remainingWidthLeft > 140) {
-       return { ...targetBox, width: remainingWidthLeft - 20 };
+      const remainingWidthLeft = faceSafeZone.x - current.x;
+      if (remainingWidthLeft > 140) {
+        current = { ...current, width: remainingWidthLeft - 20 };
+        continue;
+      }
+
+      const spaceRightStart = faceSafeZone.x + faceSafeZone.width + 20;
+      if (spaceRightStart < this.canvasWidth - constraints.safeX - 140) {
+        const newWidth = Math.min(current.width, this.canvasWidth - constraints.safeX - spaceRightStart);
+        if (newWidth > 140) {
+          current = { ...current, x: spaceRightStart, width: newWidth };
+          continue;
+        }
+      }
+
+      const bottomClear = Math.max(constraints.margins?.bottom ?? constraints.safeY, 96) + 16;
+      const spaceBelow = (this.canvasHeight - bottomClear) - (faceSafeZone.y + faceSafeZone.height);
+      const spaceAbove = faceSafeZone.y - constraints.safeY;
+      const needH = current.height;
+
+      if (spaceBelow >= needH + 16 && spaceBelow >= spaceAbove) {
+        current = { ...current, y: faceSafeZone.y + faceSafeZone.height + 16 };
+        continue;
+      }
+      if (spaceAbove >= needH + 16) {
+        current = { ...current, y: Math.max(constraints.safeY, faceSafeZone.y - needH - 16) };
+        continue;
+      }
+      if (spaceBelow >= 60) {
+        current = { ...current, y: faceSafeZone.y + faceSafeZone.height + 12, height: Math.min(needH, spaceBelow - 12) };
+        continue;
+      }
+      if (spaceAbove >= 60) {
+        const newH = Math.min(needH, spaceAbove - 12);
+        current = { ...current, y: Math.max(constraints.safeY, faceSafeZone.y - newH - 12), height: newH };
+        continue;
+      }
+
+      current = {
+        ...current,
+        y: Math.max(constraints.safeY, this.canvasHeight - bottomClear - needH),
+        width: Math.min(current.width, constraints.contentMaxWidth),
+        x: constraints.safeX,
+      };
     }
 
-    const spaceRightStart = faceSafeZone.x + faceSafeZone.width + 20;
-    const remainingWidthRight = (targetBox.x + targetBox.width) - spaceRightStart;
-    if (spaceRightStart < this.canvasWidth - constraints.safeX - 140) {
-       const newWidth = Math.min(targetBox.width, this.canvasWidth - constraints.safeX - spaceRightStart);
-       if (newWidth > 140) {
-         return { ...targetBox, x: spaceRightStart, width: newWidth };
-       }
-    }
-
-    // 2. Prefer below OR above the face — pick the larger free band
-    const bottomClear = Math.max(constraints.margins?.bottom ?? constraints.safeY, 96) + 16;
-    const spaceBelow = (this.canvasHeight - bottomClear) - (faceSafeZone.y + faceSafeZone.height);
-    const spaceAbove = faceSafeZone.y - constraints.safeY;
-    const needH = targetBox.height;
-
-    if (spaceBelow >= needH + 16 && spaceBelow >= spaceAbove) {
-      return { ...targetBox, y: faceSafeZone.y + faceSafeZone.height + 16 };
-    }
-    if (spaceAbove >= needH + 16) {
-      return { ...targetBox, y: Math.max(constraints.safeY, faceSafeZone.y - needH - 16) };
-    }
-
-    // 3. Last resort: park in the larger band and shrink height budget via y only
-    if (spaceBelow >= 60) {
-      return { ...targetBox, y: faceSafeZone.y + faceSafeZone.height + 12, height: Math.min(needH, spaceBelow - 12) };
-    }
-    if (spaceAbove >= 60) {
-      const newH = Math.min(needH, spaceAbove - 12);
-      return { ...targetBox, y: Math.max(constraints.safeY, faceSafeZone.y - newH - 12), height: newH };
-    }
-
-    // Absolute fallback: bottom safe strip (still clear of face if possible)
-    return {
-      ...targetBox,
-      y: Math.max(constraints.safeY, this.canvasHeight - bottomClear - needH),
-      width: Math.min(targetBox.width, constraints.contentMaxWidth),
-      x: constraints.safeX,
-    };
+    return current;
   }
 
   /**
@@ -289,9 +366,11 @@ export class LayoutEngine {
 
     let semanticRegion = { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 
-    // Resolve Face / Subject Collision strictly within this semantic quadrant
-    const obstacle = this.subjectBox || this.faceBox;
-    if (obstacle) {
+    // Resolve all protected subjects within this semantic quadrant
+    const subjects = this.protectedSubjects.length
+      ? this.protectedSubjects
+      : (this.subjectBox || this.faceBox ? [this.subjectBox || this.faceBox!] : []);
+    for (const obstacle of subjects) {
        const faceX = obstacle.x;
        const faceY = obstacle.y;
        const faceW = obstacle.width;
@@ -347,23 +426,17 @@ export class LayoutEngine {
     let candidates = [safeZone];
     const obstacles = [...occupiedRegions];
 
-    // Subject mass (face + torso) is the primary obstacle — clears client image, not just eyes
-    const subject = this.subjectBox || this.faceBox;
-    if (subject) {
-      const halo = 56;
+    // All protected visual subjects (face, torso, product, hands, treatment…) as obstacles
+    const subjects = this.protectedSubjects.length
+      ? this.protectedSubjects
+      : (this.subjectBox || this.faceBox ? [this.subjectBox || this.faceBox!] : []);
+    const halo = Math.round(Math.min(this.canvasWidth, this.canvasHeight) * 0.04);
+    for (const subject of subjects) {
       obstacles.push({
         x: Math.max(0, subject.x - halo),
         y: Math.max(0, subject.y - halo),
-        width: subject.width + (halo * 2),
-        height: subject.height + (halo * 2)
-      });
-    } else if (this.faceBox) {
-      const halo = 40;
-      obstacles.push({
-        x: Math.max(0, this.faceBox.x - halo),
-        y: Math.max(0, this.faceBox.y - halo),
-        width: this.faceBox.width + (halo * 2),
-        height: this.faceBox.height + (halo * 2)
+        width: subject.width + halo * 2,
+        height: subject.height + halo * 2,
       });
     }
 
@@ -424,31 +497,37 @@ export class LayoutEngine {
     const canvasArea = this.canvasWidth * this.canvasHeight;
     score += (area / canvasArea) * 2.0;
 
-    // 2. Subject clearance — prefer pockets away from the client image mass
-    const subject = this.subjectBox || this.faceBox;
-    if (subject) {
+    // 2. Subject clearance — prefer pockets away from ALL protected visual subjects
+    const subjects = this.protectedSubjects.length
+      ? this.protectedSubjects
+      : (this.subjectBox || this.faceBox ? [this.subjectBox || this.faceBox!] : []);
+    if (subjects.length > 0) {
       const cMidY = candidate.y + candidate.height / 2;
       const cMidX = candidate.x + candidate.width / 2;
-      const sMidY = subject.y + subject.height / 2;
-      const sMidX = subject.x + subject.width / 2;
-      const normDist = Math.hypot(cMidX - sMidX, cMidY - sMidY) / Math.hypot(this.canvasWidth, this.canvasHeight);
-      score += normDist * 8.0;
+      let bestSubjectScore = -999;
+      for (const subject of subjects) {
+        const sMidY = subject.y + subject.height / 2;
+        const sMidX = subject.x + subject.width / 2;
+        const normDist = Math.hypot(cMidX - sMidX, cMidY - sMidY) / Math.hypot(this.canvasWidth, this.canvasHeight);
+        let local = normDist * 8.0;
 
-      // Strong preference for clear bands above/below the subject (visual communication)
-      const aboveSubject = candidate.y + Math.min(layerHeight, candidate.height) <= subject.y - 12;
-      const belowSubject = candidate.y >= subject.y + subject.height + 12;
-      const besideSubject =
-        (candidate.x + candidate.width <= subject.x - 12) ||
-        (candidate.x >= subject.x + subject.width + 12);
+        const aboveSubject = candidate.y + Math.min(layerHeight, candidate.height) <= subject.y - 12;
+        const belowSubject = candidate.y >= subject.y + subject.height + 12;
+        const besideSubject =
+          (candidate.x + candidate.width <= subject.x - 12) ||
+          (candidate.x >= subject.x + subject.width + 12);
 
-      if (intent.visualPriority === 'image_hero') {
-        if (aboveSubject || belowSubject) score += 7.0;
-        else if (besideSubject) score += 4.0;
-        else score -= 6.0; // overlapping subject vertical band = covering the photo
-      } else {
-        if (aboveSubject || belowSubject) score += 3.0;
-        else if (besideSubject) score += 2.0;
+        if (intent.visualPriority === 'image_hero') {
+          if (aboveSubject || belowSubject) local += 7.0;
+          else if (besideSubject) local += 4.0;
+          else local -= 6.0;
+        } else {
+          if (aboveSubject || belowSubject) local += 3.0;
+          else if (besideSubject) local += 2.0;
+        }
+        bestSubjectScore = Math.max(bestSubjectScore, local);
       }
+      score += bestSubjectScore;
     }
 
     // 3. Reading Flow
