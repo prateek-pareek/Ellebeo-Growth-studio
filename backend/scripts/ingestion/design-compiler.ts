@@ -242,6 +242,119 @@ function compileQuadrant(k: IExtractedKnowledge, id: string): ICompiledLayoutDSL
   return { schemaVersion: "1.0", layoutVersion: "1.0", id, base: "universal_dynamic_base", layers };
 }
 
+// Below: Transformation / Polaroid / Notification Card / Announcement / Magazine — round-2 (gemini-
+// 2.5-flash) real mined data introduced entries in these 5 families for the first time; they had no
+// compileFamily() branch before (round 1 had ~0 real coverage for them), which would have silently
+// dropped every one of these real templates from compiled-layouts.v2.json. Each branches on the real
+// mined readingFlow/negativeSpace, same structure as compileSplit/compileCountdownPromo above, and
+// reuses the exact primitives already built + registered for these families in primitive-engine.ts
+// (timeline_track, polaroid_frame, notification_icon_badge, announcement_banner_ribbon, etc.) so
+// nothing new needs to be added to the renderer — only these compile functions were missing.
+
+function compileTransformation(k: IExtractedKnowledge, id: string): ICompiledLayoutDSL {
+  const layers: IDSLSceneLayer[] = [];
+  const flow = k.composition.readingFlow || 'center-down';
+
+  if (flow === 'z-pattern' || flow === 'diagonal') {
+    // transformation_timeline: photo left, horizontal milestone timeline + heading right
+    layers.push({ id: 'img', type: 'image', zIndex: 10, mask: 'rectangle', paddingPercent: 5, anchor: 'middle_left' });
+    layers.push({ id: 'timeline', type: 'decoration', zIndex: 25, component: 'timeline_track', anchor: 'bottom_center', offsetPercent: 10 });
+    layers.push({ id: 'heading', type: 'text', zIndex: 30, role: 'heading', anchor: 'middle_right', alignment: 'left', maxWidthPercent: 45 });
+  } else if (flow === 'center-outward' || flow === 'circular') {
+    // transformation_journey_arc: circle photo center, step badge sequence, tagline below
+    layers.push({ id: 'img', type: 'image', zIndex: 10, mask: 'circle', paddingPercent: 15, anchor: 'center' });
+    layers.push({ id: 'step', type: 'decoration', zIndex: 35, component: 'step_badge', anchor: 'top_left', offsetPercent: 5 });
+    layers.push({ id: 'heading', type: 'text', zIndex: 30, role: 'heading', anchor: 'bottom_center', alignment: 'center', maxWidthPercent: 70 });
+    layers.push({ id: 'tagline', type: 'text', zIndex: 31, role: 'tagline', anchor: 'bottom_center', alignment: 'center', maxWidthPercent: 60 });
+  } else {
+    // transformation_stat_reveal: no dual-photo split (differentiates from before_after) — single
+    // photo + numeral/metric callout, deliberately not a before/after comparison shape
+    layers.push({ id: 'img', type: 'image', zIndex: 10, mask: 'rectangle', paddingPercent: 0, anchor: 'top_center' });
+    layers.push({ id: 'stat', type: 'decoration', zIndex: 35, component: 'large_numeral_bullet', anchor: 'bottom_left', offsetPercent: 8 });
+    layers.push({ id: 'heading', type: 'text', zIndex: 30, role: 'heading', anchor: 'bottom_center', alignment: 'center', maxWidthPercent: 80 });
+  }
+  return { schemaVersion: '1.0', layoutVersion: '1.0', id, base: 'universal_dynamic_base', layers };
+}
+
+function compilePolaroid(k: IExtractedKnowledge, id: string): ICompiledLayoutDSL {
+  const layers: IDSLSceneLayer[] = [];
+  const flow = k.composition.readingFlow || 'center-down';
+
+  if (flow === 'z-pattern' || flow === 'diagonal' || flow === 'asymmetric') {
+    // polaroid_wall: offset/angled polaroid, tape accent, heading placed opposite the photo
+    layers.push({ id: 'img', type: 'image', zIndex: 10, mask: 'polaroid', paddingPercent: 8, anchor: 'top_left', offsetPercent: 5 });
+    layers.push({ id: 'frame', type: 'decoration', zIndex: 20, component: 'polaroid_frame', anchor: 'top_left', offsetPercent: 5 });
+    layers.push({ id: 'tape', type: 'decoration', zIndex: 35, component: 'editorial_tape', anchor: 'top_left', offsetPercent: 0 });
+    layers.push({ id: 'heading', type: 'text', zIndex: 30, role: 'heading', anchor: 'bottom_right', alignment: 'right', maxWidthPercent: 55 });
+  } else {
+    // polaroid_stacked_caption: single centered polaroid photo + caption strip below (the
+    // observed default — matches the dominant tight-negative-space real mined pattern)
+    layers.push({ id: 'img', type: 'image', zIndex: 10, mask: 'polaroid', paddingPercent: 8, anchor: 'top_center' });
+    layers.push({ id: 'frame', type: 'decoration', zIndex: 20, component: 'polaroid_frame', anchor: 'top_center', offsetPercent: 0 });
+    layers.push({ id: 'heading', type: 'text', zIndex: 30, role: 'heading', anchor: 'bottom_center', alignment: 'center', maxWidthPercent: 75 });
+  }
+  return { schemaVersion: '1.0', layoutVersion: '1.0', id, base: 'universal_dynamic_base', layers };
+}
+
+function compileNotificationCard(k: IExtractedKnowledge, id: string): ICompiledLayoutDSL {
+  const layers: IDSLSceneLayer[] = [];
+  const flow = k.composition.readingFlow || 'center-down';
+
+  if (flow === 'z-pattern' || flow === 'diagonal') {
+    // notification_card_alert: icon chip top-left, title + timestamp stacked beside it
+    layers.push({ id: 'icon', type: 'decoration', zIndex: 35, component: 'notification_icon_badge', anchor: 'top_left', offsetPercent: 8 });
+    layers.push({ id: 'heading', type: 'text', zIndex: 30, role: 'heading', anchor: 'middle_left', alignment: 'left', maxWidthPercent: 65 });
+    layers.push({ id: 'tagline', type: 'text', zIndex: 31, role: 'tagline', anchor: 'middle_left', alignment: 'left', maxWidthPercent: 50 });
+  } else {
+    // notification_card_banner: top banner bar with icon + status chip, heading centered below
+    layers.push({ id: 'icon', type: 'decoration', zIndex: 35, component: 'notification_icon_badge', anchor: 'top_center', offsetPercent: 5 });
+    layers.push({ id: 'chip', type: 'decoration', zIndex: 20, component: 'status_chip', anchor: 'top_right', offsetPercent: 5 });
+    layers.push({ id: 'heading', type: 'text', zIndex: 30, role: 'heading', anchor: 'center', alignment: 'center', maxWidthPercent: 75 });
+  }
+  return { schemaVersion: '1.0', layoutVersion: '1.0', id, base: 'universal_dynamic_base', layers };
+}
+
+function compileAnnouncement(k: IExtractedKnowledge, id: string): ICompiledLayoutDSL {
+  const layers: IDSLSceneLayer[] = [];
+  const flow = k.composition.readingFlow || 'center-down';
+
+  if (flow === 'center-outward' || flow === 'circular') {
+    // announcement_spotlight: centered treatment with a starburst accent behind the heading
+    layers.push({ id: 'burst', type: 'decoration', zIndex: 5, component: 'starburst_badge', anchor: 'center', offsetPercent: 0 });
+    layers.push({ id: 'heading', type: 'text', zIndex: 30, role: 'heading', anchor: 'center', alignment: 'center', maxWidthPercent: 70 });
+  } else {
+    // announcement_banner: banner ribbon accent, bold heading below it
+    layers.push({ id: 'ribbon', type: 'decoration', zIndex: 35, component: 'announcement_banner_ribbon', anchor: 'top_center', offsetPercent: 0 });
+    layers.push({ id: 'heading', type: 'text', zIndex: 30, role: 'heading', anchor: 'center', alignment: 'center', maxWidthPercent: 80, offsetPercent: 10 });
+  }
+  return { schemaVersion: '1.0', layoutVersion: '1.0', id, base: 'universal_dynamic_base', layers };
+}
+
+function compileMagazine(k: IExtractedKnowledge, id: string): ICompiledLayoutDSL {
+  const layers: IDSLSceneLayer[] = [];
+  const flow = k.composition.readingFlow || 'center-down';
+
+  if (flow === 'z-pattern' || flow === 'diagonal') {
+    // magazine_pull_quote_spread: split image/text, pull-quote treatment, vertical label accent
+    layers.push({ id: 'img', type: 'image', zIndex: 10, mask: 'rectangle', paddingPercent: 0, anchor: 'middle_right' });
+    layers.push({ id: 'label', type: 'decoration', zIndex: 20, component: 'vertical_label', anchor: 'middle_left', offsetPercent: 0 });
+    layers.push({ id: 'quote', type: 'decoration', zIndex: 35, component: 'pull_quote', anchor: 'middle_left', offsetPercent: 5 });
+    layers.push({ id: 'heading', type: 'text', zIndex: 30, role: 'heading', anchor: 'middle_left', alignment: 'left', maxWidthPercent: 40 });
+  } else if (flow === 'center-outward' || flow === 'circular') {
+    // magazine_contents_grid: chapter tabs + oversized index numeral, editorial-adjacent structure
+    layers.push({ id: 'tabs', type: 'decoration', zIndex: 20, component: 'chapter_tabs', anchor: 'top_left', offsetPercent: 0 });
+    layers.push({ id: 'index', type: 'decoration', zIndex: 5, component: 'oversized_index', anchor: 'center', offsetPercent: 0 });
+    layers.push({ id: 'heading', type: 'text', zIndex: 30, role: 'heading', anchor: 'bottom_left', alignment: 'left', maxWidthPercent: 60 });
+  } else {
+    // magazine_masthead_cover: full-bleed photo, large masthead heading, running header strip
+    layers.push({ id: 'img', type: 'image', zIndex: 10, mask: 'rectangle', paddingPercent: 0, anchor: 'center' });
+    layers.push({ id: 'header', type: 'decoration', zIndex: 20, component: 'running_header', anchor: 'top_center', offsetPercent: 5 });
+    layers.push({ id: 'sidebar', type: 'decoration', zIndex: 20, component: 'editorial_sidebar', anchor: 'middle_right', offsetPercent: 0 });
+    layers.push({ id: 'heading', type: 'text', zIndex: 30, role: 'heading', anchor: 'bottom_center', alignment: 'center', maxWidthPercent: 85 });
+  }
+  return { schemaVersion: '1.0', layoutVersion: '1.0', id, base: 'universal_dynamic_base', layers };
+}
+
 function compileFamily(family: string, k: IExtractedKnowledge, layoutId: string): ICompiledLayoutDSL | null {
   if (family === 'editorial') return compileEditorial(k, layoutId);
   if (family === 'minimalist_quote') return compileMinimalistQuote(k, layoutId);
@@ -254,6 +367,11 @@ function compileFamily(family: string, k: IExtractedKnowledge, layoutId: string)
   if (family === 'before_after') return compileBeforeAfter(k, layoutId);
   if (family === 'scrapbook') return compileScrapbook(k, layoutId);
   if (family === 'quadrant') return compileQuadrant(k, layoutId);
+  if (family === 'transformation') return compileTransformation(k, layoutId);
+  if (family === 'polaroid') return compilePolaroid(k, layoutId);
+  if (family === 'notification_card') return compileNotificationCard(k, layoutId);
+  if (family === 'announcement') return compileAnnouncement(k, layoutId);
+  if (family === 'magazine') return compileMagazine(k, layoutId);
   return null;
 }
 
@@ -340,6 +458,27 @@ function run() {
       ['before_after', 'scrapbook', 'quadrant'].includes(item.knowledge.layoutFamily?.value));
     addEntries(previouslyDropped2, 'colleague2_');
     console.log(`Recovered ${previouslyDropped2.length} previously-dropped entries from the colleague's own dataset (before_after/scrapbook/quadrant).`);
+  }
+
+  // 5. Round-2 vision extraction batch (gemini-2.5-flash, 1040 new templates) — a SEPARATE input
+  // file (our_knowledge_normalized_batch3.json) and a distinct counterPrefix ('batch3_') so this
+  // can never shift the counter/ids of any prior step. Unlike steps 1-4, this batch covers ALL
+  // families (transformation/polaroid/notification_card/announcement/magazine compile functions
+  // were added specifically to support it) — nothing from this batch should be silently dropped.
+  const ourBatch3Path = path.join(__dirname, 'our_knowledge_normalized_batch3.json');
+  if (fs.existsSync(ourBatch3Path)) {
+    const ours3: { hash: string, knowledge: IExtractedKnowledge }[] = JSON.parse(fs.readFileSync(ourBatch3Path, 'utf8'));
+    const beforeBatch3 = added;
+    const uncompiled = ours3.filter((item) => compileFamily(item.knowledge.layoutFamily?.value, item.knowledge, 'probe') === null);
+    addEntries(ours3, 'batch3_');
+    const compiledInBatch3 = added - beforeBatch3;
+    console.log(`Added ${compiledInBatch3} of ${ours3.length} entries from round-2 (gemini-2.5-flash) extraction.`);
+    if (uncompiled.length > 0) {
+      const uncompiledFamilies = new Set(uncompiled.map((item) => item.knowledge.layoutFamily?.value));
+      console.warn(`WARNING: ${uncompiled.length} round-2 entries had no matching compileFamily() branch and were skipped: families = ${[...uncompiledFamilies].join(', ')}`);
+    } else {
+      console.log('Every round-2 entry had a matching compileFamily() branch — nothing skipped.');
+    }
   }
 
   fs.writeFileSync(outputPath, JSON.stringify(finalLayouts, null, 2), 'utf8');
