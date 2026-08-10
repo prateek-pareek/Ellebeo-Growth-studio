@@ -97,20 +97,27 @@ export class GeometryCompiler {
       trackingHero = 'standard';
     }
 
-    // Minimum body size clamp for accessibility
+    // Hard cap so stacked multipliers (typography_hero × editorial × dominance)
+    // cannot blow past shared-template scale. Feed ~10% of canvas height;
+    // image-first layouts stay smaller so the photo remains the hero.
+    const isStory = canvasHeight > canvasWidth;
+    const imageFirst = designSpec?.composition?.visualPriority === 'image_hero';
+    const maxHeroRatio = imageFirst ? (isStory ? 0.055 : 0.075) : (isStory ? 0.08 : 0.10);
+    const maxHero = Math.round(canvasHeight * maxHeroRatio);
+    const minHero = isStory ? 42 : 36;
+    heroSize = Math.max(minHero, Math.min(heroSize, maxHero));
+
+    // Recalculate body from clamped hero so hierarchy stays proportional
     let bodySize = Math.round(heroSize * curve.body);
-    if (bodySize < 20) {
-      bodySize = 20;
-      // Recalculate hero to maintain proportion if body was clamped
-      heroSize = Math.round(bodySize / curve.body);
-    }
+    if (bodySize < 16) bodySize = 16;
+    // Don't inflate hero back up when body hits the floor — that was re-exploding sizes
 
     const typography = {
       heroSize: heroSize,
-      primarySize: Math.round(heroSize * curve.primary),
-      secondarySize: Math.round(heroSize * curve.secondary),
+      primarySize: Math.min(Math.round(heroSize * curve.primary), Math.round(heroSize * 0.55)),
+      secondarySize: Math.min(Math.round(heroSize * curve.secondary), Math.round(heroSize * 0.40)),
       bodySize: bodySize,
-      metadataSize: Math.round(heroSize * curve.metadata),
+      metadataSize: Math.max(12, Math.min(Math.round(heroSize * curve.metadata), 22)),
       
       heroLineHeight: behavior.lineHeightMultiplier,
       bodyLineHeight: behavior.lineHeightMultiplier,

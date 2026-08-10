@@ -40,6 +40,8 @@ import { CompositionOptimizer } from '../services/template-engine/engines/compos
 const designCompiler = new DesignCompiler();
 const optimizer = new CompositionOptimizer();
 const visualEngine = new VisualResourceEngine();
+import { DesignLanguageResolver } from '../services/template-engine/engines/design-language-resolver';
+const designLanguageResolver = new DesignLanguageResolver();
 
 
 export type LayoutTemplate = {
@@ -870,6 +872,8 @@ export type DecoCtx = {
   faceBox?: any;
   optimizedDsl?: any;
   activeTheme?: string;
+  visualRanking?: string[];
+  capitalizationRule?: string;
 };
 
 export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
@@ -1005,37 +1009,38 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     const behaviorProfile = (dsl as any)?.behavior;
     const constraints = layoutEngine.calculateConstraints(family, 'balanced', isTensionEnabled, behaviorProfile);
 
-    // Determinstic hash based on layoutType and rawName (acting as variant/tenant proxy)
-    const hashString = ctx.layoutType + '_' + (ctx.rawName || 'default');
-    let hash = 2166136261;
-    for (let i = 0; i < hashString.length; i++) {
-      hash ^= hashString.charCodeAt(i);
-      hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-    }
-    const rotationIndex = (hash >>> 0) % 4;
-
-    // Rotate Brand, Secondary, Accent, Depth. Background is explicitly locked.
-    const rotatableColors = [
-      ctx.validBrandColor,
-      ctx.validSecondaryColor,
-      ctx.validAccentColor || ctx.validBrandColor,
-      ctx.validDepthColor || ctx.validBrandColor
-    ];
-
-    const rBrand = rotatableColors[(0 + rotationIndex) % 4];
-    const rSecondary = rotatableColors[(1 + rotationIndex) % 4];
-    const rAccent = rotatableColors[(2 + rotationIndex) % 4];
-    const rDepth = rotatableColors[(3 + rotationIndex) % 4];
-
+    // BrandDNA is the single source of truth — never permute semantic color roles.
+    // Rotation previously made accent/depth swap into "brand" and broke identity.
     const colorPalette: ColorPalette = {
-      brandColor: rBrand,
-      secondaryColor: rSecondary,
-      backgroundColor: ctx.validBackgroundColor, // Locked
-      accentColor: rAccent,
-      depthColor: rDepth
+      brandColor: ctx.validBrandColor,
+      secondaryColor: ctx.validSecondaryColor,
+      backgroundColor: ctx.validBackgroundColor,
+      accentColor: ctx.validAccentColor || ctx.validBrandColor,
+      depthColor: ctx.validDepthColor || ctx.validBrandColor,
+      textColor: ctx.validDepthColor || ctx.dynamicTextColor,
     };
 
     const colorHierarchy = colorEngine.resolveHierarchy(colorPalette, visualRecipe.color);
+
+    // Resolve typography recipe from family + BrandDNA visual ranking / casing
+    const brandStyle = Array.isArray(ctx.visualRanking) && ctx.visualRanking[0]
+      ? String(ctx.visualRanking[0])
+      : String(ctx.activeTheme || 'balanced');
+    const designRecipe = designLanguageResolver.generateRecipe(
+      ctx.layoutType || dsl.id || 'layout',
+      String(family),
+      brandStyle,
+    );
+    if (ctx.capitalizationRule) {
+      const rule = String(ctx.capitalizationRule).toLowerCase();
+      if (rule === 'uppercase' || rule === 'force_uppercase') {
+        designRecipe.typography.casing = 'force_uppercase';
+      } else if (rule === 'lowercase' || rule === 'force_lowercase') {
+        designRecipe.typography.casing = 'force_lowercase';
+      } else if (rule === 'natural' || rule === 'sentence') {
+        designRecipe.typography.casing = 'natural';
+      }
+    }
 
     const primitiveCtx: PrimitiveContext = {
       w: ctx.w,
@@ -1119,6 +1124,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           colorHierarchy,
           designTokens: ctx.designTokens,
           typographyMetrics: ctx.typographyMetrics,
+          typographyTokens: designRecipe.typography,
           designSpec: ctx.designSpec,
           escapeXml: (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
         };
@@ -1133,6 +1139,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           colorHierarchy,
           designTokens: ctx.designTokens,
           typographyMetrics: ctx.typographyMetrics,
+          typographyTokens: designRecipe.typography,
           designSpec: ctx.designSpec,
           escapeXml: (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
         };

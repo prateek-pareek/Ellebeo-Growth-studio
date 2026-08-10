@@ -138,8 +138,9 @@ export class DesignLanguageResolver {
     // ==========================================
     // 2. BRAND DNA OVERRIDES (Aesthetic Shift)
     // ==========================================
+    const styleKey = (brandStyle || '').toLowerCase();
     // This is where a "Countdown Promo" can become a "Luxury Countdown"
-    if (brandStyle.includes('luxury') || brandStyle.includes('high_fashion')) {
+    if (styleKey.includes('luxury') || styleKey.includes('high_fashion') || styleKey.includes('editorial')) {
       // Luxury brands soften urgency and increase whitespace
       if (baseFamily === 'countdown_promo') {
         typography.headlineWeight = 'light';
@@ -148,22 +149,45 @@ export class DesignLanguageResolver {
         composition.whitespace = 'massive';
         visual.texture = 'grain'; // Premium subtlety
       }
-      // General luxury overrides
-      typography.casing = 'force_uppercase';
-      composition.whitespace = 'high';
+      // General luxury / editorial overrides
+      if (styleKey.includes('luxury') || styleKey.includes('high_fashion')) {
+        typography.casing = 'force_uppercase';
+        composition.whitespace = 'high';
+        typography.headlineWeight = typography.headlineWeight === 'hero' ? 'heavy' : typography.headlineWeight;
+        visual.texture = visual.texture === 'none' ? 'grain' : visual.texture;
+      }
+      if (styleKey.includes('editorial')) {
+        typography.headlineWeight = 'light';
+        typography.tracking = 'wide';
+        composition.whitespace = 'high';
+        visual.texture = 'paper';
+      }
     } 
-    else if (brandStyle.includes('bold_campaign') || brandStyle.includes('energetic')) {
+    else if (styleKey.includes('bold') || styleKey.includes('campaign') || styleKey.includes('energetic')) {
       // Bold brands amplify weight and tighten tracking for impact
       typography.headlineWeight = 'hero';
       typography.tracking = 'tight';
       visual.texture = 'noise'; // High energy texture
     }
-    else if (brandStyle.includes('warm_wellness') || brandStyle.includes('natural_organic')) {
+    else if (styleKey.includes('warm') || styleKey.includes('wellness') || styleKey.includes('natural') || styleKey.includes('organic')) {
       // Wellness brands soften edges and use natural textures
       typography.headlineWeight = 'medium';
       typography.casing = 'natural';
       visual.texture = 'paper';
       imageTreatment.mask = 'soft_edge';
+    }
+    else if (styleKey.includes('clinical') || styleKey.includes('medical') || styleKey.includes('clean')) {
+      typography.headlineWeight = 'heavy';
+      typography.tracking = 'tight';
+      typography.casing = 'sentence';
+      visual.texture = 'grain';
+      visual.decorationDensity = 'minimal';
+    }
+    else if (styleKey.includes('minimal')) {
+      typography.headlineWeight = 'light';
+      typography.tracking = 'airy';
+      composition.whitespace = 'massive';
+      visual.decorationDensity = 'minimal';
     }
 
     return {

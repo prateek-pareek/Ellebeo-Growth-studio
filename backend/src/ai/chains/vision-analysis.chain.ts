@@ -15,7 +15,7 @@ import type { ModelRouter } from '../orchestrator/model-router';
 import { wrapSystemPrompt } from '../config/platform-system-prompt';
 import { firebaseStorage } from '../../config/firebase.client';
 
-const VISION_PROMPT_VERSION = 'v2.4';
+const VISION_PROMPT_VERSION = 'v2.5';
 
 // Zod-validated output schema enforcer (inline for strict mode)
 function parseVisionOutput(raw: string): VisionAnalysisResult {
@@ -54,9 +54,11 @@ function parseVisionOutput(raw: string): VisionAnalysisResult {
     if (typeof coords.eyesYPercent === 'number' && typeof coords.mouthYPercent === 'number') {
       result.faceCoordinates = {
         eyesYPercent: coords.eyesYPercent,
-        mouthYPercent: coords.mouthYPercent
+        mouthYPercent: coords.mouthYPercent,
+        faceCenterXPercent: typeof coords.faceCenterXPercent === 'number' ? coords.faceCenterXPercent : undefined,
+        faceWidthPercent: typeof coords.faceWidthPercent === 'number' ? coords.faceWidthPercent : undefined,
       };
-      console.log(`[Vision Model] Successfully extracted face coordinates: Eyes at ${coords.eyesYPercent}%, Mouth at ${coords.mouthYPercent}%`);
+      console.log(`[Vision Model] Successfully extracted face coordinates: Eyes at ${coords.eyesYPercent}%, Mouth at ${coords.mouthYPercent}%, X at ${coords.faceCenterXPercent ?? 'n/a'}%`);
     } else {
       console.log(`[Vision Model] GPT returned malformed faceCoordinates:`, coords);
     }
@@ -236,7 +238,9 @@ Return ONLY valid JSON — no markdown, no explanation, no preamble.`;
   "facesDetected": true,
   "faceCoordinates": {
     "eyesYPercent": 35,
-    "mouthYPercent": 50
+    "mouthYPercent": 50,
+    "faceCenterXPercent": 50,
+    "faceWidthPercent": 35
   },
   "settingDetected": "salon chair|nail table|treatment bed|studio|outdoor|home — be specific",
   "framingType": "macro|portrait|wide|unknown — macro is very close up, portrait is head/shoulders, wide is full body/room",
@@ -247,7 +251,7 @@ Return ONLY valid JSON — no markdown, no explanation, no preamble.`;
   }
 }
 
-If facesDetected is true, you MUST include faceCoordinates. Imagine a vertical grid from 0 (top) to 100 (bottom). Estimate the Y position of the client's eyes and mouth to the nearest 5%. If no face is detected, omit faceCoordinates entirely.
+If facesDetected is true, you MUST include faceCoordinates. Imagine a grid from 0–100 on both axes (0 = top/left, 100 = bottom/right). Estimate eyesYPercent and mouthYPercent to the nearest 5%. Also estimate faceCenterXPercent (horizontal center of the face) and faceWidthPercent (how wide the face is relative to the frame — typically 25–45 for portraits, wider for macros). If no face is detected, omit faceCoordinates entirely.
 CRITICAL: Score technicalQuality (0-100) on sharpness, exposure, and noise. Score brandCompatibility (0-100) purely on the background and setting (is it a messy peeling wall/distracting=20, or a clean luxury salon/aesthetic=95?). Score composition (0-100) on framing and subject placement.
 Be specific. Vague answers like 'hair was coloured' or 'skin looks better' are useless. Use the technical vocabulary a professional technician would use.`,
         },

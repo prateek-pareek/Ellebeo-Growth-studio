@@ -57,23 +57,25 @@ export class LayoutEngine {
 
     if (family === 'editorial') {
       sig.baseMarginY = this.isStory ? 240 : 140;
-      sig.allowHeroOverlap = true; // Editorial tension allows some overlap
-      sig.faceHaloPadding = 20;
+      // Editorial can hug margins, but must never cover faces
+      sig.allowHeroOverlap = false;
+      sig.faceHaloPadding = 48;
     } else if (family === 'clinical') {
       sig.baseMarginX = 80; // stricter margins
       sig.maxTextCoverage = 0.5;
-      sig.faceHaloPadding = 60; // clinical strictly avoids face
+      sig.faceHaloPadding = 72; // clinical strictly avoids face
       sig.allowHeroOverlap = false;
     } else if (family === 'premium') {
       sig.baseMarginX = 120; // huge luxury margins
       sig.baseMarginY = this.isStory ? 300 : 180;
       sig.maxTextCoverage = 0.4;
-      sig.faceHaloPadding = 80;
+      sig.faceHaloPadding = 64;
+      sig.allowHeroOverlap = false;
     } else if (family === 'scrapbook') {
       sig.baseMarginX = 40; // tight margins, messy feel
       sig.baseMarginY = this.isStory ? 160 : 80;
-      sig.faceHaloPadding = 30;
-      sig.allowHeroOverlap = true; // overlapping is allowed
+      sig.faceHaloPadding = 48;
+      sig.allowHeroOverlap = false; // scrapbook clutter still must clear faces
     } else if (family === 'split') {
       sig.baseMarginX = 50;
       sig.maxTextCoverage = 0.45;
@@ -113,12 +115,16 @@ export class LayoutEngine {
     if (this.isStory) {
       // 15% footer reserve for Instagram Story UI (P1 Fix)
       bottomMargin = Math.max(safeY, Math.round(this.canvasHeight * 0.15));
+    } else {
+      // Feed: keep clear of the pinned branding footer strip (~70–96px)
+      bottomMargin = Math.max(safeY, 110);
     }
 
     if (behavior && behavior.marginHugging) {
       safeX = 10;
       safeY = 10;
-      bottomMargin = 10;
+      // Still reserve the branding footer so hugged layouts don't collide with it
+      bottomMargin = this.isStory ? Math.max(10, Math.round(this.canvasHeight * 0.12)) : 96;
     }
 
     // Apply Density (from ArtDirection Engine) to text width constraints
@@ -184,49 +190,54 @@ export class LayoutEngine {
 
     if (!(overlapsX && overlapsY)) return targetBox; // No collision with halo
 
-    if (signature.allowHeroOverlap) {
-      // Family explicitly allows tension/overlap with hero subject
-      return targetBox; 
-    }
+    // allowHeroOverlap only softens the response (prefer shrink over large Y jumps);
+    // it must never leave text covering the facial safe zone.
 
     // Constraint Solver Degradation sequence:
-    // 1. Shrink width
+    // 1. Shrink width to sit beside the face
     const remainingWidthLeft = faceSafeZone.x - targetBox.x;
-    if (remainingWidthLeft > 150) {
-       // We can just shrink the text box to fit on the left
+    if (remainingWidthLeft > 140) {
        return { ...targetBox, width: remainingWidthLeft - 20 };
     }
 
-    const remainingWidthRight = (targetBox.x + targetBox.width) - (faceSafeZone.x + faceSafeZone.width);
-    if (remainingWidthRight > 150 && targetBox.x >= faceSafeZone.x + faceSafeZone.width - 20) {
-       // It's mostly on the right, push it right and shrink
-       return { ...targetBox, x: faceSafeZone.x + faceSafeZone.width + 20, width: remainingWidthRight - 20 };
-    }
-
-    // 2. Shift slightly vertically if it's close to the edge
-    if (targetBox.y > faceSafeZone.y && targetBox.y < faceSafeZone.y + 60) {
-       // Push below face
-       let newY = faceSafeZone.y + faceSafeZone.height + 20;
-       if (newY + targetBox.height <= this.canvasHeight - constraints.safeY) {
-         return { ...targetBox, y: newY };
+    const spaceRightStart = faceSafeZone.x + faceSafeZone.width + 20;
+    const remainingWidthRight = (targetBox.x + targetBox.width) - spaceRightStart;
+    if (spaceRightStart < this.canvasWidth - constraints.safeX - 140) {
+       const newWidth = Math.min(targetBox.width, this.canvasWidth - constraints.safeX - spaceRightStart);
+       if (newWidth > 140) {
+         return { ...targetBox, x: spaceRightStart, width: newWidth };
        }
     }
 
-    if (targetBox.y + targetBox.height > faceSafeZone.y - 60 && targetBox.y < faceSafeZone.y) {
-       // Push above face
-       let newY = faceSafeZone.y - targetBox.height - 20;
-       if (newY >= constraints.safeY) {
-         return { ...targetBox, y: newY };
-       }
+    // 2. Prefer below OR above the face — pick the larger free band
+    const bottomClear = Math.max(constraints.margins?.bottom ?? constraints.safeY, 96) + 16;
+    const spaceBelow = (this.canvasHeight - bottomClear) - (faceSafeZone.y + faceSafeZone.height);
+    const spaceAbove = faceSafeZone.y - constraints.safeY;
+    const needH = targetBox.height;
+
+    if (spaceBelow >= needH + 16 && spaceBelow >= spaceAbove) {
+      return { ...targetBox, y: faceSafeZone.y + faceSafeZone.height + 16 };
+    }
+    if (spaceAbove >= needH + 16) {
+      return { ...targetBox, y: Math.max(constraints.safeY, faceSafeZone.y - needH - 16) };
     }
 
-    // Last Resort: Fallback to a completely safe region (e.g. top center or bottom center)
-    // For now, if we can't cleanly shift/shrink, we push it down forcefully (legacy fallback)
-    let newY = faceSafeZone.y + faceSafeZone.height + 20;
-    if (newY + targetBox.height > this.canvasHeight - constraints.safeY) {
-      newY = Math.max(constraints.safeY, faceSafeZone.y - targetBox.height - 20);
+    // 3. Last resort: park in the larger band and shrink height budget via y only
+    if (spaceBelow >= 60) {
+      return { ...targetBox, y: faceSafeZone.y + faceSafeZone.height + 12, height: Math.min(needH, spaceBelow - 12) };
     }
-    return { ...targetBox, y: newY };
+    if (spaceAbove >= 60) {
+      const newH = Math.min(needH, spaceAbove - 12);
+      return { ...targetBox, y: Math.max(constraints.safeY, faceSafeZone.y - newH - 12), height: newH };
+    }
+
+    // Absolute fallback: bottom safe strip (still clear of face if possible)
+    return {
+      ...targetBox,
+      y: Math.max(constraints.safeY, this.canvasHeight - bottomClear - needH),
+      width: Math.min(targetBox.width, constraints.contentMaxWidth),
+      x: constraints.safeX,
+    };
   }
 
   /**

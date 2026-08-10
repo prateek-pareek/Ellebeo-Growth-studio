@@ -73,14 +73,18 @@ export class ColorCompositionEngine {
       accent = textOrig; // Stark, heavy accent
     }
 
-    // 4. Mathematical Auto-Contrast for Typography
+    // 4. Mathematical Auto-Contrast for Typography — BrandDNA depth is the type ink
     const primaryLuminance = this.getLuminance(primaryBackground);
     const cardLuminance = this.getLuminance(cardSurface);
 
-    // Primary Text lives on Cards or Secondary Surfaces usually
-    // If the card is light, text must be dark. If card is dark, text must be light.
-    const primaryText = cardLuminance > 0.5 ? depthOrig : (recipe.warmth === 'warm' ? '#FCFBF8' : '#FFFFFF');
-    const secondaryText = cardLuminance > 0.5 ? textOrig : brandOrig;
+    // Prefer brand depth on light surfaces; warm/cool whites on dark surfaces
+    const lightInk = recipe.warmth === 'warm' ? '#FCFBF8' : '#FFFFFF';
+    const primaryText = cardLuminance > 0.5
+      ? (this.getContrastRatio(cardSurface, depthOrig) >= 3.0 ? depthOrig : textOrig)
+      : lightInk;
+    const secondaryText = cardLuminance > 0.5
+      ? (this.getContrastRatio(cardSurface, textOrig) >= 3.0 ? textOrig : depthOrig)
+      : (this.getContrastRatio(cardSurface, brandOrig) >= 3.0 ? brandOrig : lightInk);
 
     // 5. Build Hierarchy
     return {

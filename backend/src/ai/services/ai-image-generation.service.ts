@@ -1187,9 +1187,13 @@ CRITICAL IMAGE REQUIREMENTS:
       const validDepthColor = depthBrandColor && depthBrandColor.startsWith('#') ? depthBrandColor : '#1E1E1C';
 
       const rawName = (businessName || 'RAW CANVAS').trim().toUpperCase();
-      const spacedName = rawName.split('').join(' ');
+      // Letter-spacing every character looks premium for short names but clips
+      // long studio names out of the footer. Keep natural spacing past ~14 chars.
+      const displayName = rawName.length <= 14
+        ? rawName.split('').join(' ')
+        : (rawName.length > 28 ? `${rawName.slice(0, 26).trimEnd()}…` : rawName);
 
-      const escapedSpacedName = escapeXml(spacedName);
+      const escapedSpacedName = escapeXml(displayName);
 
       // Fetch logo as base64 for watermark if provided
       let logoDataUri = '';
@@ -1251,21 +1255,18 @@ CRITICAL IMAGE REQUIREMENTS:
       const borderPercent = geometry.borderPercent;
       const headingLetterSpacing = geometry.letterSpacing;
 
-      // Dynamic brand footer spacing based on name length to prevent overlaps/clippings but keep it readable (not micro)
-      let footerLetterSpacing = 6;
-      let footerFontSize = 18; // Base increased from 13 to 18
+      // Footer type: keep readable without blowing past the slide counter
+      let footerLetterSpacing = 2;
+      let footerFontSize = 18;
 
-      if (escapedSpacedName.length < 15) {
-        // Short names can be larger and more spaced out
-        footerFontSize = 24;
-        footerLetterSpacing = 8;
-      } else if (escapedSpacedName.length > 35) {
-        // Very long names
-        footerLetterSpacing = 2;
-        footerFontSize = 14; // Minimum readability increased from 10 to 14
-      } else if (escapedSpacedName.length > 25) {
-        // Medium-long names
-        footerLetterSpacing = 3;
+      if (rawName.length <= 10) {
+        footerFontSize = 22;
+        footerLetterSpacing = 4;
+      } else if (rawName.length > 22) {
+        footerLetterSpacing = 1;
+        footerFontSize = 14;
+      } else if (rawName.length > 16) {
+        footerLetterSpacing = 1;
         footerFontSize = 16;
       }
 
@@ -1324,15 +1325,33 @@ CRITICAL IMAGE REQUIREMENTS:
           ? Math.round(offsetY + (visionResult.faceCoordinates.mouthYPercent / 100) * drawnH)
           : Math.round(eyesY + (drawnH * 0.15));
 
-        // Final face-safe bounding box on canvas
-        const faceTop = Math.max(0, eyesY - Math.round(h * 0.08));
-        const faceBottom = Math.min(h, mouthY + Math.round(h * 0.08));
-        const faceHeight = faceBottom - faceTop;
-        const faceWidth = Math.round(w * 0.45);
-        const faceX = Math.round((w - faceWidth) / 2);
-        
-        faceBox = { x: faceX, y: faceTop, width: faceWidth, height: faceHeight };
+      // Final face-safe bounding box on canvas.
+      // Prefer vision X/width when present; otherwise protect a wide central band
+      // so side-anchored headlines cannot cover cheeks/hair on portraits.
+      const offsetX = Math.round((w - drawnW) / 2);
+      const faceTop = Math.max(0, eyesY - Math.round(h * 0.10));
+      const faceBottom = Math.min(h, mouthY + Math.round(h * 0.12));
+      const faceHeight = Math.max(120, faceBottom - faceTop);
+
+      const coords = visionResult.faceCoordinates;
+      const hasX = typeof coords.faceCenterXPercent === 'number';
+      const hasW = typeof coords.faceWidthPercent === 'number' && coords.faceWidthPercent > 5;
+      const widthPct = hasW
+        ? Math.min(85, Math.max(22, coords.faceWidthPercent as number))
+        : 72;
+      const faceWidth = Math.round((hasX || hasW ? drawnW : w) * (widthPct / 100));
+      let faceX: number;
+      if (hasX) {
+        const centerX = offsetX + ((coords.faceCenterXPercent as number) / 100) * drawnW;
+        faceX = Math.round(centerX - faceWidth / 2);
+      } else {
+        faceX = Math.round((w - faceWidth) / 2);
       }
+      faceX = Math.max(0, Math.min(faceX, w - faceWidth));
+
+      faceBox = { x: faceX, y: faceTop, width: faceWidth, height: faceHeight };
+      console.log(`[FaceBox] Protected zone x=${faceX} y=${faceTop}-${faceBottom} w=${faceWidth} (eyes=${eyesY}, mouth=${mouthY}, x%=${coords.faceCenterXPercent ?? 'n/a'})`);
+    }
 
       // Step 3 (Plan): Single Optimizer Pass
       let rawDsl = COMPILED_LAYOUTS[computedLayoutType];
@@ -1366,7 +1385,16 @@ CRITICAL IMAGE REQUIREMENTS:
         }
 
         const optimizer = new CompositionOptimizer();
-        optimizedDsl = optimizer.optimize(rawDsl, constraints, w, h, faceBox, designLanguage?.intent?.visualPriority, logoBox);
+        optimizedDsl = optimizer.optimize(
+          rawDsl,
+          constraints,
+          w,
+          h,
+          faceBox,
+          designLanguage?.intent?.visualPriority,
+          logoBox,
+          geometryOut.typography,
+        );
       }
 
       const baseResult = await BASE_TREATMENTS[template.base]!({
@@ -1506,7 +1534,10 @@ CRITICAL IMAGE REQUIREMENTS:
         injectedFeatures: composition.injectedFeatures,
         designTokens,
         designSpec,
+        designLanguage,
         typographyMetrics: geometryOut.typography,
+        capitalizationRule,
+        visualRanking,
         activeTheme,
         optimizedDsl,
       };
@@ -1545,10 +1576,30 @@ CRITICAL IMAGE REQUIREMENTS:
           </text>`
         : '';
 
-      const footerSection = (layoutType !== 'poster_cover')
-        ? `<rect x="0" y="${h - 85}" width="${w}" height="85" class="footer-bg" />
-          ${footerBrandToggle ? `<text x="60" y="${h - 35}" class="footer-brand">${escapedSpacedName}</text>` : ''}
-          <text x="${w - 60}" y="${h - 35}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`
+      // Footer is always pinned to the absolute canvas bottom so large
+      // negative-space margins never push the brand bar into headline territory.
+      const FOOTER_H = 72;
+      const footerBrandLabel = footerBrandToggle ? escapedSpacedName : '';
+      const footerSection = (layoutType !== 'poster_cover' && template.showFooter)
+        ? (() => {
+          const footerStyle = ((index ?? 0) + (totalSlides ?? 4)) % 5;
+          if (footerStyle === 0) {
+            return `<rect x="0" y="${h - FOOTER_H}" width="${w}" height="${FOOTER_H}" class="footer-bg" />
+              ${footerBrandLabel ? `<text x="48" y="${h - 28}" class="footer-brand">${footerBrandLabel}</text>` : ''}
+              <text x="${w - 48}" y="${h - 28}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`;
+          } else if (footerStyle === 1) {
+            return `<text x="${paddingX + 50}" y="${paddingTop + 52}" font-family="'${bodyFont}', system-ui, sans-serif" font-size="13px" font-weight="600" letter-spacing="3px" fill="${validSecondaryColor}" fill-opacity="0.85">${footerBrandLabel || escapedSpacedName}</text>
+              <line x1="${paddingX + 50}" y1="${paddingTop + 62}" x2="${Math.min(paddingX + 280, w - paddingX - 50)}" y2="${paddingTop + 62}" stroke="${validSecondaryColor}" stroke-width="1" stroke-opacity="0.45" />
+              <text x="${w - 48}" y="${h - 28}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`;
+          } else if (footerStyle === 2) {
+            return `<text x="${w - 48}" y="${h - 28}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`;
+          } else if (footerStyle === 3) {
+            const sideLabel = (footerBrandLabel || escapedSpacedName).slice(0, 22);
+            return `<text x="${w - paddingX - 24}" y="${Math.round(h * 0.55)}" font-family="'${bodyFont}', system-ui, sans-serif" font-size="11px" font-weight="600" letter-spacing="4px" fill="${validBrandColor}" fill-opacity="0.65" transform="rotate(90 ${w - paddingX - 24} ${Math.round(h * 0.55)})">${sideLabel}</text>
+              <text x="${w - 48}" y="${h - 28}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`;
+          }
+          return `<text x="${w - 48}" y="${h - 28}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`;
+        })()
         : '';
 
       const svgString = `
@@ -1591,29 +1642,7 @@ CRITICAL IMAGE REQUIREMENTS:
             </text>
           ` : ''}
           
-          <!-- Brand identity mark: randomly placed so the grid stays diverse -->
-          ${template.showFooter ? (() => {
-          const footerStyle = ((index ?? 0) + (totalSlides ?? 4)) % 5;
-          if (footerStyle === 0) {
-            // Classic footer bar
-            return `<rect x="${paddingX}" y="${h - paddingBottom - 60}" width="${innerW}" height="60" class="footer-bg" />
-              <text x="${paddingX + 60}" y="${h - paddingBottom - 25}" class="footer-brand">${escapedSpacedName}</text>
-              <text x="${w - paddingX - 60}" y="${h - paddingBottom - 25}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`;
-          } else if (footerStyle === 1) {
-            // Top-left corner floating wordmark
-            return `<text x="${paddingX + 50}" y="${paddingTop + 52}" font-family="'${bodyFont}', system-ui, sans-serif" font-size="13px" font-weight="600" letter-spacing="4px" fill="${validSecondaryColor}" fill-opacity="0.85" text-transform="uppercase">${escapedSpacedName}</text>
-              <line x1="${paddingX + 50}" y1="${paddingTop + 62}" x2="${Math.min(paddingX + 50 + escapedSpacedName.length * 8, w - paddingX - 50)}" y2="${paddingTop + 62}" stroke="${validSecondaryColor}" stroke-width="1" stroke-opacity="0.5" />`;
-          } else if (footerStyle === 2) {
-            // Bottom-right corner slide counter only — super minimal
-            return `<text x="${w - paddingX - 60}" y="${h - paddingBottom - 25}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`;
-          } else if (footerStyle === 3) {
-            // Vertical side tag — editorial magazine style
-            return `<text x="${w - paddingX - 24}" y="${Math.round(h * 0.62)}" font-family="'${bodyFont}', system-ui, sans-serif" font-size="11px" font-weight="600" letter-spacing="5px" fill="${validBrandColor}" fill-opacity="0.7" transform="rotate(90 ${w - paddingX - 24} ${Math.round(h * 0.62)})">${escapedSpacedName}</text>`;
-          } else {
-            // Pure transparent — no footer at all for this slide
-            return '';
-          }
-        })() : ''}
+          ${footerSection}
         </svg>
       `;
 

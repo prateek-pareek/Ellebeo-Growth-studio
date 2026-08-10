@@ -21,6 +21,10 @@ export interface VisionAnalysisResult {
   faceCoordinates?: {
     eyesYPercent: number;
     mouthYPercent: number;
+    /** Horizontal center of the face as % of image width (0=left, 100=right). */
+    faceCenterXPercent?: number;
+    /** Approximate face width as % of image width. */
+    faceWidthPercent?: number;
   };
   suitabilityScores: {
     technicalQuality: number;
