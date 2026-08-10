@@ -42,6 +42,8 @@ const optimizer = new CompositionOptimizer();
 const visualEngine = new VisualResourceEngine();
 import { DesignLanguageResolver } from '../services/template-engine/engines/design-language-resolver';
 const designLanguageResolver = new DesignLanguageResolver();
+import { CompositionQualityController } from '../services/template-engine/engines/composition-quality-controller';
+const compositionQC = new CompositionQualityController();
 
 
 export type LayoutTemplate = {
@@ -1011,9 +1013,9 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     const behaviorProfile = (dsl as any)?.behavior;
     const constraints = layoutEngine.calculateConstraints(family, 'balanced', isTensionEnabled, behaviorProfile);
 
-    // BrandDNA is the single source of truth — never permute semantic color roles.
-    // Rotation previously made accent/depth swap into "brand" and broke identity.
-    const colorPalette: ColorPalette = {
+    // BrandDNA palette: background is canvas-locked; primary/secondary/accent/depth
+    // may rotate for visual variety — never use background as text ink.
+    const basePalette: ColorPalette = {
       brandColor: ctx.validBrandColor,
       secondaryColor: ctx.validSecondaryColor,
       backgroundColor: ctx.validBackgroundColor,
@@ -1021,8 +1023,29 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       depthColor: ctx.validDepthColor || ctx.validBrandColor,
       textColor: ctx.validDepthColor || ctx.dynamicTextColor,
     };
+    const rotationIndex = compositionQC.hashRotationIndex(
+      `${ctx.layoutType || ''}_${ctx.rawName || 'brand'}_${ctx.activeTheme || ''}`,
+    );
+    const colorPalette = compositionQC.rotateInkPalette(basePalette, rotationIndex);
 
     const colorHierarchy = colorEngine.resolveHierarchy(colorPalette, visualRecipe.color);
+
+    // Ensure text inks never equal the locked background
+    const bg = (ctx.validBackgroundColor || '').toUpperCase();
+    if (colorHierarchy.primaryText?.toUpperCase() === bg) {
+      colorHierarchy.primaryText = colorEngine.resolveTextInk(
+        colorHierarchy.cardSurface || colorHierarchy.primaryBackground,
+        colorPalette,
+        'primary',
+      );
+    }
+    if (colorHierarchy.secondaryText?.toUpperCase() === bg) {
+      colorHierarchy.secondaryText = colorEngine.resolveTextInk(
+        colorHierarchy.cardSurface || colorHierarchy.primaryBackground,
+        colorPalette,
+        'secondary',
+      );
+    }
 
     // Resolve typography recipe from family + BrandDNA visual ranking / casing
     const brandStyle = Array.isArray(ctx.visualRanking) && ctx.visualRanking[0]

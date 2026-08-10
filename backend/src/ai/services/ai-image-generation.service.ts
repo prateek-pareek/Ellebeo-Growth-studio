@@ -1393,7 +1393,7 @@ CRITICAL IMAGE REQUIREMENTS:
         }
 
         const optimizer = new CompositionOptimizer();
-        optimizedDsl = optimizer.optimize(
+        const optResult = optimizer.optimizeWithMeta(
           rawDsl,
           constraints,
           w,
@@ -1403,7 +1403,15 @@ CRITICAL IMAGE REQUIREMENTS:
           logoBox,
           geometryOut.typography,
           subjectBox,
+          designLanguage?.intent?.readingFlow,
+          { headline, subheadline, cta },
         );
+        optimizedDsl = optResult.dsl;
+        if (optResult.suggestLayoutChange) {
+          console.warn(`[CompositionQC] Layout '${computedLayoutType}' exhausted wrap→scale→move. Actions: ${optResult.fitActions.join(' | ')}`);
+        } else if (optResult.fitActions.length) {
+          console.log(`[CompositionQC] Fit cascade: ${optResult.fitActions.join(' | ')}`);
+        }
       }
 
       const baseResult = await BASE_TREATMENTS[template.base]!({
@@ -1477,12 +1485,24 @@ CRITICAL IMAGE REQUIREMENTS:
         textColor: validDepthColor,
       };
 
-      // Use semantic color resolution to guarantee contrast and brand compliance
-      let dynamicTextColor = isLightSurface ? validDepthColor : this.colorCompositionEngine.resolveForegroundColor(textSurfaceColor, colorPalette);
+      // BrandDNA inks only — background is canvas-locked and never becomes text color
+      let dynamicTextColor = this.colorCompositionEngine.resolveTextInk(
+        textSurfaceColor,
+        colorPalette,
+        'primary',
+      );
+      // Prefer depth on light brand/canvas surfaces when contrast allows
+      if (isLightSurface && getLuminance(validDepthColor) < 120) {
+        dynamicTextColor = validDepthColor;
+      }
 
       const footerLuminance = getLuminance(validSecondaryColor);
       const isLightFooter = footerLuminance > 150;
-      const dynamicFooterTextColor = isLightFooter ? validDepthColor : this.colorCompositionEngine.resolveForegroundColor(validSecondaryColor, colorPalette);
+      const dynamicFooterTextColor = this.colorCompositionEngine.resolveTextInk(
+        validSecondaryColor,
+        colorPalette,
+        'secondary',
+      ) || (isLightFooter ? validDepthColor : '#FFFFFF');
 
       let posterTextColor = '#FFFFFF';
       try {

@@ -131,13 +131,15 @@ export class ColorCompositionEngine {
     const secondary = this.cleanHex(palette.secondaryColor || '#F6EEE4');
     const accent = this.cleanHex(palette.accentColor || brand);
     const depth = this.cleanHex(palette.depthColor || '#111111');
+    const bg = this.cleanHex(palette.backgroundColor || '#F9F6F3');
 
+    // BrandDNA inks only — background is canvas-locked and must never become text fill
     const candidates = [
       { color: depth, role: 'Depth' },
       { color: brand, role: 'Primary' },
       { color: accent, role: 'Accent' },
-      { color: secondary, role: 'Secondary' }
-    ];
+      { color: secondary, role: 'Secondary' },
+    ].filter(c => c.color.toUpperCase() !== bg.toUpperCase());
 
     let bestContrast = 0;
     let bestColor = '#FFFFFF';
@@ -150,15 +152,43 @@ export class ColorCompositionEngine {
       }
     }
 
-    // WCAG AA for normal text is 4.5:1. For large text/graphics, 3.0:1 is acceptable.
-    // If our best semantic color passes the minimum threshold, use it.
+    // WCAG AA for large text/graphics: 3.0:1
     if (bestContrast >= 3.0) {
       return bestColor;
     }
 
-    // Emergency fallback: pure white or pure black
     const surfaceLum = this.getLuminance(this.cleanHex(surfaceHex));
-    return surfaceLum > 0.5 ? '#111111' : '#FFFFFF';
+    return surfaceLum > 0.5 ? depth : '#FFFFFF';
+  }
+
+  /**
+   * Resolve text ink from BrandDNA palette against a surface.
+   * Rotation may permute primary/secondary/accent/depth; background stays excluded.
+   */
+  public resolveTextInk(
+    surfaceHex: string,
+    palette: ColorPalette,
+    role: 'primary' | 'secondary' = 'primary',
+  ): string {
+    const ink = this.resolveForegroundColor(surfaceHex, palette);
+    if (role === 'secondary') {
+      const brand = this.cleanHex(palette.brandColor || ink);
+      const accent = this.cleanHex(palette.accentColor || brand);
+      const secondary = this.cleanHex(palette.secondaryColor || brand);
+      const bg = this.cleanHex(palette.backgroundColor || '#FFFFFF');
+      const options = [accent, brand, secondary].filter(c => c.toUpperCase() !== bg.toUpperCase());
+      let best = ink;
+      let bestC = 0;
+      for (const c of options) {
+        const contrast = this.getContrastRatio(surfaceHex, c);
+        if (contrast > bestC && contrast >= 2.5) {
+          bestC = contrast;
+          best = c;
+        }
+      }
+      return best;
+    }
+    return ink;
   }
 
   private isWhite(hex: string): boolean {
