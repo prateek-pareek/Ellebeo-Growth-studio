@@ -18,6 +18,16 @@ export interface ITemplateMetadata {
   premiumStyleScore: number; // 1-10
   occupiedTextZones: BoundingBox[]; // Used for collision avoidance
   
+  // Semantic Traits for unified source-agnostic ranking
+  visualPriority?: 'image_hero' | 'typography_hero' | 'composition_hero' | 'cta_hero';
+  readingFlow?: string;
+  balance?: string;
+  energy?: string;
+  negativeSpace?: string;
+  imageExecution?: string;
+  slideType?: string;
+  family?: string;
+
   // HYBRID ARCHITECTURE FIELDS
   type: 'rigid' | 'procedural'; // Rigid = fixed compiled layout. Procedural = generated via Design Family.
   familyConfig?: IDesignFamily; // Only present if type === 'procedural'
@@ -49,10 +59,19 @@ export interface ITemplateContext {
   visualRanking?: string[];
   activeTheme?: string;
   slideType?: string;
-  requiredTraits?: {
-    visualPriority?: string;
-    energy?: string;
-    readingFlow?: string;
+  semanticIntent?: {
+    required: {
+      visualPriority?: string;
+    };
+    preferred: {
+      energy?: string;
+      readingFlow?: string;
+    };
+    weights: {
+      visualPriority: number;
+      readingFlow: number;
+      energy: number;
+    };
   };
 }
 
@@ -91,7 +110,7 @@ export interface IDSLDecorationLayer extends IDSLBaseLayer {
 
 export interface IDSLTextLayer extends IDSLBaseLayer {
   type: 'text';
-  role: 'heading' | 'tagline' | 'watermark' | 'footnote' | 'body';
+  role: 'heading' | 'tagline' | 'watermark' | 'footnote' | 'body' | 'cta';
   anchor: LayoutAnchor;
   alignment: 'left' | 'center' | 'right';
   maxWidthPercent: number; // restricts text from hitting edges
@@ -152,7 +171,7 @@ export interface ISemanticDesignSpec {
   typography: {
     hierarchy: TypographyHierarchy;
     dominance: TypographyDominance;
-    headlineTreatment?: 'experimental' | 'standard';
+    headlineTreatment?: 'experimental' | 'standard' | 'modern_minimal' | 'editorial_serif' | 'bold_condensed';
   };
   decorations: {
     density: DecorationDensity;

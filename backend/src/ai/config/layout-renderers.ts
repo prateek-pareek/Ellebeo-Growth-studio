@@ -104,6 +104,8 @@ export type BaseCtx = {
   designSpec?: ISemanticDesignSpec;
   designLanguage?: IDesignLanguage;
   faceCoordinates?: { eyesYPercent: number; mouthYPercent: number; };
+  faceBox?: any;
+  optimizedDsl?: any;
 };
 
 export type BaseResult = {
@@ -233,67 +235,40 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
   },
 
   universal_dynamic_base: async (ctx) => {
-    let dsl = COMPILED_LAYOUTS[ctx.layoutType];
-
-    // Phase 2.5: Design Compiler takes semantic intent and mutates the DSL mathematically
-    if (ctx.designLanguage && dsl) {
-      dsl = designCompiler.compile(dsl, ctx.designLanguage);
-    }
-
-    // Phase 2.6: Composition Optimizer balances whitespace and assigns strict bounding boxes
-    if (dsl) {
-      let faceBox: BoundingBox | undefined = undefined;
-      if (ctx.faceCoordinates) {
-        // Approximate a box covering the face based on Y percentages
-        const eyesY = Math.round((ctx.faceCoordinates.eyesYPercent / 100) * ctx.h);
-        const mouthY = Math.round((ctx.faceCoordinates.mouthYPercent / 100) * ctx.h);
-        const faceTop = Math.max(0, eyesY - (ctx.h * 0.05)); // 5% above eyes
-        const faceBottom = Math.min(ctx.h, mouthY + (ctx.h * 0.08)); // 8% below mouth
-        // We assume the face is roughly centered horizontally
-        faceBox = { x: Math.round(ctx.w * 0.2), y: faceTop, width: Math.round(ctx.w * 0.6), height: faceBottom - faceTop };
-      }
-
-      const layoutEngine = new LayoutEngine(ctx.w, ctx.h, faceBox);
-      const constraints = layoutEngine.calculateConstraints('minimal', 'balanced');
-      dsl = optimizer.optimize(dsl, constraints, ctx.w, ctx.h);
-    }
+    let dsl = ctx.optimizedDsl || COMPILED_LAYOUTS[ctx.layoutType];
 
     if (dsl && dsl.layers) {
       const isEditorial = ctx.layoutType.includes('editorial');
-      const imageLayer = dsl.layers.find(l => l.type === 'image') as IDSLImageLayer;
+      const imageLayer = dsl.layers.find((l: any) => l.type === 'image') as IDSLImageLayer;
 
       if (imageLayer) {
-        if (imageLayer.layoutMode === 'triptych') {
-          // CANVA-STYLE TRIPTYCH: Split the photo into 3 distinct vertical panels
+        if (imageLayer.layoutMode === 'triptych' || ctx.designSpec?.photo?.imageExecution === 'triptych') {
+          // CANVA-STYLE TRIPTYCH AS SVG MASK: Splits the photo into 3 distinct vertical panels over the brand background
           const panelW = Math.floor(ctx.w * 0.28);
           const gap = Math.floor(ctx.w * 0.04);
           const startX = Math.floor((ctx.w - (panelW * 3 + gap * 2)) / 2);
           const panelH = Math.floor(ctx.h * 0.75);
           const startY = Math.floor((ctx.h - panelH) / 2);
 
+          const triptychSvg = `
+            <svg width="${ctx.w}" height="${ctx.h}" xmlns="http://www.w3.org/2000/svg">
+              <rect x="${startX}" y="${startY}" width="${panelW}" height="${panelH}" fill="#fff"/>
+              <rect x="${startX + panelW + gap}" y="${startY}" width="${panelW}" height="${panelH}" fill="#fff"/>
+              <rect x="${startX + (panelW + gap) * 2}" y="${startY}" width="${panelW}" height="${panelH}" fill="#fff"/>
+            </svg>`;
+
           const fullPhoto = await processPortraitFit(ctx.imageBuffer, ctx.w, ctx.h, ctx.validBackgroundColor);
-
-          const extractPanel = async (x: number) => {
-            return sharp(fullPhoto).extract({ left: x, top: startY, width: panelW, height: panelH }).toBuffer();
-          };
-
-          const p1 = await extractPanel(startX);
-          const p2 = await extractPanel(startX + panelW + gap);
-          const p3 = await extractPanel(startX + (panelW + gap) * 2);
+          const maskedPhoto = await sharp(fullPhoto).composite([{ input: Buffer.from(triptychSvg), blend: 'dest-in' }]).png().toBuffer();
 
           const baseImageBuffer = await sharp({
             create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validBackgroundColor },
-          }).composite([
-            { input: p1, top: startY, left: startX },
-            { input: p2, top: startY, left: startX + panelW + gap },
-            { input: p3, top: startY, left: startX + (panelW + gap) * 2 },
-          ]).png().toBuffer();
+          }).composite([{ input: maskedPhoto, top: 0, left: 0 }]).png().toBuffer();
 
           return {
             baseImage: sharp(baseImageBuffer),
-            compositeTop: dsl.canvasRegions ? dsl.canvasRegions.textRegion.y : 0,
+            compositeTop: dsl.canvasRegions ? dsl.canvasRegions.textRegion.y : startY,
             compositeBottom: 0,
-            compositeLeft: dsl.canvasRegions ? dsl.canvasRegions.textRegion.x : 0,
+            compositeLeft: dsl.canvasRegions ? dsl.canvasRegions.textRegion.x : startX,
             compositeRight: ctx.w - (dsl.canvasRegions ? dsl.canvasRegions.textRegion.x + dsl.canvasRegions.textRegion.width : ctx.w)
           };
         }
@@ -326,33 +301,6 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
           // single-photo crop. Falls back to a single-photo treatment inside
           // stitchBeforeAfterImages() when no before-photo is available.
           return stitchBeforeAfterImages(ctx, imageLayer.orientation === 'horizontal' ? 'horizontal' : 'vertical');
-        } else if (ctx.designSpec?.photo?.imageExecution === 'triptych') {
-          // CANVA-STYLE TRIPTYCH: Split the photo into 3 distinct vertical panels
-          const panelW = Math.floor(ctx.w * 0.28);
-          const gap = Math.floor(ctx.w * 0.04);
-          const startX = Math.floor((ctx.w - (panelW * 3 + gap * 2)) / 2);
-          const panelH = Math.floor(ctx.h * 0.75);
-          const startY = Math.floor((ctx.h - panelH) / 2);
-
-          const fullPhoto = await processPortraitFit(ctx.imageBuffer, ctx.w, ctx.h, ctx.validBackgroundColor);
-
-          const extractPanel = async (x: number) => {
-            return sharp(fullPhoto).extract({ left: x, top: startY, width: panelW, height: panelH }).toBuffer();
-          };
-
-          const p1 = await extractPanel(startX);
-          const p2 = await extractPanel(startX + panelW + gap);
-          const p3 = await extractPanel(startX + (panelW + gap) * 2);
-
-          const baseImageBuffer = await sharp({
-            create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor },
-          }).composite([
-            { input: p1, top: startY, left: startX },
-            { input: p2, top: startY, left: startX + panelW + gap },
-            { input: p3, top: startY, left: startX + (panelW + gap) * 2 },
-          ]).png().toBuffer();
-
-          return { baseImage: sharp(baseImageBuffer), compositeTop: startY, compositeBottom: startY, compositeLeft: startX, compositeRight: startX };
         } else if (imageLayer.mask === 'circle') {
           const size = Math.floor(Math.min(ctx.w, ctx.h) * 0.6); // 60% of canvas width
           const paddingPx = Math.floor(ctx.w * (imageLayer.paddingPercent || 15) / 100);
@@ -919,6 +867,8 @@ export type DecoCtx = {
   designLanguage?: IDesignLanguage;
   structuredText?: { headline?: string; subheadline?: string; cta?: string; };
   typographyMetrics?: any;
+  faceBox?: any;
+  optimizedDsl?: any;
   activeTheme?: string;
 };
 
@@ -1002,43 +952,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
   },
 
   universal_dynamic_deco: (ctx) => {
-    let dsl = COMPILED_LAYOUTS[ctx.layoutType];
-
-    // Phase 2.5: Design Compiler mutates text widths and alignments based on semantic intent
-    if (ctx.designSpec && dsl) {
-      dsl = designCompiler.compile(dsl, ctx.designSpec);
-    }
-
-    // Compile DSL rules dynamically based on semantic intent
-    if (ctx.designLanguage) {
-      dsl = designCompiler.compile(dsl, ctx.designLanguage);
-    }
-
-    // Extract faceBox early for the optimizer
-    let faceBox: any | undefined = undefined;
-    if (ctx.faceCoordinates && ctx.faceCoordinates.eyesYPercent) {
-      const eyesY = Math.round((ctx.faceCoordinates.eyesYPercent / 100) * ctx.h);
-      const mouthY = ctx.faceCoordinates.mouthYPercent
-        ? Math.round((ctx.faceCoordinates.mouthYPercent / 100) * ctx.h)
-        : Math.round(eyesY + (ctx.h * 0.15));
-
-      const faceTop = Math.max(0, eyesY - Math.round(ctx.h * 0.08));
-      const faceBottom = Math.min(ctx.h, mouthY + Math.round(ctx.h * 0.08));
-      const faceHeight = faceBottom - faceTop;
-      const faceWidth = Math.round(ctx.w * 0.45);
-      const faceX = Math.round((ctx.w - faceWidth) / 2);
-      faceBox = { x: faceX, y: faceTop, width: faceWidth, height: faceHeight };
-      console.log(`[LayoutRenderer] Applied GPT face coordinates. Computed FaceBox for avoidance:`, faceBox);
-    }
-
-    // Phase 2.6: Composition Optimizer
-    if (dsl) {
-      const layoutEngine = new LayoutEngine(ctx.w, ctx.h, faceBox);
-      const optFamily = (ctx.designLanguage?.intent?.family as any) || 'minimal';
-      const behaviorProfile = (dsl as any)?.behavior;
-      const constraints = layoutEngine.calculateConstraints(optFamily, 'balanced', false, behaviorProfile);
-      dsl = optimizer.optimize(dsl, constraints, ctx.w, ctx.h, faceBox, ctx.designLanguage?.intent?.visualPriority);
-    }
+    let dsl = ctx.optimizedDsl || COMPILED_LAYOUTS[ctx.layoutType];
 
     if (!dsl || !dsl.layers) return '';
 
@@ -1048,7 +962,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     const contract = (dsl as any).contract;
     if (contract && Array.isArray(contract.required)) {
       for (const req of contract.required) {
-        const hasPrimitive = dsl.layers.some(l => ('component' in l && l.component === req)) ||
+        const hasPrimitive = dsl.layers.some((l: any) => ('component' in l && l.component === req)) ||
           (ctx.injectedFeatures || []).includes(req);
         if (!hasPrimitive) {
           console.warn(`[Renderer] Template '${dsl.id}' is missing required primitive: '${req}'.`);
@@ -1057,7 +971,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     }
 
     // Check if we need to apply a global overlay (like noise) based on brand DNA
-    let overlayLayers = dsl.layers.filter(l => l.type === 'decoration' || l.type === 'text' || (l.type === 'image' && l.component));
+    let overlayLayers = dsl.layers.filter((l: any) => l.type === 'decoration' || l.type === 'text' || (l.type === 'image' && l.component));
 
     // Generate the Visual Recipe instead of relying on rigid family names
     let visualRecipe;
@@ -1077,7 +991,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     const moodDecorations = themeEngine.getMoodDecorations(visualRecipe.texture);
     overlayLayers = [...overlayLayers, ...moodDecorations];
 
-    overlayLayers.sort((a, b) => a.zIndex - b.zIndex);
+    overlayLayers.sort((a: any, b: any) => a.zIndex - b.zIndex);
 
 
 
@@ -1086,7 +1000,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     // Construct an estimated face BoundingBox from the vision result's Y coordinates
     // (Already extracted above for the optimizer)
 
-    const layoutEngine = new LayoutEngine(ctx.w, ctx.h, faceBox);
+    const layoutEngine = new LayoutEngine(ctx.w, ctx.h, ctx.faceBox);
     const isTensionEnabled = family === 'editorial';
     const behaviorProfile = (dsl as any)?.behavior;
     const constraints = layoutEngine.calculateConstraints(family, 'balanced', isTensionEnabled, behaviorProfile);

@@ -115,15 +115,27 @@ export class TypographyEngine {
     const style = this.resolveStyle(layer, ctx, textToWrap);
 
     // 3. Pre-calculate line height & wrapping bounds
-    let lineHeight = Math.round(style.fontSize * 1.35);
+    let lineHeightMultiplier = 1.35;
+    let explicitLineHeight = false;
+    let absoluteLineHeight = 26;
+
     if ((layer as any).lineHeight !== undefined) {
-      lineHeight = Math.round(style.fontSize * (layer as any).lineHeight);
+      lineHeightMultiplier = (layer as any).lineHeight;
+      explicitLineHeight = true;
     } else if (layer.role === 'heading') {
-      lineHeight = Math.round(style.fontSize * (ctx.typographyMetrics?.heroLineHeight || 1.18));
+      lineHeightMultiplier = ctx.typographyMetrics?.heroLineHeight || 1.18;
+      explicitLineHeight = true;
     } else if (layer.role === 'body') {
-      lineHeight = Math.round(style.fontSize * (ctx.typographyMetrics?.bodyLineHeight || 1.35));
-    } else if (layer.role === 'tagline' || layer.role === 'footnote') {
-      lineHeight = 26;
+      lineHeightMultiplier = ctx.typographyMetrics?.bodyLineHeight || 1.35;
+      explicitLineHeight = true;
+    }
+
+    const isStoryLH = ctx.h > ctx.w;
+    if (isStoryLH && layer.role === 'heading') lineHeightMultiplier *= 1.2;
+
+    let lineHeight = Math.round(style.fontSize * lineHeightMultiplier);
+    if (!explicitLineHeight && (layer.role === 'tagline' || layer.role === 'footnote')) {
+      lineHeight = absoluteLineHeight;
     }
 
     // Pre-calculate X and alignment based on allocated box or anchor
@@ -226,9 +238,7 @@ export class TypographyEngine {
     // PHASE 2.5: SMART COMPOSITION (No Shrinking, No Failing)
 
     // 1. Vertical Validation & Clamping
-    // Dynamic reserve calculation based on canvas height (story vs square format)
-    const effectiveFooterReserve = ctx.h > 1300 ? Math.round(ctx.h * 0.20) : BRANDING_FOOTER_RESERVE_PX;
-
+    // We now respect the LayoutEngine's constraints directly instead of artificially clamping
     // Sequential Y Stacking: Check if previous text regions already occupy space
     // and push this layer below them to prevent text collision
     if (!layer.allocatedBox && ctx.layoutState && ctx.layoutState.occupiedRegions.length > 0) {
@@ -238,11 +248,22 @@ export class TypographyEngine {
         
         // Vertical Rhythm & Cluster Spacing (DesignSpec Driven)
         let rhythmMultiplier = 0.6;
+        if (ctx.layoutState?.family === 'typography_hero') rhythmMultiplier = 0.4;
+        else if (ctx.layoutState?.family === 'image_hero') rhythmMultiplier = 0.8;
+        
+        const isStoryRhythm = ctx.h > ctx.w;
+        if (isStoryRhythm) rhythmMultiplier *= 0.75;
+
         if (ctx.designSpec?.composition?.negativeSpace === 'large' || ctx.designSpec?.composition?.negativeSpace === 'massive') {
-          rhythmMultiplier = 1.5; // Huge breathing room between elements
+          rhythmMultiplier *= 1.5; // Huge breathing room between elements
         } else if (ctx.designSpec?.composition?.negativeSpace === 'minimal') {
-          rhythmMultiplier = 0.3; // Tight clustering
+          rhythmMultiplier *= 0.5; // Tight clustering
         }
+
+        // Density affects rhythm too
+        const density = ctx.designSpec?.decorations?.density || 'medium';
+        if (density === 'high') rhythmMultiplier *= 0.7;
+        if (density === 'low' || density === 'none') rhythmMultiplier *= 1.3;
 
         const interElementGap = Math.round(style.fontSize * rhythmMultiplier); // Rhythmic gap based on font size
         const stackedY = lastTextRegion.y + (lastTextRegion.height || 0) + interElementGap;
@@ -253,8 +274,8 @@ export class TypographyEngine {
       }
     }
 
-    if (y + textHeight > ctx.h - effectiveFooterReserve) {
-      y = ctx.h - textHeight - effectiveFooterReserve;
+    if (y + textHeight > ctx.h - ctx.constraints.margins.bottom) {
+      y = ctx.h - textHeight - ctx.constraints.margins.bottom;
     }
     if (y < ctx.constraints.safeY) {
       y = ctx.constraints.safeY;
@@ -322,6 +343,8 @@ export class TypographyEngine {
     let opacityStr = '';
     if ((layer as any).opacity !== undefined) {
       opacityStr = ` opacity="${(layer as any).opacity}"`;
+    } else if (style.opacity !== undefined && style.opacity !== 1.0) {
+      opacityStr = ` opacity="${style.opacity}"`;
     }
     let containerSvg = '';
     if (layer.component === 'pill_label' || layer.component === 'solid_card' || layer.component === 'inset_card') {
@@ -414,6 +437,9 @@ export class TypographyEngine {
       else if (child.role === 'heading') lineHeightMultiplier = ctx.typographyMetrics?.heroLineHeight || 1.18;
       else if (child.role === 'body') lineHeightMultiplier = ctx.typographyMetrics?.bodyLineHeight || 1.35;
       
+      const isStoryLHChild = ctx.h > ctx.w;
+      if (isStoryLHChild && child.role === 'heading') lineHeightMultiplier *= 1.2;
+      
       const escapedLines = this.wrapText(rawText, style.fontSize, child, ctx, maxW);
       const lineHeight = Math.round(style.fontSize * lineHeightMultiplier);
       const textHeight = escapedLines.length * lineHeight;
@@ -421,7 +447,10 @@ export class TypographyEngine {
 
       if (childMaxW > groupMaxWidth) groupMaxWidth = childMaxW;
 
-      let childSvg = `<text font-family="${style.fontFamily}" font-size="${style.fontSize}px" font-weight="${style.fontWeight}" font-style="${style.fontStyle}" fill="${style.fill}" letter-spacing="${style.letterSpacing}" text-anchor="${groupLayer.alignment === 'center' ? 'middle' : groupLayer.alignment === 'right' ? 'end' : 'start'}">`;
+      let opacityStr = '';
+      if (style.opacity !== undefined && style.opacity !== 1.0) opacityStr = ` opacity="${style.opacity}"`;
+
+      let childSvg = `<text font-family="${style.fontFamily}" font-size="${style.fontSize}px" font-weight="${style.fontWeight}" font-style="${style.fontStyle}" fill="${style.fill}" letter-spacing="${style.letterSpacing}" text-anchor="${groupLayer.alignment === 'center' ? 'middle' : groupLayer.alignment === 'right' ? 'end' : 'start'}"${opacityStr}>`;
       for (let i = 0; i < escapedLines.length; i++) {
         const line = escapedLines[i];
         let dx = '0';
@@ -440,7 +469,14 @@ export class TypographyEngine {
       });
 
       // Add inter-element rhythmic gap for next child
-      const interElementGap = Math.round(style.fontSize * 0.6);
+      let rhythmMult = 0.6;
+      if (ctx.layoutState?.family === 'typography_hero') rhythmMult = 0.4;
+      else if (ctx.layoutState?.family === 'image_hero') rhythmMult = 0.8;
+      
+      const isStoryGap = ctx.h > ctx.w;
+      if (isStoryGap) rhythmMult *= 0.75;
+      
+      const interElementGap = Math.round(style.fontSize * rhythmMult);
       currentLocalY += textHeight + interElementGap;
     }
 
@@ -448,7 +484,19 @@ export class TypographyEngine {
 
     // Remove the trailing gap from the total height
     const lastChild = childrenData[childrenData.length - 1];
-    const totalGroupHeight = lastChild.localY + lastChild.height;
+    let totalGroupHeight = lastChild.localY + lastChild.height;
+
+    // GLOBAL GROUP SHRINKAGE: Ensure text doesn't overflow canvas vertically while perfectly preserving the Golden Ratio hierarchy
+    let groupShrinkageMultiplier = 1.0;
+    const effectiveFooterReserve = ctx.h > 1300 ? Math.round(ctx.h * 0.20) : 120;
+    const maxAllowedHeight = groupLayer.allocatedBox ? groupLayer.allocatedBox.height : (ctx.h - effectiveFooterReserve - ctx.constraints.safeY);
+
+    if (totalGroupHeight > maxAllowedHeight) {
+      groupShrinkageMultiplier = maxAllowedHeight / totalGroupHeight;
+      if (groupShrinkageMultiplier < 0.5) groupShrinkageMultiplier = 0.5; // Cap maximum shrinkage
+      totalGroupHeight *= groupShrinkageMultiplier;
+      groupMaxWidth *= groupShrinkageMultiplier;
+    }
 
     // 2. Global Positioning for the ENTIRE Group
     const baseAnchorResult = ctx.layoutEngine.resolveAnchor(groupLayer.anchor, 0, totalGroupHeight, ctx.constraints);
@@ -478,7 +526,8 @@ export class TypographyEngine {
     }
 
     // 3. Render the group
-    groupSvg += `<g transform="translate(${x}, ${y})">`;
+    const scaleStr = groupShrinkageMultiplier !== 1.0 ? ` scale(${groupShrinkageMultiplier})` : '';
+    groupSvg += `<g transform="translate(${x}, ${y})${scaleStr}">`;
     for (const child of childrenData) {
       groupSvg += `<g transform="translate(0, ${child.localY})">${child.svg}</g>`;
     }
@@ -532,11 +581,13 @@ export class TypographyEngine {
       if (role === 'heading') {
         fontSize = ctx.typographyMetrics ? ctx.typographyMetrics.heroSize : 72;
       } else if (role === 'tagline') {
-        fontSize = ctx.typographyMetrics ? ctx.typographyMetrics.secondarySize : 24;
+        fontSize = ctx.typographyMetrics ? ctx.typographyMetrics.primarySize : 36;
       } else if (role === 'footnote') {
         fontSize = ctx.typographyMetrics ? ctx.typographyMetrics.metadataSize : 16;
       } else if (role === 'body') {
         fontSize = ctx.typographyMetrics ? ctx.typographyMetrics.bodySize : 18;
+      } else if (role === 'cta') {
+        fontSize = ctx.typographyMetrics ? ctx.typographyMetrics.primarySize * 0.75 : 24;
       }
     }
 
@@ -572,7 +623,7 @@ export class TypographyEngine {
     } else if (role === 'body') {
       fontWeight = weightMap[tokens.bodyWeight] || '400';
       fill = ctx.colorHierarchy ? ctx.colorHierarchy.secondaryText : ctx.dynamicTextColor;
-    } else if (role === 'tagline' || role === 'footnote') {
+    } else if (role === 'tagline' || role === 'footnote' || role === 'cta') {
       // Metadata is usually slightly bolder and wider than body, but smaller
       fontWeight = weightMap[tokens.bodyWeight] === 'light' ? '400' : '600';
       letterSpacing = trackingMap['wide'];
@@ -599,6 +650,47 @@ export class TypographyEngine {
         fontSize *= 1.1; // Moderate dominant scale
       }
     }
+    
+    // STORY BOOST: heroSize format-aware scaling
+    const isStorySize = ctx.h > ctx.w;
+    if (isStorySize && role === 'heading') {
+      fontSize = Math.round(fontSize * 1.15);
+    }
+
+    // HEADLINE TREATMENTS: Semantic intent overrides for typography
+    const headlineTreatment = ctx.designSpec?.typography?.headlineTreatment;
+    if (role === 'heading' && headlineTreatment) {
+      if (headlineTreatment === 'modern_minimal') {
+        layerObj.alignment = layerObj.alignment || 'left';
+        letterSpacing = '0.05em';
+        layerObj.maxWidthPercent = layerObj.maxWidthPercent || 50;
+      } else if (headlineTreatment === 'editorial_serif') {
+        layerObj.alignment = layerObj.alignment || 'center';
+        letterSpacing = '0em';
+        layerObj.maxWidthPercent = layerObj.maxWidthPercent || 80;
+        fontFamily = `'${ctx.brandFont}', 'Playfair Display', 'Georgia', 'Times New Roman', serif`;
+      } else if (headlineTreatment === 'bold_condensed') {
+        layerObj.alignment = layerObj.alignment || 'left';
+        letterSpacing = '-0.05em';
+        layerObj.capitalizationRule = 'uppercase';
+      }
+    }
+    
+    // FORMAT-AWARE OPACITY CASCADE
+    let opacity = 1.0;
+    if (role === 'tagline' || role === 'cta') opacity = 0.95;
+    else if (role === 'body') opacity = 0.85;
+    else if (role === 'footnote') opacity = 0.70;
+
+    // DENSITY MODIFIERS: Apply tracking based on density
+    const density = ctx.designSpec?.decorations?.density || 'medium';
+    if (density === 'low' || density === 'none') {
+      if (letterSpacing === '0em') letterSpacing = '0.04em'; // Breathe out
+      if (letterSpacing === '0.08em') letterSpacing = '0.12em';
+    } else if (density === 'high') {
+      if (letterSpacing === '0.08em') letterSpacing = '0.04em'; // Tighten
+      if (letterSpacing === '0em') letterSpacing = '-0.02em';
+    }
 
     // DYNAMIC CLAMPING: Prevent single long words from bleeding off the canvas
     // Split by whitespace and hyphens to handle compound words like PRESS-POINT
@@ -616,7 +708,7 @@ export class TypographyEngine {
       }
     }
 
-    return { fontSize, fontWeight, fontStyle, fill, letterSpacing, fontFamily };
+    return { fontSize, fontWeight, fontStyle, fill, letterSpacing, fontFamily, opacity };
   }
 
   /**

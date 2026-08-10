@@ -30,6 +30,9 @@ import { CompositionEngine, TemplateIntent } from './template-engine/engines/com
 import { ArtDirectionEngine } from './template-engine/engines/art-direction-engine';
 import { GeometryCompiler } from './template-engine/engines/geometry-compiler';
 import { ColorCompositionEngine } from './template-engine/engines/color-composition-engine';
+import { DesignCompiler } from './template-engine/engines/design-compiler';
+import { LayoutEngine } from './template-engine/engines/layout-engine';
+import { CompositionOptimizer } from './template-engine/engines/composition-optimizer';
 
 const openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
 
@@ -337,7 +340,7 @@ export class AiImageGenerationService {
     secondaryColor?: string;
     aesthetic?: string;
     serviceType?: string;
-    outputSize?: '1024x1024' | '1024x1536';
+    outputSize?: '1024x1024' | '1080x1920';
     customPrompt?: string;
     totalSlides?: number;
     layoutType?: string;
@@ -354,6 +357,7 @@ export class AiImageGenerationService {
     visionResult?: VisionAnalysisResult;
     templateIntent?: 'educational' | 'promotion' | 'testimonial' | 'before_after' | 'brand_story';
     logoUrl?: string;
+    logoPosition?: 'bottom_right' | 'bottom_left' | 'top_right' | 'top_left';
     designSpec?: import('./template-engine/interfaces').ISemanticDesignSpec;
   }): Promise<{ url: string; variants?: { gemini?: string; dalle?: string } }> {
     const {
@@ -362,9 +366,10 @@ export class AiImageGenerationService {
       secondaryColor = '#f5f0eb',
       aesthetic = 'minimal editorial premium beauty',
       serviceType = 'beauty treatment',
-      outputSize = '1024x1024' as '1024x1024' | '1024x1536',
+      outputSize = '1024x1024' as '1024x1024' | '1080x1920',
       layoutType = 'passepartout_text',
       customPrompt,
+      logoPosition = 'bottom_right',
       totalSlides = 4,
       brandFont,
       bodyFont,
@@ -411,6 +416,7 @@ export class AiImageGenerationService {
         captionText: overlayText,
         visionResult,
         logoUrl,
+        logoPosition,
       });
       const url = await uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
       return { url };
@@ -451,6 +457,7 @@ export class AiImageGenerationService {
         visionResult,
         designSpec,
         logoUrl,
+        logoPosition,
       });
       const url = await uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
       return { url };
@@ -458,44 +465,44 @@ export class AiImageGenerationService {
 
     // Bypass AI image generation entirely for procedural text-only families
     if (layoutType === 'text_palette_minimal' || !photoUrl && layoutType?.includes('text_')) {
-       // Create a minimal 1x1 transparent pixel base64. The renderer will cover it with SVG backgrounds.
-       const transparent1x1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
-       const brandedBase64 = await this.overlayBrandingAndText({
-         base64Image: transparent1x1,
-         overlayText,
-         headline,
-         subheadline,
-         cta,
-         isFirst,
-         isLast,
-         brandColor,
-         secondaryColor,
-         businessName,
-         index,
-         totalSlides,
-         brandFont,
-         bodyFont,
-         layoutType,
-         beforePhotoUrl,
-         visualRanking,
-         capitalizationRule,
-         footerBrandToggle,
-         backgroundBrandColor,
-         accentBrandColor,
-         depthBrandColor,
-         outputSize,
-         captionText: overlayText,
-         visionResult,
-         designSpec,
-       });
-       const url = await uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
-       return { url, variants: { gemini: url, dalle: url } };
+      // Create a minimal 1x1 transparent pixel base64. The renderer will cover it with SVG backgrounds.
+      const transparent1x1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+      const brandedBase64 = await this.overlayBrandingAndText({
+        base64Image: transparent1x1,
+        overlayText,
+        headline,
+        subheadline,
+        cta,
+        isFirst,
+        isLast,
+        brandColor,
+        secondaryColor,
+        businessName,
+        index,
+        totalSlides,
+        brandFont,
+        bodyFont,
+        layoutType,
+        beforePhotoUrl,
+        visualRanking,
+        capitalizationRule,
+        footerBrandToggle,
+        backgroundBrandColor,
+        accentBrandColor,
+        depthBrandColor,
+        outputSize,
+        captionText: overlayText,
+        visionResult,
+        designSpec,
+      });
+      const url = await uploadBase64ToFirebase(brandedBase64, tenantId, `slide_${index}`);
+      return { url, variants: { gemini: url, dalle: url } };
     }
 
     // Compile dynamic lifestyle/studio assets for non-booking educational/moodboard posts
     // Subjects use Brand DNA aesthetic direction instead of hardcoded beige/travertine
     const brandAestheticHint = aesthetic || 'minimal, premium beauty editorial';
-    
+
     // Canva-Style Aesthetic Multiplexer: Force the AI into distinct aesthetic categories 
     // rather than repeating "lifestyle interior" every time.
     const lifestyleSubjects = [
@@ -581,7 +588,7 @@ CRITICAL IMAGE REQUIREMENTS:
         const response = await openai.images.generate({
           model: 'gpt-image-1',
           prompt: cleanPrompt,
-          size: outputSize === '1024x1536' ? '1024x1536' as any : '1024x1024',
+          size: outputSize === '1080x1920' ? '1024x1536' as any : '1024x1024',
         });
         const base64 = response.data?.[0]?.b64_json;
         if (base64) {
@@ -641,6 +648,7 @@ CRITICAL IMAGE REQUIREMENTS:
       visionResult,
       designSpec,
       logoUrl,
+      logoPosition,
     });
 
     // Upload primary image
@@ -651,7 +659,7 @@ CRITICAL IMAGE REQUIREMENTS:
     if (geminiResult && dalleResult && generatorModel === 'both') {
       // Apply overlay to alternative image for comparison using alternative text logic
       const altBase64 = geminiResult === base64 ? dalleResult : geminiResult;
-      
+
       // Simple heuristic to create a different text variation for the alt model
       // so the slides don't look completely identical. 
       // If it's a cover slide, we might use a slightly different hook format.
@@ -659,9 +667,9 @@ CRITICAL IMAGE REQUIREMENTS:
       if (overlayText.length > 20 && overlayText.includes(' ')) {
         const words = overlayText.split(' ');
         if (words.length > 5) {
-            altOverlayText = words.slice(0, Math.ceil(words.length * 0.8)).join(' ') + '...';
+          altOverlayText = words.slice(0, Math.ceil(words.length * 0.8)).join(' ') + '...';
         } else {
-            altOverlayText = overlayText.toUpperCase();
+          altOverlayText = overlayText.toUpperCase();
         }
       } else {
         altOverlayText = overlayText.toUpperCase() !== overlayText ? overlayText.toUpperCase() : overlayText.toLowerCase();
@@ -729,10 +737,12 @@ CRITICAL IMAGE REQUIREMENTS:
     depthBrandColor?: string;
     moodboardVisionSummary?: string;
     visionResult?: VisionAnalysisResult;
+    visionResultBefore?: VisionAnalysisResult;
     templateIntent?: 'educational' | 'promotion' | 'testimonial' | 'before_after' | 'brand_story';
     designSpec?: import('./template-engine/interfaces').ISemanticDesignSpec;
+    logoPosition?: 'bottom_right' | 'bottom_left' | 'top_right' | 'top_left';
   }): Promise<GeneratedSlide[]> {
-    const { afterPhotoUrl, beforePhotoUrl, concepts, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', depthBrandColor = '#1E1E1C', moodboardVisionSummary, visionResult, templateIntent = 'educational', designSpec, ...rest } = params;
+    const { afterPhotoUrl, beforePhotoUrl, concepts, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', depthBrandColor = '#1E1E1C', moodboardVisionSummary, visionResult, visionResultBefore, templateIntent = 'educational', designSpec, ...rest } = params;
     const total = concepts.length;
 
     // Derive pool dynamically from compiled layouts — never goes stale when new layouts are added
@@ -749,18 +759,18 @@ CRITICAL IMAGE REQUIREMENTS:
 
     // Select unique layouts intelligently using Template Agent sequentially to ensure diversity and history tracking works
     const agentDecisions: Array<{ selected_layout_id: string; reasoning: string; designSpec?: any }> = [];
-    
+
     for (let i = 0; i < total; i++) {
       const concept = concepts[i];
-      
+
       if (i === 0 && params.layoutType) {
-         agentDecisions.push({ selected_layout_id: params.layoutType, reasoning: 'Pre-selected cover layout from orchestrator', designSpec: params.designSpec });
-         uniqueLayoutsForSlides.push(params.layoutType);
-         continue;
+        agentDecisions.push({ selected_layout_id: params.layoutType, reasoning: 'Pre-selected cover layout from orchestrator', designSpec: params.designSpec });
+        uniqueLayoutsForSlides.push(params.layoutType);
+        continue;
       }
 
       const semanticSlide = params.semanticFlow?.find(s => s.slideType === concept.slideType);
-      
+
       const decision = await this.templateAgent.selectTemplate({
         brief: concept.overlayText || 'Slide',
         brandName: params.businessName || 'Brand',
@@ -772,7 +782,7 @@ CRITICAL IMAGE REQUIREMENTS:
         excludeLayouts: uniqueLayoutsForSlides,
         templateIntent,
         slideType: concept.slideType,
-        requiredTraits: semanticSlide?.requiredTraits
+        semanticIntent: semanticSlide?.semanticIntent
       });
       agentDecisions.push(decision);
       uniqueLayoutsForSlides.push(decision.selected_layout_id);
@@ -780,12 +790,12 @@ CRITICAL IMAGE REQUIREMENTS:
 
     // Instantiate the layout assembler to handle forced procedural layouts
     const layoutAssembler = new LayoutAssemblerService();
-    
+
     // Inject a "breather" slide (text-only, aesthetic background) into the middle of the carousel
     // This provides visual relief and answers the user request for a "random color palette text slide"
     for (let i = 0; i < total; i++) {
       let chosen = agentDecisions[i].selected_layout_id;
-      
+
       // Let the AI Art Director's choice pass through
       uniqueLayoutsForSlides[i] = chosen;
     }
@@ -808,11 +818,11 @@ CRITICAL IMAGE REQUIREMENTS:
 
         const brief = artDirectorBrief?.find(b => b.index === concept.index);
         let currentSlideLayout = uniqueLayoutsForSlides[i];
-        
+
         // Removed forced premium_text_only to allow AI Art Director to rotate freely
-        
+
         // Let the AI Art Director's choice apply to the last slide too
-        
+
         try {
           const result = await this.generateSlide({
             photoUrl: photoUrl || '',
@@ -838,11 +848,12 @@ CRITICAL IMAGE REQUIREMENTS:
             footerBrandToggle,
             generatorModel,
             logoUrl: params.logoUrl,
+            logoPosition: params.logoPosition,
             backgroundBrandColor,
             accentBrandColor,
             depthBrandColor,
             moodboardVisionSummary,
-            visionResult: visionResult ?? visionResultStub,
+            visionResult: (usingBefore && visionResultBefore) ? visionResultBefore : (visionResult ?? visionResultStub),
             templateIntent,
             designSpec: agentDecisions[i].designSpec,
           });
@@ -888,14 +899,17 @@ CRITICAL IMAGE REQUIREMENTS:
     depthBrandColor?: string;
     moodboardVisionSummary?: string;
     visionResult?: VisionAnalysisResult;
+    visionResultBefore?: VisionAnalysisResult;
     templateIntent?: any;
+    semanticFlow?: import('./narrative-planner.service').SemanticSlide[];
     designSpec?: import('./template-engine/interfaces').ISemanticDesignSpec;
+    logoPosition?: 'bottom_right' | 'bottom_left' | 'top_right' | 'top_left';
   }): Promise<GeneratedSlide[]> {
-    const { afterPhotoUrl, beforePhotoUrl, frames, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', depthBrandColor = '#1E1E1C', moodboardVisionSummary, visionResult, templateIntent, designSpec, ...rest } = params;
+    const { afterPhotoUrl, beforePhotoUrl, frames, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', depthBrandColor = '#1E1E1C', moodboardVisionSummary, visionResult, visionResultBefore, templateIntent, semanticFlow, designSpec, ...rest } = params;
     const total = frames.length;
 
-    // Derive pool dynamically from JSON config — never goes stale when new layouts are added
-    const layoutPool = Object.keys(LAYOUT_TEMPLATES);
+    // Derive pool dynamically from compiled layouts — never goes stale when new layouts are added
+    const layoutPool = Object.keys(COMPILED_LAYOUTS);
 
     // Prepare vision summary mapping
     const isZoomedFace = moodboardVisionSummary ? (moodboardVisionSummary.toLowerCase().includes('macro') || moodboardVisionSummary.toLowerCase().includes('zoomed') || moodboardVisionSummary.toLowerCase().includes('close-up')) : false;
@@ -905,15 +919,17 @@ CRITICAL IMAGE REQUIREMENTS:
     // Select unique layouts intelligently using Template Agent sequentially
     const uniqueLayoutsForFrames: string[] = [];
     const agentDecisions: Array<{ selected_layout_id: string; reasoning: string; designSpec?: any }> = [];
-    
+
     for (let i = 0; i < total; i++) {
       const frame = frames[i];
       if (i === 0 && params.layoutType) {
-         agentDecisions.push({ selected_layout_id: params.layoutType, reasoning: 'Pre-selected cover layout from orchestrator', designSpec: params.designSpec });
-         uniqueLayoutsForFrames.push(params.layoutType);
-         continue;
+        agentDecisions.push({ selected_layout_id: params.layoutType, reasoning: 'Pre-selected cover layout from orchestrator', designSpec: params.designSpec });
+        uniqueLayoutsForFrames.push(params.layoutType);
+        continue;
       }
-      
+
+      const semanticSlide = semanticFlow?.find((s, idx) => idx === i);
+
       const decision = await this.templateAgent.selectTemplate({
         brief: frame.overlayText || (i === 0 ? 'Cover frame' : 'Body frame'),
         brandName: params.businessName || 'Brand',
@@ -923,7 +939,9 @@ CRITICAL IMAGE REQUIREMENTS:
         totalSlides: total,
         visionResult: visionResultStub,
         excludeLayouts: uniqueLayoutsForFrames,
-        templateIntent
+        templateIntent,
+        slideType: semanticSlide?.slideType,
+        semanticIntent: semanticSlide?.semanticIntent
       });
       agentDecisions.push(decision);
       uniqueLayoutsForFrames.push(decision.selected_layout_id);
@@ -981,7 +999,7 @@ CRITICAL IMAGE REQUIREMENTS:
             isFirst,
             isLast,
             isBeforePhoto: usingBefore,
-            outputSize: '1024x1536',
+            outputSize: '1080x1920',
             customPrompt: brief?.artDirectorPrompt,
             ...rest,
             brandColor: rest.brandColor,
@@ -993,12 +1011,13 @@ CRITICAL IMAGE REQUIREMENTS:
             footerBrandToggle,
             generatorModel,
             logoUrl: params.logoUrl,
+            logoPosition: params.logoPosition,
             backgroundBrandColor,
             accentBrandColor,
             depthBrandColor,
             moodboardVisionSummary,
-            visionResult: visionResult ?? visionResultStub,
-            templateIntent,
+            visionResult: (usingBefore && visionResultBefore) ? visionResultBefore : (visionResult ?? visionResultStub),
+            templateIntent: mappedIntent,
             designSpec: agentDecisions[i].designSpec,
           });
           return {
@@ -1040,6 +1059,7 @@ CRITICAL IMAGE REQUIREMENTS:
     capitalizationRule?: string;
     footerBrandToggle?: boolean;
     logoUrl?: string;
+    logoPosition?: string;
     backgroundBrandColor?: string;
     accentBrandColor?: string;
     depthBrandColor?: string;
@@ -1076,6 +1096,7 @@ CRITICAL IMAGE REQUIREMENTS:
       visionResult,
       templateIntent,
       logoUrl,
+      logoPosition = 'bottom_right',
       designSpec
     } = params;
 
@@ -1104,11 +1125,11 @@ CRITICAL IMAGE REQUIREMENTS:
         originalH = metadata.height || 1024;
         const photoMimeType = metadata.format === 'jpeg' ? 'image/jpeg' : metadata.format === 'webp' ? 'image/webp' : 'image/png';
         photoDataUri = `data:${photoMimeType};base64,${base64Image}`;
-        isStory = outputSize === '1024x1536';
+        isStory = outputSize === '1080x1920';
       } else {
-        isStory = outputSize === '1024x1536';
+        isStory = outputSize === '1080x1920';
         originalW = 1080;
-        originalH = isStory ? 1620 : 1080;
+        originalH = isStory ? 1920 : 1080;
         imageBuffer = await sharp({
           create: {
             width: originalW,
@@ -1122,7 +1143,7 @@ CRITICAL IMAGE REQUIREMENTS:
 
       // Force high-definition target canvas dimensions (Instagram standards)
       const w = 1080;
-      const h = isStory ? 1620 : 1080;
+      const h = isStory ? 1920 : 1080;
 
       // Ensure every slide has text for layouts that use randomized_overlay
       let finalOverlayText = overlayText;
@@ -1261,7 +1282,10 @@ CRITICAL IMAGE REQUIREMENTS:
 
       const paddingX = geometryOut.safeX;
       const paddingTop = geometryOut.safeY;
-      const paddingBottom = geometryOut.safeY + 80; // Deep bottom margin for text & footer
+      
+      const _topLevelLayoutEngine = new LayoutEngine(w, h, undefined);
+      const _topLevelConstraints = _topLevelLayoutEngine.calculateConstraints((intent.family as any) || 'minimal', 'balanced', false, behavior);
+      const paddingBottom = _topLevelConstraints.margins.bottom;
 
       const innerW = w - (paddingX * 2);
       const innerH = h - (paddingTop + paddingBottom);
@@ -1283,6 +1307,68 @@ CRITICAL IMAGE REQUIREMENTS:
         template.base = computedLayoutType as any;
       }
 
+      // Step 2 (Plan): Face Coordinate Transformation
+      let faceBox: any = undefined;
+      if (visionResult?.faceCoordinates && visionResult.faceCoordinates.eyesYPercent) {
+        const sourceW = originalW;
+        const sourceH = originalH;
+        // Image scaling and translation (letterbox offset) from fit: contain
+        const scale = Math.min(w / sourceW, h / sourceH);
+        const drawnW = Math.round(sourceW * scale);
+        const drawnH = Math.round(sourceH * scale);
+        const offsetY = Math.round((h - drawnH) / 2);
+        
+        // Map percentages to actual drawn image height on canvas
+        const eyesY = Math.round(offsetY + (visionResult.faceCoordinates.eyesYPercent / 100) * drawnH);
+        const mouthY = visionResult.faceCoordinates.mouthYPercent
+          ? Math.round(offsetY + (visionResult.faceCoordinates.mouthYPercent / 100) * drawnH)
+          : Math.round(eyesY + (drawnH * 0.15));
+
+        // Final face-safe bounding box on canvas
+        const faceTop = Math.max(0, eyesY - Math.round(h * 0.08));
+        const faceBottom = Math.min(h, mouthY + Math.round(h * 0.08));
+        const faceHeight = faceBottom - faceTop;
+        const faceWidth = Math.round(w * 0.45);
+        const faceX = Math.round((w - faceWidth) / 2);
+        
+        faceBox = { x: faceX, y: faceTop, width: faceWidth, height: faceHeight };
+      }
+
+      // Step 3 (Plan): Single Optimizer Pass
+      let rawDsl = COMPILED_LAYOUTS[computedLayoutType];
+      let optimizedDsl: any = undefined;
+      
+      if (rawDsl) {
+        // Design Compiler mutates the DSL mathematically first
+        const designCompiler = new DesignCompiler();
+        if (designLanguage) {
+          rawDsl = designCompiler.compile(rawDsl, designLanguage);
+        }
+        if (designSpec) {
+          rawDsl = designCompiler.compile(rawDsl, designSpec);
+        }
+
+        const layoutEngine = new LayoutEngine(w, h, faceBox);
+        const optFamily = (designLanguage?.intent?.family as any) || 'minimal';
+        const behaviorProfile = (rawDsl as any)?.behavior;
+        const constraints = layoutEngine.calculateConstraints(optFamily, 'balanced', false, behaviorProfile);
+        
+        let logoBox: any = undefined;
+        if (logoUrl) {
+          const logoW = 150;
+          const logoH = 150;
+          let lx = w - logoW - 30; // default bottom_right
+          let ly = h - logoH - 30;
+          if (logoPosition === 'bottom_left') { lx = 30; }
+          else if (logoPosition === 'top_right') { ly = 30; }
+          else if (logoPosition === 'top_left') { lx = 30; ly = 30; }
+          logoBox = { x: lx, y: ly, width: logoW, height: logoH, role: 'obstacle' };
+        }
+
+        const optimizer = new CompositionOptimizer();
+        optimizedDsl = optimizer.optimize(rawDsl, constraints, w, h, faceBox, designLanguage?.intent?.visualPriority, logoBox);
+      }
+
       const baseResult = await BASE_TREATMENTS[template.base]!({
         layoutType: computedLayoutType,
         imageBuffer,
@@ -1297,6 +1383,8 @@ CRITICAL IMAGE REQUIREMENTS:
         designSpec,
         designLanguage,
         faceCoordinates: visionResult?.faceCoordinates,
+        faceBox,
+        optimizedDsl
       });
       let baseImage = baseResult.baseImage;
       let compositeTop = baseResult.compositeTop;
@@ -1324,7 +1412,7 @@ CRITICAL IMAGE REQUIREMENTS:
       // Determine text color using luminance to guarantee WCAG contrast
       // Explicitly enforce the Brand DNA semantic roles: Depth color is for Typography!
       let isFullBleed = template.base === 'full_bleed_base' || template.base === 'universal_dynamic_base' || layoutType === 'look_number_plate';
-      
+
       // V2 Smart Surface Detection for Breather Slides
       if (layoutType.includes('text_only')) {
         isFullBleed = false;
@@ -1340,8 +1428,8 @@ CRITICAL IMAGE REQUIREMENTS:
       }
 
       const surfaceLuminance = getLuminance(textSurfaceColor);
-      const isLightSurface = surfaceLuminance > 150; 
-      
+      const isLightSurface = surfaceLuminance > 150;
+
       const colorPalette = {
         brandColor: validBrandColor,
         secondaryColor: validSecondaryColor,
@@ -1353,7 +1441,7 @@ CRITICAL IMAGE REQUIREMENTS:
 
       // Use semantic color resolution to guarantee contrast and brand compliance
       let dynamicTextColor = isLightSurface ? validDepthColor : this.colorCompositionEngine.resolveForegroundColor(textSurfaceColor, colorPalette);
-      
+
       const footerLuminance = getLuminance(validSecondaryColor);
       const isLightFooter = footerLuminance > 150;
       const dynamicFooterTextColor = isLightFooter ? validDepthColor : this.colorCompositionEngine.resolveForegroundColor(validSecondaryColor, colorPalette);
@@ -1370,12 +1458,12 @@ CRITICAL IMAGE REQUIREMENTS:
       }
 
       if (isFullBleed && !layoutType.includes('text_only') && photoDataUri) {
-         dynamicTextColor = posterTextColor;
+        dynamicTextColor = posterTextColor;
       }
 
       // Instead of rigid character counting, we now defer to the Art Direction Engine's proportional weighting
       let dynamicFontSize = geometryOut.typography.heroSize;
-      
+
       let maxLength = 0;
       for (const line of lines) {
         if (line.length > maxLength) maxLength = line.length;
@@ -1414,11 +1502,13 @@ CRITICAL IMAGE REQUIREMENTS:
         visionResult: visionResult,
         logoUrl,
         faceCoordinates: visionResult?.faceCoordinates,
+        faceBox,
         injectedFeatures: composition.injectedFeatures,
         designTokens,
         designSpec,
         typographyMetrics: geometryOut.typography,
         activeTheme,
+        optimizedDsl,
       };
 
       const visualAdditions = template.decoration

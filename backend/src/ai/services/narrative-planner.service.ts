@@ -4,10 +4,19 @@ import { BusinessGoalType } from '../types/job-payload.types';
 export interface SemanticSlide {
   slideType: string;
   description: string;
-  requiredTraits?: {
-    visualPriority?: 'image_hero' | 'typography_hero' | 'composition_hero' | 'cta_hero';
-    energy?: 'bold' | 'minimal' | 'playful';
-    readingFlow?: 'center_down' | 'z_pattern' | 'asymmetrical';
+  semanticIntent?: {
+    required: {
+      visualPriority?: 'image_hero' | 'typography_hero' | 'composition_hero' | 'cta_hero';
+    };
+    preferred: {
+      energy?: 'bold' | 'minimal' | 'playful' | 'calm' | 'structured';
+      readingFlow?: 'center_down' | 'z_pattern' | 'asymmetrical';
+    };
+    weights: {
+      visualPriority: number;
+      readingFlow: number;
+      energy: number;
+    };
   };
 }
 
@@ -16,6 +25,8 @@ export interface MarketingGoalRecipe {
   slideCount: number;
   semanticFlow: SemanticSlide[];
 }
+
+const DEFAULT_WEIGHTS = { visualPriority: 30, readingFlow: 15, energy: 10 };
 
 @Injectable()
 export class NarrativePlannerService {
@@ -29,11 +40,11 @@ export class NarrativePlannerService {
           goal,
           slideCount: 5,
           semanticFlow: [
-            { slideType: 'HOOK', description: 'Cover — 3 WORDS MAX (e.g. "Reveal Your Glow" using hook)', requiredTraits: { visualPriority: 'typography_hero', energy: 'bold' } },
-            { slideType: 'PROBLEM', description: 'Context — 3 WORDS MAX (e.g. "Clogged. Pores. Hurt.")', requiredTraits: { visualPriority: 'composition_hero', readingFlow: 'z_pattern' } },
-            { slideType: 'EXPLANATION', description: 'Deep Dive — 3 WORDS MAX (e.g. "Extraction. Clears. Everything.")', requiredTraits: { visualPriority: 'composition_hero' } },
-            { slideType: 'PRO_TIP', description: 'Value — 3 WORDS MAX (e.g. "Safe. Proven. Glow.")', requiredTraits: { visualPriority: 'image_hero', energy: 'minimal' } },
-            { slideType: 'CTA', description: 'Call to Action — 3 WORDS MAX (e.g. "Book Today" using CTA)', requiredTraits: { visualPriority: 'cta_hero', energy: 'bold' } }
+            { slideType: 'HOOK', description: 'Cover — 3 WORDS MAX (e.g. "Reveal Your Glow" using hook)', semanticIntent: { required: { visualPriority: 'typography_hero' }, preferred: { energy: 'bold', readingFlow: 'center_down' }, weights: DEFAULT_WEIGHTS } },
+            { slideType: 'PROBLEM', description: 'Context — 3 WORDS MAX (e.g. "Clogged. Pores. Hurt.")', semanticIntent: { required: { visualPriority: 'composition_hero' }, preferred: { energy: 'structured', readingFlow: 'z_pattern' }, weights: DEFAULT_WEIGHTS } },
+            { slideType: 'EXPLANATION', description: 'Deep Dive — 3 WORDS MAX (e.g. "Extraction. Clears. Everything.")', semanticIntent: { required: { visualPriority: 'composition_hero' }, preferred: { energy: 'structured', readingFlow: 'asymmetrical' }, weights: DEFAULT_WEIGHTS } },
+            { slideType: 'PRO_TIP', description: 'Value — 3 WORDS MAX (e.g. "Safe. Proven. Glow.")', semanticIntent: { required: { visualPriority: 'image_hero' }, preferred: { energy: 'minimal', readingFlow: 'center_down' }, weights: DEFAULT_WEIGHTS } },
+            { slideType: 'CTA', description: 'Call to Action — 3 WORDS MAX (e.g. "Book Today" using CTA)', semanticIntent: { required: { visualPriority: 'cta_hero' }, preferred: { energy: 'bold', readingFlow: 'center_down' }, weights: DEFAULT_WEIGHTS } }
           ]
         };
         break;
@@ -43,10 +54,10 @@ export class NarrativePlannerService {
           goal,
           slideCount: 4,
           semanticFlow: [
-            { slideType: 'HOOK', description: 'Cover — 3 WORDS MAX (e.g. "Life. Changing. Facial.")', requiredTraits: { visualPriority: 'typography_hero' } },
-            { slideType: 'CLIENT_QUOTE', description: 'Context — 3 WORDS MAX (e.g. "My skin transformed")', requiredTraits: { visualPriority: 'typography_hero', energy: 'minimal' } },
-            { slideType: 'TREATMENT_EXPERIENCE', description: 'Deep Dive — 3 WORDS MAX (e.g. "Calm. Relaxing. Space.")', requiredTraits: { visualPriority: 'image_hero' } },
-            { slideType: 'CTA', description: 'Call to Action — 3 WORDS MAX (e.g. "Book Today" using CTA)', requiredTraits: { visualPriority: 'cta_hero' } }
+            { slideType: 'HOOK', description: 'Cover — 3 WORDS MAX (e.g. "Life. Changing. Facial.")', semanticIntent: { required: { visualPriority: 'typography_hero' }, preferred: { energy: 'minimal', readingFlow: 'center_down' }, weights: DEFAULT_WEIGHTS } },
+            { slideType: 'CLIENT_QUOTE', description: 'Context — 3 WORDS MAX (e.g. "My skin transformed")', semanticIntent: { required: { visualPriority: 'typography_hero' }, preferred: { energy: 'minimal', readingFlow: 'center_down' }, weights: DEFAULT_WEIGHTS } },
+            { slideType: 'TREATMENT_EXPERIENCE', description: 'Deep Dive — 3 WORDS MAX (e.g. "Calm. Relaxing. Space.")', semanticIntent: { required: { visualPriority: 'image_hero' }, preferred: { energy: 'calm', readingFlow: 'asymmetrical' }, weights: DEFAULT_WEIGHTS } },
+            { slideType: 'CTA', description: 'Call to Action — 3 WORDS MAX (e.g. "Book Today" using CTA)', semanticIntent: { required: { visualPriority: 'cta_hero' }, preferred: { energy: 'minimal', readingFlow: 'center_down' }, weights: DEFAULT_WEIGHTS } }
           ]
         };
         break;
@@ -57,9 +68,9 @@ export class NarrativePlannerService {
           goal,
           slideCount: 3,
           semanticFlow: [
-            { slideType: 'OFFER_HOOK', description: 'Cover — 3 WORDS MAX (e.g. "Half. Price. Today.")', requiredTraits: { visualPriority: 'typography_hero', energy: 'bold' } },
-            { slideType: 'WHAT_IS_INCLUDED', description: 'Deep Dive — 3 WORDS MAX (e.g. "Facial. Massage. Mask.")', requiredTraits: { visualPriority: 'composition_hero', readingFlow: 'center_down' } },
-            { slideType: 'CTA', description: 'Call to Action — 3 WORDS MAX (e.g. "Book Today" using CTA)', requiredTraits: { visualPriority: 'cta_hero', energy: 'bold' } }
+            { slideType: 'OFFER_HOOK', description: 'Cover — 3 WORDS MAX (e.g. "Half. Price. Today.")', semanticIntent: { required: { visualPriority: 'typography_hero' }, preferred: { energy: 'bold', readingFlow: 'center_down' }, weights: DEFAULT_WEIGHTS } },
+            { slideType: 'WHAT_IS_INCLUDED', description: 'Deep Dive — 3 WORDS MAX (e.g. "Facial. Massage. Mask.")', semanticIntent: { required: { visualPriority: 'composition_hero' }, preferred: { energy: 'structured', readingFlow: 'center_down' }, weights: DEFAULT_WEIGHTS } },
+            { slideType: 'CTA', description: 'Call to Action — 3 WORDS MAX (e.g. "Book Today" using CTA)', semanticIntent: { required: { visualPriority: 'cta_hero' }, preferred: { energy: 'bold', readingFlow: 'center_down' }, weights: DEFAULT_WEIGHTS } }
           ]
         };
         break;
@@ -70,10 +81,10 @@ export class NarrativePlannerService {
           goal,
           slideCount: 4,
           semanticFlow: [
-            { slideType: 'STRUGGLE_HOOK', description: 'Cover — 3 WORDS MAX (e.g. "Acne. Scars. Redness.")', requiredTraits: { visualPriority: 'image_hero' } },
-            { slideType: 'REVEAL', description: 'Value — 3 WORDS MAX (e.g. "Smooth. Clear. Skin.")', requiredTraits: { visualPriority: 'image_hero' } },
-            { slideType: 'TECHNIQUE', description: 'Deep Dive — 3 WORDS MAX (e.g. "Three. Sessions. Only.")', requiredTraits: { visualPriority: 'composition_hero' } },
-            { slideType: 'CTA', description: 'Call to Action — 3 WORDS MAX (e.g. "Book Today" using CTA)', requiredTraits: { visualPriority: 'cta_hero' } }
+            { slideType: 'STRUGGLE_HOOK', description: 'Cover — 3 WORDS MAX (e.g. "Acne. Scars. Redness.")', semanticIntent: { required: { visualPriority: 'image_hero' }, preferred: { energy: 'structured', readingFlow: 'asymmetrical' }, weights: DEFAULT_WEIGHTS } },
+            { slideType: 'REVEAL', description: 'Value — 3 WORDS MAX (e.g. "Smooth. Clear. Skin.")', semanticIntent: { required: { visualPriority: 'image_hero' }, preferred: { energy: 'calm', readingFlow: 'center_down' }, weights: DEFAULT_WEIGHTS } },
+            { slideType: 'TECHNIQUE', description: 'Deep Dive — 3 WORDS MAX (e.g. "Three. Sessions. Only.")', semanticIntent: { required: { visualPriority: 'composition_hero' }, preferred: { energy: 'structured', readingFlow: 'z_pattern' }, weights: DEFAULT_WEIGHTS } },
+            { slideType: 'CTA', description: 'Call to Action — 3 WORDS MAX (e.g. "Book Today" using CTA)', semanticIntent: { required: { visualPriority: 'cta_hero' }, preferred: { energy: 'bold', readingFlow: 'center_down' }, weights: DEFAULT_WEIGHTS } }
           ]
         };
         break;
@@ -84,10 +95,10 @@ export class NarrativePlannerService {
           goal,
           slideCount: 4,
           semanticFlow: [
-            { slideType: 'DESIRE_HOOK', description: 'Cover — 3 WORDS MAX (e.g. "Want. Glass. Skin.")', requiredTraits: { visualPriority: 'typography_hero' } },
-            { slideType: 'TREATMENT_ACTION', description: 'Deep Dive — 3 WORDS MAX (e.g. "Book. Our. Signature.")', requiredTraits: { visualPriority: 'image_hero' } },
-            { slideType: 'TRUST_EVIDENCE', description: 'Value — 3 WORDS MAX (e.g. "Five. Star. Rated.")', requiredTraits: { visualPriority: 'composition_hero' } },
-            { slideType: 'CTA', description: 'Call to Action — 3 WORDS MAX (e.g. "Book Today" using CTA)', requiredTraits: { visualPriority: 'cta_hero', energy: 'bold' } }
+            { slideType: 'DESIRE_HOOK', description: 'Cover — 3 WORDS MAX (e.g. "Want. Glass. Skin.")', semanticIntent: { required: { visualPriority: 'typography_hero' }, preferred: { energy: 'bold', readingFlow: 'center_down' }, weights: DEFAULT_WEIGHTS } },
+            { slideType: 'TREATMENT_ACTION', description: 'Deep Dive — 3 WORDS MAX (e.g. "Book. Our. Signature.")', semanticIntent: { required: { visualPriority: 'image_hero' }, preferred: { energy: 'minimal', readingFlow: 'asymmetrical' }, weights: DEFAULT_WEIGHTS } },
+            { slideType: 'TRUST_EVIDENCE', description: 'Value — 3 WORDS MAX (e.g. "Five. Star. Rated.")', semanticIntent: { required: { visualPriority: 'composition_hero' }, preferred: { energy: 'structured', readingFlow: 'center_down' }, weights: DEFAULT_WEIGHTS } },
+            { slideType: 'CTA', description: 'Call to Action — 3 WORDS MAX (e.g. "Book Today" using CTA)', semanticIntent: { required: { visualPriority: 'cta_hero' }, preferred: { energy: 'bold', readingFlow: 'center_down' }, weights: DEFAULT_WEIGHTS } }
           ]
         };
         break;

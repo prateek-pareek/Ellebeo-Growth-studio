@@ -109,9 +109,16 @@ export class LayoutEngine {
     let safeX = tension ? Math.round(signature.baseMarginX * 0.3) : Math.round(signature.baseMarginX * multiplier);
     let safeY = tension ? Math.round(signature.baseMarginY * 0.3) : Math.round(signature.baseMarginY * multiplier);
     
+    let bottomMargin = safeY;
+    if (this.isStory) {
+      // 15% footer reserve for Instagram Story UI (P1 Fix)
+      bottomMargin = Math.max(safeY, Math.round(this.canvasHeight * 0.15));
+    }
+
     if (behavior && behavior.marginHugging) {
       safeX = 10;
       safeY = 10;
+      bottomMargin = 10;
     }
 
     // Apply Density (from ArtDirection Engine) to text width constraints
@@ -140,7 +147,7 @@ export class LayoutEngine {
       contentMaxWidth,
       margins: {
         top: safeY,
-        bottom: safeY,
+        bottom: bottomMargin,
         left: safeX,
         right: safeX
       },
@@ -366,7 +373,7 @@ export class LayoutEngine {
     // Larger regions are generally better, especially for heroes
     const area = candidate.width * candidate.height;
     const canvasArea = this.canvasWidth * this.canvasHeight;
-    score += (area / canvasArea) * 5.0; // Bonus up to +5
+    score += (area / canvasArea) * 2.0; // Reduced from +5 to let intent dominate
 
     // 2. Face Safety is inherently guaranteed by generateCandidateRegions
 
@@ -376,13 +383,17 @@ export class LayoutEngine {
     const isLeftHalf = candidate.x < this.canvasWidth / 2;
     
     if (intent.readingFlow === 'z_pattern') {
-      if (intent.role === 'heading' && isTopHalf && isLeftHalf) score += 3.0;
-      if (intent.role === 'footnote' && isBottomHalf) score += 3.0;
+      if (intent.role === 'heading' && isTopHalf && isLeftHalf) score += 6.0;
+      if (intent.role === 'footnote' && isBottomHalf) score += 6.0;
     } else if (intent.readingFlow === 'center_down') {
       const isCentered = candidate.x + (candidate.width / 2) > (this.canvasWidth / 2) - 100 &&
                          candidate.x + (candidate.width / 2) < (this.canvasWidth / 2) + 100;
-      if (isCentered) score += 2.0;
-      if (intent.role === 'heading' && isTopHalf) score += 2.0;
+      if (isCentered) {
+        score += 6.0;
+      } else {
+        score -= 5.0; // Heavy penalty for off-center candidates when center_anchored requested
+      }
+      if (intent.role === 'heading' && isTopHalf) score += 3.0;
     }
 
     // 4. Role-specific heuristics

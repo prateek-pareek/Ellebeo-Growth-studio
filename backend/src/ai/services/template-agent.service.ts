@@ -43,10 +43,10 @@ export class TemplateAgentService {
     excludeLayouts?: string[];
     templateIntent?: 'educational' | 'promotion' | 'testimonial' | 'before_after' | 'brand_story';
     slideType?: string;
-    requiredTraits?: import('../services/narrative-planner.service').SemanticSlide['requiredTraits'];
+    semanticIntent?: import('../services/narrative-planner.service').SemanticSlide['semanticIntent'];
   }): Promise<{ selected_layout_id: string; reasoning: string; designSpec?: import('./template-engine/interfaces').ISemanticDesignSpec }> {
 
-    const context: ITemplateContext & { slideType?: string; requiredTraits?: any } = {
+    const context: ITemplateContext & { slideType?: string; semanticIntent?: any } = {
       brief: params.brief,
       brandName: params.brandName,
       aesthetic: params.aesthetic,
@@ -56,7 +56,7 @@ export class TemplateAgentService {
       visionResult: params.visionResult,
       templateIntent: params.templateIntent,
       slideType: params.slideType,
-      requiredTraits: params.requiredTraits
+      semanticIntent: params.semanticIntent
     };
 
     try {
@@ -99,7 +99,8 @@ We have mathematically narrowed down our layout library to the absolute Top ${to
 Your ONLY job is to select the single best structural variant from this shortlist based strictly on the provided Brand Aesthetic and visual storytelling for the given brief.
 
 Do NOT default to "minimal" or "high-end fashion" unless it perfectly matches the Brand Aesthetic. Adapt dynamically.
-CRITICAL DESIGN RULE: You MUST rotate across different Design Families (e.g., if previous slides used 'editorial', you must actively select 'minimalist_quote', 'clinical_hero', 'split', 'countdown_promo', 'product_showcase', 'before_after', 'testimonial', 'scrapbook', 'quadrant' or other distinct families). Variants from the same design family must NOT be used continuously. Ensure each slide is distinct visually while maintaining brand coherence.
+CRITICAL DESIGN RULE 1: Do NOT default to "hero" layouts just because it is the first slide. Choose layouts that structurally fit the brief (e.g. text-heavy briefs need split or text_only layouts).
+CRITICAL DESIGN RULE 2: You MUST rotate across different Design Families (e.g., if previous slides used 'editorial', you must actively select 'minimalist_quote', 'clinical_hero', 'split', 'countdown_promo', 'product_showcase', 'before_after', 'testimonial', 'scrapbook', 'quadrant' or other distinct families). Variants from the same design family must NOT be used continuously. Ensure each slide is distinct visually while maintaining brand coherence.
 
 CONTEXT:
 - Brand Aesthetic: ${context.aesthetic}

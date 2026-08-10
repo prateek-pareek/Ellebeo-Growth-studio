@@ -1635,11 +1635,76 @@ export class CompositionEngine {
       layers.push({ id: 'fb_text', type: 'text', zIndex: 30, anchor: 'center', role: 'heading', alignment: 'center', maxWidthPercent: 80 } as IDSLTextLayer);
     }
 
+    // Filter out hardcoded decorations that aren't structural, allowing dynamic primitive injection
+    const structuralIds = ['split_border', 'breather_ghost_text', 'split_line', 'fb_gradient', 'mag_masthead', 'port_image'];
+    const filteredLayers = layers.filter(l => l.type !== 'decoration' || structuralIds.includes(l.id));
+
+    // Dynamically inject family primitives
+    const familyId = layoutId.split('_')[0];
+    this.injectFamilyPrimitives(familyId, filteredLayers);
+
     return {
       schemaVersion: '1.0',
       layoutVersion: '1.0',
       id: recipeId,
-      layers
+      layers: filteredLayers
     };
+  }
+
+  private injectFamilyPrimitives(familyId: string, layers: IDSLSceneLayer[]) {
+    const anchors: Array<'top_left' | 'top_right' | 'bottom_left' | 'bottom_right' | 'center'> = ['top_left', 'top_right', 'bottom_left', 'bottom_right', 'center'];
+    const randomAnchor = () => anchors[Math.floor(Math.random() * anchors.length)];
+
+    let primitivesToInject: string[] = [];
+
+    if (familyId === 'editorial') {
+      primitivesToInject = ['accent_rule', 'editorial_badge', 'thin_divider', 'gallery_frame'];
+    } else if (familyId === 'clinical') {
+      primitivesToInject = ['step_badge', 'metric_label', 'clinical_callout_box', 'measurement_lines'];
+    } else if (familyId === 'scrapbook') {
+      primitivesToInject = ['masking_tape', 'torn_paper', 'handmade_mark', 'ink_stamp', 'polaroid_frame'];
+    } else if (familyId === 'minimalist') {
+      primitivesToInject = ['minimal_grid', 'margin_rule', 'ghost_headline'];
+    } else if (familyId === 'premium') {
+      primitivesToInject = ['premium_stars', 'elegant_line_art', 'gold_accents'];
+    } else if (familyId === 'split') {
+      primitivesToInject = ['split_seam_line', 'divider'];
+    } else if (familyId === 'countdown') {
+      primitivesToInject = ['countdown_urgency_badge', 'status_chip'];
+    } else if (familyId === 'product') {
+      primitivesToInject = ['product_halo_ring', 'geometric_badge'];
+    } else if (familyId === 'before') { // before_after
+      primitivesToInject = ['transformation_arrow', 'masking_tape'];
+    } else if (familyId === 'testimonial') {
+      primitivesToInject = ['quote_marks', 'star_rating_row', 'pull_quote'];
+    } else if (familyId === 'quadrant') {
+      primitivesToInject = ['blueprint_grid', 'corner_frame'];
+    } else if (familyId === 'transformation') {
+      primitivesToInject = ['timeline_track', 'step_badge'];
+    } else if (familyId === 'magazine') {
+      primitivesToInject = ['editorial_sidebar', 'running_header', 'oversized_index'];
+    } else if (familyId === 'polaroid') {
+      primitivesToInject = ['polaroid_frame', 'sticker', 'masking_tape'];
+    } else if (familyId === 'notification') {
+      primitivesToInject = ['notification_icon_badge', 'status_chip'];
+    } else if (familyId === 'announcement') {
+      primitivesToInject = ['announcement_banner_ribbon', 'starburst_badge'];
+    }
+
+    if (primitivesToInject.length > 0) {
+      // Inject 1-2 random primitives
+      const numToInject = Math.floor(Math.random() * 2) + 1; // 1 or 2
+      for (let i = 0; i < numToInject; i++) {
+        const primitive = primitivesToInject[Math.floor(Math.random() * primitivesToInject.length)];
+        layers.push({
+          id: `dyn_prim_${familyId}_${i}`,
+          type: 'decoration',
+          zIndex: 25 + i, // Above images, below top text
+          component: primitive as any,
+          anchor: randomAnchor(),
+          offsetPercent: Math.floor(Math.random() * 10)
+        } as IDSLDecorationLayer);
+      }
+    }
   }
 }
