@@ -65,8 +65,9 @@ export class TypographyEngine {
     if (ctx.structuredText && (ctx.structuredText.headline || ctx.structuredText.subheadline || ctx.structuredText.cta)) {
       if (layer.id === 'headline' || layer.role === 'heading') rawText = ctx.structuredText.headline || '';
       else if (layer.id === 'subheadline' || layer.role === 'tagline') rawText = ctx.structuredText.subheadline || '';
-      else if (layer.id === 'cta' || layer.role === 'footnote') rawText = ctx.structuredText.cta || '';
-      else if (layer.role === 'body') {
+      else if (layer.id === 'cta' || layer.role === 'cta' || layer.role === 'footnote') {
+        rawText = ctx.structuredText.cta || (layer.role === 'footnote' ? ctx.structuredText.cta : '') || '';
+      } else if (layer.role === 'body') {
         let overlay = ctx.overlayText || '';
         if (ctx.structuredText.headline && overlay.includes(ctx.structuredText.headline)) {
           overlay = overlay.replace(ctx.structuredText.headline, '').trim();
@@ -276,11 +277,25 @@ export class TypographyEngine {
           lineHeight = Math.max(1, Math.round(newSize * originalLineHeightMult));
           escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, effectiveMaxW, trackingEm);
 
-          const maxLines = Math.max(1, Math.floor(fillBox.height / lineHeight));
-          if (escapedLines.length > maxLines) {
-            escapedLines = escapedLines.slice(0, maxLines);
+          // Prefer shrink over slicing words — never drop headline content after a boost
+          let fitAttempts = 0;
+          while (
+            escapedLines.length * lineHeight > fillBox.height
+            && style.fontSize > Math.round(ctx.h * 0.055)
+            && fitAttempts < 6
+          ) {
+            style.fontSize = Math.floor(style.fontSize * 0.92);
+            lineHeight = Math.max(1, Math.round(style.fontSize * originalLineHeightMult));
+            escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, effectiveMaxW, trackingEm);
+            fitAttempts++;
           }
           textHeight = escapedLines.length * lineHeight;
+          if (escapedLines.length * lineHeight > fillBox.height * 1.02) {
+            (layer as any)._contentIntegrity = {
+              ok: false,
+              reason: `headline_overflow_after_boost:lines=${escapedLines.length}`,
+            };
+          }
 
           console.log(
             `[TypographyOccupancy] Boosted heading: ${style.fontSize}px (ratio=${boostRatio.toFixed(2)}) ` +
@@ -415,10 +430,17 @@ export class TypographyEngine {
         attempts++;
       }
       if (textHeight > availableHeight && lineHeight > 0) {
-        const roleCap = layer.role === 'tagline' ? 2 : layer.role === 'heading' ? 4 : 3;
-        const maxLines = Math.min(roleCap, Math.max(1, Math.floor(availableHeight / lineHeight)));
-        escapedLines = escapedLines.slice(0, maxLines);
-        textHeight = escapedLines.length * lineHeight;
+        if (layer.role === 'heading') {
+          (layer as any)._contentIntegrity = {
+            ok: false,
+            reason: `headline_overflow_no_slice:h=${Math.round(textHeight)}_avail=${Math.round(availableHeight)}`,
+          };
+        } else {
+          const roleCap = layer.role === 'tagline' ? 2 : 3;
+          const maxLines = Math.min(roleCap, Math.max(1, Math.floor(availableHeight / lineHeight)));
+          escapedLines = escapedLines.slice(0, maxLines);
+          textHeight = escapedLines.length * lineHeight;
+        }
       }
       if (isSecondary && textHeight > availableHeight) {
         return '';

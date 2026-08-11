@@ -530,19 +530,32 @@ export class GenerationOrchestrator {
       console.log(`[TEMPLATE AGENT] Bypassed — using tenant's explicit template layout hint: ${determinedGrid.layout}`);
     } else if (captionResult) {
       const isCarouselOpt = (generationOptions.outputFormats as string[]).includes('carousel');
-      agentDecisionPromise = this.templateAgent.selectTemplate({
-        brief: captionResult.caption,
-        brandName: brandDNA.businessName || 'Brand',
-        aesthetic: (brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA.visualRanking) : null) ?? brandDNA.aestheticDirection ?? 'minimal editorial',
-        textLength: captionResult.caption.length,
-        slideIndex: 0,
-        totalSlides: isCarouselOpt ? 4 : 1,
-        gridConstraints: determinedGrid.gridConstraints,
-        visionResult: visionResult,
-      }).catch(err => {
-        console.error('[Orchestrator Step 3.5 Template Agent Error]:', err);
-        return null;
-      });
+      const isStoryOpt = (generationOptions.outputFormats as string[]).includes('story');
+      // Multi-slide jobs select layouts once per slide inside generateCarousel/generateStory.
+      // Do NOT pre-select cover here — that caused duplicate Template Agent calls for slide 1.
+      if (isCarouselOpt || isStoryOpt) {
+        console.log(`[TEMPLATE AGENT] Deferred to per-slide selection (${isCarouselOpt ? 'carousel' : 'story'})`);
+        agentDecisionPromise = Promise.resolve(null);
+        // Do not pre-bind a cover layout — generateCarousel/Story selects each slide once
+        if (!payload.layoutHint) {
+          determinedGrid.layout = '';
+          (determinedGrid as any).designSpec = undefined;
+        }
+      } else {
+        agentDecisionPromise = this.templateAgent.selectTemplate({
+          brief: captionResult.caption,
+          brandName: brandDNA.businessName || 'Brand',
+          aesthetic: (brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA.visualRanking) : null) ?? brandDNA.aestheticDirection ?? 'minimal editorial',
+          textLength: captionResult.caption.length,
+          slideIndex: 0,
+          totalSlides: 1,
+          gridConstraints: determinedGrid.gridConstraints,
+          visionResult: visionResult,
+        }).catch(err => {
+          console.error('[Orchestrator Step 3.5 Template Agent Error]:', err);
+          return null;
+        });
+      }
     }
 
     if (captionResult && generationOptions.platform.length > 1) {

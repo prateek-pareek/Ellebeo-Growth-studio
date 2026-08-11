@@ -1484,7 +1484,7 @@ CRITICAL IMAGE REQUIREMENTS:
       let failReason: string | undefined;
       const compositionQC = new CompositionQualityController();
 
-      // CTA slides must have explicit CTA copy
+      // CTA / last-slide copy: loud lead + adaptable supporting rest (never hard-slice to N words)
       let effectiveCta = cta;
       let effectiveHeadline = headline;
       let effectiveSubheadline = subheadline;
@@ -1492,9 +1492,47 @@ CRITICAL IMAGE REQUIREMENTS:
         if (!effectiveCta || !String(effectiveCta).trim()) {
           effectiveCta = 'Book now';
         }
+        const splitLoudLead = (raw: string): { lead: string; rest: string } => {
+          const words = raw.split(/\s+/).filter(Boolean);
+          if (words.length === 0) return { lead: '', rest: '' };
+          if (words.length <= 3) return { lead: words.join(' '), rest: '' };
+          // Prefer first sentence / clause when present
+          const sentenceMatch = raw.match(/^(.+?[.!?])(?:\s+|$)([\s\S]*)$/);
+          if (sentenceMatch && sentenceMatch[1].split(/\s+/).length <= 8) {
+            return { lead: sentenceMatch[1].trim(), rest: (sentenceMatch[2] || '').trim() };
+          }
+          // Adaptive lead: ~3 words soft target, expands/contracts by copy length (2–5)
+          const targetLead = Math.min(5, Math.max(2, Math.round(3 + (words.length > 10 ? 1 : 0) - (words.length < 6 ? 1 : 0))));
+          const targetChars = Math.round(Math.min(44, Math.max(18, raw.length * 0.32)));
+          const leadWords: string[] = [];
+          let chars = 0;
+          for (const w of words) {
+            const next = chars + w.length + (leadWords.length ? 1 : 0);
+            if (leadWords.length >= 2 && (leadWords.length >= targetLead || next > targetChars)) break;
+            leadWords.push(w);
+            chars = next;
+          }
+          return {
+            lead: leadWords.join(' '),
+            rest: words.slice(leadWords.length).join(' ').trim(),
+          };
+        };
+
         if (!effectiveHeadline || !String(effectiveHeadline).trim()) {
-          effectiveHeadline = overlayText?.split(/\s+/).slice(0, 5).join(' ') || 'Ready when you are';
+          const source = [overlayText, subheadline, cta].filter(s => s && String(s).trim()).join(' ').trim();
+          const { lead, rest } = splitLoudLead(source || 'Ready when you are');
+          effectiveHeadline = lead || 'Ready when you are';
+          if (rest) {
+            effectiveSubheadline = [rest, effectiveSubheadline].filter(Boolean).join(' ').trim();
+          }
+        } else if (overlayText && overlayText.trim() && !effectiveSubheadline) {
+          // Headline present — put leftover overlay into support so it is not discarded
+          const leftover = overlayText.replace(effectiveHeadline, '').trim();
+          if (leftover) effectiveSubheadline = leftover;
         }
+        console.log(
+          `[CTA Copy] lead="${effectiveHeadline}" support="${(effectiveSubheadline || '').slice(0, 80)}" cta="${effectiveCta}"`,
+        );
       }
       if (!effectiveHeadline && !overlayText) {
         compositionFailed = true;

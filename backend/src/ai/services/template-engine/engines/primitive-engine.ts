@@ -1866,7 +1866,8 @@ export class PrimitiveEngine {
       if (ctx.tokens && ctx.tokens.opacityMultiplier !== undefined) {
         finalOpacity = baseOpacity * ctx.tokens.opacityMultiplier;
       }
-      return Math.min(1.0, Math.max(0.02, parseFloat(finalOpacity.toFixed(2))));
+      // Floor high enough that family primitives remain visible on photo/canvas
+      return Math.min(1.0, Math.max(0.28, parseFloat(finalOpacity.toFixed(2))));
     };
 
     ctx.isSafePlacement = (candidateBox: BoundingBox): boolean => {

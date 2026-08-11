@@ -150,27 +150,31 @@ export class DesignCompiler {
       }
     }
 
-    // 4. Decoration Strategy — Enforce Decoration Policy based on density
+    // 4. Decoration Strategy — density tunes presence, must not erase family DNA
     if (spec.decorations) {
       let allowedCount = 5;
       let opacityMultiplier = 1.0;
 
-      if (spec.decorations.density === 'none' || spec.decorations.density === 'low') {
+      if (spec.decorations.density === 'none') {
+        // Truly none: keep only structural lines
         allowedCount = 0;
-        opacityMultiplier = 0.0;
+        opacityMultiplier = 0.55;
+      } else if (spec.decorations.density === 'low') {
+        // Low = subtle, NOT invisible — keep 1–2 family primitives visible
+        allowedCount = 2;
+        opacityMultiplier = 0.55;
       } else if (spec.decorations.density === 'medium') {
-        allowedCount = 1;
-        opacityMultiplier = 0.7;
-      } else if (spec.decorations.density === 'high') {
         allowedCount = 3;
-        opacityMultiplier = 1.2;
+        opacityMultiplier = 0.75;
+      } else if (spec.decorations.density === 'high') {
+        allowedCount = 5;
+        opacityMultiplier = 1.15;
       }
 
       let currentDecoCount = 0;
       compiledDsl.layers = compiledDsl.layers.filter(layer => {
         if (layer.type === 'decoration') {
-          // Allow functional/structural borders, but limit heavy noise/shapes
-          const isStructural = ['structural_border', 'thin_divider', 'divider'].includes((layer as any).component || '');
+          const isStructural = ['structural_border', 'thin_divider', 'divider', 'accent_rule', 'margin_rule'].includes((layer as any).component || '');
           if (!isStructural) {
             currentDecoCount++;
             if (currentDecoCount > allowedCount) return false;
@@ -179,10 +183,9 @@ export class DesignCompiler {
         return true;
       });
 
-      // Export PrimitiveTokens downstream so decorations are responsive and not just statically filtered by count
+      // Never drive opacity to 0 — resolveOpacity floor would still leave ~0.02 (invisible)
       compiledDsl.primitiveTokens = {
-        opacityMultiplier: opacityMultiplier,
-        // E.g. base stroke weight scales slightly up for higher densities to compete, down for luxury
+        opacityMultiplier: Math.max(0.45, opacityMultiplier),
         baseStrokeWeight: spec.style.mood === 'luxury' ? 1.0 : (spec.decorations.density === 'high' ? 2.0 : 1.5),
         shadowDepth: spec.style.mood === 'luxury' ? 'soft' : 'medium',
         moodAdjustments: {

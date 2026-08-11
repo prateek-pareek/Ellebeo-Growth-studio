@@ -1631,6 +1631,15 @@ export class CompositionEngine {
       layers.push({ id: 'prem_qp_stars', type: 'decoration', zIndex: 15, component: 'premium_stars', anchor: 'top_left' } as IDSLDecorationLayer);
       layers.push({ id: 'prem_qp_quote', type: 'decoration', zIndex: 16, component: 'pull_quote', anchor: 'center' } as IDSLDecorationLayer);
 
+    } else if (layoutId === 'premium_text_only' || layoutId === 'premium_text_slide') {
+      // Text-only promotional / breather slide — NO image layer so base paints solid brand canvas
+      layers.push({ id: 'prem_to_texture', type: 'decoration', zIndex: 5, component: 'paper_texture', anchor: 'center', offsetPercent: 0 } as IDSLDecorationLayer);
+      layers.push({ id: 'prem_to_stars', type: 'decoration', zIndex: 12, component: 'premium_stars', anchor: 'top_right', offsetPercent: 5 } as IDSLDecorationLayer);
+      layers.push({ id: 'prem_to_line', type: 'decoration', zIndex: 14, component: 'elegant_line_art', anchor: 'bottom_left', offsetPercent: 8 } as IDSLDecorationLayer);
+      layers.push({ id: 'prem_to_rule', type: 'decoration', zIndex: 15, component: 'thin_divider', anchor: 'center', offsetPercent: 0 } as IDSLDecorationLayer);
+      layers.push({ id: 'prem_to_title', type: 'text', zIndex: 30, anchor: 'center', role: 'heading', alignment: 'center', maxWidthPercent: 85 } as IDSLTextLayer);
+      layers.push({ id: 'prem_to_body', type: 'text', zIndex: 31, anchor: 'bottom_center', role: 'body', alignment: 'center', maxWidthPercent: 75 } as IDSLTextLayer);
+
     } else if (layoutId === 'premium_cta_poster') {
       layers.push({ id: 'prem_cta_bg', type: 'image', zIndex: 10, mask: 'full_bleed', paddingPercent: 0, anchor: 'center' } as IDSLImageLayer);
       layers.push({ id: 'prem_cta_title', type: 'text', zIndex: 30, anchor: 'center', role: 'heading', alignment: 'center', maxWidthPercent: 90 } as IDSLTextLayer);
@@ -1710,16 +1719,18 @@ export class CompositionEngine {
               .map((l: any) => l.component)
       );
 
-      // Only inject primitives not already present
+      // Inject enough family DNA to be visible — not a single optional accent
       const candidates = primitivesToInject.filter(p => !existingComponents.has(p));
       if (candidates.length > 0) {
-        const numToInject = Math.min(candidates.length, Math.floor(Math.random() * 2) + 1);
+        const minInject = Math.min(candidates.length, familyId === 'premium' || familyId === 'announcement' || familyId === 'countdown' ? 3 : 2);
+        const numToInject = Math.min(candidates.length, Math.max(minInject, Math.floor(Math.random() * 2) + minInject));
+        const shuffled = [...candidates].sort(() => Math.random() - 0.5);
         for (let i = 0; i < numToInject; i++) {
-          const primitive = candidates[Math.floor(Math.random() * candidates.length)];
+          const primitive = shuffled[i];
           layers.push({
             id: `dyn_prim_${familyId}_${i}`,
             type: 'decoration',
-            zIndex: 25 + i, // Above images, below top text
+            zIndex: 25 + i,
             component: primitive as any,
             anchor: randomAnchor(),
             offsetPercent: Math.floor(Math.random() * 10)
