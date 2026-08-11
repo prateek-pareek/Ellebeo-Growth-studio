@@ -1117,10 +1117,22 @@ export class PrimitiveEngine {
       }
     };
 
+    this.registry['subtle_grain'] = {
+      category: 'effects', render: (ctx) => {
+        return `
+      <!-- Subtle Film Grain Overlay (high-frequency, very low opacity — photographic feel) -->
+      <filter id="subtleGrainFilter">
+        <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="4" stitchTiles="stitch" result="grain" />
+        <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0 0 0 0.10 0" in="grain" />
+      </filter>
+      <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" style="pointer-events:none; mix-blend-mode: overlay;" filter="url(#subtleGrainFilter)" opacity="0.6" />`;
+      }
+    };
+
     this.registry['paper_texture'] = {
       category: 'effects', render: (ctx, layer) => {
         const profile = ctx.recipe?.paper_texture;
-        const opacity = profile?.opacity ?? 0.45;
+        const opacity = profile?.opacity ?? 0.25;  // Reduced from 0.45 → 0.25 for a subtler premium look
         const blendMode = profile?.blendMode ?? 'multiply';
 
         return `

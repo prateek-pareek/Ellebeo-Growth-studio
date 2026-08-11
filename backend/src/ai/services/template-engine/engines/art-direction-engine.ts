@@ -481,10 +481,16 @@ export class ArtDirectionEngine {
     }
 
     if (intent.primitives.textureIntensity === 'heavy') {
-      texture.style = isOrganic ? 'paper' : 'grain';
+      // Rotate through premium textures instead of always picking paper for organic/editorial
+      const heavyTextures: Array<'paper' | 'grain' | 'noise'> = isOrganic
+        ? ['paper', 'grain', 'paper', 'noise'] // paper weighted 2x for organic but not exclusive
+        : ['grain', 'noise', 'grain', 'paper'];   // grain/noise for non-organic
+      texture.style = heavyTextures[Math.floor(Math.random() * heavyTextures.length)] as any;
       texture.intensity = 'heavy';
     } else if (intent.primitives.textureIntensity === 'subtle' || intent.primitives.textureIntensity === 'medium') {
-      texture.style = 'linen';
+      // For non-heavy: grain or none — linen is not in the supported style union
+      const lightTextures: Array<'grain' | 'noise' | 'none'> = ['grain', 'noise', 'none'];
+      texture.style = lightTextures[Math.floor(Math.random() * lightTextures.length)] as any;
       texture.intensity = intent.primitives.textureIntensity;
     } else {
       texture.style = 'none';

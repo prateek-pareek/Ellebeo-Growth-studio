@@ -59,7 +59,9 @@ export class DesignLanguageResolver {
         composition.alignment = 'offset';
         readingFlow.type = 'z_pattern';
         primitives.borders = true; // Elegant structural lines
-        visual.texture = 'paper';
+        // Add variety to editorial textures instead of always using paper
+        const edTextures: Array<'paper'|'grain'|'noise'|'none'> = ['paper', 'grain', 'noise', 'none'];
+        visual.texture = edTextures[Math.floor(Math.random() * edTextures.length)];
         break;
 
       case 'clinical':
@@ -160,7 +162,8 @@ export class DesignLanguageResolver {
         typography.headlineWeight = 'light';
         typography.tracking = 'wide';
         composition.whitespace = 'high';
-        visual.texture = 'paper';
+        const edStyleTextures: Array<'paper'|'grain'|'noise'|'none'> = ['paper', 'grain', 'noise', 'none'];
+        visual.texture = edStyleTextures[Math.floor(Math.random() * edStyleTextures.length)];
       }
     } 
     else if (styleKey.includes('bold') || styleKey.includes('campaign') || styleKey.includes('energetic')) {
@@ -173,7 +176,8 @@ export class DesignLanguageResolver {
       // Wellness brands soften edges and use natural textures
       typography.headlineWeight = 'medium';
       typography.casing = 'natural';
-      visual.texture = 'paper';
+      const wellnessTextures: Array<'paper'|'noise'|'grain'> = ['paper', 'noise', 'grain'];
+      visual.texture = wellnessTextures[Math.floor(Math.random() * wellnessTextures.length)];
       imageTreatment.mask = 'soft_edge';
     }
     else if (styleKey.includes('clinical') || styleKey.includes('medical') || styleKey.includes('clean')) {
