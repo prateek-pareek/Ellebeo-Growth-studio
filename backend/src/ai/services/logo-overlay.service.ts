@@ -54,7 +54,6 @@ export class LogoOverlayService {
       // Generate final URL with logo overlay
       const finalUrl = cloudinary.url(baseUpload.public_id, {
         transformation: [
-          { width: 1024, height: 1024, crop: 'fill' },
           {
             overlay: logoUpload.public_id.replace(/\//g, ':'),
             width: 120,

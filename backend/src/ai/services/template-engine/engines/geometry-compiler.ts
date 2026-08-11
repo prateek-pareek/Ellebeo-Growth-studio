@@ -59,32 +59,73 @@ export class GeometryCompiler {
 
     const contentMaxWidth = canvasWidth - (safeX * 2);
 
-    // 2. TYPOGRAPHY SCALING (Proportional Strategy) — graded across the full dominance
-    // enum ('medium' previously no-op'd) and now also covers 'editorial'/'technical'
-    // hierarchies, not just 'bold'/'minimal'.
+    // 2. TYPOGRAPHY SCALING (Top-Down Hierarchy Curve Strategy)
+    // Note: baseScale is available for future proportional calculations if needed
     const baseScale = canvasWidth;
     let heroSize = Math.round(behavior.heroBaseFontSize * (behavior.typographyScaleMultiplier || 1.0));
-    let bodySize = Math.round(behavior.bodyBaseFontSize * (behavior.typographyScaleMultiplier || 1.0));
 
-    const dominanceScale: Record<string, number> = { low: 0.7, medium: 1.0, high: 1.3 };
-    heroSize = Math.round(heroSize * (dominanceScale[designSpec?.typography?.dominance || 'medium'] ?? 1.0));
-
-    const hierarchyBodyScale: Record<string, number> = { bold: 1.2, editorial: 1.1, technical: 0.95, minimal: 0.8 };
-    if (designSpec?.typography?.hierarchy) {
-      bodySize = Math.round(bodySize * (hierarchyBodyScale[designSpec.typography.hierarchy] ?? 1.0));
+    // A. Visual Dominance — placement priority, not micro-type punishment
+    // Prefer designLanguage intent; fall back to designSpec composition tags.
+    const visualPriority =
+      intent?.visualPriority || designSpec?.composition?.visualPriority;
+    let dominanceScale = 1.0;
+    if (designSpec?.typography?.dominance === 'high' || visualPriority === 'typography_hero') {
+      dominanceScale = 1.25;
+    } else if (designSpec?.typography?.dominance === 'low' || visualPriority === 'image_hero') {
+      // Slight yield only — image_hero wins frame via bands, type stays readable
+      dominanceScale = 0.94;
+    } else if (visualPriority === 'cta_hero') {
+      dominanceScale = 0.9;
     }
+    
+    heroSize = Math.round(heroSize * dominanceScale);
+
+    // B. Typography Hierarchy Curve (Determine derivatives from Hero)
+    let curve = { primary: 0.45, secondary: 0.30, body: 0.18, metadata: 0.12 };
+    let trackingHero: string | number = behavior.trackingHero;
+    let trackingMetadata: string | number = behavior.trackingMetadata;
+
+    if (designSpec?.typography?.hierarchy === 'editorial') {
+      heroSize = Math.round(heroSize * 1.3); // Editorials have massive heroes
+      curve = { primary: 0.45, secondary: 0.30, body: 0.18, metadata: 0.12 };
+      trackingHero = 'wide';
+    } else if (designSpec?.typography?.hierarchy === 'bold') {
+      heroSize = Math.round(heroSize * 1.15);
+      curve = { primary: 0.50, secondary: 0.35, body: 0.22, metadata: 0.15 };
+      trackingHero = 'tight';
+    } else if (designSpec?.typography?.hierarchy === 'minimal') {
+      heroSize = Math.round(heroSize * 0.9);
+      curve = { primary: 0.55, secondary: 0.40, body: 0.28, metadata: 0.16 };
+      trackingHero = 'standard';
+    } else if (designSpec?.typography?.hierarchy === 'technical') {
+      curve = { primary: 0.50, secondary: 0.35, body: 0.25, metadata: 0.15 };
+      trackingHero = 'standard';
+    }
+
+    // Hard caps: image_hero still keeps readable presence (~7–9% of canvas)
+    const isStory = canvasHeight > canvasWidth;
+    const imageFirst = visualPriority === 'image_hero';
+    const maxHeroRatio = imageFirst ? (isStory ? 0.075 : 0.09) : (isStory ? 0.09 : 0.11);
+    const maxHero = Math.round(canvasHeight * maxHeroRatio);
+    const minHero = Math.round(canvasHeight * (imageFirst ? 0.04 : 0.038));
+    heroSize = Math.max(minHero, Math.min(heroSize, maxHero));
+
+    // Recalculate body from clamped hero so hierarchy stays proportional
+    let bodySize = Math.round(heroSize * curve.body);
+    if (bodySize < 16) bodySize = 16;
+    // Don't inflate hero back up when body hits the floor — that was re-exploding sizes
 
     const typography = {
       heroSize: heroSize,
-      primarySize: Math.round(bodySize * 1.5),
-      secondarySize: Math.round(bodySize * 1.2),
+      primarySize: Math.min(Math.round(heroSize * curve.primary), Math.round(heroSize * 0.55)),
+      secondarySize: Math.min(Math.round(heroSize * curve.secondary), Math.round(heroSize * 0.40)),
       bodySize: bodySize,
-      metadataSize: behavior.metadataBaseFontSize,
+      metadataSize: Math.max(12, Math.min(Math.round(heroSize * curve.metadata), 22)),
       
       heroLineHeight: behavior.lineHeightMultiplier,
       bodyLineHeight: behavior.lineHeightMultiplier,
-      heroTracking: `${behavior.trackingHero}em`,
-      metadataTracking: `${behavior.trackingMetadata}em`,
+      heroTracking: typeof trackingHero === 'number' ? `${trackingHero}em` : trackingHero,
+      metadataTracking: typeof trackingMetadata === 'number' ? `${trackingMetadata}em` : trackingMetadata,
     };
 
     // 3. ALIGNMENT (Composition Strategy) — an explicit designSpec.typography.alignment

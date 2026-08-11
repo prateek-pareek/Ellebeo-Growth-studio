@@ -21,7 +21,7 @@ export class MoodboardVisionChain {
         throw new Error('GEMINI_API_KEY required for moodboard vision analysis');
       }
       this.model = new ChatGoogleGenerativeAI({
-        model: 'gemini-pro-latest',
+        model: 'gemini-2.5-flash',
         temperature: 0.1,
         maxOutputTokens: 8192,
         apiKey: process.env['GEMINI_API_KEY'],

@@ -1,5 +1,7 @@
 import { ITemplateMetadata, ITemplateRetriever, ITemplateCandidate, ITemplateContext } from './interfaces';
 import compiledLayoutsData from '../../config/compiled-layouts.v2.json';
+import knowledgeMapData from '../../config/design-knowledge-map.json';
+import { designFamilyRecipes } from './config/design-families.recipe';
 
 export class MetadataRetriever implements ITemplateRetriever {
   private library: Record<string, any> = {};
@@ -83,6 +85,34 @@ export class MetadataRetriever implements ITemplateRetriever {
 
       // We keep the legacy rigid layouts active as they provide the 266 base templates.
 
+      const knowledgeMap: Record<string, any> = knowledgeMapData || {};
+      const k = knowledgeMap[id];
+      let visualPriority: any = undefined;
+      let readingFlow = undefined;
+      let balance = undefined;
+      let energy = undefined;
+      let negativeSpace = undefined;
+      let family = undefined;
+
+      if (k) {
+        family = k.layoutFamily?.value;
+        energy = k.visualLanguage?.energy;
+        readingFlow = k.composition?.readingFlow?.toLowerCase() || 'default';
+        balance = k.composition?.balance;
+        negativeSpace = k.composition?.negativeSpace;
+        
+        const primaryFocus = (k.composition?.primaryFocus || '').toLowerCase();
+        if (primaryFocus.includes('text') || primaryFocus.includes('quote') || primaryFocus.includes('headline')) {
+          visualPriority = 'typography_hero';
+        } else if (family === 'split' || family === 'quadrant') {
+          visualPriority = 'composition_hero';
+        } else if (primaryFocus.includes('cta') || primaryFocus.includes('button')) {
+          visualPriority = 'cta_hero';
+        } else {
+          visualPriority = 'image_hero';
+        }
+      }
+
       candidates.push({
         id,
         category,
@@ -95,7 +125,15 @@ export class MetadataRetriever implements ITemplateRetriever {
         isCarouselOnly: false,
         premiumStyleScore: 10,
         occupiedTextZones: [],
-        type: 'rigid' // All V2 compiled layouts are fully compiled, acting as rigid structures
+        type: 'rigid', // All V2 compiled layouts are fully compiled, acting as rigid structures
+        
+        // Semantic Traits mapped from design-knowledge-map.json
+        visualPriority,
+        readingFlow,
+        balance,
+        energy,
+        negativeSpace,
+        family
       });
     }
 
@@ -188,6 +226,9 @@ export class MetadataRetriever implements ITemplateRetriever {
     ];
 
     for (const recipe of compositionRecipes) {
+      // Find the base family name (e.g. 'editorial_portrait_hero' -> 'editorial')
+      const familyName = Object.keys(designFamilyRecipes).find(f => recipe.id.startsWith(f));
+      const familyRecipe = familyName ? designFamilyRecipes[familyName] : null;
 
       candidates.push({
         id: recipe.id,
@@ -201,7 +242,12 @@ export class MetadataRetriever implements ITemplateRetriever {
         isCarouselOnly: false,
         premiumStyleScore: 20, // Heavily weight Phase 3 recipes to encourage selection
         occupiedTextZones: [],
-        type: 'procedural' as any
+        type: 'procedural' as any,
+        
+        // Semantic Traits mapped from design-families.recipe.ts
+        visualPriority: familyRecipe?.dominance?.type as any,
+        readingFlow: familyRecipe?.readingFlow?.type as any,
+        family: familyName
       });
     }
 

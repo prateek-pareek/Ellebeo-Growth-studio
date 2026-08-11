@@ -73,14 +73,18 @@ export class ColorCompositionEngine {
       accent = textOrig; // Stark, heavy accent
     }
 
-    // 4. Mathematical Auto-Contrast for Typography
+    // 4. Mathematical Auto-Contrast for Typography — BrandDNA depth is the type ink
     const primaryLuminance = this.getLuminance(primaryBackground);
     const cardLuminance = this.getLuminance(cardSurface);
 
-    // Primary Text lives on Cards or Secondary Surfaces usually
-    // If the card is light, text must be dark. If card is dark, text must be light.
-    const primaryText = cardLuminance > 0.5 ? depthOrig : (recipe.warmth === 'warm' ? '#FCFBF8' : '#FFFFFF');
-    const secondaryText = cardLuminance > 0.5 ? textOrig : brandOrig;
+    // Prefer brand depth on light surfaces; warm/cool whites on dark surfaces
+    const lightInk = recipe.warmth === 'warm' ? '#FCFBF8' : '#FFFFFF';
+    const primaryText = cardLuminance > 0.5
+      ? (this.getContrastRatio(cardSurface, depthOrig) >= 3.0 ? depthOrig : textOrig)
+      : lightInk;
+    const secondaryText = cardLuminance > 0.5
+      ? (this.getContrastRatio(cardSurface, textOrig) >= 3.0 ? textOrig : depthOrig)
+      : (this.getContrastRatio(cardSurface, brandOrig) >= 3.0 ? brandOrig : lightInk);
 
     // 5. Build Hierarchy
     return {
@@ -112,6 +116,79 @@ export class ColorCompositionEngine {
     const g = (rgb >>  8) & 0xff;  
     const b = (rgb >>  0) & 0xff;  
     return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  }
+
+  private getContrastRatio(hex1: string, hex2: string): number {
+    const l1 = this.getLuminance(this.cleanHex(hex1));
+    const l2 = this.getLuminance(this.cleanHex(hex2));
+    const lighter = Math.max(l1, l2);
+    const darker = Math.min(l1, l2);
+    return (lighter + 0.05) / (darker + 0.05);
+  }
+
+  public resolveForegroundColor(surfaceHex: string, palette: ColorPalette): string {
+    const brand = this.cleanHex(palette.brandColor || '#CBBFB1');
+    const secondary = this.cleanHex(palette.secondaryColor || '#F6EEE4');
+    const accent = this.cleanHex(palette.accentColor || brand);
+    const depth = this.cleanHex(palette.depthColor || '#111111');
+    const bg = this.cleanHex(palette.backgroundColor || '#F9F6F3');
+
+    // BrandDNA inks only — background is canvas-locked and must never become text fill
+    const candidates = [
+      { color: depth, role: 'Depth' },
+      { color: brand, role: 'Primary' },
+      { color: accent, role: 'Accent' },
+      { color: secondary, role: 'Secondary' },
+    ].filter(c => c.color.toUpperCase() !== bg.toUpperCase());
+
+    let bestContrast = 0;
+    let bestColor = '#FFFFFF';
+
+    for (const candidate of candidates) {
+      const contrast = this.getContrastRatio(surfaceHex, candidate.color);
+      if (contrast > bestContrast) {
+        bestContrast = contrast;
+        bestColor = candidate.color;
+      }
+    }
+
+    // WCAG AA for large text/graphics: 3.0:1
+    if (bestContrast >= 3.0) {
+      return bestColor;
+    }
+
+    const surfaceLum = this.getLuminance(this.cleanHex(surfaceHex));
+    return surfaceLum > 0.5 ? depth : '#FFFFFF';
+  }
+
+  /**
+   * Resolve text ink from BrandDNA palette against a surface.
+   * Rotation may permute primary/secondary/accent/depth; background stays excluded.
+   */
+  public resolveTextInk(
+    surfaceHex: string,
+    palette: ColorPalette,
+    role: 'primary' | 'secondary' = 'primary',
+  ): string {
+    const ink = this.resolveForegroundColor(surfaceHex, palette);
+    if (role === 'secondary') {
+      const brand = this.cleanHex(palette.brandColor || ink);
+      const accent = this.cleanHex(palette.accentColor || brand);
+      const secondary = this.cleanHex(palette.secondaryColor || brand);
+      const bg = this.cleanHex(palette.backgroundColor || '#FFFFFF');
+      const options = [accent, brand, secondary].filter(c => c.toUpperCase() !== bg.toUpperCase());
+      let best = ink;
+      let bestC = 0;
+      for (const c of options) {
+        const contrast = this.getContrastRatio(surfaceHex, c);
+        if (contrast > bestC && contrast >= 2.5) {
+          bestC = contrast;
+          best = c;
+        }
+      }
+      return best;
+    }
+    return ink;
   }
 
   private isWhite(hex: string): boolean {

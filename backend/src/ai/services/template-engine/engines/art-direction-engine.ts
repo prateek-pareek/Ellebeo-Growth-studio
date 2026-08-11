@@ -1,5 +1,6 @@
 import designKnowledgeMap from '../../../config/design-knowledge-map.json';
 import { VisualRecipe, ColorRecipe, TypographyRecipe, PrimitiveRecipe, TextureRecipe, HeroRecipe, IDesignIntent, ISemanticDesignSpec } from '../interfaces';
+import { selectDeterministically } from '../utils/deterministic-hash.util';
 
 // ─── 1. INTERFACES ───
 
@@ -481,20 +482,22 @@ export class ArtDirectionEngine {
     // Apply strict geometric overrides based on philosophical intent
 
     if (intent.visualPriority === 'typography_hero') {
-      profile.heroBaseFontSize = 140;
+      profile.heroBaseFontSize = 110;
       profile.metadataBaseFontSize = 20;
       profile.bodyBaseFontSize = 28;
-      profile.elementOverlapAllowed = true;
+      profile.elementOverlapAllowed = false;
       profile.marginHugging = true;
-      profile.typographyScaleMultiplier = 1.3;
+      profile.typographyScaleMultiplier = 1.15;
     } else {
-      profile.heroBaseFontSize = 100;
+      profile.heroBaseFontSize = 84;
+      // image_hero = photo owns the FRAME via placement/whitespace, NOT micro-type.
+      // Type stays readable and present; it simply sits in clear bands.
       if (intent.visualPriority === 'image_hero') {
-        profile.typographyScaleMultiplier = 0.65;
+        profile.typographyScaleMultiplier = 0.94;
       } else if (intent.visualPriority === 'composition_hero') {
         profile.typographyScaleMultiplier = 0.9;
       } else if (intent.visualPriority === 'cta_hero') {
-        profile.typographyScaleMultiplier = 1.1;
+        profile.typographyScaleMultiplier = 0.95;
       }
     }
 
@@ -543,7 +546,7 @@ export class ArtDirectionEngine {
   // SPRINT 4: VISUAL RECIPE GENERATOR
   // ==========================================
 
-  public generateVisualRecipe(intent: IDesignIntent, themeId: string): VisualRecipe {
+  public generateVisualRecipe(intent: IDesignIntent, themeId: string, brandSeed?: string): VisualRecipe {
     const isPop = themeId.includes('pop') || themeId.includes('vibrant');
     const isLuxury = themeId.includes('beauty') || themeId.includes('luxury') || intent.mood === 'luxury';
     const isOrganic = themeId.includes('organic') || themeId.includes('wellness') || intent.mood === 'organic';
@@ -604,11 +607,22 @@ export class ArtDirectionEngine {
       color.warmth = 'cool';
     }
 
+    // Texture choice is seeded deterministically per brand+family+mood (selectDeterministically)
+    // instead of Math.random() — otherwise the same brand's posts flip randomly between grain/
+    // paper/noise/none from one generation to the next, which reads as an inconsistent Instagram
+    // grid rather than one cohesive visual system.
+    const textureSeed = { tenantId: brandSeed || 'default_brand', slideIndex: 0, mood: intent.mood, goal: intent.family };
     if (intent.primitives.textureIntensity === 'heavy') {
-      texture.style = isOrganic ? 'paper' : 'grain';
+      // Rotate through premium textures instead of always picking paper for organic/editorial
+      const heavyTextures: Array<'paper' | 'grain' | 'noise'> = isOrganic
+        ? ['paper', 'grain', 'paper', 'noise'] // paper weighted 2x for organic but not exclusive
+        : ['grain', 'noise', 'grain', 'paper'];   // grain/noise for non-organic
+      texture.style = selectDeterministically(heavyTextures, textureSeed) as any;
       texture.intensity = 'heavy';
     } else if (intent.primitives.textureIntensity === 'subtle' || intent.primitives.textureIntensity === 'medium') {
-      texture.style = 'linen';
+      // For non-heavy: grain or none — linen is not in the supported style union
+      const lightTextures: Array<'grain' | 'noise' | 'none'> = ['grain', 'noise', 'none'];
+      texture.style = selectDeterministically(lightTextures, textureSeed) as any;
       texture.intensity = intent.primitives.textureIntensity;
     } else {
       texture.style = 'none';

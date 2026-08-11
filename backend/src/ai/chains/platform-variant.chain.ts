@@ -13,6 +13,7 @@ import type { CaptionGenerationResult } from '../types/chain-output.types';
 import type { BrandDNARecord, SocialPlatform } from '../types/job-payload.types';
 import type { ModelRouter } from '../orchestrator/model-router';
 import { wrapSystemPrompt } from '../config/platform-system-prompt';
+import { getEffectiveBlacklist } from '../config/brand-dna-blacklist.util';
 
 const PLATFORM_ADAPTATION_RULES: Partial<Record<SocialPlatform, string>> = {
   facebook: `Adapt this caption for Facebook:
@@ -115,7 +116,7 @@ export class PlatformVariantChain {
 The brand voice must remain IDENTICAL — only the format and style changes.
 Business: ${brandDNA.businessName}
 Tone: ${(brandDNA.primaryTone ?? '').replace(/_/g, ' ')}
-NEVER use these words: ${brandDNA.vocabularyBlacklist.join(', ')}`;
+NEVER use these words: ${getEffectiveBlacklist(brandDNA).join(', ')}`;
 
     const userPrompt = `PRIMARY INSTAGRAM CAPTION:
 "${primaryCaption.caption}"

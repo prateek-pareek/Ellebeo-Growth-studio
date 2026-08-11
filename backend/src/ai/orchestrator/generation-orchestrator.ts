@@ -9,6 +9,7 @@ import { ModelRouter } from './model-router';
 import { PromptBuilder } from './prompt-builder';
 import { filterDnaForTier, tierDnaLabel } from '../config/brand-dna-tier-filter';
 import { isMedicalAestheticsBrand } from '../config/medical-compliance';
+import { getEffectiveBlacklist } from '../config/brand-dna-blacklist.util';
 import { buildStyleDirectionBlock } from '../config/visual-style-library';
 import { VisionAnalysisChain } from '../chains/vision-analysis.chain';
 import { CaptionGenerationChain } from '../chains/caption-generation.chain';
@@ -25,6 +26,7 @@ import { StoryFrameChain } from '../chains/story-frame.chain';
 import { StoryPipelineService, type StoryOutput } from '../services/story-pipeline.service';
 import { AiImageGenerationService } from '../services/ai-image-generation.service';
 import { LogoOverlayService } from '../services/logo-overlay.service';
+import { ContentValidatorService } from '../services/content-validator.service';
 import { ReelShotChain, type ReelShotResult } from '../chains/reel-shot.chain';
 import { extractBrandVoice } from '../config/brand-voice';
 import { AI_CONFIG, estimateTotalJobSeconds } from '../../config/ai.config';
@@ -87,6 +89,7 @@ export class GenerationOrchestrator {
   private readonly reelShotChain: ReelShotChain;
   private readonly aiImageGen: AiImageGenerationService;
   private readonly logoOverlay: LogoOverlayService;
+  private readonly contentValidator: ContentValidatorService;
 
   // New properties
   private readonly tierGating: TierGatingService;
@@ -127,6 +130,7 @@ export class GenerationOrchestrator {
     this.reelShotChain = new ReelShotChain();
     this.aiImageGen = new AiImageGenerationService();
     this.logoOverlay = new LogoOverlayService();
+    this.contentValidator = new ContentValidatorService();
 
     // New instantiations
     this.tierGating = new TierGatingService(prisma);
@@ -180,6 +184,7 @@ export class GenerationOrchestrator {
 
     // Track partial results for partial success support
     let visionResult: VisionAnalysisResult | null = null;
+    let visionResultBefore: VisionAnalysisResult | null = null;
     let captionResult: CaptionGenerationResult | null = null;
     let generationOptionsResult: (CaptionGenerationResult & { generatedBy: string })[] = [];
     let reelScriptResult: ReelScriptResult | null = null;
@@ -227,47 +232,53 @@ export class GenerationOrchestrator {
     const appointmentVisionTask = (async () => {
       if (payload.imageAssets.length === 0) return;
       await this.progressEmitter.emit(jobId, tenantId, 'processing_vision');
-      const primaryImage = payload.imageAssets[0]!;
-      const isLocalVisionUrl = primaryImage.rawStoragePath.startsWith('http://localhost') ||
-        primaryImage.rawStoragePath.startsWith('http://127.');
-      if (isLocalVisionUrl) return;
-      try {
-        const imageUrl = (process.env['CLOUDINARY_CLOUD_NAME'] && primaryImage.cloudinaryPublicId)
-          ? `https://res.cloudinary.com/${process.env['CLOUDINARY_CLOUD_NAME']}/image/upload/${primaryImage.cloudinaryPublicId}`
-          : primaryImage.rawStoragePath;
-        if (imageUrl.includes('firebasestorage.app') && !imageUrl.includes('token=')) {
-          console.warn(`[Vision Task] The imageUrl is a Firebase Storage URL without a public download token. GPT Vision will likely fail with a 403 Forbidden: ${imageUrl}`);
+
+      const visionPromises = payload.imageAssets.map(async (asset) => {
+        const isLocalVisionUrl = asset.rawStoragePath.startsWith('http://localhost') ||
+          asset.rawStoragePath.startsWith('http://127.');
+        if (isLocalVisionUrl) return;
+
+        try {
+          const imageUrl = (process.env['CLOUDINARY_CLOUD_NAME'] && asset.cloudinaryPublicId)
+            ? `https://res.cloudinary.com/${process.env['CLOUDINARY_CLOUD_NAME']}/image/upload/${asset.cloudinaryPublicId}`
+            : asset.rawStoragePath;
+
+          const visionAnalysis = await this.visionChain.analyse({
+            imageUrl,
+            storagePath: asset.rawStoragePath,
+            imageHash: asset.s3ObjectHash,
+            cachedResult: asset.visionAnalysisCache,
+          });
+
+          if (asset.isBeforePhoto) {
+            visionResultBefore = visionAnalysis.result;
+          } else {
+            visionResult = visionAnalysis.result;
+          }
+        } catch (error: any) {
+          console.error(`[Vision Task] Vision extraction failed silently. Error: ${error?.message || error}`);
         }
-        
-        const visionAnalysis = await this.visionChain.analyse({
-          imageUrl,
-          storagePath: primaryImage.rawStoragePath,
-          imageHash: primaryImage.s3ObjectHash,
-          cachedResult: primaryImage.visionAnalysisCache,
-        });
-        visionResult = visionAnalysis.result;
-      } catch (error: any) {
-        console.error(`[Vision Task] Vision extraction failed silently. faceCoordinates will be undefined. Error: ${error?.message || error}`);
-        // Non-fatal — caption still generated from appointment context
-      }
+      });
+
+      await Promise.all(visionPromises);
     })();
 
     const moodboardVisionTask = (async () => {
       const cache: any[] = Array.isArray((brandDNA as any).moodboardIntentsCache)
         ? (brandDNA as any).moodboardIntentsCache
         : [];
-      
+
       if (cache.length > 0) {
         // "Roulette" Algorithm: pick 1 lighting, 1 texture, 1 mood to prevent hallucination
         const lightings = cache.filter(c => c.intent.toLowerCase() === 'lighting');
         const textures = cache.filter(c => c.intent.toLowerCase() === 'texture');
         const moods = cache.filter(c => ['mood', 'vibe', 'style'].includes(c.intent.toLowerCase()));
-        
+
         const selected = [];
         if (lightings.length > 0) selected.push(lightings[Math.floor(Math.random() * lightings.length)].summary);
         if (textures.length > 0) selected.push(textures[Math.floor(Math.random() * textures.length)].summary);
         if (moods.length > 0) selected.push(moods[Math.floor(Math.random() * moods.length)].summary);
-        
+
         if (selected.length > 0) {
           moodboardVisionSummary = selected.join(' ');
         }
@@ -360,7 +371,7 @@ export class GenerationOrchestrator {
     });
 
     // ——— Pre-Launch: Parallel Image Processing Task —————————————————────────
-    const isMedicalPractitioner = (brandDNA as any).serviceCategory === 'injectables_cosmetic' || (brandDNA as any).serviceCategory === 'laser_treatments' || ['medical', 'injectables', 'laser', 'nurse'].some(k => brandDNA.businessName?.toLowerCase().includes(k)); // simple proxy for isMedicalAestheticsBrand if not imported; wait, isMedicalAestheticsBrand is available globally in the file? Let me check line 538.
+    const isMedicalPractitioner = isMedicalAestheticsBrand(brandDNA);
     const consentShowFace = !!(consentCheck.activeRestrictions as any)?.show_face;
     let nonMedicalImageProcessingPromise: Promise<ImageProcessingResult | null> = Promise.resolve(null);
 
@@ -395,7 +406,7 @@ export class GenerationOrchestrator {
               try {
                 const cloudinaryId = await this.imagePipeline.uploadUrl(result.variants.feedUrl, tenantId);
                 result = { ...result, cloudinaryPublicId: cloudinaryId };
-              } catch (err) {}
+              } catch (err) { }
             }
           }
           return result;
@@ -417,7 +428,7 @@ export class GenerationOrchestrator {
     modelUsed = `${llmConfig.provider}/${llmConfig.modelId}`;
 
     try {
-      const blacklist = brandDNA.vocabularyBlacklist;
+      const blacklist = getEffectiveBlacklist(brandDNA);
 
       const antiAIGlossary = ["transformation", "radiant", "rejuvenated", "delve", "journey", "oasis", "sanctuary", "meticulous", "nestled", "whimsical", "unveil", "elevate", "glow up", "game-changer", "luxurious", "indulge"];
 
@@ -529,6 +540,7 @@ export class GenerationOrchestrator {
         totalSlides: isCarouselOpt ? 4 : 1,
         gridConstraints: determinedGrid.gridConstraints,
         visionResult: visionResult,
+        brandDNA,
       }).catch(err => {
         console.error('[Orchestrator Step 3.5 Template Agent Error]:', err);
         return null;
@@ -629,7 +641,7 @@ export class GenerationOrchestrator {
     const feedPhotoUrlRaw = isMedicalPractitioner
       ? undefined
       : payload.imageAssets.find(a => a.isAfterPhoto)?.rawStoragePath
-        ?? payload.imageAssets[0]?.rawStoragePath;
+      ?? payload.imageAssets[0]?.rawStoragePath;
 
     let feedPhotoUrl: string | undefined = feedPhotoUrlRaw;
     if (feedPhotoUrlRaw && !consentShowFace) {
@@ -651,8 +663,8 @@ Aesthetic: ${(brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA
 Caption hook: "${captionResult.hookSentence || captionResult.caption.slice(0, 80)}"
 Requirements:
 ${consentShowFace
-  ? '- Keep the real photo as the main visual — preserve the person/hair authentically'
-  : '- The client\'s face is already obscured for privacy — do NOT sharpen, restore, reconstruct, or otherwise reveal any facial detail; keep it fully obscured'}
+            ? '- Keep the real photo as the main visual — preserve the person/hair authentically'
+            : '- The client\'s face is already obscured for privacy — do NOT sharpen, restore, reconstruct, or otherwise reveal any facial detail; keep it fully obscured'}
 - Add subtle brand-matched design: clean typography, brand color accents
 - Minimal overlay — let the photo shine
 - Professional beauty industry aesthetic
@@ -755,12 +767,12 @@ ${consentShowFace
 
     // Ticket 5: AI Super Resolution and Inpainting
     const brandColor = brandDNA.primaryBrandColor ?? '#1a1a1a';
-    
+
     // Execute sequentially to avoid Replicate 429 rate limit retries
     if (afterPhotoUrl) {
       afterPhotoUrl = await this.imageEnhancementService.enhanceImage(afterPhotoUrl as string, moodboardVisionSummary ?? '', brandColor, visionResult);
     }
-    
+
     if (beforePhotoUrl) {
       beforePhotoUrl = await this.imageEnhancementService.enhanceImage(beforePhotoUrl as string, moodboardVisionSummary ?? '', brandColor, visionResult);
     }
@@ -820,6 +832,7 @@ ${consentShowFace
             depthBrandColor: brandDNA.depthBrandColor ?? '#1E1E1C',
             moodboardVisionSummary: moodboardVisionSummary ?? undefined,
             visionResult: visionResult ?? undefined,
+            visionResultBefore: visionResultBefore ?? undefined,
             templateIntent: getTemplateIntent(determinedGrid.pillar)
           });
           // Apply logo to each carousel slide
@@ -861,11 +874,15 @@ ${consentShowFace
         });
 
         // Step 2 of two-step prompting: Generate bespoke visual design briefs via Creative Director Agent
-        const briefResult = await this.creativeDirectorChain.generate({
+        let briefResult = await this.creativeDirectorChain.generate({
           strategistOutput,
           brandDNA,
           concepts: storyFrames.frames,
         });
+
+        // Step 2.5: Content Validation & Trimming
+        storyFrames.frames = this.contentValidator.validateStoryFrames(storyFrames.frames);
+        briefResult.slides = this.contentValidator.validateStoryFrames(briefResult.slides as any) as any;
 
         try {
           const headingFont = brandDNA.brandFont || (brandDNA.brandDnaV2 as any)?.typography?.heading_font || 'Playfair Display';
@@ -895,6 +912,8 @@ ${consentShowFace
             depthBrandColor: brandDNA.depthBrandColor ?? '#1E1E1C',
             moodboardVisionSummary: moodboardVisionSummary ?? undefined,
             visionResult: visionResult ?? undefined,
+            visionResultBefore: visionResultBefore ?? undefined,
+            semanticFlow: this.narrativePlanner.getRecipe(payload.businessGoal as any).semanticFlow,
             templateIntent: getTemplateIntent(determinedGrid.pillar)
           });
           const framesWithLogo = brandDNA.logoUrl
@@ -966,7 +985,7 @@ ${consentShowFace
     try {
       const origUrl = payload.imageAssets[0]?.rawStoragePath;
       const genUrl = imageResult?.variants?.feedUrl;
-      
+
       if (origUrl && genUrl) {
         const [origRes, genRes] = await Promise.all([
           fetch(origUrl),
@@ -985,7 +1004,7 @@ ${consentShowFace
     const scoringResult = await this.scoringGate.evaluate({
       caption: captionResult?.caption ?? '',
       hashtags: captionResult?.hashtags ?? [],
-      blacklist: brandDNA.vocabularyBlacklist,
+      blacklist: getEffectiveBlacklist(brandDNA),
       hasBefore: !!beforePhotoUrl,
       beforeAfterAllowed: consentCheck.activeRestrictions?.allow_before_after !== false,
       isCarousel: isCarousel,
@@ -1092,10 +1111,7 @@ ${consentShowFace
         include: { pillars: true },
       });
 
-      const blacklist: string[] = [
-        ...((brandDna?.vocabularyBlacklist ?? []) as string[]),
-        ...((brandDna?.doNotSay ?? []) as string[]),
-      ];
+      const blacklist: string[] = getEffectiveBlacklist(brandDna ?? {});
 
       const { systemPrompt, userPrompt } = this.promptBuilder.assembleTweakPrompt({
         previousCaption: contentItem.caption ?? '',
@@ -1104,8 +1120,8 @@ ${consentShowFace
         brandDNA: {
           businessName: brandDna?.businessName ?? 'Beauty Business',
           primaryTone: (brandDna?.primaryTone ?? 'professional_warm') as any,
-          blacklistedWords: blacklist,
           ...(brandDna ?? {}),
+          vocabularyBlacklist: blacklist,
         } as any,
         platform: 'instagram',
       });

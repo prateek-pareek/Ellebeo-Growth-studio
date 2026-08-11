@@ -1,13 +1,17 @@
 import { DesignRecipe, TypographyTokens, VisualTokens, CompositionTokens, ReadingFlowTokens, PrimitiveTokens, ImageTreatmentTokens } from '../interfaces';
+import { selectDeterministically } from '../utils/deterministic-hash.util';
 
 export class DesignLanguageResolver {
-  
+
   /**
    * Translates Brand DNA and Structural Intent into a unified Design Recipe.
    * This is the core engine that ensures Editorial looks like Editorial, Minimalist looks Minimalist, etc.
    */
-  public generateRecipe(layoutId: string, baseFamily: string, brandStyle: string = 'balanced'): DesignRecipe {
-    
+  public generateRecipe(layoutId: string, baseFamily: string, brandStyle: string = 'balanced', brandSeed?: string): DesignRecipe {
+    // Texture picks below are seeded from brand identity + family/style instead of Math.random(),
+    // so the same brand doesn't randomly flip textures between posts (grid consistency).
+    const textureSeed = { tenantId: brandSeed || 'default_brand', slideIndex: 0, mood: brandStyle, goal: baseFamily };
+
     // Default fallback tokens (A baseline to prevent errors)
     let typography: TypographyTokens = {
       headlineWeight: 'medium',
@@ -59,7 +63,9 @@ export class DesignLanguageResolver {
         composition.alignment = 'offset';
         readingFlow.type = 'z_pattern';
         primitives.borders = true; // Elegant structural lines
-        visual.texture = 'paper';
+        // Add variety to editorial textures instead of always using paper
+        const edTextures: Array<'paper'|'grain'|'noise'|'none'> = ['paper', 'grain', 'noise', 'none'];
+        visual.texture = selectDeterministically(edTextures, textureSeed);
         break;
 
       case 'clinical':
@@ -138,8 +144,9 @@ export class DesignLanguageResolver {
     // ==========================================
     // 2. BRAND DNA OVERRIDES (Aesthetic Shift)
     // ==========================================
+    const styleKey = (brandStyle || '').toLowerCase();
     // This is where a "Countdown Promo" can become a "Luxury Countdown"
-    if (brandStyle.includes('luxury') || brandStyle.includes('high_fashion')) {
+    if (styleKey.includes('luxury') || styleKey.includes('high_fashion') || styleKey.includes('editorial')) {
       // Luxury brands soften urgency and increase whitespace
       if (baseFamily === 'countdown_promo') {
         typography.headlineWeight = 'light';
@@ -148,22 +155,47 @@ export class DesignLanguageResolver {
         composition.whitespace = 'massive';
         visual.texture = 'grain'; // Premium subtlety
       }
-      // General luxury overrides
-      typography.casing = 'force_uppercase';
-      composition.whitespace = 'high';
+      // General luxury / editorial overrides
+      if (styleKey.includes('luxury') || styleKey.includes('high_fashion')) {
+        typography.casing = 'force_uppercase';
+        composition.whitespace = 'high';
+        typography.headlineWeight = typography.headlineWeight === 'hero' ? 'heavy' : typography.headlineWeight;
+        visual.texture = visual.texture === 'none' ? 'grain' : visual.texture;
+      }
+      if (styleKey.includes('editorial')) {
+        typography.headlineWeight = 'light';
+        typography.tracking = 'wide';
+        composition.whitespace = 'high';
+        const edStyleTextures: Array<'paper'|'grain'|'noise'|'none'> = ['paper', 'grain', 'noise', 'none'];
+        visual.texture = selectDeterministically(edStyleTextures, textureSeed);
+      }
     } 
-    else if (brandStyle.includes('bold_campaign') || brandStyle.includes('energetic')) {
+    else if (styleKey.includes('bold') || styleKey.includes('campaign') || styleKey.includes('energetic')) {
       // Bold brands amplify weight and tighten tracking for impact
       typography.headlineWeight = 'hero';
       typography.tracking = 'tight';
       visual.texture = 'noise'; // High energy texture
     }
-    else if (brandStyle.includes('warm_wellness') || brandStyle.includes('natural_organic')) {
+    else if (styleKey.includes('warm') || styleKey.includes('wellness') || styleKey.includes('natural') || styleKey.includes('organic')) {
       // Wellness brands soften edges and use natural textures
       typography.headlineWeight = 'medium';
       typography.casing = 'natural';
-      visual.texture = 'paper';
+      const wellnessTextures: Array<'paper'|'noise'|'grain'> = ['paper', 'noise', 'grain'];
+      visual.texture = selectDeterministically(wellnessTextures, textureSeed);
       imageTreatment.mask = 'soft_edge';
+    }
+    else if (styleKey.includes('clinical') || styleKey.includes('medical') || styleKey.includes('clean')) {
+      typography.headlineWeight = 'heavy';
+      typography.tracking = 'tight';
+      typography.casing = 'sentence';
+      visual.texture = 'grain';
+      visual.decorationDensity = 'minimal';
+    }
+    else if (styleKey.includes('minimal')) {
+      typography.headlineWeight = 'light';
+      typography.tracking = 'airy';
+      composition.whitespace = 'massive';
+      visual.decorationDensity = 'minimal';
     }
 
     return {

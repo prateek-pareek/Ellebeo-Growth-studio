@@ -157,10 +157,27 @@ export class ThemeEngine {
   }
 
   /**
-   * Generates a full-canvas overlay for global film grain or lighting if needed.
+   * Generates a full-canvas finishing overlay (subtle vignette) applied on top of
+   * every generation, so every post shares the same finished "edge treatment"
+   * regardless of which of the ~24 layout templates was picked — one small lever
+   * for reading as a consistent system across a client's grid.
+   *
+   * Deliberately gradient-only, no SVG filter primitives. A previous version used
+   * a full-canvas feTurbulence noise filter here and librsvg rendered it as solid
+   * blanketing noise instead of subtle grain (see layout-renderers.ts git history) —
+   * a radial-gradient vignette gives a comparable "finished" feel and is
+   * universally supported, so it can't regress into that failure mode.
    */
   public generateGlobalOverlay(w: number, h: number): string {
-    return '';
+    return `
+      <defs>
+        <radialGradient id="global-vignette" cx="50%" cy="45%" r="75%">
+          <stop offset="55%" stop-color="#000000" stop-opacity="0" />
+          <stop offset="100%" stop-color="#000000" stop-opacity="0.18" />
+        </radialGradient>
+      </defs>
+      <rect x="0" y="0" width="${w}" height="${h}" fill="url(#global-vignette)" pointer-events="none" />
+    `;
   }
 
   /**
