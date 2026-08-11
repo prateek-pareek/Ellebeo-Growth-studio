@@ -1499,6 +1499,7 @@ CRITICAL IMAGE REQUIREMENTS:
           designLanguage?.intent?.readingFlow,
           { headline: effectiveHeadline, subheadline: effectiveSubheadline, cta: effectiveCta },
           additionalSubjects,
+          geometryOut.spatial,
         );
       };
 

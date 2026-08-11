@@ -173,37 +173,56 @@ export class TypographyEngine {
     let escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, effectiveMaxW, trackingEm);
     let textHeight = escapedLines.length * lineHeight;
 
-    // VERTICAL OVERFLOW — adapt to safe region without mid-word clipping ("Pull…")
+    const preserveHero =
+      !!(layer as any)._preserveHeroSize
+      || ctx.visualPriority === 'typography_hero'
+      || ctx.designLanguage?.intent?.visualPriority === 'typography_hero'
+      || ctx.designSpec?.composition?.visualPriority === 'typography_hero';
+
+    // VERTICAL OVERFLOW — wrap/line-cap first; font shrink is last resort (esp. typography_hero)
     if (layer.allocatedBox && textHeight > layer.allocatedBox.height) {
       const isSecondary = layer.role === 'tagline' || layer.role === 'body' || layer.role === 'footnote';
-      let attempts = 0;
-      let currentFontSize = style.fontSize;
-      const minFontSize = isSecondary
-        ? Math.max(ctx.h * 0.016, style.fontSize * 0.85)
-        : Math.max(ctx.h * 0.028, style.fontSize * 0.68);
+      const pocketH = layer.allocatedBox.height;
       const originalLineHeightMultiplier = lineHeight / Math.max(1, style.fontSize);
-      const maxAttempts = isSecondary ? 6 : 12;
 
-      while (textHeight > layer.allocatedBox.height && currentFontSize > minFontSize && attempts < maxAttempts) {
-        currentFontSize = Math.floor(currentFontSize * 0.94);
-        lineHeight = Math.max(1, Math.floor(currentFontSize * originalLineHeightMultiplier));
-        style.fontSize = currentFontSize;
-        escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, effectiveMaxW, trackingEm);
-        textHeight = escapedLines.length * lineHeight;
-        attempts++;
-      }
-
-      // Drop whole trailing lines (complete words) — never ellipsis mid-word
-      if (textHeight > layer.allocatedBox.height && lineHeight > 0) {
-        const roleCap = layer.role === 'tagline' ? 2 : layer.role === 'heading' ? 4 : 3;
-        const maxLines = Math.min(roleCap, Math.max(1, Math.floor(layer.allocatedBox.height / lineHeight)));
+      // Prefer dropping whole lines before crushing hero type
+      if (lineHeight > 0) {
+        const roleCap = layer.role === 'tagline' ? 2 : layer.role === 'heading' ? (preserveHero ? 5 : 4) : 3;
+        const maxLines = Math.min(roleCap, Math.max(1, Math.floor(pocketH / lineHeight)));
         if (escapedLines.length > maxLines) {
           escapedLines = escapedLines.slice(0, maxLines);
           textHeight = escapedLines.length * lineHeight;
         }
       }
 
-      if (isSecondary && textHeight > layer.allocatedBox.height * 1.02) {
+      let attempts = 0;
+      let currentFontSize = style.fontSize;
+      const minFontSize = preserveHero && layer.role === 'heading'
+        ? Math.max(Math.round(ctx.h * 0.055), Math.round(style.fontSize * 0.92))
+        : isSecondary
+          ? Math.max(ctx.h * 0.016, style.fontSize * 0.85)
+          : Math.max(ctx.h * 0.028, style.fontSize * 0.68);
+      const maxAttempts = preserveHero ? 4 : (isSecondary ? 6 : 12);
+      const shrinkFactor = preserveHero ? 0.97 : 0.94;
+
+      while (textHeight > pocketH && currentFontSize > minFontSize && attempts < maxAttempts) {
+        currentFontSize = Math.floor(currentFontSize * shrinkFactor);
+        lineHeight = Math.max(1, Math.floor(currentFontSize * originalLineHeightMultiplier));
+        style.fontSize = currentFontSize;
+        escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, effectiveMaxW, trackingEm);
+        textHeight = escapedLines.length * lineHeight;
+        if (lineHeight > 0) {
+          const roleCap = layer.role === 'tagline' ? 2 : layer.role === 'heading' ? 4 : 3;
+          const maxLines = Math.min(roleCap, Math.max(1, Math.floor(pocketH / lineHeight)));
+          if (escapedLines.length > maxLines) {
+            escapedLines = escapedLines.slice(0, maxLines);
+            textHeight = escapedLines.length * lineHeight;
+          }
+        }
+        attempts++;
+      }
+
+      if (isSecondary && textHeight > pocketH * 1.02) {
         return '';
       }
     }
@@ -212,43 +231,13 @@ export class TypographyEngine {
     let y = ctx.h / 2;
 
     if (layer.allocatedBox) {
-      // HARD LOCK: QC already chose this pocket. Do not re-anchor or face-nudge —
-      // that was moving type onto the photo and causing "random" placement.
+      // HARD LOCK: stay inside allocated text region — never re-anchor onto the photo
       x = layer.allocatedBox.x;
       y = layer.allocatedBox.y;
       effectiveMaxW = Math.min(effectiveMaxW, layer.allocatedBox.width);
 
       if (anchor === 'middle') x = layer.allocatedBox.x + layer.allocatedBox.width / 2;
       if (anchor === 'end') x = layer.allocatedBox.x + layer.allocatedBox.width;
-
-      // Fit content inside the allocated pocket only (scale/wrap), never relocate
-      const pocketH = layer.allocatedBox.height;
-      if (textHeight > pocketH && pocketH > 0) {
-        const isSecondary = layer.role === 'tagline' || layer.role === 'body' || layer.role === 'footnote';
-        const originalLineHeightMultiplier = lineHeight / Math.max(1, style.fontSize);
-        let currentFontSize = style.fontSize;
-        const minFontSize = isSecondary
-          ? Math.max(18, Math.round(ctx.h * 0.018))
-          : Math.max(Math.round(ctx.h * 0.038), Math.round(style.fontSize * 0.82));
-        let attempts = 0;
-        while (textHeight > pocketH && currentFontSize > minFontSize && attempts < 8) {
-          currentFontSize = Math.floor(currentFontSize * 0.92);
-          lineHeight = Math.max(1, Math.floor(currentFontSize * originalLineHeightMultiplier));
-          style.fontSize = currentFontSize;
-          escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, effectiveMaxW, trackingEm);
-          textHeight = escapedLines.length * lineHeight;
-          attempts++;
-        }
-        if (textHeight > pocketH && lineHeight > 0) {
-          const roleCap = layer.role === 'tagline' ? 2 : layer.role === 'heading' ? 4 : 3;
-          const maxLines = Math.min(roleCap, Math.max(1, Math.floor(pocketH / lineHeight)));
-          escapedLines = escapedLines.slice(0, maxLines);
-          textHeight = escapedLines.length * lineHeight;
-        }
-        if (isSecondary && textHeight > pocketH * 1.02) {
-          return '';
-        }
-      }
     } else {
       const baseAnchorResult = ctx.layoutEngine.resolveAnchor(layer.anchor, 0, textHeight, ctx.constraints);
       x = baseAnchorResult.x;
@@ -914,14 +903,21 @@ export class TypographyEngine {
       fontSize = Math.round(fontSize * 1.06);
     }
 
-    // Absolute canvas cap — image_hero still keeps readable presence
+    // Absolute canvas cap — relative to priority (typography_hero keeps presence)
     if (role === 'heading') {
-      const imageFirst =
-        ctx.visualPriority === 'image_hero'
-        || ctx.designLanguage?.intent?.visualPriority === 'image_hero'
-        || ctx.designSpec?.composition?.visualPriority === 'image_hero';
-      const maxPx = Math.round(ctx.h * (imageFirst ? (isStorySize ? 0.075 : 0.09) : (isStorySize ? 0.09 : 0.11)));
-      const minPx = Math.round(ctx.h * 0.038);
+      const vp =
+        ctx.visualPriority
+        || ctx.designLanguage?.intent?.visualPriority
+        || ctx.designSpec?.composition?.visualPriority
+        || 'image_hero';
+      const imageFirst = vp === 'image_hero';
+      const typeFirst = vp === 'typography_hero';
+      const maxPx = Math.round(ctx.h * (
+        typeFirst ? (isStorySize ? 0.12 : 0.14)
+          : imageFirst ? (isStorySize ? 0.075 : 0.09)
+            : (isStorySize ? 0.09 : 0.11)
+      ));
+      const minPx = Math.round(ctx.h * (typeFirst ? 0.055 : 0.038));
       if (fontSize > maxPx) fontSize = maxPx;
       if (fontSize < minPx) fontSize = minPx;
     }

@@ -1,5 +1,5 @@
 import { ICompiledLayoutDSL, IDSLTextLayer, IDSLTextGroupLayer } from '../interfaces';
-import { LayoutConstraints, LayoutEngine, BoundingBox } from './layout-engine';
+import { LayoutConstraints, LayoutEngine, BoundingBox, SpatialAllocationPolicy } from './layout-engine';
 import {
   CompositionQualityController,
   ContentBundle,
@@ -20,18 +20,12 @@ export interface OptimizeResult {
   fitActions: string[];
 }
 
-export interface ITextCopyHint {
-  headline?: string;
-  subheadline?: string;
-  cta?: string;
-}
-
 export class CompositionOptimizer {
   private qc = new CompositionQualityController();
 
   /**
-   * Priority-aware composition: allocates boxes using readingFlow + visualPriority,
-   * content-aware heights, and the wrap → scale → relocate → layout-change cascade.
+   * Priority-aware composition: spatial allocation FIRST (visualPriority),
+   * then typography fitting inside the real text panel.
    */
   public optimize(
     dsl: ICompiledLayoutDSL,
@@ -46,10 +40,12 @@ export class CompositionOptimizer {
     readingFlow?: ReadingFlow,
     content?: ContentBundle,
     additionalSubjects?: BoundingBox[],
+    spatialPolicy?: SpatialAllocationPolicy,
   ): ICompiledLayoutDSL {
     return this.optimizeWithMeta(
       dsl, constraints, canvasW, canvasHeight, faceBox, visualPriority,
       logoBox, typographyMetrics, subjectBox, readingFlow, content, additionalSubjects,
+      spatialPolicy,
     ).dsl;
   }
 
@@ -66,6 +62,7 @@ export class CompositionOptimizer {
     readingFlow?: ReadingFlow,
     content?: ContentBundle,
     additionalSubjects: BoundingBox[] = [],
+    spatialPolicy?: SpatialAllocationPolicy,
   ): OptimizeResult {
     let optimized = JSON.parse(JSON.stringify(dsl)) as ICompiledLayoutDSL;
     if (!optimized.layers) return { dsl: optimized, suggestLayoutChange: false, fitActions: [] };
@@ -78,117 +75,28 @@ export class CompositionOptimizer {
       if (layer.allowedAnchors && layer.allowedAnchors.length > 0) {
         const preferred = this.preferredAnchorsForFlow(flow, priority, layer.allowedAnchors);
         const pool = preferred.length > 0 ? preferred : layer.allowedAnchors;
-        // Deterministic: first preferred — never Math.random (was fighting QC placement)
         (layer as any).anchor = pool[0];
       }
 
-      // image_hero: slightly narrower text so photo dominates — type stays large
       if (priority === 'image_hero' && layer.type === 'text') {
         const textLayer = layer as IDSLTextLayer;
         if (textLayer.maxWidthPercent > 58) textLayer.maxWidthPercent = 58;
       } else if (priority === 'typography_hero' && layer.type === 'text') {
         const textLayer = layer as IDSLTextLayer;
-        if (!textLayer.maxWidthPercent || textLayer.maxWidthPercent < 70) {
-          textLayer.maxWidthPercent = Math.max(textLayer.maxWidthPercent || 0, 72);
-        }
+        // Own the panel — wide measure so hero size does not need crush-to-fit
+        textLayer.maxWidthPercent = Math.max(textLayer.maxWidthPercent || 0, 82);
       }
     }
 
     const layoutEngine = new LayoutEngine(canvasW, canvasHeight, faceBox, subjectBox, additionalSubjects);
-    let imageBleedExtent = 'full_bleed';
-    if (flow === 'z_pattern' || dsl.id.includes('asymmetrical')) {
-      imageBleedExtent = 'asymmetrical_65';
-    } else if (dsl.id.includes('split') || flow === 'left_right') {
-      imageBleedExtent = 'split_50';
-    } else if (priority === 'image_hero' || priority === 'cta_hero') {
-      // Keep photo full-bleed but allocate a dedicated text band (top/bottom)
-      imageBleedExtent = 'full_bleed_band';
-    }
 
-    const regions = layoutEngine.allocateRegions(
-      { imageBleedExtent, readingJourney: flow === 'z_pattern' ? 'z_pattern' : 'linear' },
-      constraints,
-      priority,
-      subjectBox || faceBox,
-    );
-    optimized.canvasRegions = regions;
+    // --- SPATIAL ALLOCATION (before typography fitting) ---
+    let policy = spatialPolicy || LayoutEngine.deriveSpatialPolicy(priority, {
+      negativeSpaceMultiplier: (optimized as any)?.behavior?.negativeSpaceMultiplier ?? 1,
+      readingFlow: flow,
+    });
 
     const roleWeight: Record<string, number> = { heading: 4, tagline: 3, body: 2, footnote: 1, cta: 0 };
-
-    let currentYOffset = regions.textRegion.y;
-
-    // Visual Weight Sorting: Sort text layers by dominance (Heading -> Tagline -> Body -> CTA)
-    const sortedTextLayers = optimized.layers.filter(l => l.type === 'text') as IDSLTextLayer[];
-    sortedTextLayers.sort((a, b) => (roleWeight[b.role || 'body'] || 0) - (roleWeight[a.role || 'body'] || 0));
-
-    let headingBox: any = null;
-    const behaviorProfile: any = (optimized as any)?.behavior;
-
-    for (const txtLayer of sortedTextLayers) {
-      const fallbackHeight = txtLayer.role === 'heading' ? 300 : txtLayer.role === 'body' ? 180 : 120;
-      const fontSizeForRole = txtLayer.role === 'heading'
-        ? (behaviorProfile?.heroBaseFontSize || 100)
-        : txtLayer.role === 'body'
-          ? (behaviorProfile?.bodyBaseFontSize || 32)
-          : (behaviorProfile?.metadataBaseFontSize || 24);
-      const maxWidthPx = regions.textRegion.width * ((txtLayer.maxWidthPercent || 100) / 100);
-      let estimatedHeight = this.estimateTextBlockHeight(
-        this.copyForRole(txtLayer.role, content),
-        fontSizeForRole,
-        maxWidthPx,
-        fallbackHeight
-      );
-
-      let targetRegion: any = regions.textRegion;
-      let x = 0, y = 0;
-
-      // If this is a secondary element and we have a heading, cluster it
-      if (headingBox && txtLayer.role !== 'heading' && !txtLayer.anchor?.includes('bottom_edge')) {
-        // Cluster relative to heading
-        x = headingBox.x;
-        // Stack below the heading
-        y = headingBox.y + headingBox.height + 20;
-
-        // If the heading was centered, keep this centered
-        if (txtLayer.anchor === 'center' || txtLayer.anchor?.includes('center')) {
-          // Leave x as is, TypograpyEngine handles center text-anchor internally
-        }
-      } else {
-        // Primary placement (Heading) using Semantic Whitespace Topology
-        const anchorResult = layoutEngine.resolveAnchor(
-          txtLayer.anchor || 'middle_left',
-          0,
-          estimatedHeight,
-          constraints,
-          targetRegion
-        );
-        x = anchorResult.x;
-        y = anchorResult.y;
-      }
-
-      // Allocate strict bounding box inside textRegion
-      txtLayer.allocatedBox = {
-        x,
-        y,
-        width: regions.textRegion.width,
-        height: estimatedHeight
-      };
-
-      const family = (dsl as any).id?.split('_')[0] || 'minimal';
-      const originalY = txtLayer.allocatedBox.y;
-      txtLayer.allocatedBox = layoutEngine.resolveFaceCollision(txtLayer.allocatedBox, constraints, family as any);
-      
-      if (txtLayer.allocatedBox.y !== originalY) {
-        console.log(`[CompositionOptimizer] Text collision detected with face box! Moved '${txtLayer.role}' text from Y=${originalY} to Y=${txtLayer.allocatedBox.y}`);
-      }
-
-      if (txtLayer.role === 'heading') {
-        headingBox = txtLayer.allocatedBox;
-      }
-    }
-
-    // Balance Checks: Is whitespace balanced? Does the headline overpower?
-    // (This is a simplified optimization pass that adjusts properties based on semantic rules)
     const allTextLayers = optimized.layers.filter(l => l.type === 'text') as IDSLTextLayer[];
     const textGroupLayers = optimized.layers.filter(l => l.type === 'text_group') as IDSLTextGroupLayer[];
 
@@ -205,6 +113,7 @@ export class CompositionOptimizer {
             : (content?.subheadline || content?.headline || 'Body'),
     }));
 
+    // Estimate at FULL intended hero size (scale=1) so space expands first
     const estimated = this.qc.estimateGroupHeight(roleTexts, typographyMetrics, canvasHeight, priority);
     let estimatedHeights: Record<string, number> = {};
     const estimatedFontSizes: Record<string, number> = {};
@@ -215,31 +124,65 @@ export class CompositionOptimizer {
     let totalGroupHeight = estimated.total;
     const clusterGap = estimated.gap;
 
+    // Expand text share to fit content BEFORE allocating regions (image surrenders more)
+    const primaryAxis = policy.splitAxis === 'horizontal' ? canvasW : canvasHeight;
+    const contentNeedPx = policy.splitAxis === 'horizontal'
+      ? totalGroupHeight // still drive vertical need inside column via later fit
+      : totalGroupHeight;
+    if (policy.splitAxis === 'overlay') {
+      policy = LayoutEngine.fitTextShareToContent(policy, totalGroupHeight, canvasHeight);
+    } else if (policy.splitAxis === 'vertical') {
+      policy = LayoutEngine.fitTextShareToContent(policy, totalGroupHeight, primaryAxis);
+    } else {
+      // horizontal split: ensure column is wide enough for hero measure
+      const neededW = Math.round((typographyMetrics?.heroSize || canvasHeight * 0.08) * 8);
+      policy = LayoutEngine.fitTextShareToContent(policy, neededW, canvasW);
+    }
+
+    let imageBleedExtent = 'full_bleed';
+    if (policy.splitAxis === 'horizontal') {
+      imageBleedExtent = 'asymmetrical_65';
+    } else if (policy.splitAxis === 'vertical') {
+      imageBleedExtent = 'panel_surrender';
+    } else if (priority === 'image_hero' || priority === 'cta_hero') {
+      imageBleedExtent = 'full_bleed_band';
+    }
+
+    const regions = layoutEngine.allocateRegions(
+      { imageBleedExtent, readingJourney: flow === 'z_pattern' ? 'z_pattern' : 'linear' },
+      constraints,
+      priority,
+      subjectBox || faceBox,
+      policy,
+    );
+    optimized.canvasRegions = regions;
+    (optimized as any)._spatialPolicy = regions.spatial;
+
+    console.log(
+      `[SpatialAlloc] priority=${priority} axis=${regions.spatial.splitAxis} ` +
+      `textShare=${regions.spatial.textShare.toFixed(2)} ` +
+      `textRegion=${Math.round(regions.textRegion.width)}x${Math.round(regions.textRegion.height)} ` +
+      `imageRegion=${Math.round(regions.imageRegion.width)}x${Math.round(regions.imageRegion.height)}`,
+    );
+
     const protectedSubjects = layoutEngine.getProtectedSubjects();
     const sBox = layoutEngine.getSubjectBox() || layoutEngine.getFaceBox();
     const subjectHaloRatio = 0.035;
     const subjectHalo = Math.round(Math.min(canvasW, canvasHeight) * subjectHaloRatio);
 
-    // Obstacles: logo + protected subjects + photo core when text has a dedicated band/panel
-    const obstacles: BoundingBox[] = logoBox ? [logoBox] : [];
-    const textPanelDistinct =
-      regions.textRegion
-      && (regions.imageRegion.width < canvasW - 2
-        || regions.textRegion.height < canvasHeight * 0.55);
+    const isDedicatedPanel = regions.spatial.splitAxis !== 'overlay'
+      && (regions.imageRegion.width < canvasW - 2 || regions.imageRegion.height < canvasHeight - 2);
 
-    if (textPanelDistinct) {
-      // Treat everything outside the text band as an obstacle so candidates stay in negative space
+    const obstacles: BoundingBox[] = logoBox ? [logoBox] : [];
+    if (!isDedicatedPanel) {
       const tr = regions.textRegion;
-      // Top strip above text band
       if (tr.y > constraints.safeY) {
         obstacles.push({ x: 0, y: 0, width: canvasW, height: tr.y });
       }
-      // Bottom strip below text band
       const belowY = tr.y + tr.height;
       if (belowY < canvasHeight) {
         obstacles.push({ x: 0, y: belowY, width: canvasW, height: canvasHeight - belowY });
       }
-      // Side strips outside text band
       if (tr.x > 0) {
         obstacles.push({ x: 0, y: tr.y, width: tr.x, height: tr.height });
       }
@@ -253,9 +196,11 @@ export class CompositionOptimizer {
       }
     }
 
-    let candidates = layoutEngine.generateCandidateRegions(constraints, obstacles);
-    // Prefer candidates that intersect the dedicated text region
-    if (regions.textRegion) {
+    let candidates = isDedicatedPanel
+      ? [regions.textRegion]
+      : layoutEngine.generateCandidateRegions(constraints, obstacles);
+
+    if (!isDedicatedPanel && regions.textRegion) {
       const tr = regions.textRegion;
       const intersecting = candidates.filter(c =>
         c.x < tr.x + tr.width && c.x + c.width > tr.x
@@ -270,6 +215,7 @@ export class CompositionOptimizer {
     }
 
     const hitsSubject = (region: BoundingBox, heightNeed: number) => {
+      if (isDedicatedPanel) return false;
       const subjects = protectedSubjects.length ? protectedSubjects : (sBox ? [sBox] : []);
       if (subjects.length === 0) return false;
       for (const sub of subjects) {
@@ -285,20 +231,36 @@ export class CompositionOptimizer {
       return false;
     };
 
+    // typography_hero: preserve intended size — scale is last resort
+    const minAcceptScale = priority === 'typography_hero' ? 0.92 : 0.82;
+
     const fit = this.qc.fitGroupIntoSafeRegions({
       layoutEngine,
       constraints,
       candidates,
       neededHeight: totalGroupHeight,
-      preferredWidth: constraints.contentMaxWidth,
+      preferredWidth: regions.textRegion.width,
       intent: { visualPriority: priority, readingFlow: flow },
       subjectHits: hitsSubject,
+      minAcceptScale,
     });
 
     const fitActions = fit.actions.map(a => `${a.stage}:${a.detail}`);
     let groupRegion = fit.region;
-    const groupScale = fit.scale;
+    let groupScale = fit.scale;
     const wrapWidthFactor = fit.wrapWidthFactor;
+
+    // Dedicated panel already fits content → force preserve hero size
+    if (isDedicatedPanel && regions.textRegion.height >= totalGroupHeight * 0.95) {
+      groupScale = 1;
+      groupRegion = {
+        x: regions.textRegion.x,
+        y: regions.textRegion.y,
+        width: regions.textRegion.width,
+        height: regions.textRegion.height,
+      };
+      fitActions.push('spatial:dedicated_panel_preserve_scale=1');
+    }
 
     if (groupScale < 1) {
       for (const id of Object.keys(estimatedHeights)) {
@@ -307,52 +269,44 @@ export class CompositionOptimizer {
       totalGroupHeight = Math.round(totalGroupHeight * groupScale);
     }
 
-    // Apply wrap width factor to maxWidthPercent for content-aware wrapping
     if (wrapWidthFactor < 1) {
       for (const layer of groupedTextLayers) {
         const cur = layer.maxWidthPercent || 80;
-        layer.maxWidthPercent = Math.max(40, Math.round(cur * wrapWidthFactor));
+        layer.maxWidthPercent = Math.max(
+          priority === 'typography_hero' ? 55 : 40,
+          Math.round(cur * wrapWidthFactor),
+        );
       }
     }
 
     if (!groupRegion) {
-      // Last resort: use dedicated textRegion band (never random mid-photo)
       const tr = regions.textRegion;
       groupRegion = {
-        x: tr?.x ?? constraints.safeX,
-        y: tr?.y ?? constraints.safeY,
-        width: Math.round((tr?.width ?? constraints.contentMaxWidth) * wrapWidthFactor),
-        height: Math.min(totalGroupHeight, tr?.height ?? totalGroupHeight),
+        x: tr.x,
+        y: tr.y,
+        width: Math.round(tr.width * wrapWidthFactor),
+        height: Math.min(Math.max(totalGroupHeight, tr.height * 0.5), tr.height),
       };
-      if (sBox && hitsSubject(groupRegion, totalGroupHeight) && tr) {
-        // Flip to opposite band if subject occupies preferred band
-        const altY = tr.y < canvasHeight / 2
-          ? Math.max(constraints.safeY, canvasHeight - constraints.margins.bottom - totalGroupHeight)
-          : constraints.safeY;
-        groupRegion.y = altY;
-      }
     }
 
-    // Clamp group into textRegion if present
-    if (regions.textRegion && groupRegion) {
-      const tr = regions.textRegion;
-      groupRegion = {
-        x: Math.max(tr.x, Math.min(groupRegion.x, tr.x + tr.width - Math.min(groupRegion.width, tr.width))),
-        y: Math.max(tr.y, Math.min(groupRegion.y, tr.y + tr.height - Math.min(groupRegion.height, tr.height))),
-        width: Math.min(groupRegion.width, tr.width),
-        height: Math.min(groupRegion.height || totalGroupHeight, tr.height),
-      };
+    groupRegion = this.clampBoxToRegion(groupRegion, regions.textRegion);
+    // Pass actual text-region dimensions to typography
+    groupRegion.width = regions.textRegion.width;
+    groupRegion.x = regions.textRegion.x;
+    if (isDedicatedPanel || priority === 'typography_hero') {
+      groupRegion.height = Math.max(
+        groupRegion.height,
+        Math.min(totalGroupHeight, regions.textRegion.height),
+      );
     }
 
     let currentY = groupRegion.y;
-    const canvasWidth = constraints.safeX * 2 + constraints.contentMaxWidth;
-    const regionWidth = Math.round(groupRegion.width * wrapWidthFactor);
+    const regionWidth = Math.round(groupRegion.width * Math.min(1, wrapWidthFactor));
 
     for (const layer of groupedTextLayers) {
       let x = groupRegion.x;
-      let width = Math.min(regionWidth, canvasWidth - constraints.safeX - x);
-      x = Math.max(constraints.safeX, x);
-      width = Math.max(Math.round(canvasW * 0.28), width);
+      let width = Math.max(Math.round(canvasW * 0.28), Math.min(regionWidth, regions.textRegion.width));
+      x = Math.max(regions.textRegion.x, x);
 
       let box: BoundingBox = {
         x,
@@ -360,15 +314,12 @@ export class CompositionOptimizer {
         width,
         height: estimatedHeights[layer.id],
       };
-      // Stay inside the chosen pocket — do NOT face-nudge out of allocated negative space
       box = this.clampBoxToSafe(box, constraints, canvasW, canvasHeight);
-      if (regions.textRegion) {
-        box = this.clampBoxToRegion(box, regions.textRegion);
-      }
+      box = this.clampBoxToRegion(box, regions.textRegion);
       layer.allocatedBox = box;
       (layer as any)._groupScale = groupScale;
       (layer as any)._estimatedFontSize = estimatedFontSizes[layer.id] * groupScale;
-      // CTA / last-slide contrast: card behind text when over photo
+      (layer as any)._preserveHeroSize = priority === 'typography_hero' && groupScale >= 0.92;
       if (priority === 'cta_hero' && layer.role === 'heading') {
         (layer as any).component = (layer as any).component || 'solid_card';
       }
@@ -380,29 +331,24 @@ export class CompositionOptimizer {
         x: groupRegion.x,
         y: groupRegion.y,
         width: regionWidth,
-        height: Math.min(totalGroupHeight, groupRegion.height || totalGroupHeight),
+        height: Math.min(Math.max(totalGroupHeight, groupRegion.height * 0.5), regions.textRegion.height),
       };
       box = this.clampBoxToSafe(box, constraints, canvasW, canvasHeight);
-      if (regions.textRegion) {
-        box = this.clampBoxToRegion(box, regions.textRegion);
-      }
+      box = this.clampBoxToRegion(box, regions.textRegion);
       group.allocatedBox = box;
       (group as any)._groupScale = groupScale;
       (group as any)._wrapWidthFactor = wrapWidthFactor;
       (group as any)._suggestLayoutChange = fit.suggestLayoutChange;
+      (group as any)._preserveHeroSize = priority === 'typography_hero' && groupScale >= 0.92;
     }
 
     for (const layer of structuralLayers) {
       const h = Math.round(canvasHeight * 0.045);
-      // Stack from the text cluster — do not re-resolve random anchors
-      let x = groupRegion.x;
-      x = Math.max(constraints.safeX, x);
-      const width = Math.min(regionWidth, canvasWidth - constraints.safeX - x);
+      let x = Math.max(regions.textRegion.x, groupRegion.x);
+      const width = Math.min(regionWidth, regions.textRegion.width);
       let box: BoundingBox = { x, y: currentY, width, height: h };
       box = this.clampBoxToSafe(box, constraints, canvasW, canvasHeight);
-      if (regions.textRegion) {
-        box = this.clampBoxToRegion(box, regions.textRegion);
-      }
+      box = this.clampBoxToRegion(box, regions.textRegion);
       layer.allocatedBox = box;
       if (layer.role === 'cta') {
         (layer as any).component = (layer as any).component || 'pill_label';
@@ -414,7 +360,6 @@ export class CompositionOptimizer {
       currentY = layer.allocatedBox.y + h + clusterGap;
     }
 
-    // Final VISUAL QUALITY gate — geometric fit alone is not acceptance
     const quality = this.qc.evaluateVisualQuality({
       boxes: allTextLayers.map(l => ({
         role: l.role,
@@ -427,17 +372,16 @@ export class CompositionOptimizer {
       constraints,
       canvasW,
       canvasH: canvasHeight,
-      subjectBoxes: protectedSubjects,
+      subjectBoxes: isDedicatedPanel ? [] : protectedSubjects,
       intent: { visualPriority: priority, readingFlow: flow },
       groupScale,
     });
 
-    let suggestLayoutChange = fit.suggestLayoutChange || !groupRegion;
+    let suggestLayoutChange = fit.suggestLayoutChange;
     const allFitActions = [...fitActions];
 
     if (!quality.pass) {
       allFitActions.push(`quality_reject:score=${quality.score.toFixed(1)};issues=${quality.issues.join(',')}`);
-      // Do not auto-accept a geometrically packed but visually weak result
       suggestLayoutChange = true;
       for (const group of textGroupLayers) {
         (group as any)._suggestLayoutChange = true;
@@ -457,6 +401,9 @@ export class CompositionOptimizer {
       visualPriority: priority,
       groupScale,
       wrapWidthFactor,
+      spatial: regions.spatial,
+      textRegion: regions.textRegion,
+      imageRegion: regions.imageRegion,
       qualityScore: quality.score,
       qualityIssues: quality.issues,
       qualityCritical: quality.critical,
@@ -488,23 +435,6 @@ export class CompositionOptimizer {
       prefer.push('top_center', 'center');
     }
     return prefer.filter(a => allowed.includes(a as any));
-  }
-
-  private copyForRole(role: string | undefined, copy?: ITextCopyHint): string | undefined {
-    if (!copy) return undefined;
-    if (role === 'heading') return copy.headline;
-    if (role === 'tagline' || role === 'body') return copy.subheadline;
-    if (role === 'footnote' || role === 'watermark') return copy.cta;
-    return undefined;
-  }
-
-  private estimateTextBlockHeight(text: string | undefined, fontSize: number, maxWidthPx: number, fallback: number): number {
-    if (!text || !fontSize || !maxWidthPx) return fallback;
-    const avgCharWidth = fontSize * 0.58;
-    const charsPerLine = Math.max(1, Math.floor(maxWidthPx / avgCharWidth));
-    const lines = Math.max(1, Math.ceil(text.length / charsPerLine));
-    const lineHeight = fontSize * 1.15;
-    return Math.round(lines * lineHeight + fontSize * 0.4);
   }
 
   private clampBoxToSafe(

@@ -1,5 +1,6 @@
 import { IDesignLanguage } from './art-direction-engine';
 import { ISemanticDesignSpec } from '../interfaces';
+import { LayoutEngine, SpatialAllocationPolicy } from './layout-engine';
 
 export interface IGeometryOutput {
   canvasWidth: number;
@@ -7,6 +8,8 @@ export interface IGeometryOutput {
   safeX: number;
   safeY: number;
   contentMaxWidth: number;
+  /** First-class spatial allocation driven by visualPriority — used before typography fitting */
+  spatial: SpatialAllocationPolicy;
   typography: {
     heroSize: number;
     primarySize: number;
@@ -31,6 +34,7 @@ export interface IGeometryOutput {
 export class GeometryCompiler {
   /**
    * Compiles high-level Design Language into hard pixel coordinates and bounding boxes.
+   * visualPriority is a first-class input to spatial allocation — not only a font multiplier.
    */
   public compile(
     preset: IDesignLanguage,
@@ -41,9 +45,7 @@ export class GeometryCompiler {
     const intent = preset.intent;
     const behavior = preset.behavior;
     
-    // 1. SAFE ZONES (Whitespace Strategy) — graded across the full negativeSpace enum;
-    // previously only 'massive'/'minimal' had any effect and 'medium'/'large' silently
-    // no-op'd even though the LLM picks them just as often.
+    // 1. SAFE ZONES (Whitespace Strategy)
     let safeX = Math.round(60 * behavior.negativeSpaceMultiplier);
     let safeY = Math.round(80 * behavior.negativeSpaceMultiplier);
 
@@ -57,22 +59,34 @@ export class GeometryCompiler {
       safeY = Math.round(safeY * 0.3);
     }
 
+    // Floor so type never hugs the edge
+    const minSafe = Math.round(Math.min(canvasWidth, canvasHeight) * 0.045);
+    safeX = Math.max(minSafe, safeX);
+    safeY = Math.max(minSafe, safeY);
+
     const contentMaxWidth = canvasWidth - (safeX * 2);
 
-    // 2. TYPOGRAPHY SCALING (Top-Down Hierarchy Curve Strategy)
-    // Note: baseScale is available for future proportional calculations if needed
-    const baseScale = canvasWidth;
+    const visualPriority =
+      intent?.visualPriority || designSpec?.composition?.visualPriority || 'image_hero';
+
+    // 1b. SPATIAL POLICY — structural composition difference by priority
+    const spatial = LayoutEngine.deriveSpatialPolicy(visualPriority, {
+      negativeSpaceMultiplier: behavior.negativeSpaceMultiplier,
+      readingFlow: intent?.readingFlow,
+    });
+
+    // Expected text-panel size on the primary split axis (before subject carve)
+    const primaryAxis =
+      spatial.splitAxis === 'horizontal' ? canvasWidth : canvasHeight;
+    const expectedTextExtent = primaryAxis * spatial.textShare;
+
+    // 2. TYPOGRAPHY SCALING — sized relative to the text panel it will live in
     let heroSize = Math.round(behavior.heroBaseFontSize * (behavior.typographyScaleMultiplier || 1.0));
 
-    // A. Visual Dominance — placement priority, not micro-type punishment
-    // Prefer designLanguage intent; fall back to designSpec composition tags.
-    const visualPriority =
-      intent?.visualPriority || designSpec?.composition?.visualPriority;
     let dominanceScale = 1.0;
     if (designSpec?.typography?.dominance === 'high' || visualPriority === 'typography_hero') {
       dominanceScale = 1.25;
     } else if (designSpec?.typography?.dominance === 'low' || visualPriority === 'image_hero') {
-      // Slight yield only — image_hero wins frame via bands, type stays readable
       dominanceScale = 0.94;
     } else if (visualPriority === 'cta_hero') {
       dominanceScale = 0.9;
@@ -80,13 +94,12 @@ export class GeometryCompiler {
     
     heroSize = Math.round(heroSize * dominanceScale);
 
-    // B. Typography Hierarchy Curve (Determine derivatives from Hero)
     let curve = { primary: 0.45, secondary: 0.30, body: 0.18, metadata: 0.12 };
     let trackingHero: string | number = behavior.trackingHero;
     let trackingMetadata: string | number = behavior.trackingMetadata;
 
     if (designSpec?.typography?.hierarchy === 'editorial') {
-      heroSize = Math.round(heroSize * 1.3); // Editorials have massive heroes
+      heroSize = Math.round(heroSize * 1.3);
       curve = { primary: 0.45, secondary: 0.30, body: 0.18, metadata: 0.12 };
       trackingHero = 'wide';
     } else if (designSpec?.typography?.hierarchy === 'bold') {
@@ -102,18 +115,35 @@ export class GeometryCompiler {
       trackingHero = 'standard';
     }
 
-    // Hard caps: image_hero still keeps readable presence (~7–9% of canvas)
+    // Caps relative to the TEXT PANEL (not the whole canvas) so typography_hero
+    // can keep its intended size once space is actually allocated.
     const isStory = canvasHeight > canvasWidth;
-    const imageFirst = visualPriority === 'image_hero';
-    const maxHeroRatio = imageFirst ? (isStory ? 0.075 : 0.09) : (isStory ? 0.09 : 0.11);
-    const maxHero = Math.round(canvasHeight * maxHeroRatio);
-    const minHero = Math.round(canvasHeight * (imageFirst ? 0.04 : 0.038));
-    heroSize = Math.max(minHero, Math.min(heroSize, maxHero));
+    const panelH =
+      spatial.splitAxis === 'vertical' || spatial.splitAxis === 'overlay'
+        ? expectedTextExtent
+        : canvasHeight - safeY * 2;
 
-    // Recalculate body from clamped hero so hierarchy stays proportional
+    let maxHeroRatio: number;
+    let minHeroRatio: number;
+    if (visualPriority === 'typography_hero') {
+      maxHeroRatio = isStory ? 0.28 : 0.32; // of text panel
+      minHeroRatio = 0.12;
+    } else if (visualPriority === 'image_hero') {
+      maxHeroRatio = isStory ? 0.55 : 0.58; // of smaller overlay band
+      minHeroRatio = 0.22;
+    } else {
+      maxHeroRatio = isStory ? 0.22 : 0.26;
+      minHeroRatio = 0.10;
+    }
+
+    const maxHero = Math.round(panelH * maxHeroRatio);
+    const minHero = Math.round(panelH * minHeroRatio);
+    // Also never exceed ~12% of full canvas for readability/aesthetic ceiling
+    const canvasCeiling = Math.round(canvasHeight * (visualPriority === 'typography_hero' ? 0.14 : visualPriority === 'image_hero' ? 0.09 : 0.11));
+    heroSize = Math.max(minHero, Math.min(heroSize, maxHero, canvasCeiling));
+
     let bodySize = Math.round(heroSize * curve.body);
     if (bodySize < 16) bodySize = 16;
-    // Don't inflate hero back up when body hits the floor — that was re-exploding sizes
 
     const typography = {
       heroSize: heroSize,
@@ -128,18 +158,13 @@ export class GeometryCompiler {
       metadataTracking: typeof trackingMetadata === 'number' ? `${trackingMetadata}em` : trackingMetadata,
     };
 
-    // 3. ALIGNMENT (Composition Strategy) — an explicit designSpec.typography.alignment
-    // is a more direct signal than reading flow and wins when present; otherwise fall
-    // back to the reading-flow-derived default as before.
     let alignment: 'left' | 'center' | 'right' = 'left';
     if (intent.readingFlow === 'center_down') alignment = 'center';
-    if (intent.readingFlow === 'z_pattern') alignment = 'left'; // z-pattern starts left
+    if (intent.readingFlow === 'z_pattern') alignment = 'left';
     if (designSpec?.typography?.alignment) alignment = designSpec.typography.alignment;
 
-    // 4. RHYTHM & PADDING (Whitespace padding between elements)
     let padding = Math.round(30 * behavior.negativeSpaceMultiplier);
     
-    // 5. EDITORIAL GRID (Anchoring system)
     const columns = 12;
     const gutter = padding;
     const columnWidth = (contentMaxWidth - (gutter * (columns - 1))) / columns;
@@ -155,6 +180,7 @@ export class GeometryCompiler {
       safeX,
       safeY,
       contentMaxWidth,
+      spatial,
       typography,
       alignment,
       padding,
