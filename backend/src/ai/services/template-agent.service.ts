@@ -4,10 +4,21 @@ import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import { MetadataRetriever } from './template-engine/metadata.retriever';
 import { HardConstraintEngine } from './template-engine/hard-constraint.engine';
 import { RankingEngine } from './template-engine/ranking.engine';
-import { DiversityEngine } from './template-engine/diversity.engine';
-import { ITemplateContext } from './template-engine/interfaces';
+import { DiversityEngine, getMacroFamily } from './template-engine/diversity.engine';
+import { ITemplateCandidate, ITemplateContext, ISemanticDesignSpec } from './template-engine/interfaces';
 import { LayoutAssemblerService } from './template-engine/layout-assembler.service';
 import { registerDynamicLayout } from '../config/layout-renderers';
+import { DesignKnowledgeService, normalizeReadingFlow } from './template-engine/design-knowledge.service';
+
+interface ICandidateGrounding {
+  source: 'mined_exact' | 'mined_family_stats';
+  balance: string;
+  readingFlow: string; // normalized, underscore form
+  energy: string;
+  sampleFraction?: string;
+  decorationTypes?: string[];
+  designRules?: string[];
+}
 
 @Injectable()
 export class TemplateAgentService {
@@ -18,6 +29,7 @@ export class TemplateAgentService {
   private rankingEngine: RankingEngine;
   private diversityEngine: DiversityEngine;
   private layoutAssembler: LayoutAssemblerService;
+  private designKnowledge: DesignKnowledgeService;
 
   constructor() {
     // Initialize Pipeline Engines
@@ -26,6 +38,109 @@ export class TemplateAgentService {
     this.rankingEngine = new RankingEngine();
     this.diversityEngine = new DiversityEngine();
     this.layoutAssembler = new LayoutAssemblerService();
+    this.designKnowledge = new DesignKnowledgeService();
+  }
+
+  /**
+   * Looks up real mined design data for a shortlisted candidate — exact match for
+   * rigid ids (design-knowledge-map.json has 1:1 coverage of all 770 rigid ids),
+   * aggregated family stats for procedural family recipes. Never returns invented data.
+   */
+  private groundCandidate(candidate: ITemplateCandidate): ICandidateGrounding | null {
+    if (candidate.type === 'rigid') {
+      const exact = this.designKnowledge.getGroundTruth(candidate.id);
+      if (exact) {
+        return {
+          source: 'mined_exact',
+          balance: exact.composition.balance,
+          readingFlow: normalizeReadingFlow(exact.composition.readingFlow),
+          energy: exact.visualLanguage.energy,
+          decorationTypes: (exact.decorations || []).map(d => d.type),
+          designRules: exact.designRules,
+        };
+      }
+    }
+    const macroFamily = getMacroFamily(candidate.id);
+    const stats = this.designKnowledge.getFamilyStats(macroFamily);
+    if (!stats) return null;
+    return {
+      source: 'mined_family_stats',
+      balance: stats.balance,
+      readingFlow: normalizeReadingFlow(stats.readingFlow),
+      energy: stats.energy,
+      sampleFraction: stats.sampleFraction,
+      decorationTypes: stats.decorationTypes,
+      designRules: stats.designRules,
+    };
+  }
+
+  /**
+   * Merges the LLM's authored designSpec with real grounding data: structural facts
+   * (balance, readingFlow) are overridden from mined data when available so they can
+   * never be silently invented, while every creative field the LLM authored (mood,
+   * hierarchy, spacing, emphasis, philosophy...) passes through untouched.
+   */
+  private groundDesignSpec(rawSpec: any, grounding: ICandidateGrounding | undefined): ISemanticDesignSpec {
+    const spec: ISemanticDesignSpec = {
+      composition: {
+        hero: rawSpec?.composition?.hero || 'image',
+        balance: rawSpec?.composition?.balance || 'asymmetrical',
+        negativeSpace: rawSpec?.composition?.negativeSpace || 'medium',
+        readingFlow: rawSpec?.composition?.readingFlow,
+      },
+      photo: {
+        role: rawSpec?.photo?.role || 'hero',
+        treatment: rawSpec?.photo?.treatment || 'framed',
+        imageExecution: rawSpec?.photo?.imageExecution,
+      },
+      typography: {
+        hierarchy: rawSpec?.typography?.hierarchy || 'editorial',
+        dominance: rawSpec?.typography?.dominance || 'medium',
+        headlineTreatment: rawSpec?.typography?.headlineTreatment,
+        alignment: rawSpec?.typography?.alignment,
+      },
+      decorations: { density: rawSpec?.decorations?.density || 'medium' },
+      style: { mood: rawSpec?.style?.mood || 'warm_paper' },
+      hierarchy: rawSpec?.hierarchy,
+      spacing: rawSpec?.spacing,
+      emphasis: rawSpec?.emphasis,
+      philosophy: rawSpec?.philosophy,
+    };
+
+    if (grounding) {
+      // Structural facts win over the LLM's guess — this is what makes the intent
+      // "grounded" rather than invented.
+      spec.composition.balance = grounding.balance as any;
+      spec.composition.readingFlow = grounding.readingFlow as any;
+      spec.groundedIn = {
+        source: grounding.source,
+        sampleFraction: grounding.sampleFraction,
+        energy: grounding.energy,
+      };
+    } else {
+      spec.groundedIn = { source: 'llm_inferred' };
+    }
+
+    return spec;
+  }
+
+  /**
+   * BrandDNA extensibility seam. A future BrandDNA Agent would populate either
+   * `params.brandDNA` (passed in here) or `spec.brandOverrides` (settable directly on
+   * the DesignIntent contract, e.g. by a caller that already merged brand data earlier
+   * in the pipeline) with primaryColor/secondaryColor/fontFamily. Neither is populated
+   * by anything today, so this is a documented no-op: it changes nothing until a real
+   * caller starts passing brand data through one of those two paths.
+   */
+  private applyBrandOverrides(spec: ISemanticDesignSpec, brandDNA?: any): ISemanticDesignSpec {
+    const overrides = spec.brandOverrides || (brandDNA ? {
+      primaryColor: brandDNA.primaryBrandColor,
+      secondaryColor: brandDNA.secondaryBrandColor,
+      fontFamily: { headline: brandDNA.fonts?.headline || brandDNA.primaryFont, body: brandDNA.fonts?.body || brandDNA.secondaryFont },
+    } : undefined);
+
+    if (!overrides) return spec;
+    return { ...spec, brandOverrides: overrides };
   }
 
   /**
@@ -44,6 +159,11 @@ export class TemplateAgentService {
     templateIntent?: 'educational' | 'promotion' | 'testimonial' | 'before_after' | 'brand_story';
     slideType?: string;
     semanticIntent?: import('../services/narrative-planner.service').SemanticSlide['semanticIntent'];
+    requiredTraits?: import('../services/narrative-planner.service').SemanticSlide['requiredTraits'];
+    /** True if an earlier slide in this same carousel/story already used the triptych photo split. */
+    triptychAlreadyUsed?: boolean;
+    /** Extensibility seam for a future BrandDNA Agent — no-op today unless populated. */
+    brandDNA?: any;
   }): Promise<{ selected_layout_id: string; reasoning: string; designSpec?: import('./template-engine/interfaces').ISemanticDesignSpec }> {
 
     const context: ITemplateContext & { slideType?: string; semanticIntent?: any } = {
@@ -89,18 +209,32 @@ export class TemplateAgentService {
       this.logger.log(`[Stage 4] Reduced to Top ${topCandidates.length} candidates for AI Art Director.`);
 
       // Stage 5: LLM Art Director
-      const candidateSummary = topCandidates.map(c =>
-        `- ID: ${c.id}\n  Concept: ${c.concept}\n  Why it fits: Ranked highly for ${context.aesthetic} aesthetic.`
-      ).join('\n\n');
+      // Ground each shortlisted candidate in real mined data BEFORE prompting, so the
+      // LLM cites real facts instead of inventing structural fields.
+      const groundingByCandidate = new Map<string, ICandidateGrounding>();
+      for (const c of topCandidates) {
+        const grounding = this.groundCandidate(c);
+        if (grounding) groundingByCandidate.set(c.id, grounding);
+      }
+
+      const candidateSummary = topCandidates.map(c => {
+        const grounding = groundingByCandidate.get(c.id);
+        const groundingLine = grounding
+          ? `\n  REAL MINED DATA (${grounding.source}${grounding.sampleFraction ? `, ${grounding.sampleFraction} samples` : ''}): balance=${grounding.balance}, readingFlow=${grounding.readingFlow}, energy=${grounding.energy}${grounding.decorationTypes?.length ? `, decorations=[${grounding.decorationTypes.join(', ')}]` : ''}${grounding.designRules?.length ? `, rules=[${grounding.designRules.join('; ')}]` : ''}`
+          : '';
+        return `- ID: ${c.id}\n  Concept: ${c.concept}\n  Why it fits: Ranked highly for ${context.aesthetic} aesthetic.${groundingLine}`;
+      }).join('\n\n');
 
       const systemPrompt = `
 You are an elite Visual Art Director.
 We have mathematically narrowed down our layout library to the absolute Top ${topCandidates.length} candidates. These candidates represent specific, semantically distinct structural variants (e.g. "editorial_magazine_cover", "minimalist_offset_quote", "clinical_split").
-Your ONLY job is to select the single best structural variant from this shortlist based strictly on the provided Brand Aesthetic and visual storytelling for the given brief.
+Your job has two parts: (1) select the single best structural variant from this shortlist, and (2) author a complete Design Intent for it so the renderer can faithfully recreate your decision instead of guessing.
 
 Do NOT default to "minimal" or "high-end fashion" unless it perfectly matches the Brand Aesthetic. Adapt dynamically.
 CRITICAL DESIGN RULE 1: Do NOT default to "hero" layouts just because it is the first slide. Choose layouts that structurally fit the brief (e.g. text-heavy briefs need split or text_only layouts).
-CRITICAL DESIGN RULE 2: You MUST rotate across different Design Families (e.g., if previous slides used 'editorial', you must actively select 'minimalist_quote', 'clinical_hero', 'split', 'countdown_promo', 'product_showcase', 'before_after', 'testimonial', 'scrapbook', 'quadrant' or other distinct families). Variants from the same design family must NOT be used continuously. Ensure each slide is distinct visually while maintaining brand coherence.
+CRITICAL DESIGN RULE 2: You MUST rotate across different Design Families (e.g., if previous slides used 'editorial', you must actively select 'minimalist_quote', 'clinical_hero', 'split', 'countdown_promo', 'product_showcase', 'before_after', 'testimonial', 'scrapbook', 'quadrant', 'transformation', 'magazine', 'polaroid', 'notification_card', 'announcement' or other distinct families). Variants from the same design family must NOT be used continuously. Ensure each slide is distinct visually while maintaining brand coherence.
+
+GROUNDING RULE: Each candidate below may list "REAL MINED DATA" — actual measured facts about that template (or its family) from real analyzed designs. Treat "balance" and "readingFlow" as structural facts about the template itself: cite them as-is in your designSpec, do not invent different values. "energy" describes the template's inherent character; let it inform (not override) your own creative fields like mood/emphasis/spacing, which should also react to THIS specific brief and content.
 
 CONTEXT:
 - Brand Aesthetic: ${context.aesthetic}
@@ -110,6 +244,7 @@ CONTEXT:
 - Previously Used Layouts: ${params.excludeLayouts?.join(', ') || 'None'}
 ${params.gridConstraints ? `- GRID CONSTRAINTS: ${params.gridConstraints}` : ''}
 ${context.visionResult?.suitabilityScores ? `- PHOTO SUITABILITY: Technical Quality=${context.visionResult.suitabilityScores.technicalQuality}/100, Brand Compatibility=${context.visionResult.suitabilityScores.brandCompatibility}/100. CRITICAL: If Brand Compatibility is low (<50), choose a layout with heavy masks to hide the background.` : ''}
+${params.triptychAlreadyUsed ? `- TRIPTYCH ALREADY USED: An earlier slide in this carousel already used the 3-panel triptych photo split. Do NOT set photo.imageExecution="triptych" again — pick "standard" so slides don't all look visually identical.` : ''}
 
 BRIEF FOR THIS SLIDE:
 ${context.brief || 'Standard beautifully aesthetic post.'}
@@ -119,8 +254,9 @@ ${candidateSummary}
 
 INSTRUCTIONS:
 1. Select ONE layout ID from the shortlist above that flawlessly matches the Brand Aesthetic and Brief.
-2. Formulate a 'designSpec' to inject intent. 
-   - CRITICAL: If the image is a high quality portrait, and the aesthetic allows modern layouts, set 'photo.imageExecution = "triptych"' to slice the image into 3 vertical elegant panels.
+2. Author a complete 'designSpec' (full schema below) describing composition, typography, hierarchy, spacing, alignment, visual emphasis, and your design philosophy for THIS specific slide.
+   - EXCEPTION, use rarely: 'photo.imageExecution = "triptych"' slices the image into 3 vertical panels. This is a deliberate, occasional stylistic choice for ONE slide at most in a whole carousel/story — not a default. Only pick it when the brief specifically calls for a fashion-editorial, multi-angle, or "process/journey" feel AND no earlier slide has used it (see TRIPTYCH ALREADY USED below). Default to "standard" otherwise, even for portrait photos.
+   - Per the GROUNDING RULE above, set composition.balance and composition.readingFlow to match the cited REAL MINED DATA when present.
 3. Return strictly in valid JSON format.
 
 JSON SCHEMA:
@@ -131,7 +267,8 @@ JSON SCHEMA:
     "composition": {
       "hero": "image",
       "balance": "asymmetrical",
-      "negativeSpace": "medium"
+      "negativeSpace": "medium",
+      "readingFlow": "z_pattern" // one of: z_pattern, center_down, circular, center_outward, diagonal, bottom_left, scattered
     },
     "photo": {
       "role": "hero",
@@ -141,12 +278,27 @@ JSON SCHEMA:
     "typography": {
       "hierarchy": "editorial", // Must be exactly one of: "editorial", "bold", "minimal", "technical"
       "dominance": "high",
-      "headlineTreatment": "standard"
+      "headlineTreatment": "standard",
+      "alignment": "left" // one of: left, center, right
     },
     "decorations": { 
       "density": "medium" // Must be exactly one of: "none", "low", "medium", "high"
     },
-    "style": { "mood": "warm_paper" // Must be exactly one of: "warm_paper", "luxury_black", "clinical_white", "vibrant_pop" }
+    "style": { "mood": "warm_paper" /* one of: warm_paper, luxury_black, clinical_white, vibrant_pop */ },
+    "hierarchy": {
+      "primaryElement": "image", // one of: image, headline, body, cta, badge — what leads the eye
+      "secondaryElement": "headline",
+      "tertiaryElement": "cta"
+    },
+    "spacing": {
+      "whitespaceFeel": "balanced", // one of: tight, balanced, generous, luxury
+      "rhythm": "standard" // one of: compact, standard, relaxed
+    },
+    "emphasis": {
+      "focalPoint": "image", // one of: headline, image, badge, balanced
+      "contrastStrategy": "soft_minimal" // one of: high_impact, soft_minimal, tonal
+    },
+    "philosophy": "1-2 sentences explaining the design rationale for this specific slide."
   }
 }
 `;
@@ -197,10 +349,21 @@ JSON SCHEMA:
       // Tell the Diversity Engine to penalize this layout for future runs
       this.diversityEngine.recordUsage(finalId);
 
+      // Ground the final designSpec: balance/readingFlow are structural facts about the
+      // chosen template, not per-generation creative choices, so real mined data wins
+      // over whatever the LLM guessed for those two fields specifically.
+      const grounding = groundingByCandidate.get(finalId);
+      const groundedSpec = this.groundDesignSpec(decision.designSpec, grounding);
+      // BrandDNA extensibility seam — the single call site a future BrandDNA Agent's
+      // output would merge through. No-op today: applyBrandOverrides only touches
+      // fields when params.brandDNA/spec.brandOverrides are actually populated, and
+      // nothing populates them yet.
+      const designSpec = this.applyBrandOverrides(groundedSpec, params.brandDNA);
+
       return {
         selected_layout_id: returnedLayoutId,
         reasoning: decision.reasoning || 'Selected via Pipeline',
-        designSpec: decision.designSpec
+        designSpec
       };
 
     } catch (err) {

@@ -14,6 +14,36 @@ try {
 // For production, this could be backed by Redis `hincrby tenantId templateId 1`
 const usageHistory: Record<string, number> = {};
 
+/**
+ * Buckets a procedural layout id into one of the 15 macro design families.
+ * Family-specific checks must come before the generic 'quote' substring check
+ * below — e.g. 'testimonial_quote_portrait' contains "quote" and would
+ * otherwise get misbucketed with minimalist_quote/premium_quote (while
+ * 'testimonial_star_card', with no "quote" in its name, would correctly
+ * bucket as 'testimonial' — an inconsistent split within the same family
+ * that silently broke its own diversity rotation).
+ */
+export function getMacroFamily(id: string): string {
+  if (id.startsWith('testimonial')) return 'testimonial';
+  if (id.startsWith('before_after')) return 'before_after';
+  if (id.startsWith('scrapbook')) return 'scrapbook';
+  if (id.startsWith('quadrant')) return 'quadrant';
+  if (id.startsWith('transformation')) return 'transformation';
+  if (id.startsWith('magazine')) return 'magazine';
+  if (id.startsWith('polaroid')) return 'polaroid';
+  // Must come before the generic id.split('_')[0] fallback below — that
+  // fallback would otherwise fragment 'notification_card_alert' and
+  // 'notification_card_banner' into a bare 'notification' bucket.
+  if (id.startsWith('notification_card')) return 'notification_card';
+  if (id.startsWith('announcement')) return 'announcement';
+  if (id.includes('quote')) return 'quote';
+  if (id.startsWith('editorial')) return 'editorial';
+  if (id.startsWith('clinical')) return 'clinical';
+  if (id.startsWith('educational')) return 'educational';
+  if (id.startsWith('premium_text') || id.includes('breather')) return 'text_only';
+  return id.split('_')[0];
+}
+
 export class DiversityEngine {
   /**
    * Applies usage penalties to prevent the LLM from constantly picking `vogue_cover`.
@@ -54,33 +84,6 @@ export class DiversityEngine {
 
       // 4. Macro-Family Diversity Penalty (Ensures Carousel hits distinct families)
       if (carouselHistory.length > 0) {
-        const getMacroFamily = (id: string) => {
-          // Family-specific checks must come before the generic 'quote' substring
-          // check below — e.g. 'testimonial_quote_portrait' contains "quote" and
-          // would otherwise get misbucketed with minimalist_quote/premium_quote
-          // (while 'testimonial_star_card', with no "quote" in its name, would
-          // correctly bucket as 'testimonial' — an inconsistent split within the
-          // same family that silently broke its own diversity rotation).
-          if (id.startsWith('testimonial')) return 'testimonial';
-          if (id.startsWith('before_after')) return 'before_after';
-          if (id.startsWith('scrapbook')) return 'scrapbook';
-          if (id.startsWith('quadrant')) return 'quadrant';
-          if (id.startsWith('transformation')) return 'transformation';
-          if (id.startsWith('magazine')) return 'magazine';
-          if (id.startsWith('polaroid')) return 'polaroid';
-          // Must come before the generic id.split('_')[0] fallback below — that
-          // fallback would otherwise fragment 'notification_card_alert' and
-          // 'notification_card_banner' into a bare 'notification' bucket.
-          if (id.startsWith('notification_card')) return 'notification_card';
-          if (id.startsWith('announcement')) return 'announcement';
-          if (id.includes('quote')) return 'quote';
-          if (id.startsWith('editorial')) return 'editorial';
-          if (id.startsWith('clinical')) return 'clinical';
-          if (id.startsWith('educational')) return 'educational';
-          if (id.startsWith('premium_text') || id.includes('breather')) return 'text_only';
-          return id.split('_')[0];
-        };
-        
         const currentMacro = getMacroFamily(template.id);
         const usedMacros = carouselHistory.map(historyId => getMacroFamily(historyId.split('_variant')[0] || ''));
         

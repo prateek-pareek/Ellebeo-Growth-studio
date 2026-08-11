@@ -91,6 +91,11 @@ function GeneratePage() {
   const [jobProgress, setJobProgress] = useState<{ percent: number; step: string; secondsRemaining: number } | null>(null);
   const [backendVariants, setBackendVariants] = useState<any[] | null>(null);
   const pollRef = useRef<number | null>(null);
+  // Tracks which "Generate" attempt is authoritative — lets a poll effect for an
+  // abandoned/stale job detect it's been superseded and discard its late-arriving result
+  // instead of overwriting a newer, already-completed generation on screen.
+  const attemptRef = useRef(0);
+  const [attempt, setAttempt] = useState(0);
 
   const [promptPreview, setPromptPreview] = useState<{ systemPrompt: string; userPrompt: string } | null>(null);
 
@@ -158,17 +163,24 @@ function GeneratePage() {
 
   useEffect(() => {
     if (!jobId || !generating) return;
+    const myAttempt = attempt;
     let pollCount = 0;
     let errorCount = 0;
     let latestSeq = 0;
     const MAX_POLLS = 150; // 5 minutes at 2s intervals
     const MAX_ERRORS = 5;
+    // If a newer "Generate" click has since started a different attempt, this poll
+    // belongs to an abandoned job — never let it write to state anymore.
+    const isStale = () => attemptRef.current !== myAttempt;
 
     pollRef.current = window.setInterval(async () => {
+      if (isStale()) { clearInterval(pollRef.current!); return; }
       pollCount++;
       if (pollCount > MAX_POLLS) {
         clearInterval(pollRef.current!);
+        if (isStale()) return;
         setGenerating(false);
+        setStep("format");
         toast.error("Generation timed out. Please try again.");
         return;
       }
@@ -178,7 +190,7 @@ function GeneratePage() {
       const seq = ++latestSeq;
       try {
         const res = await api.get(`/generation/jobs/${jobId}`);
-        if (seq !== latestSeq) return; // a newer poll already resolved — discard this one
+        if (seq !== latestSeq || isStale()) return; // a newer poll (or newer attempt) already landed
         const data = res.data.data;
         const status = data.state;
         errorCount = 0;
@@ -194,6 +206,7 @@ function GeneratePage() {
         if (status === 'completed') {
           clearInterval(pollRef.current!);
           const contentRes = await api.get(`/content?jobId=${jobId}`);
+          if (isStale()) return; // a newer attempt started while this fetch was in flight
           const contentBody = contentRes.data.data;
           const items = Array.isArray(contentBody) ? contentBody : (contentBody?.data ?? []);
           setBackendVariants(items);
@@ -201,13 +214,16 @@ function GeneratePage() {
         } else if (status === 'failed') {
           clearInterval(pollRef.current!);
           setGenerating(false);
+          setStep("format");
           toast.error("Generation failed. Please try again.");
         }
       } catch (e) {
         errorCount++;
         if (errorCount >= MAX_ERRORS) {
           clearInterval(pollRef.current!);
+          if (isStale()) return;
           setGenerating(false);
+          setStep("format");
           toast.error("Lost connection during generation. Please check your content library.");
         }
       }
@@ -216,14 +232,18 @@ function GeneratePage() {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [jobId, generating]);
+  }, [jobId, generating, attempt]);
 
   const handleGenerate = async (selectedFormat?: Format) => {
     if (!appointment) return;
+    attemptRef.current += 1;
+    setAttempt(attemptRef.current);
     setGenerating(true);
     setStep("review");
     setJobStatus("Queuing job...");
     setJobProgress(null);
+    setBackendVariants(null);
+    setJobId(null);
 
     const formatMap: Record<Format, string> = {
       'Carousel': 'carousel',
@@ -1692,7 +1712,7 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, jobProgress, back
                         className={"overflow-hidden rounded-lg border transition-all " +
                           (i === safeFrame ? "border-brass" : "border-transparent opacity-50 hover:opacity-80")}
                       >
-                        <img src={frame.url} alt={frame.title || frame.label} className="w-full aspect-[9/16] object-cover" />
+                        <img src={getVariantUrl(frame)} alt={frame.title || frame.label} className="w-full aspect-[9/16] object-cover" />
                       </button>
                     ))}
                   </div>
@@ -1997,7 +2017,7 @@ function ReviewStep({ generating, jobStatus, estimatedSeconds, jobProgress, back
                         className={"shrink-0 relative overflow-hidden rounded-lg transition-all " + (i === safeSlide ? "ring-2 ring-brass" : "opacity-60 hover:opacity-90")}
                       >
                         <img
-                          src={slide.url}
+                          src={getVariantUrl(slide)}
                           alt={slide.title || slide.label || `Slide ${i + 1}`}
                           className="w-14 h-14 object-cover"
                         />

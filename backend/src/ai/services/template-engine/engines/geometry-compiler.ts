@@ -41,17 +41,16 @@ export class GeometryCompiler {
     const intent = preset.intent;
     const behavior = preset.behavior;
     
-    // 1. SAFE ZONES (Whitespace Strategy)
+    // 1. SAFE ZONES (Whitespace Strategy) — graded across the full negativeSpace enum;
+    // previously only 'massive'/'minimal' had any effect and 'medium'/'large' silently
+    // no-op'd even though the LLM picks them just as often.
     let safeX = Math.round(60 * behavior.negativeSpaceMultiplier);
     let safeY = Math.round(80 * behavior.negativeSpaceMultiplier);
 
-    if (designSpec?.composition?.negativeSpace === 'massive') {
-      safeX = Math.round(safeX * 1.5);
-      safeY = Math.round(safeY * 1.5);
-    } else if (designSpec?.composition?.negativeSpace === 'minimal') {
-      safeX = Math.round(safeX * 0.6);
-      safeY = Math.round(safeY * 0.6);
-    }
+    const negativeSpaceScale: Record<string, number> = { minimal: 0.6, medium: 1.0, large: 1.25, massive: 1.5 };
+    const spaceScale = negativeSpaceScale[designSpec?.composition?.negativeSpace || 'medium'] ?? 1.0;
+    safeX = Math.round(safeX * spaceScale);
+    safeY = Math.round(safeY * spaceScale);
 
     if (behavior.marginHugging) {
       safeX = Math.round(safeX * 0.3);
@@ -61,6 +60,8 @@ export class GeometryCompiler {
     const contentMaxWidth = canvasWidth - (safeX * 2);
 
     // 2. TYPOGRAPHY SCALING (Top-Down Hierarchy Curve Strategy)
+    // Note: baseScale is available for future proportional calculations if needed
+    const baseScale = canvasWidth;
     let heroSize = Math.round(behavior.heroBaseFontSize * (behavior.typographyScaleMultiplier || 1.0));
 
     // A. Visual Dominance — placement priority, not micro-type punishment
@@ -127,10 +128,13 @@ export class GeometryCompiler {
       metadataTracking: typeof trackingMetadata === 'number' ? `${trackingMetadata}em` : trackingMetadata,
     };
 
-    // 3. ALIGNMENT (Composition Strategy)
+    // 3. ALIGNMENT (Composition Strategy) — an explicit designSpec.typography.alignment
+    // is a more direct signal than reading flow and wins when present; otherwise fall
+    // back to the reading-flow-derived default as before.
     let alignment: 'left' | 'center' | 'right' = 'left';
     if (intent.readingFlow === 'center_down') alignment = 'center';
     if (intent.readingFlow === 'z_pattern') alignment = 'left'; // z-pattern starts left
+    if (designSpec?.typography?.alignment) alignment = designSpec.typography.alignment;
 
     // 4. RHYTHM & PADDING (Whitespace padding between elements)
     let padding = Math.round(30 * behavior.negativeSpaceMultiplier);

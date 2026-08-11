@@ -793,7 +793,9 @@ CRITICAL IMAGE REQUIREMENTS:
         excludeLayouts: uniqueLayoutsForSlides,
         templateIntent,
         slideType: concept.slideType,
-        semanticIntent: semanticSlide?.semanticIntent
+        semanticIntent: semanticSlide?.semanticIntent,
+        requiredTraits: semanticSlide?.requiredTraits,
+        triptychAlreadyUsed: agentDecisions.some(d => d.designSpec?.photo?.imageExecution === 'triptych'),
       });
       agentDecisions.push(decision);
       uniqueLayoutsForSlides.push(decision.selected_layout_id);
@@ -967,7 +969,8 @@ CRITICAL IMAGE REQUIREMENTS:
         excludeLayouts: uniqueLayoutsForFrames,
         templateIntent,
         slideType: semanticSlide?.slideType,
-        semanticIntent: semanticSlide?.semanticIntent
+        semanticIntent: semanticSlide?.semanticIntent,
+        triptychAlreadyUsed: agentDecisions.some(d => d.designSpec?.photo?.imageExecution === 'triptych'),
       });
       agentDecisions.push(decision);
       uniqueLayoutsForFrames.push(decision.selected_layout_id);
@@ -1317,7 +1320,7 @@ CRITICAL IMAGE REQUIREMENTS:
       const composition = this.compositionEngine.calculateComposition(designTokens, templateIntent as any, isFirst, visionResult?.faceCoordinates);
 
       // NEW ARCHITECTURE: Pull semantic rules from the Art Direction Engine using the layout ID!
-      const intent = this.artDirectionEngine.generateDesignIntent(layoutType, Math.max(0, (index || 1) - 1), totalSlides || 1);
+      const intent = this.artDirectionEngine.generateDesignIntent(layoutType, Math.max(0, (index || 1) - 1), totalSlides || 1, designSpec);
       // Final slide must be a clear CTA composition
       if (isLast) {
         intent.visualPriority = 'cta_hero';

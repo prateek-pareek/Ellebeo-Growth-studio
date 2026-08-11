@@ -1006,14 +1006,26 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       visualRecipe = artDirectionEngine.generateVisualRecipe(ctx.designLanguage.intent, ctx.activeTheme || 'editorial_beauty');
       family = (ctx.designLanguage.intent.family as LayoutFamily) || 'minimal';
     } else {
-      const fallbackIntent = artDirectionEngine.generateDesignIntent(ctx.layoutType || 'minimal');
+      // Defensive fallback only — every call site in ai-image-generation.service.ts now
+      // threads designLanguage into decoCtx, so this branch shouldn't fire in practice.
+      // Still passes designSpec (if present) so a grounded Design Intent is used instead
+      // of guessing from the id string, should some other caller reach this path.
+      const fallbackIntent = artDirectionEngine.generateDesignIntent(ctx.layoutType || 'minimal', undefined, undefined, ctx.designSpec);
       visualRecipe = artDirectionEngine.generateVisualRecipe(fallbackIntent, ctx.activeTheme || 'editorial_beauty');
       family = (fallbackIntent.family as LayoutFamily) || 'minimal';
     }
 
     // PHASE 3A: Thematic Mood Injection
-    // Inject textures/overlays dynamically via the VisualRecipe (TextureRecipe)
-    const moodDecorations = themeEngine.getMoodDecorations(visualRecipe.texture);
+    // Inject textures/overlays dynamically via the VisualRecipe (TextureRecipe).
+    // decorations.density gates this additive overlay (never the family's own
+    // structural decoration layers, which are untouched design DNA) — 'none'/'low'
+    // keeps the design clean, 'medium'/'high' allows the mood texture through. This
+    // is the first real, generic effect decorations.density has ever had; previously
+    // it was parsed by the LLM prompt but read nowhere downstream.
+    const decorationDensity = ctx.designSpec?.decorations?.density;
+    const moodDecorations = (decorationDensity === 'none' || decorationDensity === 'low')
+      ? []
+      : themeEngine.getMoodDecorations(visualRecipe.texture);
     overlayLayers = [...overlayLayers, ...moodDecorations];
 
     overlayLayers.sort((a: any, b: any) => a.zIndex - b.zIndex);

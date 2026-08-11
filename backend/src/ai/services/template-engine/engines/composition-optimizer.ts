@@ -20,6 +20,12 @@ export interface OptimizeResult {
   fitActions: string[];
 }
 
+export interface ITextCopyHint {
+  headline?: string;
+  subheadline?: string;
+  cta?: string;
+}
+
 export class CompositionOptimizer {
   private qc = new CompositionQualityController();
 
@@ -108,6 +114,81 @@ export class CompositionOptimizer {
     optimized.canvasRegions = regions;
 
     const roleWeight: Record<string, number> = { heading: 4, tagline: 3, body: 2, footnote: 1, cta: 0 };
+
+    let currentYOffset = regions.textRegion.y;
+
+    // Visual Weight Sorting: Sort text layers by dominance (Heading -> Tagline -> Body -> CTA)
+    const sortedTextLayers = optimized.layers.filter(l => l.type === 'text') as IDSLTextLayer[];
+    sortedTextLayers.sort((a, b) => (roleWeight[b.role || 'body'] || 0) - (roleWeight[a.role || 'body'] || 0));
+
+    let headingBox: any = null;
+    const behaviorProfile: any = (optimized as any)?.behavior;
+
+    for (const txtLayer of sortedTextLayers) {
+      const fallbackHeight = txtLayer.role === 'heading' ? 300 : txtLayer.role === 'body' ? 180 : 120;
+      const fontSizeForRole = txtLayer.role === 'heading'
+        ? (behaviorProfile?.heroBaseFontSize || 100)
+        : txtLayer.role === 'body'
+          ? (behaviorProfile?.bodyBaseFontSize || 32)
+          : (behaviorProfile?.metadataBaseFontSize || 24);
+      const maxWidthPx = regions.textRegion.width * ((txtLayer.maxWidthPercent || 100) / 100);
+      let estimatedHeight = this.estimateTextBlockHeight(
+        this.copyForRole(txtLayer.role, content),
+        fontSizeForRole,
+        maxWidthPx,
+        fallbackHeight
+      );
+
+      let targetRegion: any = regions.textRegion;
+      let x = 0, y = 0;
+
+      // If this is a secondary element and we have a heading, cluster it
+      if (headingBox && txtLayer.role !== 'heading' && !txtLayer.anchor?.includes('bottom_edge')) {
+        // Cluster relative to heading
+        x = headingBox.x;
+        // Stack below the heading
+        y = headingBox.y + headingBox.height + 20;
+
+        // If the heading was centered, keep this centered
+        if (txtLayer.anchor === 'center' || txtLayer.anchor?.includes('center')) {
+          // Leave x as is, TypograpyEngine handles center text-anchor internally
+        }
+      } else {
+        // Primary placement (Heading) using Semantic Whitespace Topology
+        const anchorResult = layoutEngine.resolveAnchor(
+          txtLayer.anchor || 'middle_left',
+          0,
+          estimatedHeight,
+          constraints,
+          targetRegion
+        );
+        x = anchorResult.x;
+        y = anchorResult.y;
+      }
+
+      // Allocate strict bounding box inside textRegion
+      txtLayer.allocatedBox = {
+        x,
+        y,
+        width: regions.textRegion.width,
+        height: estimatedHeight
+      };
+
+      const family = (dsl as any).id?.split('_')[0] || 'minimal';
+      const originalY = txtLayer.allocatedBox.y;
+      txtLayer.allocatedBox = layoutEngine.resolveFaceCollision(txtLayer.allocatedBox, constraints, family as any);
+      
+      if (txtLayer.allocatedBox.y !== originalY) {
+        console.log(`[CompositionOptimizer] Text collision detected with face box! Moved '${txtLayer.role}' text from Y=${originalY} to Y=${txtLayer.allocatedBox.y}`);
+      }
+
+      if (txtLayer.role === 'heading') {
+        headingBox = txtLayer.allocatedBox;
+      }
+    }
+
+    // Balance Checks: Is whitespace balanced? Does the headline overpower?
+    // (This is a simplified optimization pass that adjusts properties based on semantic rules)
     const allTextLayers = optimized.layers.filter(l => l.type === 'text') as IDSLTextLayer[];
     const textGroupLayers = optimized.layers.filter(l => l.type === 'text_group') as IDSLTextGroupLayer[];
 
@@ -407,6 +488,23 @@ export class CompositionOptimizer {
       prefer.push('top_center', 'center');
     }
     return prefer.filter(a => allowed.includes(a as any));
+  }
+
+  private copyForRole(role: string | undefined, copy?: ITextCopyHint): string | undefined {
+    if (!copy) return undefined;
+    if (role === 'heading') return copy.headline;
+    if (role === 'tagline' || role === 'body') return copy.subheadline;
+    if (role === 'footnote' || role === 'watermark') return copy.cta;
+    return undefined;
+  }
+
+  private estimateTextBlockHeight(text: string | undefined, fontSize: number, maxWidthPx: number, fallback: number): number {
+    if (!text || !fontSize || !maxWidthPx) return fallback;
+    const avgCharWidth = fontSize * 0.58;
+    const charsPerLine = Math.max(1, Math.floor(maxWidthPx / avgCharWidth));
+    const lines = Math.max(1, Math.ceil(text.length / charsPerLine));
+    const lineHeight = fontSize * 1.15;
+    return Math.round(lines * lineHeight + fontSize * 0.4);
   }
 
   private clampBoxToSafe(

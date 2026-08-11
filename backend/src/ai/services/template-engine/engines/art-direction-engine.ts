@@ -1,5 +1,5 @@
 import designKnowledgeMap from '../../../config/design-knowledge-map.json';
-import { VisualRecipe, ColorRecipe, TypographyRecipe, PrimitiveRecipe, TextureRecipe, HeroRecipe, IDesignIntent } from '../interfaces';
+import { VisualRecipe, ColorRecipe, TypographyRecipe, PrimitiveRecipe, TextureRecipe, HeroRecipe, IDesignIntent, ISemanticDesignSpec } from '../interfaces';
 
 // ─── 1. INTERFACES ───
 
@@ -69,10 +69,183 @@ export class ArtDirectionEngine {
   /**
    * Generates Semantic Design Intent from knowledge tags and carousel rhythm
    */
-  public generateDesignIntent(layoutId: string, slideIndex?: number, totalSlides?: number): IDesignIntent {
+  public generateDesignIntent(layoutId: string, slideIndex?: number, totalSlides?: number, designSpec?: ISemanticDesignSpec): IDesignIntent {
     // 1. Procedural Layout Interception
     const baseId = this.normalizeFamilyId(layoutId);
 
+    let family: string;
+    let energy: string;
+    let balance: string;
+    let readingFlow: string;
+    let whitespace: 'tight' | 'comfortable' | 'airy' | 'luxury';
+    let mood: 'luxury' | 'organic' | 'clinical' | 'pop' | 'minimalist';
+    let visualPriority: 'typography_hero' | 'image_hero' | 'composition_hero' | 'cta_hero';
+    let cardStyle: 'solid' | 'glass' | 'outlined' | 'floating' | 'none';
+
+    if (designSpec) {
+      // The Template Agent already produced a real Design Intent for this exact
+      // selection (grounded in mined data where available) — use it directly instead
+      // of re-guessing composition/energy/mood from the id string a second time.
+      const derived = this.deriveIntentFromDesignSpec(baseId, designSpec);
+      family = derived.family;
+      energy = derived.energy;
+      balance = derived.balance;
+      readingFlow = derived.readingFlow;
+      whitespace = derived.whitespace;
+      mood = derived.mood;
+      visualPriority = derived.visualPriority;
+      cardStyle = derived.cardStyle;
+      console.log(`[ArtDirectionEngine] Derived intent for ${layoutId} from Design Intent (grounding: ${designSpec.groundedIn?.source || 'none'}) — no id-string guessing.`, { family, energy, balance, readingFlow, visualPriority, mood });
+    } else {
+      const legacy = this.deriveIntentFromLayoutId(layoutId, baseId);
+      family = legacy.family;
+      energy = legacy.energy;
+      balance = legacy.balance;
+      readingFlow = legacy.readingFlow;
+      whitespace = legacy.whitespace;
+      mood = legacy.mood;
+      visualPriority = legacy.visualPriority;
+      cardStyle = legacy.cardStyle;
+    }
+
+    // [PHASE 3: RHYTHM INJECTION] - Formalize the 4-slide musical rhythm
+    let textureIntensity = mood === 'organic' ? 'heavy' : (mood === 'minimalist' ? 'subtle' : 'none');
+    let density: 'none' | 'low' | 'medium' | 'high' = energy === 'bold' ? 'high' : 'low';
+
+    if (slideIndex !== undefined && totalSlides !== undefined && totalSlides > 1) {
+      const normalizedPos = slideIndex / (totalSlides - 1);
+
+      // Dense -> Open -> Medium -> Minimal (or custom based on position)
+      if (slideIndex === 0) {
+        // Cover Slide: Punchy, tight, dense
+        whitespace = 'tight';
+        energy = 'bold';
+        density = 'high';
+        textureIntensity = 'heavy';
+      } else if (slideIndex === totalSlides - 1) {
+        // Final Slide: Clean, airy CTA
+        whitespace = 'airy';
+        energy = 'minimal';
+        density = 'low';
+        textureIntensity = 'none';
+      } else if (normalizedPos <= 0.5) {
+        // Slide 2: Comfortable breather
+        whitespace = 'comfortable';
+        energy = 'structured';
+        density = 'medium';
+      } else {
+        // Slide 3: Luxury / Minimal
+        whitespace = 'luxury';
+        energy = 'playful';
+        density = 'medium';
+      }
+      console.log(`[ArtDirectionEngine] Applied Rhythm (Slide ${slideIndex + 1}/${totalSlides}) - Whitespace: ${whitespace}, Density: ${density}, Energy: ${energy}`);
+    }
+
+    return {
+      family,
+      energy: energy as any,
+      balance: balance as any,
+      readingFlow: readingFlow as any,
+      visualPriority: visualPriority as any,
+      whitespace,
+      mood,
+      primitives: {
+        cards: cardStyle,
+        textureIntensity: textureIntensity as any,
+        density: density
+      }
+    };
+  }
+
+  /**
+   * Grounded path: derive IDesignIntent directly from the Template Agent's own Design
+   * Intent instead of re-guessing from the id string. Structural fields (balance,
+   * readingFlow) come straight from designSpec.composition, which is already grounded
+   * in real mined data at Stage 5 — nothing to re-derive here.
+   */
+  private deriveIntentFromDesignSpec(baseId: string, spec: ISemanticDesignSpec) {
+    const family = this.macroFamilyFromBaseId(baseId);
+
+    const energyFromMined: Record<string, string> = { calm: 'calm', energetic: 'bold', youthful: 'playful' };
+    const energy = spec.groundedIn?.energy ? (energyFromMined[spec.groundedIn.energy] || 'calm') : this.legacyEnergyFallback(family);
+
+    const balance = spec.composition.balance;
+
+    const readingFlowMap: Record<string, IDesignIntent['readingFlow']> = {
+      z_pattern: 'z_pattern',
+      center_down: 'center_down',
+      circular: 'circular',
+      center_outward: 'circular',
+      diagonal: 'scattered',
+      bottom_left: 'scattered',
+      scattered: 'scattered',
+    };
+    const readingFlow = (spec.composition.readingFlow && readingFlowMap[spec.composition.readingFlow]) || 'center_anchored';
+
+    // Whitespace: prefer the graded spacing.whitespaceFeel; falls back to the older
+    // 4-value negativeSpace enum so every enum value (not just the extremes) maps to
+    // something real.
+    const whitespaceFromFeel: Record<string, 'tight' | 'comfortable' | 'airy' | 'luxury'> = {
+      tight: 'tight', balanced: 'comfortable', generous: 'airy', luxury: 'luxury',
+    };
+    const whitespaceFromNegativeSpace: Record<string, 'tight' | 'comfortable' | 'airy' | 'luxury'> = {
+      minimal: 'tight', medium: 'comfortable', large: 'airy', massive: 'luxury',
+    };
+    const whitespace = spec.spacing?.whitespaceFeel
+      ? whitespaceFromFeel[spec.spacing.whitespaceFeel]
+      : whitespaceFromNegativeSpace[spec.composition.negativeSpace] || 'comfortable';
+
+    const moodFromStyle: Record<string, 'luxury' | 'organic' | 'clinical' | 'pop' | 'minimalist'> = {
+      warm_paper: 'organic', luxury_black: 'luxury', clinical_white: 'clinical', vibrant_pop: 'pop',
+    };
+    const mood = moodFromStyle[spec.style.mood] || (family === 'clinical' ? 'clinical' : family === 'minimalist' ? 'minimalist' : 'luxury');
+
+    // Visual priority: prefer the explicit emphasis.focalPoint; falls back to composition.hero
+    const priorityFromElement: Record<string, 'typography_hero' | 'image_hero' | 'composition_hero' | 'cta_hero'> = {
+      headline: 'typography_hero', image: 'image_hero', badge: 'composition_hero', balanced: 'composition_hero',
+    };
+    const visualPriority = priorityFromElement[spec.emphasis?.focalPoint || spec.composition.hero] || 'image_hero';
+
+    // Decoration card style: floating photo treatment wins outright, otherwise scale with decoration density
+    const cardStyleFromDensity: Record<string, 'solid' | 'glass' | 'outlined' | 'floating' | 'none'> = {
+      high: 'solid', medium: 'outlined', low: 'glass', none: 'none',
+    };
+    const cardStyle = spec.photo.treatment === 'floating' ? 'floating' : (cardStyleFromDensity[spec.decorations.density] || 'none');
+
+    return { family, energy, balance, readingFlow, whitespace, mood, visualPriority, cardStyle };
+  }
+
+  private macroFamilyFromBaseId(baseId: string): string {
+    // Rigid ids (compiled-layouts.v2.json) are literally named "layout_v2_<layoutFamily.value>_...",
+    // e.g. "layout_v2_clinical_hero_center_down_11" — strip that prefix so the same family-value
+    // token vocabulary the mining pipeline uses (editorial, minimalist_quote, clinical_hero,
+    // text_only...) resolves correctly instead of falling through to a useless 'layout' bucket.
+    const withoutRigidPrefix = baseId.startsWith('layout_v2_') ? baseId.slice('layout_v2_'.length) : baseId;
+
+    if (withoutRigidPrefix.startsWith('minimalist_quote')) return 'minimalist';
+    if (withoutRigidPrefix.startsWith('clinical_hero')) return 'clinical';
+    if (withoutRigidPrefix.startsWith('text_only')) return 'premium';
+    if (withoutRigidPrefix.startsWith('premium_text') || withoutRigidPrefix.includes('breather')) return 'premium';
+    if (withoutRigidPrefix.startsWith('minimalist')) return 'minimalist';
+    if (withoutRigidPrefix.startsWith('clinical')) return 'clinical';
+    if (withoutRigidPrefix.startsWith('educational')) return 'educational';
+    if (withoutRigidPrefix.includes('quote')) return 'quote';
+    return withoutRigidPrefix.split('_')[0];
+  }
+
+  private legacyEnergyFallback(family: string): string {
+    if (family === 'minimalist' || family === 'educational') return 'minimal';
+    if (family === 'clinical') return 'structured';
+    return 'calm';
+  }
+
+  /**
+   * Legacy path: id-string matching + the 770-entry knowledge map fallback. Preserved
+   * unchanged for callers that don't yet pass a Design Intent (older scripts, and any
+   * code path that hasn't been migrated to thread designSpec through).
+   */
+  private deriveIntentFromLayoutId(layoutId: string, baseId: string) {
     let family = 'editorial';
     let energy = 'calm';
     let balance = 'symmetrical';
@@ -259,54 +432,7 @@ export class ArtDirectionEngine {
       console.warn(`[ArtDirectionEngine] No knowledge found for ${layoutId}. Falling back to default.`);
     }
 
-    // [PHASE 3: RHYTHM INJECTION] - Formalize the 4-slide musical rhythm
-    let textureIntensity = mood === 'organic' ? 'heavy' : (mood === 'minimalist' ? 'subtle' : 'none');
-    let density: 'none' | 'low' | 'medium' | 'high' = energy === 'bold' ? 'high' : 'low';
-
-    if (slideIndex !== undefined && totalSlides !== undefined && totalSlides > 1) {
-      const normalizedPos = slideIndex / (totalSlides - 1);
-
-      // Dense -> Open -> Medium -> Minimal (or custom based on position)
-      if (slideIndex === 0) {
-        // Cover Slide: Punchy, tight, dense
-        whitespace = 'tight';
-        energy = 'bold';
-        density = 'high';
-        textureIntensity = 'heavy';
-      } else if (slideIndex === totalSlides - 1) {
-        // Final Slide: Clean, airy CTA
-        whitespace = 'airy';
-        energy = 'minimal';
-        density = 'low';
-        textureIntensity = 'none';
-      } else if (normalizedPos <= 0.5) {
-        // Slide 2: Comfortable breather
-        whitespace = 'comfortable';
-        energy = 'structured';
-        density = 'medium';
-      } else {
-        // Slide 3: Luxury / Minimal
-        whitespace = 'luxury';
-        energy = 'playful';
-        density = 'medium';
-      }
-      console.log(`[ArtDirectionEngine] Applied Rhythm (Slide ${slideIndex + 1}/${totalSlides}) - Whitespace: ${whitespace}, Density: ${density}, Energy: ${energy}`);
-    }
-
-    return {
-      family,
-      energy: energy as any,
-      balance: balance as any,
-      readingFlow: readingFlow as any,
-      visualPriority: visualPriority as any,
-      whitespace,
-      mood,
-      primitives: {
-        cards: cardStyle,
-        textureIntensity: textureIntensity as any,
-        density: density
-      }
-    };
+    return { family, energy, balance, readingFlow, whitespace, mood, visualPriority, cardStyle };
   }
 
   /**

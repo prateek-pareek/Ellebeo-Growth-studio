@@ -1,360 +1,380 @@
 {
-  "templateCount": 1000,
+  "templateCount": 2040,
   "layoutFamilies": [
     {
-      "label": "split",
-      "count": 206,
-      "pct": 20.599999999999998
-    },
-    {
-      "label": "text_only",
-      "count": 185,
-      "pct": 18.5
-    },
-    {
       "label": "countdown_promo",
-      "count": 135,
-      "pct": 13.5
-    },
-    {
-      "label": "clinical_hero",
-      "count": 132,
-      "pct": 13.200000000000001
+      "count": 348,
+      "pct": 17.058823529411764
     },
     {
       "label": "product_showcase",
-      "count": 116,
-      "pct": 11.600000000000001
+      "count": 264,
+      "pct": 12.941176470588237
     },
     {
-      "label": "editorial",
-      "count": 70,
-      "pct": 7.000000000000001
+      "label": "split",
+      "count": 262,
+      "pct": 12.84313725490196
+    },
+    {
+      "label": "text_only",
+      "count": 261,
+      "pct": 12.794117647058822
+    },
+    {
+      "label": "clinical_hero",
+      "count": 228,
+      "pct": 11.176470588235295
     },
     {
       "label": "minimalist_quote",
-      "count": 52,
-      "pct": 5.2
+      "count": 186,
+      "pct": 9.117647058823529
     },
     {
       "label": "before_after",
-      "count": 45,
-      "pct": 4.5
+      "count": 157,
+      "pct": 7.696078431372549
+    },
+    {
+      "label": "editorial",
+      "count": 145,
+      "pct": 7.107843137254902
     },
     {
       "label": "testimonial",
-      "count": 24,
-      "pct": 2.4
-    },
-    {
-      "label": "transformation",
-      "count": 16,
-      "pct": 1.6
-    },
-    {
-      "label": "announcement",
-      "count": 10,
-      "pct": 1
-    },
-    {
-      "label": "scrapbook",
-      "count": 5,
-      "pct": 0.5
+      "count": 59,
+      "pct": 2.892156862745098
     },
     {
       "label": "quadrant",
-      "count": 3,
-      "pct": 0.3
+      "count": 45,
+      "pct": 2.2058823529411766
+    },
+    {
+      "label": "transformation",
+      "count": 40,
+      "pct": 1.9607843137254901
+    },
+    {
+      "label": "scrapbook",
+      "count": 19,
+      "pct": 0.9313725490196079
+    },
+    {
+      "label": "announcement",
+      "count": 15,
+      "pct": 0.7352941176470588
     },
     {
       "label": "polaroid",
+      "count": 10,
+      "pct": 0.49019607843137253
+    },
+    {
+      "label": "notification_card",
       "count": 1,
-      "pct": 0.1
+      "pct": 0.049019607843137254
     }
   ],
   "visualStyles": [
     {
-      "label": "minimalist",
-      "count": 302,
-      "pct": 30.2
-    },
-    {
-      "label": "modern",
-      "count": 264,
-      "pct": 26.400000000000002
+      "label": "organic",
+      "count": 588,
+      "pct": 28.823529411764703
     },
     {
       "label": "minimal",
-      "count": 258,
-      "pct": 25.8
+      "count": 536,
+      "pct": 26.27450980392157
     },
     {
-      "label": "organic",
-      "count": 174,
-      "pct": 17.4
+      "label": "minimalist",
+      "count": 513,
+      "pct": 25.147058823529413
+    },
+    {
+      "label": "modern",
+      "count": 399,
+      "pct": 19.558823529411764
     },
     {
       "label": "editorial",
-      "count": 1,
-      "pct": 0.1
+      "count": 3,
+      "pct": 0.14705882352941177
     },
     {
       "label": "clinical",
       "count": 1,
-      "pct": 0.1
+      "pct": 0.049019607843137254
     }
   ],
   "readingFlows": [
     {
       "label": "center-down",
-      "count": 620,
-      "pct": 62
-    },
-    {
-      "label": "undetermined",
-      "count": 200,
-      "pct": 20
+      "count": 1269,
+      "pct": 62.205882352941174
     },
     {
       "label": "circular",
-      "count": 73,
-      "pct": 7.3
+      "count": 217,
+      "pct": 10.637254901960784
+    },
+    {
+      "label": "undetermined",
+      "count": 207,
+      "pct": 10.147058823529411
     },
     {
       "label": "center-outward",
-      "count": 57,
-      "pct": 5.7
+      "count": 169,
+      "pct": 8.284313725490195
     },
     {
       "label": "diagonal",
-      "count": 26,
-      "pct": 2.6
+      "count": 97,
+      "pct": 4.754901960784314
     },
     {
       "label": "asymmetric",
-      "count": 13,
-      "pct": 1.3
+      "count": 45,
+      "pct": 2.2058823529411766
     },
     {
       "label": "z-pattern",
-      "count": 11,
-      "pct": 1.0999999999999999
+      "count": 36,
+      "pct": 1.7647058823529411
     }
   ],
   "negativeSpace": [
     {
       "label": "tight",
-      "count": 780,
-      "pct": 78
+      "count": 1488,
+      "pct": 72.94117647058823
     },
     {
       "label": "moderate",
-      "count": 113,
-      "pct": 11.3
+      "count": 350,
+      "pct": 17.15686274509804
     },
     {
       "label": "large",
-      "count": 107,
-      "pct": 10.7
+      "count": 202,
+      "pct": 9.901960784313726
     }
   ],
   "typography": [
     {
       "label": "bold_sans",
-      "count": 712,
-      "pct": 71.2
+      "count": 1495,
+      "pct": 73.2843137254902
     },
     {
       "label": "mixed",
-      "count": 213,
-      "pct": 21.3
+      "count": 234,
+      "pct": 11.470588235294118
     },
     {
       "label": "script",
-      "count": 42,
-      "pct": 4.2
-    },
-    {
-      "label": "modern_sans",
-      "count": 16,
-      "pct": 1.6
+      "count": 122,
+      "pct": 5.980392156862745
     },
     {
       "label": "italic_sans",
-      "count": 6,
-      "pct": 0.6
+      "count": 110,
+      "pct": 5.392156862745098
+    },
+    {
+      "label": "modern_sans",
+      "count": 64,
+      "pct": 3.1372549019607843
     },
     {
       "label": "fashion_serif",
-      "count": 6,
-      "pct": 0.6
+      "count": 10,
+      "pct": 0.49019607843137253
     },
     {
       "label": "serif",
       "count": 5,
-      "pct": 0.5
+      "pct": 0.24509803921568626
     }
   ],
   "decorationComponents": [
     {
       "label": "textured_background",
-      "count": 307,
-      "pct": 24.501197126895452
-    },
-    {
-      "label": "shadow",
-      "count": 211,
-      "pct": 16.839584996009577
+      "count": 471,
+      "pct": 17.753486618921976
     },
     {
       "label": "frame_border",
-      "count": 142,
-      "pct": 11.332801276935355
+      "count": 435,
+      "pct": 16.396532227666793
     },
     {
-      "label": "gradient",
-      "count": 95,
-      "pct": 7.581803671189145
-    },
-    {
-      "label": "illustration",
-      "count": 94,
-      "pct": 7.501995211492418
+      "label": "shadow",
+      "count": 344,
+      "pct": 12.96645307199397
     },
     {
       "label": "divider",
-      "count": 90,
-      "pct": 7.182761372705507
+      "count": 208,
+      "pct": 7.840180927252168
     },
     {
       "label": "geometric_badge",
-      "count": 57,
-      "pct": 4.549082202713488
+      "count": 170,
+      "pct": 6.407840180927252
     },
     {
-      "label": "circle",
-      "count": 55,
-      "pct": 4.389465283320032
+      "label": "illustration",
+      "count": 154,
+      "pct": 5.804749340369393
     },
     {
       "label": "rounded_corners",
-      "count": 44,
-      "pct": 3.5115722266560256
+      "count": 133,
+      "pct": 5.013192612137203
     },
     {
-      "label": "arrow",
-      "count": 29,
-      "pct": 2.314445331205108
-    },
-    {
-      "label": "star_rating",
-      "count": 23,
-      "pct": 1.8355945730247407
+      "label": "gradient",
+      "count": 124,
+      "pct": 4.6739540143234075
     },
     {
       "label": "outline",
-      "count": 17,
-      "pct": 1.3567438148443736
+      "count": 104,
+      "pct": 3.920090463626084
     },
     {
-      "label": "floral",
-      "count": 16,
-      "pct": 1.2769353551476457
+      "label": "circle",
+      "count": 101,
+      "pct": 3.8070109310214852
     },
     {
-      "label": "heart",
-      "count": 12,
-      "pct": 0.9577015163607342
+      "label": "arrow",
+      "count": 65,
+      "pct": 2.4500565397663023
+    },
+    {
+      "label": "star_rating",
+      "count": 56,
+      "pct": 2.1108179419525066
+    },
+    {
+      "label": "striped_background",
+      "count": 50,
+      "pct": 1.8846588767433095
     },
     {
       "label": "polaroid",
-      "count": 9,
-      "pct": 0.7182761372705506
+      "count": 37,
+      "pct": 1.394647568790049
+    },
+    {
+      "label": "floral",
+      "count": 31,
+      "pct": 1.1684885035808519
+    },
+    {
+      "label": "heart",
+      "count": 30,
+      "pct": 1.1307953260459858
+    },
+    {
+      "label": "underline",
+      "count": 22,
+      "pct": 0.8292499057670562
+    },
+    {
+      "label": "color_block",
+      "count": 18,
+      "pct": 0.6784771956275913
     },
     {
       "label": "speech_bubble",
-      "count": 9,
-      "pct": 0.7182761372705506
+      "count": 17,
+      "pct": 0.6407840180927252
+    },
+    {
+      "label": "dotted_border",
+      "count": 15,
+      "pct": 0.5653976630229929
+    },
+    {
+      "label": "film_strip",
+      "count": 13,
+      "pct": 0.4900113079532605
+    },
+    {
+      "label": "quotation_marks",
+      "count": 12,
+      "pct": 0.4523181304183943
     },
     {
       "label": "ribbon",
       "count": 7,
-      "pct": 0.5586592178770949
+      "pct": 0.2638522427440633
     },
     {
-      "label": "dotted_border",
+      "label": "numbered_list",
       "count": 6,
-      "pct": 0.4788507581803671
+      "pct": 0.22615906520919715
+    },
+    {
+      "label": "collage",
+      "count": 6,
+      "pct": 0.22615906520919715
+    },
+    {
+      "label": "perforation",
+      "count": 5,
+      "pct": 0.18846588767433095
     },
     {
       "label": "paper_clip",
       "count": 4,
-      "pct": 0.3192338387869114
-    },
-    {
-      "label": "color_block",
-      "count": 4,
-      "pct": 0.3192338387869114
-    },
-    {
-      "label": "striped_background",
-      "count": 4,
-      "pct": 0.3192338387869114
+      "pct": 0.15077271013946475
     },
     {
       "label": "paper_tape",
       "count": 3,
-      "pct": 0.23942537909018355
+      "pct": 0.11307953260459858
     },
     {
-      "label": "numbered_list",
+      "label": "grid_lines",
       "count": 3,
-      "pct": 0.23942537909018355
+      "pct": 0.11307953260459858
     },
     {
-      "label": "quotation_marks",
+      "label": "arch_frame",
       "count": 3,
-      "pct": 0.23942537909018355
+      "pct": 0.11307953260459858
     },
     {
-      "label": "underline",
+      "label": "gold_accents",
       "count": 2,
-      "pct": 0.1596169193934557
+      "pct": 0.07538635506973237
     },
     {
       "label": "doodle",
       "count": 1,
-      "pct": 0.07980845969672785
+      "pct": 0.03769317753486619
     },
     {
       "label": "seal",
       "count": 1,
-      "pct": 0.07980845969672785
+      "pct": 0.03769317753486619
     },
     {
       "label": "pushpin",
       "count": 1,
-      "pct": 0.07980845969672785
+      "pct": 0.03769317753486619
     },
     {
       "label": "camera",
       "count": 1,
-      "pct": 0.07980845969672785
-    },
-    {
-      "label": "grid_lines",
-      "count": 1,
-      "pct": 0.07980845969672785
-    },
-    {
-      "label": "gold_accents",
-      "count": 1,
-      "pct": 0.07980845969672785
-    },
-    {
-      "label": "arch_frame",
-      "count": 1,
-      "pct": 0.07980845969672785
+      "pct": 0.03769317753486619
     }
   ]
 }

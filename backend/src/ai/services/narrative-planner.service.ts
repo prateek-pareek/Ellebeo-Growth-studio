@@ -18,6 +18,8 @@ export interface SemanticSlide {
       energy: number;
     };
   };
+  /** Optional filter traits a candidate must satisfy (co-worker extension — no-op until populated). */
+  requiredTraits?: string[];
 }
 
 export interface MarketingGoalRecipe {
