@@ -1003,7 +1003,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     let family: LayoutFamily = 'minimal';
 
     if (ctx.designLanguage && ctx.designLanguage.intent) {
-      visualRecipe = artDirectionEngine.generateVisualRecipe(ctx.designLanguage.intent, ctx.activeTheme || 'editorial_beauty');
+      visualRecipe = artDirectionEngine.generateVisualRecipe(ctx.designLanguage.intent, ctx.activeTheme || 'editorial_beauty', ctx.rawName);
       family = (ctx.designLanguage.intent.family as LayoutFamily) || 'minimal';
     } else {
       // Defensive fallback only — every call site in ai-image-generation.service.ts now
@@ -1011,7 +1011,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       // Still passes designSpec (if present) so a grounded Design Intent is used instead
       // of guessing from the id string, should some other caller reach this path.
       const fallbackIntent = artDirectionEngine.generateDesignIntent(ctx.layoutType || 'minimal', undefined, undefined, ctx.designSpec);
-      visualRecipe = artDirectionEngine.generateVisualRecipe(fallbackIntent, ctx.activeTheme || 'editorial_beauty');
+      visualRecipe = artDirectionEngine.generateVisualRecipe(fallbackIntent, ctx.activeTheme || 'editorial_beauty', ctx.rawName);
       family = (fallbackIntent.family as LayoutFamily) || 'minimal';
     }
 
@@ -1090,6 +1090,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       ctx.layoutType || dsl.id || 'layout',
       String(family),
       brandStyle,
+      ctx.rawName,
     );
     if (ctx.capitalizationRule) {
       const rule = String(ctx.capitalizationRule).toLowerCase();
@@ -1217,7 +1218,9 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       }
     }
 
-    // Global theme overlay removed to prevent librsvg feTurbulence canvas blanketing
+    // Gradient-only vignette finishing pass (see ThemeEngine.generateGlobalOverlay for
+    // why this isn't the old feTurbulence-based overlay that caused librsvg blanketing).
+    svg += themeEngine.generateGlobalOverlay(ctx.w, ctx.h);
     return svg;
   },
 };

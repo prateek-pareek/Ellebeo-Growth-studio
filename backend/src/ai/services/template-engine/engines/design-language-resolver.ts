@@ -1,13 +1,17 @@
 import { DesignRecipe, TypographyTokens, VisualTokens, CompositionTokens, ReadingFlowTokens, PrimitiveTokens, ImageTreatmentTokens } from '../interfaces';
+import { selectDeterministically } from '../utils/deterministic-hash.util';
 
 export class DesignLanguageResolver {
-  
+
   /**
    * Translates Brand DNA and Structural Intent into a unified Design Recipe.
    * This is the core engine that ensures Editorial looks like Editorial, Minimalist looks Minimalist, etc.
    */
-  public generateRecipe(layoutId: string, baseFamily: string, brandStyle: string = 'balanced'): DesignRecipe {
-    
+  public generateRecipe(layoutId: string, baseFamily: string, brandStyle: string = 'balanced', brandSeed?: string): DesignRecipe {
+    // Texture picks below are seeded from brand identity + family/style instead of Math.random(),
+    // so the same brand doesn't randomly flip textures between posts (grid consistency).
+    const textureSeed = { tenantId: brandSeed || 'default_brand', slideIndex: 0, mood: brandStyle, goal: baseFamily };
+
     // Default fallback tokens (A baseline to prevent errors)
     let typography: TypographyTokens = {
       headlineWeight: 'medium',
@@ -61,7 +65,7 @@ export class DesignLanguageResolver {
         primitives.borders = true; // Elegant structural lines
         // Add variety to editorial textures instead of always using paper
         const edTextures: Array<'paper'|'grain'|'noise'|'none'> = ['paper', 'grain', 'noise', 'none'];
-        visual.texture = edTextures[Math.floor(Math.random() * edTextures.length)];
+        visual.texture = selectDeterministically(edTextures, textureSeed);
         break;
 
       case 'clinical':
@@ -163,7 +167,7 @@ export class DesignLanguageResolver {
         typography.tracking = 'wide';
         composition.whitespace = 'high';
         const edStyleTextures: Array<'paper'|'grain'|'noise'|'none'> = ['paper', 'grain', 'noise', 'none'];
-        visual.texture = edStyleTextures[Math.floor(Math.random() * edStyleTextures.length)];
+        visual.texture = selectDeterministically(edStyleTextures, textureSeed);
       }
     } 
     else if (styleKey.includes('bold') || styleKey.includes('campaign') || styleKey.includes('energetic')) {
@@ -177,7 +181,7 @@ export class DesignLanguageResolver {
       typography.headlineWeight = 'medium';
       typography.casing = 'natural';
       const wellnessTextures: Array<'paper'|'noise'|'grain'> = ['paper', 'noise', 'grain'];
-      visual.texture = wellnessTextures[Math.floor(Math.random() * wellnessTextures.length)];
+      visual.texture = selectDeterministically(wellnessTextures, textureSeed);
       imageTreatment.mask = 'soft_edge';
     }
     else if (styleKey.includes('clinical') || styleKey.includes('medical') || styleKey.includes('clean')) {

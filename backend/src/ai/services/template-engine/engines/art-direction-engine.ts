@@ -1,5 +1,6 @@
 import designKnowledgeMap from '../../../config/design-knowledge-map.json';
 import { VisualRecipe, ColorRecipe, TypographyRecipe, PrimitiveRecipe, TextureRecipe, HeroRecipe, IDesignIntent, ISemanticDesignSpec } from '../interfaces';
+import { selectDeterministically } from '../utils/deterministic-hash.util';
 
 // ─── 1. INTERFACES ───
 
@@ -545,7 +546,7 @@ export class ArtDirectionEngine {
   // SPRINT 4: VISUAL RECIPE GENERATOR
   // ==========================================
 
-  public generateVisualRecipe(intent: IDesignIntent, themeId: string): VisualRecipe {
+  public generateVisualRecipe(intent: IDesignIntent, themeId: string, brandSeed?: string): VisualRecipe {
     const isPop = themeId.includes('pop') || themeId.includes('vibrant');
     const isLuxury = themeId.includes('beauty') || themeId.includes('luxury') || intent.mood === 'luxury';
     const isOrganic = themeId.includes('organic') || themeId.includes('wellness') || intent.mood === 'organic';
@@ -606,17 +607,22 @@ export class ArtDirectionEngine {
       color.warmth = 'cool';
     }
 
+    // Texture choice is seeded deterministically per brand+family+mood (selectDeterministically)
+    // instead of Math.random() — otherwise the same brand's posts flip randomly between grain/
+    // paper/noise/none from one generation to the next, which reads as an inconsistent Instagram
+    // grid rather than one cohesive visual system.
+    const textureSeed = { tenantId: brandSeed || 'default_brand', slideIndex: 0, mood: intent.mood, goal: intent.family };
     if (intent.primitives.textureIntensity === 'heavy') {
       // Rotate through premium textures instead of always picking paper for organic/editorial
       const heavyTextures: Array<'paper' | 'grain' | 'noise'> = isOrganic
         ? ['paper', 'grain', 'paper', 'noise'] // paper weighted 2x for organic but not exclusive
         : ['grain', 'noise', 'grain', 'paper'];   // grain/noise for non-organic
-      texture.style = heavyTextures[Math.floor(Math.random() * heavyTextures.length)] as any;
+      texture.style = selectDeterministically(heavyTextures, textureSeed) as any;
       texture.intensity = 'heavy';
     } else if (intent.primitives.textureIntensity === 'subtle' || intent.primitives.textureIntensity === 'medium') {
       // For non-heavy: grain or none — linen is not in the supported style union
       const lightTextures: Array<'grain' | 'noise' | 'none'> = ['grain', 'noise', 'none'];
-      texture.style = lightTextures[Math.floor(Math.random() * lightTextures.length)] as any;
+      texture.style = selectDeterministically(lightTextures, textureSeed) as any;
       texture.intensity = intent.primitives.textureIntensity;
     } else {
       texture.style = 'none';

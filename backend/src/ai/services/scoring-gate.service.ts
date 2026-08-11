@@ -233,6 +233,7 @@ Does this slide look visually balanced, premium, and free of any text overlappin
         isCarousel,
         slidesCount,
         generatedBy,
+        imageBuffer: generatedPhotoBuffer,
       });
       if (judgeResult) {
         finalResult = judgeResult;
@@ -270,16 +271,21 @@ Does this slide look visually balanced, premium, and free of any text overlappin
     isCarousel: boolean;
     slidesCount: number;
     generatedBy: string;
+    imageBuffer?: Buffer;
   }): Promise<ScoringResult | null> {
-    const { caption, hashtags, isCarousel, slidesCount, generatedBy } = params;
+    const { caption, hashtags, isCarousel, slidesCount, generatedBy, imageBuffer } = params;
 
     const systemPrompt = `You are an expert social media brand auditor and creative director for beauty and wellness.
 Your task is to judge a social media post draft across 10 strategic dimensions and output a strict score and analysis.
 
+${imageBuffer
+  ? 'The final generated image is attached below. Use it directly — judge "Grid Fit" and "Visual Quality" from what you actually see in the pixels (composition, spacing, hierarchy, premium feel), not by inferring from the caption text.'
+  : 'No final image was available for this evaluation — score "Grid Fit" and "Visual Quality" conservatively based on available context only, and note in your comment that no image was reviewed.'}
+
 10-DIMENSIONAL RUBRIC:
 1. Brand Fit (Max 15): Does it sound like a premium, bespoke business, not a generic template?
-2. Grid Fit (Max 10): Does it maintain visual rhythm and structure?
-3. Visual Quality (Max 12): Is the layout elegant, composed, and premium?
+2. Grid Fit (Max 10): Does the image maintain visual rhythm and structure — balanced composition, clean hierarchy, would it sit well next to a premium Instagram grid?
+3. Visual Quality (Max 12): Is the layout elegant, composed, and premium — judged from the actual image, not assumed?
 4. Content Variety (Max 10): Does it avoid repeating the same post formats?
 5. Commercial Value (Max 10): Does it build authority or drive client conversion?
 6. Voice Accuracy (Max 10): Wrote in technician's voice, avoids AI tells (e.g. "luxurious", "obsessed", "glow up").
@@ -325,6 +331,16 @@ Slides Count: ${slidesCount}`;
     const openaiKey = process.env['GEMINI_API_KEY'];
     const geminiKey = process.env['GEMINI_API_KEY'];
 
+    // When the final image is available, attach it as a multimodal content part so the
+    // judge scores Grid Fit / Visual Quality from real pixels instead of the caption alone.
+    const imageDataUrl = imageBuffer ? `data:image/png;base64,${imageBuffer.toString('base64')}` : null;
+    const humanMessageContent: any = imageDataUrl
+      ? [
+          { type: 'text', text: userPrompt },
+          { type: 'image_url', image_url: { url: imageDataUrl } },
+        ]
+      : userPrompt;
+
     if (anthropicKey) {
       console.log('LLM Judge: Invoking Anthropic Claude 3.5 Sonnet (Master Judge)...');
       const claude = new ChatAnthropic({
@@ -333,7 +349,7 @@ Slides Count: ${slidesCount}`;
         maxTokens: 1000,
         anthropicApiKey: anthropicKey,
       });
-      const res = await claude.invoke([new SystemMessage(systemPrompt), new HumanMessage(userPrompt)]);
+      const res = await claude.invoke([new SystemMessage(systemPrompt), new HumanMessage({ content: humanMessageContent })]);
       responseText = typeof res.content === 'string' ? res.content : JSON.stringify(res.content);
     } else if (generatedBy.toLowerCase().includes('gemini') && openaiKey) {
       console.log('LLM Judge: Invoking OpenAI GPT-4o-mini (Cross-Judge)...');
@@ -349,7 +365,7 @@ Slides Count: ${slidesCount}`;
           { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
         ],
       });
-      const res = await gpt.invoke([new SystemMessage(systemPrompt), new HumanMessage(userPrompt)]);
+      const res = await gpt.invoke([new SystemMessage(systemPrompt), new HumanMessage({ content: humanMessageContent })]);
       responseText = typeof res.content === 'string' ? res.content : JSON.stringify(res.content);
     } else if (geminiKey) {
       console.log('LLM Judge: Invoking Gemini (Cross-Judge)...');
@@ -364,7 +380,11 @@ Slides Count: ${slidesCount}`;
         ],
       });
       const prompt = `${systemPrompt}\n\nUser Input:\n${userPrompt}`;
-      const res = await model.generateContent(prompt);
+      const contentParts: any[] = [prompt];
+      if (imageBuffer) {
+        contentParts.push({ inlineData: { data: imageBuffer.toString('base64'), mimeType: 'image/png' } });
+      }
+      const res = await model.generateContent(contentParts);
       responseText = res.response.text();
     } else {
       return null; // No LLM keys configured, trigger local fallback
