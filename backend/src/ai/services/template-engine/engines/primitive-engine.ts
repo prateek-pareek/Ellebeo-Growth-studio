@@ -1835,10 +1835,21 @@ export class PrimitiveEngine {
   }
 
   public renderPrimitive(name: string, ctx: PrimitiveContext, layer?: IDSLDecorationLayer | IDSLTextLayer): string {
-    const primitive = this.registry[name];
+    // Aliases for family-inject / theme names that map to real registry entries
+    const ALIASES: Record<string, string> = {
+      gallery_frame: 'museum_border',
+      masking_tape: 'editorial_tape',
+      gold_accents: 'elegant_line_art',
+      tape: 'editorial_tape',
+    };
+    const resolvedName = ALIASES[name] || name;
+    const primitive = this.registry[resolvedName];
     if (!primitive) {
-      console.warn(`[PrimitiveEngine] Warning: Primitive '${name}' not found.`);
+      console.warn(`[PrimitiveEngine] Warning: Primitive '${name}'${resolvedName !== name ? ` (alias→${resolvedName})` : ''} not found.`);
       return '';
+    }
+    if (resolvedName !== name) {
+      console.log(`[PrimitiveEngine] Aliased '${name}' → '${resolvedName}'`);
     }
 
     // --- Inject Responsive Helpers ---

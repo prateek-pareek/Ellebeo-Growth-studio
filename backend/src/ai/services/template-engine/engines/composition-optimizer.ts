@@ -325,18 +325,31 @@ export class CompositionOptimizer {
       let width = Math.max(Math.round(canvasW * 0.28), Math.min(regionWidth, regions.textRegion.width));
       x = Math.max(regions.textRegion.x, x);
 
+      // typography_hero: give the heading most of the text panel so occupancy can
+      // boost type into the available negative space (not a tiny estimate-tall box).
+      let boxH = estimatedHeights[layer.id];
+      if (priority === 'typography_hero' && layer.role === 'heading') {
+        const supportReserve = Math.round(regions.textRegion.height * 0.28);
+        boxH = Math.max(
+          boxH,
+          Math.round(regions.textRegion.height * 0.55),
+          Math.min(regions.textRegion.height - supportReserve, Math.round((typographyMetrics?.heroSize || canvasHeight * 0.1) * 2.4)),
+        );
+      }
+
       let box: BoundingBox = {
         x,
         y: currentY,
         width,
-        height: estimatedHeights[layer.id],
+        height: boxH,
       };
       box = this.clampBoxToSafe(box, constraints, canvasW, canvasHeight);
       box = this.clampBoxToRegion(box, regions.textRegion);
       layer.allocatedBox = box;
       (layer as any)._groupScale = groupScale;
       (layer as any)._estimatedFontSize = estimatedFontSizes[layer.id] * groupScale;
-      (layer as any)._preserveHeroSize = priority === 'typography_hero' && groupScale >= 0.92;
+      (layer as any)._preserveHeroSize = priority === 'typography_hero' && groupScale >= 0.88;
+      (layer as any)._textRegion = regions.textRegion;
       if (priority === 'cta_hero' && layer.role === 'heading') {
         (layer as any).component = (layer as any).component || 'solid_card';
       }

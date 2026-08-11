@@ -664,13 +664,19 @@ export class LayoutEngine {
       * (whitespace === 'tight' ? 1.12 : whitespace === 'airy' || whitespace === 'luxury' ? 0.92 : 1.0);
 
     if (visualPriority === 'typography_hero') {
-      const textShare = Math.min(0.70, Math.max(0.52, 0.58 * (0.9 + 0.15 * neg) * fillBoost));
+      // Moderate panel — hero presence comes from LARGE type inside the panel,
+      // not from stealing most of the photo. Keep image ≥ ~52% of primary axis.
+      // Airy/luxury whitespace should NOT shrink the panel (type fills the breathing room).
+      const typeFillBoost =
+        (density === 'high' ? 1.08 : density === 'low' ? 0.95 : 1.0)
+        * (whitespace === 'tight' ? 1.06 : whitespace === 'airy' || whitespace === 'luxury' ? 1.04 : 1.0);
+      const textShare = Math.min(0.48, Math.max(0.36, 0.42 * (0.95 + 0.05 * Math.min(neg, 1.2)) * typeFillBoost));
       const splitAxis: SpatialAllocationPolicy['splitAxis'] =
         flow === 'z_pattern' || flow === 'left_right' ? 'horizontal' : 'vertical';
       return {
         textShare,
-        minTextShare: 0.48,
-        maxTextShare: 0.72,
+        minTextShare: 0.34,
+        maxTextShare: 0.50, // hard cap — never crush photo to a sliver
         splitAxis,
         preferredTextBias: 'start',
       };
@@ -739,29 +745,32 @@ export class LayoutEngine {
   ): SpatialAllocationPolicy {
     const base = failedPolicy || LayoutEngine.deriveSpatialPolicy(priority);
     const escalated: SpatialAllocationPolicy = { ...base };
+    // typography_hero must keep a professional image presence
+    const shareCap = priority === 'typography_hero' ? 0.50
+      : priority === 'image_hero' ? 0.44
+        : 0.68;
 
     if (base.splitAxis === 'overlay' || reason === 'whitespace_tight_to_subject' || reason === 'collision') {
-      // Leave overlay family immediately — image must surrender space
       escalated.splitAxis = 'vertical';
-      escalated.textShare = Math.min(0.62, Math.max(0.42, (base.textShare || 0.28) * 1.55));
+      escalated.textShare = Math.min(shareCap, Math.max(0.36, (base.textShare || 0.28) * 1.35));
       escalated.preferredTextBias = base.preferredTextBias === 'start' ? 'end' : 'start';
     } else if (base.splitAxis === 'vertical') {
       escalated.splitAxis = 'horizontal';
-      escalated.textShare = Math.min(0.68, Math.max(0.45, base.textShare * 1.2));
+      escalated.textShare = Math.min(shareCap, Math.max(0.36, base.textShare * 1.12));
       escalated.preferredTextBias = base.preferredTextBias === 'start' ? 'end' : 'start';
     } else {
       escalated.splitAxis = 'vertical';
-      escalated.textShare = Math.min(0.75, Math.max(0.50, base.textShare * 1.35));
+      escalated.textShare = Math.min(shareCap, Math.max(0.38, base.textShare * 1.15));
       escalated.preferredTextBias = base.preferredTextBias === 'start' ? 'end' : 'start';
     }
 
     escalated.minTextShare = Math.min(escalated.textShare, Math.max(base.minTextShare, escalated.textShare * 0.85));
-    escalated.maxTextShare = Math.min(0.85, Math.max(base.maxTextShare, escalated.textShare * 1.15));
+    escalated.maxTextShare = Math.min(shareCap, Math.max(base.maxTextShare, escalated.textShare));
 
     console.log(
       `[SpatialEscalation] ${base.splitAxis}@${(base.textShare || 0).toFixed(2)} ` +
       `→ ${escalated.splitAxis}@${escalated.textShare.toFixed(2)} ` +
-      `(bias=${escalated.preferredTextBias} reason=${reason || 'retry'})`,
+      `(bias=${escalated.preferredTextBias} reason=${reason || 'retry'} priority=${priority} cap=${shareCap})`,
     );
 
     return escalated;

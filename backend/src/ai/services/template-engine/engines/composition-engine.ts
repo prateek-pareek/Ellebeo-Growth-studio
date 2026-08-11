@@ -1670,15 +1670,15 @@ export class CompositionEngine {
     let primitivesToInject: string[] = [];
 
     if (familyId === 'editorial') {
-      primitivesToInject = ['accent_rule', 'editorial_badge', 'thin_divider', 'gallery_frame'];
+      primitivesToInject = ['accent_rule', 'editorial_badge', 'thin_divider', 'museum_border'];
     } else if (familyId === 'clinical') {
       primitivesToInject = ['step_badge', 'metric_label', 'clinical_callout_box', 'measurement_lines'];
     } else if (familyId === 'scrapbook') {
-      primitivesToInject = ['masking_tape', 'torn_paper', 'handmade_mark', 'ink_stamp', 'polaroid_frame'];
+      primitivesToInject = ['editorial_tape', 'torn_paper', 'handmade_mark', 'ink_stamp', 'polaroid_frame'];
     } else if (familyId === 'minimalist') {
       primitivesToInject = ['minimal_grid', 'margin_rule', 'ghost_headline'];
     } else if (familyId === 'premium') {
-      primitivesToInject = ['premium_stars', 'elegant_line_art', 'gold_accents'];
+      primitivesToInject = ['premium_stars', 'elegant_line_art'];
     } else if (familyId === 'split') {
       primitivesToInject = ['split_seam_line', 'divider'];
     } else if (familyId === 'countdown') {
@@ -1686,7 +1686,7 @@ export class CompositionEngine {
     } else if (familyId === 'product') {
       primitivesToInject = ['product_halo_ring', 'geometric_badge'];
     } else if (familyId === 'before') { // before_after
-      primitivesToInject = ['transformation_arrow', 'masking_tape'];
+      primitivesToInject = ['transformation_arrow', 'editorial_tape'];
     } else if (familyId === 'testimonial') {
       primitivesToInject = ['quote_marks', 'star_rating_row', 'pull_quote'];
     } else if (familyId === 'quadrant') {
@@ -1696,7 +1696,7 @@ export class CompositionEngine {
     } else if (familyId === 'magazine') {
       primitivesToInject = ['editorial_sidebar', 'running_header', 'oversized_index'];
     } else if (familyId === 'polaroid') {
-      primitivesToInject = ['polaroid_frame', 'sticker', 'masking_tape'];
+      primitivesToInject = ['polaroid_frame', 'sticker', 'editorial_tape'];
     } else if (familyId === 'notification') {
       primitivesToInject = ['notification_icon_badge', 'status_chip'];
     } else if (familyId === 'announcement') {
