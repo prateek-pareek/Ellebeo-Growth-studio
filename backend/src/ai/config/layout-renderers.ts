@@ -297,21 +297,27 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
         // AI ART DIRECTION UPGRADE: Region-Based Extraction
         if (dsl.canvasRegions && (!imageLayer.mask || imageLayer.mask === 'rectangle' || imageLayer.mask === 'split')) {
           const region = dsl.canvasRegions.imageRegion;
+          const textPanel = dsl.canvasRegions.textRegion;
 
-          if (region.width < ctx.w) {
-            // Asymmetrical Bleed or Split (Photo does not occupy 100% of canvas width)
-            const splitPhoto = await processPortraitFit(ctx.imageBuffer, region.width, region.height, ctx.validBackgroundColor);
+          // Image surrenders width OR height (typography_hero panel splits)
+          if (region.width < ctx.w - 2 || region.height < ctx.h - 2) {
+            const splitPhoto = await processPortraitFit(
+              ctx.imageBuffer,
+              Math.max(1, region.width),
+              Math.max(1, region.height),
+              ctx.validBackgroundColor,
+            );
 
             const baseImageBuffer = await sharp({
               create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validBackgroundColor },
-            }).composite([{ input: splitPhoto, top: region.y, left: region.x }]).png().toBuffer();
+            }).composite([{ input: splitPhoto, top: Math.max(0, region.y), left: Math.max(0, region.x) }]).png().toBuffer();
 
             return {
               baseImage: sharp(baseImageBuffer),
-              compositeTop: dsl.canvasRegions.textRegion.y,
+              compositeTop: textPanel?.y ?? 0,
               compositeBottom: 0,
-              compositeLeft: dsl.canvasRegions.textRegion.x,
-              compositeRight: ctx.w - (dsl.canvasRegions.textRegion.x + dsl.canvasRegions.textRegion.width)
+              compositeLeft: textPanel?.x ?? 0,
+              compositeRight: ctx.w - ((textPanel?.x ?? 0) + (textPanel?.width ?? ctx.w)),
             };
           }
         }
@@ -1120,10 +1126,16 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     // Do not seed a fake full-frame hero-image occupied region — that lied about free space
     // for any fallback path without allocatedBox.
 
-    // Text-band readability scrim: when type sits in a dedicated band over the photo
+    // Text-band / panel readability: scrim only when type overlays the photo (overlay axis).
+    // Dedicated panels sit on brand background — no scrim needed.
     const textBand = (dsl as any)?.canvasRegions?.textRegion;
+    const spatialAxis = (dsl as any)?._spatialPolicy?.splitAxis
+      || ((dsl as any)?.canvasRegions?.imageRegion?.width < ctx.w - 2
+        || (dsl as any)?.canvasRegions?.imageRegion?.height < ctx.h - 2
+        ? 'panel'
+        : 'overlay');
     const priority = ctx.designLanguage?.intent?.visualPriority || ctx.designSpec?.composition?.visualPriority;
-    if (textBand && (priority === 'image_hero' || priority === 'cta_hero' || priority === 'composition_hero')) {
+    if (textBand && spatialAxis === 'overlay' && (priority === 'image_hero' || priority === 'cta_hero' || priority === 'composition_hero')) {
       const pad = 16;
       const scrimOpacity = priority === 'cta_hero' ? 0.55 : 0.42;
       const scrimFill = (ctx.validDepthColor && getLuminanceSafe(ctx.validDepthColor) < 140)

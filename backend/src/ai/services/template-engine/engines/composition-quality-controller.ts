@@ -174,6 +174,8 @@ export class CompositionQualityController {
     preferredWidth: number;
     intent: CompositionIntent;
     subjectHits: (region: BoundingBox, heightNeed: number) => boolean;
+    /** Override readable scale floor (typography_hero uses a higher floor) */
+    minAcceptScale?: number;
   }): {
     region: BoundingBox | null;
     wrapWidthFactor: number;
@@ -184,6 +186,7 @@ export class CompositionQualityController {
     const actions: FitActionLog[] = [];
     const { layoutEngine, constraints, candidates, intent, subjectHits } = params;
     const neededHeight = params.neededHeight;
+    const minAccept = params.minAcceptScale ?? CompositionQualityController.MIN_ACCEPT_SCALE;
     let wrapWidthFactor = 1.0;
     let scale = 1.0;
 
@@ -209,8 +212,11 @@ export class CompositionQualityController {
       return best;
     };
 
-    // Stage 1 — WRAP
-    for (const factor of [1.0, 0.88, 0.76, 0.65]) {
+    // Stage 1 — WRAP (preferred over scale for typography_hero)
+    const wrapFactors = intent.visualPriority === 'typography_hero'
+      ? [1.0, 0.92, 0.84, 0.76]
+      : [1.0, 0.88, 0.76, 0.65];
+    for (const factor of wrapFactors) {
       const wrapHeightBoost = 1 + (1 - factor) * 0.3;
       const tryH = neededHeight * wrapHeightBoost;
       const region = pickBest(tryH, factor);
@@ -222,8 +228,12 @@ export class CompositionQualityController {
     }
     actions.push({ stage: 'wrap', detail: 'wrap exhausted' });
 
-    // Stage 2 — SCALE (stop before type becomes unreadable)
-    for (const s of [0.94, 0.88, 0.82]) {
+    // Stage 2 — SCALE (last resort for typography_hero — higher floor)
+    const scaleSteps = intent.visualPriority === 'typography_hero'
+      ? [0.96, 0.92]
+      : [0.94, 0.88, 0.82];
+    for (const s of scaleSteps) {
+      if (s < minAccept) continue;
       const tryH = neededHeight * s;
       const region = pickBest(tryH, wrapWidthFactor);
       if (region) {
@@ -232,14 +242,14 @@ export class CompositionQualityController {
       }
       scale = s;
     }
-    actions.push({ stage: 'scale', detail: 'scale exhausted at readable floor' });
+    actions.push({ stage: 'scale', detail: `scale exhausted at floor=${minAccept.toFixed(2)}` });
 
-    // Stage 3 — RELOCATE (only accept if scale stays readable)
+    // Stage 3 — RELOCATE
     let safest: BoundingBox | null = null;
     let bestDist = -1;
     const subjects = params.layoutEngine.getProtectedSubjects();
     for (const c of candidates) {
-      if (subjectHits(c, neededHeight * CompositionQualityController.MIN_ACCEPT_SCALE)) continue;
+      if (subjectHits(c, neededHeight * minAccept)) continue;
       const cx = c.x + c.width / 2;
       const cy = c.y + c.height / 2;
       let dist = 0;
@@ -261,7 +271,7 @@ export class CompositionQualityController {
       if (safest.height < neededHeight * relocateScale && neededHeight > 0) {
         relocateScale = safest.height / neededHeight;
       }
-      if (relocateScale >= CompositionQualityController.MIN_ACCEPT_SCALE) {
+      if (relocateScale >= minAccept) {
         actions.push({ stage: 'relocate', detail: `safest pocket scale=${relocateScale.toFixed(2)}` });
         return { region: safest, wrapWidthFactor, scale: relocateScale, suggestLayoutChange: false, actions };
       }
@@ -271,7 +281,6 @@ export class CompositionQualityController {
       });
     }
 
-    // Stage 4 — do not accept; alternate layout required
     actions.push({ stage: 'layout_change', detail: 'wrap+scale+relocate exhausted — alternate layout required' });
     return {
       region: null,

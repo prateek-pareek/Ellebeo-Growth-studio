@@ -17,6 +17,20 @@ export interface BoundingBox {
   height: number;
 }
 
+/**
+ * Ratio-driven spatial policy. visualPriority decides whether type owns a real panel
+ * (image surrenders canvas) or only overlays a band on a full-bleed photo.
+ */
+export interface SpatialAllocationPolicy {
+  /** Target fraction of the primary split axis reserved for text */
+  textShare: number;
+  minTextShare: number;
+  maxTextShare: number;
+  /** overlay = photo full-bleed + text band; horizontal/vertical = image surrenders space */
+  splitAxis: 'horizontal' | 'vertical' | 'overlay';
+  preferredTextBias: 'start' | 'end';
+}
+
 export interface LayoutConstraints {
   safeX: number;
   safeY: number;
@@ -575,6 +589,7 @@ export class LayoutEngine {
 
   /**
    * Resolves absolute X, Y coordinates from semantic layout anchors using Whitespace Topology.
+   * When targetRegion is provided (priority-allocated panel), place inside that box only.
    */
   public resolveAnchor(
     anchor: string, 
@@ -584,11 +599,26 @@ export class LayoutEngine {
     targetRegion?: BoundingBox
   ): { x: number; y: number } {
     
+    if (targetRegion) {
+      let x = targetRegion.x + targetRegion.width / 2;
+      let y = targetRegion.y + Math.min(40, targetRegion.height * 0.08);
+      if (anchor.includes('left')) x = targetRegion.x;
+      else if (anchor.includes('right')) x = targetRegion.x + Math.max(0, targetRegion.width - boxWidth);
+      else x = targetRegion.x + Math.max(0, (targetRegion.width - boxWidth) / 2);
+
+      if (anchor.includes('top')) y = targetRegion.y;
+      else if (anchor.includes('bottom')) y = targetRegion.y + Math.max(0, targetRegion.height - boxHeight);
+      else if (anchor === 'center' || anchor.includes('middle')) {
+        y = targetRegion.y + Math.max(0, (targetRegion.height - boxHeight) / 2);
+      }
+      return { x, y };
+    }
+
     // Grid alignment for left heavy layout (asymmetrical splits)
-    if (anchor === 'split_left' && constraints.grid && !targetRegion) {
+    if (anchor === 'split_left' && constraints.grid) {
         return { x: constraints.grid.tracks[0], y: constraints.safeY + 40 };
     }
-    if (anchor === 'split_right' && constraints.grid && !targetRegion) {
+    if (anchor === 'split_right' && constraints.grid) {
         return { x: constraints.grid.tracks[6], y: constraints.safeY + 40 };
     }
 
@@ -608,80 +638,272 @@ export class LayoutEngine {
   }
 
   /**
-   * Deterministically allocates canvas space into non-overlapping regions for Image and Text.
-   * For image_hero / cta_hero full-bleed, keeps the photo full-bleed but reserves a text band
-   * in negative space (top or bottom) so type does not land randomly on the subject.
+   * Derive scalable spatial ratios from visualPriority (+ whitespace / reading flow).
+   * This is the structural difference between typography_hero and image_hero —
+   * not a font-size knob.
+   */
+  public static deriveSpatialPolicy(
+    visualPriority: string,
+    opts?: { negativeSpaceMultiplier?: number; readingFlow?: string },
+  ): SpatialAllocationPolicy {
+    const neg = Math.max(0.5, Math.min(2.0, opts?.negativeSpaceMultiplier ?? 1.0));
+    const flow = opts?.readingFlow || 'center_down';
+
+    if (visualPriority === 'typography_hero') {
+      // Type owns a real panel; image surrenders canvas share
+      const textShare = Math.min(0.70, Math.max(0.52, 0.58 * (0.9 + 0.15 * neg)));
+      const splitAxis: SpatialAllocationPolicy['splitAxis'] =
+        flow === 'z_pattern' || flow === 'left_right' ? 'horizontal' : 'vertical';
+      return {
+        textShare,
+        minTextShare: 0.48,
+        maxTextShare: 0.72,
+        splitAxis,
+        preferredTextBias: 'start',
+      };
+    }
+
+    if (visualPriority === 'image_hero') {
+      return {
+        textShare: Math.min(0.34, Math.max(0.24, 0.28 * (0.95 + 0.05 * neg))),
+        minTextShare: 0.22,
+        maxTextShare: 0.36,
+        splitAxis: 'overlay',
+        preferredTextBias: 'start',
+      };
+    }
+
+    if (visualPriority === 'cta_hero') {
+      return {
+        textShare: Math.min(0.40, Math.max(0.30, 0.34 * (0.95 + 0.05 * neg))),
+        minTextShare: 0.28,
+        maxTextShare: 0.42,
+        splitAxis: 'overlay',
+        preferredTextBias: 'end',
+      };
+    }
+
+    // composition_hero — balanced panel split
+    return {
+      textShare: Math.min(0.55, Math.max(0.40, 0.45 * (0.9 + 0.1 * neg))),
+      minTextShare: 0.38,
+      maxTextShare: 0.58,
+      splitAxis: flow === 'center_down' ? 'vertical' : 'horizontal',
+      preferredTextBias: 'start',
+    };
+  }
+
+  /**
+   * Expand textShare to fit content need (before any font shrink), clamped to policy max.
+   */
+  public static fitTextShareToContent(
+    policy: SpatialAllocationPolicy,
+    neededTextPx: number,
+    primaryAxisPx: number,
+  ): SpatialAllocationPolicy {
+    if (primaryAxisPx <= 0 || neededTextPx <= 0) return policy;
+    const neededShare = neededTextPx / primaryAxisPx;
+    const textShare = Math.min(
+      policy.maxTextShare,
+      Math.max(policy.textShare, neededShare * 1.08),
+    );
+    return { ...policy, textShare };
+  }
+
+  /**
+   * Allocates image vs text regions from visualPriority spatial policy.
+   * typography_hero / composition_hero: image surrenders a real panel (non-overlapping).
+   * image_hero / cta_hero: photo stays full-bleed; text gets a subject-aware overlay band.
+   * Subject/face protection chooses which side the text panel occupies.
    */
   public allocateRegions(
     behavior: { imageBleedExtent?: string; readingJourney?: string },
     constraints: LayoutConstraints,
     visualPriority: string = 'image_hero',
     subjectHint?: BoundingBox,
-  ): { imageRegion: BoundingBox; textRegion: BoundingBox } {
-    const isZPattern = behavior.readingJourney === 'z_pattern';
-    
-    // Default: Full bleed (text overlays image directly, requires scrims)
-    let imageRegion: BoundingBox = { x: 0, y: 0, width: this.canvasWidth, height: this.canvasHeight };
-    let textRegion: BoundingBox = { x: constraints.safeX, y: constraints.safeY, width: constraints.contentMaxWidth, height: this.canvasHeight - constraints.safeY * 2 };
+    spatialPolicy?: SpatialAllocationPolicy,
+  ): { imageRegion: BoundingBox; textRegion: BoundingBox; spatial: SpatialAllocationPolicy } {
+    const policy = spatialPolicy || LayoutEngine.deriveSpatialPolicy(visualPriority, {
+      readingFlow: behavior.readingJourney === 'z_pattern' ? 'z_pattern' : 'center_down',
+    });
 
-    let textRatio = 0.50;
-    if (visualPriority === 'typography_hero') textRatio = 0.65;
-    else if (visualPriority === 'image_hero') textRatio = 0.30;
-    else if (visualPriority === 'cta_hero') textRatio = 0.42;
-
-    if (behavior.imageBleedExtent === 'asymmetrical_65') {
-      const splitW = Math.floor(this.canvasWidth * (isZPattern ? textRatio : (1.0 - textRatio)));
-      if (isZPattern) {
-        imageRegion = { x: 0, y: 0, width: splitW, height: this.canvasHeight };
-        textRegion = { x: splitW + 40, y: constraints.safeY, width: (this.canvasWidth - splitW) - 40 - constraints.safeX, height: this.canvasHeight - constraints.safeY * 2 };
-      } else {
-        imageRegion = { x: this.canvasWidth - splitW, y: 0, width: splitW, height: this.canvasHeight };
-        textRegion = { x: constraints.safeX, y: constraints.safeY, width: (this.canvasWidth - splitW) - 40 - constraints.safeX, height: this.canvasHeight - constraints.safeY * 2 };
-      }
-    } else if (behavior.imageBleedExtent === 'split_50') {
-      const splitW = Math.floor(this.canvasWidth / 2);
-      if (isZPattern) {
-        imageRegion = { x: 0, y: 0, width: splitW, height: this.canvasHeight };
-        textRegion = { x: splitW + 40, y: constraints.safeY, width: splitW - 40 - constraints.safeX, height: this.canvasHeight - constraints.safeY * 2 };
-      } else {
-        imageRegion = { x: splitW, y: 0, width: splitW, height: this.canvasHeight };
-        textRegion = { x: constraints.safeX, y: constraints.safeY, width: splitW - 40 - constraints.safeX, height: this.canvasHeight - constraints.safeY * 2 };
-      }
+    // Legacy bleed overrides still honored when they force a stronger split
+    let axis = policy.splitAxis;
+    if (behavior.imageBleedExtent === 'asymmetrical_65' && axis === 'overlay') {
+      axis = 'horizontal';
+    } else if (behavior.imageBleedExtent === 'split_50' && axis === 'overlay') {
+      axis = 'horizontal';
     } else if (
-      behavior.imageBleedExtent === 'full_bleed_band'
-      || visualPriority === 'image_hero'
-      || visualPriority === 'cta_hero'
+      (behavior.imageBleedExtent === 'full_bleed_band' || behavior.imageBleedExtent === 'full')
+      && (visualPriority === 'image_hero' || visualPriority === 'cta_hero')
     ) {
-      // Photo stays full-bleed; text is constrained to a safe band away from the subject
-      imageRegion = { x: 0, y: 0, width: this.canvasWidth, height: this.canvasHeight };
-      const bandRatio = visualPriority === 'cta_hero' ? 0.34 : 0.28;
-      const bandH = Math.max(
-        Math.round(this.canvasHeight * bandRatio),
-        Math.round(constraints.safeY + this.canvasHeight * 0.18),
-      );
-      const subjectCy = subjectHint
-        ? subjectHint.y + subjectHint.height / 2
-        : this.canvasHeight * 0.45;
-      // Prefer the band farther from the subject mass
-      const preferBottom = subjectCy < this.canvasHeight * 0.55;
-      if (preferBottom) {
-        const y = this.canvasHeight - constraints.margins.bottom - bandH;
-        textRegion = {
+      axis = 'overlay';
+    }
+
+    const bias = this.resolveTextBias(policy.preferredTextBias, axis, subjectHint);
+    const gutter = Math.max(24, Math.round(constraints.safeX * 0.5));
+
+    if (axis === 'horizontal') {
+      // Image surrenders width — text gets a dedicated column
+      const textW = Math.round(this.canvasWidth * policy.textShare);
+      const imageW = this.canvasWidth - textW;
+      if (bias === 'start') {
+        const textRegion = {
           x: constraints.safeX,
-          y: Math.max(constraints.safeY, y),
-          width: constraints.contentMaxWidth,
-          height: bandH,
+          y: constraints.safeY,
+          width: Math.max(120, textW - constraints.safeX - gutter / 2),
+          height: this.canvasHeight - constraints.safeY - constraints.margins.bottom,
         };
-      } else {
-        textRegion = {
+        const imageRegion = {
+          x: textW,
+          y: 0,
+          width: imageW,
+          height: this.canvasHeight,
+        };
+        return {
+          imageRegion,
+          textRegion: this.carveSubjectsFromRegion(textRegion),
+          spatial: { ...policy, splitAxis: axis, preferredTextBias: bias },
+        };
+      }
+      const textRegion = {
+        x: imageW + gutter / 2,
+        y: constraints.safeY,
+        width: Math.max(120, this.canvasWidth - imageW - constraints.safeX - gutter / 2),
+        height: this.canvasHeight - constraints.safeY - constraints.margins.bottom,
+      };
+      const imageRegion = { x: 0, y: 0, width: imageW, height: this.canvasHeight };
+      return {
+        imageRegion,
+        textRegion: this.carveSubjectsFromRegion(textRegion),
+        spatial: { ...policy, splitAxis: axis, preferredTextBias: bias },
+      };
+    }
+
+    if (axis === 'vertical') {
+      // Image surrenders height — text gets a dedicated row panel
+      const textH = Math.round(this.canvasHeight * policy.textShare);
+      const imageH = this.canvasHeight - textH;
+      if (bias === 'start') {
+        const textRegion = {
           x: constraints.safeX,
           y: constraints.safeY,
           width: constraints.contentMaxWidth,
-          height: bandH,
+          height: Math.max(100, textH - constraints.safeY - gutter / 2),
         };
+        const imageRegion = {
+          x: 0,
+          y: textH,
+          width: this.canvasWidth,
+          height: imageH,
+        };
+        return {
+          imageRegion,
+          textRegion: this.carveSubjectsFromRegion(textRegion),
+          spatial: { ...policy, splitAxis: axis, preferredTextBias: bias },
+        };
+      }
+      const textRegion = {
+        x: constraints.safeX,
+        y: imageH + gutter / 2,
+        width: constraints.contentMaxWidth,
+        height: Math.max(100, this.canvasHeight - imageH - constraints.margins.bottom - gutter / 2),
+      };
+      const imageRegion = { x: 0, y: 0, width: this.canvasWidth, height: imageH };
+      return {
+        imageRegion,
+        textRegion: this.carveSubjectsFromRegion(textRegion),
+        spatial: { ...policy, splitAxis: axis, preferredTextBias: bias },
+      };
+    }
+
+    // Overlay band — photo full-bleed; text in subject-aware band (image_hero / cta_hero)
+    const imageRegion: BoundingBox = { x: 0, y: 0, width: this.canvasWidth, height: this.canvasHeight };
+    const bandH = Math.max(
+      Math.round(this.canvasHeight * policy.textShare),
+      Math.round(constraints.safeY + this.canvasHeight * 0.16),
+    );
+    let textRegion: BoundingBox;
+    if (bias === 'end') {
+      const y = this.canvasHeight - constraints.margins.bottom - bandH;
+      textRegion = {
+        x: constraints.safeX,
+        y: Math.max(constraints.safeY, y),
+        width: constraints.contentMaxWidth,
+        height: bandH,
+      };
+    } else {
+      textRegion = {
+        x: constraints.safeX,
+        y: constraints.safeY,
+        width: constraints.contentMaxWidth,
+        height: bandH,
+      };
+    }
+
+    return {
+      imageRegion,
+      textRegion: this.carveSubjectsFromRegion(textRegion),
+      spatial: { ...policy, splitAxis: 'overlay', preferredTextBias: bias },
+    };
+  }
+
+  private resolveTextBias(
+    preferred: 'start' | 'end',
+    axis: 'horizontal' | 'vertical' | 'overlay',
+    subjectHint?: BoundingBox,
+  ): 'start' | 'end' {
+    if (!subjectHint) return preferred;
+    if (axis === 'horizontal') {
+      const cx = subjectHint.x + subjectHint.width / 2;
+      // Put text opposite the subject mass
+      return cx < this.canvasWidth * 0.5 ? 'end' : 'start';
+    }
+    const cy = subjectHint.y + subjectHint.height / 2;
+    return cy < this.canvasHeight * 0.55 ? 'end' : 'start';
+  }
+
+  /**
+   * After panel allocation, shrink text region away from protected subjects that still intersect.
+   * Keeps composition valid before QC instead of relying on font crush.
+   */
+  private carveSubjectsFromRegion(region: BoundingBox): BoundingBox {
+    const subjects = this.protectedSubjects.length
+      ? this.protectedSubjects
+      : (this.subjectBox || this.faceBox ? [this.subjectBox || this.faceBox!] : []);
+    if (subjects.length === 0) return region;
+
+    let result = { ...region };
+    for (const s of subjects) {
+      const overlaps =
+        result.x < s.x + s.width && result.x + result.width > s.x
+        && result.y < s.y + s.height && result.y + result.height > s.y;
+      if (!overlaps) continue;
+
+      const spaceLeft = s.x - result.x;
+      const spaceRight = (result.x + result.width) - (s.x + s.width);
+      const spaceTop = s.y - result.y;
+      const spaceBottom = (result.y + result.height) - (s.y + s.height);
+      const best = Math.max(spaceLeft, spaceRight, spaceTop, spaceBottom);
+      if (best <= 40) continue;
+
+      if (best === spaceLeft && spaceLeft > 40) {
+        result.width = spaceLeft;
+      } else if (best === spaceRight && spaceRight > 40) {
+        const nx = s.x + s.width;
+        result.width = result.x + result.width - nx;
+        result.x = nx;
+      } else if (best === spaceTop && spaceTop > 40) {
+        result.height = spaceTop;
+      } else if (best === spaceBottom && spaceBottom > 40) {
+        const ny = s.y + s.height;
+        result.height = result.y + result.height - ny;
+        result.y = ny;
       }
     }
 
-    return { imageRegion, textRegion };
+    result.width = Math.max(80, result.width);
+    result.height = Math.max(60, result.height);
+    return result;
   }
 }
