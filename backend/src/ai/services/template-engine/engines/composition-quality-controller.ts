@@ -131,11 +131,17 @@ export class CompositionQualityController {
     metrics: TypographyMetricsHint | undefined,
     canvasH: number,
     visualPriority?: VisualPriority,
+    preferredWidth?: number,
   ): { heights: number[]; total: number; gap: number; fontSizes: number[] } {
     const gapRatio = visualPriority === 'image_hero' ? 0.02 : 0.014;
     const gap = Math.round(canvasH * gapRatio);
     const heights: number[] = [];
     const fontSizes: number[] = [];
+    // Use real text-column width when known — never invent a pocket from canvasH*0.7 alone
+    const measureWidth = Math.max(
+      canvasH * 0.28,
+      preferredWidth || canvasH * 0.55,
+    );
 
     for (const item of roles) {
       const base =
@@ -149,17 +155,20 @@ export class CompositionQualityController {
         item.text || 'X',
         item.role,
         canvasH,
-        canvasH * 0.7,
+        measureWidth,
         visualPriority,
       );
       fontSizes.push(adapted);
+      const words = (item.text || '').split(/\s+/).filter(Boolean);
+      const avgCharW = adapted * 0.62;
+      const charsPerLine = Math.max(4, Math.floor(measureWidth / Math.max(1, avgCharW)));
       const lineEstimate = Math.max(
         1,
-        Math.ceil((item.text || '').split(/\s+/).filter(Boolean).length / (item.role === 'heading' ? 3 : 6)),
+        Math.ceil(words.reduce((acc, w) => acc + w.length + 1, 0) / charsPerLine),
       );
       const lineHeight = item.role === 'heading' ? 1.15 : 1.3;
       heights.push(
-        Math.round(adapted * lineHeight * Math.min(lineEstimate, item.role === 'heading' ? 4 : 2)),
+        Math.round(adapted * lineHeight * Math.min(lineEstimate, item.role === 'heading' ? 4 : 3)),
       );
     }
 
@@ -585,35 +594,38 @@ export class CompositionQualityController {
     const familyHint = intent.family || this.inferFamilyFromLayoutId(currentLayoutId);
     const roleHint = intent.role || 'default';
     const others = availableIds.filter(id => id !== currentLayoutId);
+    const sameFamily = familyHint
+      ? others.filter(id => id.toLowerCase().includes(String(familyHint).toLowerCase()))
+      : [];
+    // Prefer same-family candidates; only widen if too few
+    const pool = sameFamily.length >= 1 ? sameFamily : others;
 
-    const scored = others
+    const scored = pool
       .map(id => {
-        let s = 1; // base score
+        let s = 1;
 
-        // 1. Same family (Highest Priority)
         if (familyHint && id.toLowerCase().includes(String(familyHint).toLowerCase())) {
-          s += 50; 
-        } 
-        
-        // 2. Semantically compatible family based on Role/Intent
+          s += 100; // hard preference for same family
+        }
+
         if (roleHint === 'cta' || intent.visualPriority === 'cta_hero') {
-          if (id.includes('cta') || id.includes('promo') || id.includes('premium')) {
-             s += 30; // Strongly prefer other conversion-oriented templates
-          }
+          if (id.includes('cta') || id.includes('promo') || id.includes('premium')) s += 30;
         }
         if (intent.visualPriority === 'typography_hero') {
-          if (id.includes('quote') || id.includes('minimal') || id.includes('editorial')) {
-             s += 20;
+          if (id.includes('quote') || id.includes('minimal') || id.includes('editorial') || id.includes('type')) {
+            s += 40;
           }
         }
+        if (intent.visualPriority === 'image_hero') {
+          if (id.includes('hero') || id.includes('photo') || id.includes('portrait')) s += 30;
+        }
 
-        // 3. Flow and Structure matching
         if (id.includes(flow)) s += 10;
         if (flow === 'center_down' && id.includes('z_pattern')) s += 3;
         if (flow === 'z_pattern' && (id.includes('center_down') || id.includes('center'))) s += 3;
 
-        // Note: We NO LONGER penalize the family just because we are escalating.
-        // Escalation means changing the spatial policy (axis/share) *within* a compatible layout.
+        // Soft-penalize ids that already failed with same category signature
+        if (failedSignatures.some(f => f.category === 'collision' && id === currentLayoutId)) s -= 5;
 
         return { id, s };
       })
@@ -622,7 +634,7 @@ export class CompositionQualityController {
     return scored.slice(0, max).map(x => x.id);
   }
 
-  private inferFamilyFromLayoutId(id: string): string | null {
+  public inferFamilyFromLayoutId(id: string): string | null {
     const families = ['editorial', 'minimalist', 'minimal', 'clinical', 'premium', 'scrapbook', 'architectural', 'split', 'luxury', 'vintage', 'polaroid', 'countdown', 'testimonial'];
     return families.find(f => id.includes(f)) || null;
   }

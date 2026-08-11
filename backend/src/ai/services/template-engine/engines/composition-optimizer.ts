@@ -407,27 +407,40 @@ export class CompositionOptimizer {
       groupScale,
     });
 
-    // Content integrity: required headline words must survive allocation estimates
+    // Content integrity: measure against the REAL allocated box (not a fake ch-pocket).
+    // If full hero size doesn't pack, try controlled font shrink within allowed range BEFORE rejecting.
     const headlineText = (content?.headline || '').trim();
+    const headingLayer = groupedTextLayers.find(l => l.role === 'heading');
     const contentIntegrity = this.validateContentIntegrity(
       headlineText,
-      groupedTextLayers.find(l => l.role === 'heading'),
+      headingLayer,
       estimatedFontSizes,
       regions.textRegion,
       groupScale,
+      priority,
+      canvasHeight,
     );
 
-    // GATE PREDICATE (single source of truth):
-    // suggestLayoutChange iff quality fails OR fit found no region OR content truncated
-    // OR soft spatial issues require geometry change.
-    // Do NOT keep fit.suggestLayoutChange when quality.pass and content is intact
-    // unless spatial escalation is needed.
+    // Apply typography repair scale if integrity found a fit at reduced size
+    if (contentIntegrity.ok && contentIntegrity.suggestedFontScale != null && contentIntegrity.suggestedFontScale < 0.999) {
+      const s = contentIntegrity.suggestedFontScale;
+      if (headingLayer) {
+        (headingLayer as any)._estimatedFontSize =
+          ((headingLayer as any)._estimatedFontSize || estimatedFontSizes[headingLayer.id] || canvasHeight * 0.06) * s;
+        (headingLayer as any)._groupScale = Math.min(groupScale, s);
+      }
+    }
+
+    // GATE PREDICATE:
+    // Integrity repairable failures → typography repair (NOT spatial escalation / template reject)
     const fitExhausted = fit.suggestLayoutChange && !fit.region;
+    const needsTypographyRepair = !contentIntegrity.ok && !!contentIntegrity.repairable;
     let suggestLayoutChange =
       !quality.pass
       || fitExhausted
-      || !contentIntegrity.ok
-      || !!quality.needsSpatialEscalation;
+      || (!contentIntegrity.ok && !contentIntegrity.repairable)
+      || !!quality.needsSpatialEscalation
+      || needsTypographyRepair;
 
     const allFitActions = [...fitActions];
     allFitActions.push(
@@ -435,6 +448,7 @@ export class CompositionOptimizer {
       `threshold=${quality.passThreshold ?? 7.5} ` +
       `critical=[${(quality.critical || []).join(',') || 'none'}] ` +
       `fitExhausted=${fitExhausted} spatialEscalation=${!!quality.needsSpatialEscalation} ` +
+      `typographyRepair=${needsTypographyRepair} ` +
       `contentIntegrity=${contentIntegrity.ok ? 'ok' : contentIntegrity.reason}`,
     );
 
@@ -446,7 +460,12 @@ export class CompositionOptimizer {
       console.warn(
         `[CompositionQC] Visual gate FAILED (score=${quality.score.toFixed(1)} ` +
         `threshold=${quality.passThreshold ?? 7.5} critical=${quality.critical.join('|') || 'none'} ` +
-        `issues=${quality.issues.join('|') || 'none'}). Triggering alternate/spatial escalation.`,
+        `issues=${quality.issues.join('|') || 'none'}). Triggering repair.`,
+      );
+    } else if (needsTypographyRepair) {
+      allFitActions.push(`typography_repair:${contentIntegrity.reason}`);
+      console.warn(
+        `[CompositionQC] Typography repair required (not template reject): ${contentIntegrity.reason}`,
       );
     } else if (quality.needsSpatialEscalation) {
       allFitActions.push(`quality_soft_fail:spatial_escalation;issues=${quality.issues.join(',')}`);
@@ -459,7 +478,6 @@ export class CompositionOptimizer {
       console.warn(`[CompositionQC] Content integrity FAILED: ${contentIntegrity.reason}`);
     } else {
       allFitActions.push(`quality_pass:score=${quality.score.toFixed(1)}`);
-      // Clear stale fit suggestion when quality+content are fine
       suggestLayoutChange = false;
     }
 
@@ -470,6 +488,12 @@ export class CompositionOptimizer {
       clusterGap,
       priority,
     );
+
+    const failureCategory = needsTypographyRepair || (!contentIntegrity.ok && contentIntegrity.repairable)
+      ? 'readability'
+      : !contentIntegrity.ok
+        ? 'readability'
+        : (quality.failureCategory || (suggestLayoutChange ? 'spatial_allocation' : 'none'));
 
     (optimized as any)._compositionMeta = {
       suggestLayoutChange,
@@ -485,10 +509,10 @@ export class CompositionOptimizer {
       qualityIssues: quality.issues,
       qualityCritical: quality.critical,
       qualityMetrics: quality.metrics,
-      failureCategory: !contentIntegrity.ok
-        ? 'renderer'
-        : (quality.failureCategory || (suggestLayoutChange ? 'spatial_allocation' : 'none')),
-      needsSpatialEscalation: !!quality.needsSpatialEscalation || !contentIntegrity.ok,
+      failureCategory,
+      // Integrity/measure must NOT force axis escalation
+      needsSpatialEscalation: !!quality.needsSpatialEscalation,
+      needsTypographyRepair,
       contentIntegrity,
       gatePredicate: {
         pass: quality.pass,
@@ -496,6 +520,7 @@ export class CompositionOptimizer {
         threshold: quality.passThreshold ?? 7.5,
         fitExhausted,
         needsSpatialEscalation: !!quality.needsSpatialEscalation,
+        needsTypographyRepair,
         contentOk: contentIntegrity.ok,
         suggestLayoutChange,
       },
@@ -546,8 +571,9 @@ export class CompositionOptimizer {
   }
 
   /**
-   * Verify the allocated pocket can hold the full headline (word count / measure),
-   * not just the first token.
+   * Verify the allocated text box can hold the full headline after wrap + allowed shrink.
+   * Measures against allocatedBox/textRegion pixels — NOT a fake "ch pocket".
+   * If full size fails, try controlled font shrink within priority-allowed range (typography repair).
    */
   private validateContentIntegrity(
     headline: string,
@@ -555,50 +581,127 @@ export class CompositionOptimizer {
     fontSizes: Record<string, number>,
     textRegion: BoundingBox,
     groupScale: number,
-  ): { ok: boolean; reason?: string; expectedWords?: number; estimableWords?: number } {
+    priority: string = 'image_hero',
+    canvasH: number = 1080,
+  ): {
+    ok: boolean;
+    reason?: string;
+    expectedWords?: number;
+    estimableWords?: number;
+    repairable?: boolean;
+    suggestedFontScale?: number;
+  } {
     if (!headline) return { ok: true };
     const words = headline.split(/\s+/).filter(Boolean);
-    if (words.length <= 1) return { ok: true };
+    if (words.length === 0) return { ok: true };
 
-    const fontSize = (headingLayer
-      ? (fontSizes[headingLayer.id] || (headingLayer as any)._estimatedFontSize)
-      : undefined) || textRegion.height * 0.2;
-    const scaled = fontSize * (groupScale || 1);
-    const avgCharW = scaled * 0.62;
-    const maxCharsPerLine = Math.max(4, Math.floor(textRegion.width / Math.max(1, avgCharW)));
-    const lineH = scaled * 1.15;
-    const maxLines = Math.max(1, Math.floor(textRegion.height / Math.max(1, lineH)));
+    const box = headingLayer?.allocatedBox || textRegion;
+    const measureW = Math.max(40, box.width);
+    const measureH = Math.max(40, box.height);
+    const baseFont =
+      (headingLayer
+        ? (fontSizes[headingLayer.id] || (headingLayer as any)._estimatedFontSize)
+        : undefined)
+      || Math.round(measureH * 0.35);
+    const startSize = baseFont * (groupScale || 1);
 
-    // Greedy whole-word pack estimate
-    let linesUsed = 1;
-    let lineChars = 0;
-    let fitted = 0;
-    for (const w of words) {
-      const need = (lineChars === 0 ? 0 : 1) + w.length;
-      if (lineChars + need <= maxCharsPerLine) {
-        lineChars += need;
-        fitted++;
-      } else if (linesUsed < maxLines && w.length <= maxCharsPerLine) {
-        linesUsed++;
-        lineChars = w.length;
-        fitted++;
-      } else if (linesUsed < maxLines) {
-        // word alone too wide — still count as needing space (integrity fail if we can't fit)
-        break;
+    // Adapt to actual column width first (same as render path)
+    const adapted = this.qc.adaptFontSizeToContent(
+      startSize,
+      headline,
+      'heading',
+      canvasH,
+      measureW,
+      priority,
+    );
+
+    const minRatio = priority === 'typography_hero' ? 0.065 : 0.038;
+    const minFont = Math.round(canvasH * minRatio);
+    const tryPack = (fontPx: number): { fitted: number; lines: number; charsPerLine: number } => {
+      const avgCharW = fontPx * 0.62;
+      const charsPerLine = Math.max(4, Math.floor(measureW / Math.max(1, avgCharW)));
+      const lineH = fontPx * 1.15;
+      const maxLines = Math.max(1, Math.floor(measureH / Math.max(1, lineH)));
+      let linesUsed = 1;
+      let lineChars = 0;
+      let fitted = 0;
+      for (const w of words) {
+        const need = (lineChars === 0 ? 0 : 1) + w.length;
+        if (lineChars + need <= charsPerLine) {
+          lineChars += need;
+          fitted++;
+        } else if (linesUsed < maxLines) {
+          // Word alone longer than line: still place on its own line if possible
+          if (w.length > charsPerLine && linesUsed < maxLines) {
+            linesUsed++;
+            lineChars = w.length;
+            fitted++;
+          } else if (w.length <= charsPerLine) {
+            linesUsed++;
+            lineChars = w.length;
+            fitted++;
+          } else {
+            break;
+          }
+        } else {
+          break;
+        }
+      }
+      return { fitted, lines: maxLines, charsPerLine };
+    };
+
+    let pack = tryPack(adapted);
+    if (pack.fitted >= words.length) {
+      return {
+        ok: true,
+        expectedWords: words.length,
+        estimableWords: pack.fitted,
+        suggestedFontScale: adapted / Math.max(1, startSize),
+      };
+    }
+
+    // Controlled shrink within allowed range — typography repair, not template reject
+    let lo = minFont;
+    let hi = adapted;
+    let bestScale: number | null = null;
+    for (let i = 0; i < 8; i++) {
+      const mid = Math.round((lo + hi) / 2);
+      const midPack = tryPack(mid);
+      if (midPack.fitted >= words.length) {
+        bestScale = mid / Math.max(1, startSize);
+        lo = mid + 1; // try larger
+        pack = midPack;
       } else {
-        break;
+        hi = mid - 1;
       }
     }
 
-    if (fitted < words.length) {
+    if (bestScale != null) {
+      console.log(
+        `[ContentIntegrity] Typography repair: full size failed, fits at scale=${bestScale.toFixed(2)} ` +
+        `in ${Math.round(measureW)}x${Math.round(measureH)}px box (${pack.lines} lines × ~${pack.charsPerLine}ch)`,
+      );
       return {
-        ok: false,
-        reason: `headline_truncated:${fitted}/${words.length}_words fit in ${maxLines}×${maxCharsPerLine}ch pocket`,
+        ok: true,
         expectedWords: words.length,
-        estimableWords: fitted,
+        estimableWords: words.length,
+        suggestedFontScale: bestScale,
       };
     }
-    return { ok: true, expectedWords: words.length, estimableWords: fitted };
+
+    // Still can't fit even at min — repairable via relocate/wrap, not axis thrash
+    const reason =
+      `headline_measure:${pack.fitted}/${words.length}_words ` +
+      `at~${Math.round(adapted)}px in ${Math.round(measureW)}x${Math.round(measureH)}px ` +
+      `(${pack.lines}×${pack.charsPerLine}ch capacity)`;
+    console.warn(`[ContentIntegrity] ${reason}`);
+    return {
+      ok: false,
+      reason,
+      expectedWords: words.length,
+      estimableWords: pack.fitted,
+      repairable: true,
+    };
   }
 
   private preferredAnchorsForFlow(

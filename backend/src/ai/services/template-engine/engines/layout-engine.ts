@@ -734,34 +734,82 @@ export class LayoutEngine {
   }
 
   /**
-   * Escalate to a structurally different spatial contract.
-   * overlay → vertical panel → horizontal column → larger share.
-   * Never returns the same axis+share signature.
+   * In-place spatial repair: flip bias / nudge share WITHOUT changing axis.
+   * Used for typography/collision repair before any axis escalation.
    */
-  public static escalateSpatialPolicy(
+  public static adjustSpatialPolicyInPlace(
     failedPolicy: SpatialAllocationPolicy | undefined,
     priority: string,
     reason?: string,
   ): SpatialAllocationPolicy {
     const base = failedPolicy || LayoutEngine.deriveSpatialPolicy(priority);
+    const shareCap = priority === 'typography_hero' ? 0.50
+      : priority === 'image_hero' ? 0.44
+        : 0.68;
+    const adjusted: SpatialAllocationPolicy = {
+      ...base,
+      preferredTextBias: base.preferredTextBias === 'start' ? 'end' : 'start',
+      textShare: Math.min(shareCap, Math.max(base.minTextShare, base.textShare * 1.08)),
+      maxTextShare: Math.min(shareCap, base.maxTextShare),
+    };
+    console.log(
+      `[SpatialAdjust] ${base.splitAxis}@${(base.textShare || 0).toFixed(2)} ` +
+      `bias ${base.preferredTextBias}→${adjusted.preferredTextBias} ` +
+      `share→${adjusted.textShare.toFixed(2)} (same axis, reason=${reason || 'repair'} priority=${priority})`,
+    );
+    return adjusted;
+  }
+
+  /**
+   * Escalate to a structurally different spatial contract.
+   * Bounded: will not oscillate vertical↔horizontal if that axis was already tried.
+   * Preserves visualPriority share caps so hierarchy is not destroyed.
+   */
+  public static escalateSpatialPolicy(
+    failedPolicy: SpatialAllocationPolicy | undefined,
+    priority: string,
+    reason?: string,
+    triedAxes: Array<'overlay' | 'vertical' | 'horizontal'> = [],
+  ): SpatialAllocationPolicy {
+    const base = failedPolicy || LayoutEngine.deriveSpatialPolicy(priority);
     const escalated: SpatialAllocationPolicy = { ...base };
-    // typography_hero must keep a professional image presence
     const shareCap = priority === 'typography_hero' ? 0.50
       : priority === 'image_hero' ? 0.44
         : 0.68;
 
-    if (base.splitAxis === 'overlay' || reason === 'whitespace_tight_to_subject' || reason === 'collision') {
-      escalated.splitAxis = 'vertical';
-      escalated.textShare = Math.min(shareCap, Math.max(0.36, (base.textShare || 0.28) * 1.35));
+    const pickAxis = (preferred: 'vertical' | 'horizontal'): 'vertical' | 'horizontal' | 'overlay' => {
+      if (!triedAxes.includes(preferred)) return preferred;
+      const other = preferred === 'vertical' ? 'horizontal' : 'vertical';
+      if (!triedAxes.includes(other)) return other;
+      // Both split axes tried — stay on current axis and only adjust share/bias
+      return base.splitAxis;
+    };
+
+    if (base.splitAxis === 'overlay' || reason === 'whitespace_tight_to_subject') {
+      escalated.splitAxis = pickAxis('vertical');
+      escalated.textShare = Math.min(shareCap, Math.max(0.36, (base.textShare || 0.28) * 1.25));
       escalated.preferredTextBias = base.preferredTextBias === 'start' ? 'end' : 'start';
     } else if (base.splitAxis === 'vertical') {
-      escalated.splitAxis = 'horizontal';
-      escalated.textShare = Math.min(shareCap, Math.max(0.36, base.textShare * 1.12));
-      escalated.preferredTextBias = base.preferredTextBias === 'start' ? 'end' : 'start';
+      const next = pickAxis('horizontal');
+      if (next === base.splitAxis) {
+        // Oscillation guard: grow share / flip bias only
+        escalated.textShare = Math.min(shareCap, base.textShare * 1.1);
+        escalated.preferredTextBias = base.preferredTextBias === 'start' ? 'end' : 'start';
+      } else {
+        escalated.splitAxis = next;
+        escalated.textShare = Math.min(shareCap, Math.max(0.36, base.textShare * 1.08));
+        escalated.preferredTextBias = base.preferredTextBias === 'start' ? 'end' : 'start';
+      }
     } else {
-      escalated.splitAxis = 'vertical';
-      escalated.textShare = Math.min(shareCap, Math.max(0.38, base.textShare * 1.15));
-      escalated.preferredTextBias = base.preferredTextBias === 'start' ? 'end' : 'start';
+      const next = pickAxis('vertical');
+      if (next === base.splitAxis) {
+        escalated.textShare = Math.min(shareCap, base.textShare * 1.1);
+        escalated.preferredTextBias = base.preferredTextBias === 'start' ? 'end' : 'start';
+      } else {
+        escalated.splitAxis = next;
+        escalated.textShare = Math.min(shareCap, Math.max(0.38, base.textShare * 1.08));
+        escalated.preferredTextBias = base.preferredTextBias === 'start' ? 'end' : 'start';
+      }
     }
 
     escalated.minTextShare = Math.min(escalated.textShare, Math.max(base.minTextShare, escalated.textShare * 0.85));
@@ -770,7 +818,8 @@ export class LayoutEngine {
     console.log(
       `[SpatialEscalation] ${base.splitAxis}@${(base.textShare || 0).toFixed(2)} ` +
       `→ ${escalated.splitAxis}@${escalated.textShare.toFixed(2)} ` +
-      `(bias=${escalated.preferredTextBias} reason=${reason || 'retry'} priority=${priority} cap=${shareCap})`,
+      `(bias=${escalated.preferredTextBias} reason=${reason || 'retry'} ` +
+      `priority=${priority} cap=${shareCap} tried=[${triedAxes.join(',')||'none'}])`,
     );
 
     return escalated;

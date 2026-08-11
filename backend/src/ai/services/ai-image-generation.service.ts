@@ -840,11 +840,25 @@ CRITICAL IMAGE REQUIREMENTS:
           const MAX_SLIDE_ATTEMPTS = 3;
           let result: Awaited<ReturnType<AiImageGenerationService['generateSlide']>> | null = null;
           let attemptLayout = currentSlideLayout;
+          const slideQC = new CompositionQualityController();
+          const lockedFamily = slideQC.inferFamilyFromLayoutId(currentSlideLayout);
           for (let attempt = 0; attempt < MAX_SLIDE_ATTEMPTS; attempt++) {
             if (attempt > 0) {
-              const fallbackPool = layoutPool.filter(id => id !== attemptLayout);
-              attemptLayout = fallbackPool[Math.floor(((concept.index || i) + attempt) % Math.max(1, fallbackPool.length))] || attemptLayout;
-              console.warn(`[SlideQC] Regenerating slide ${concept.index} attempt ${attempt + 1} with layout '${attemptLayout}' (prev fail: ${result?.failReason || 'unknown'})`);
+              // Same-family ranked candidates only — never random redesign
+              const alts = slideQC.suggestAlternateLayouts(
+                attemptLayout,
+                layoutPool,
+                {
+                  visualPriority: agentDecisions[i]?.designSpec?.composition?.visualPriority,
+                  family: lockedFamily || undefined,
+                },
+                3,
+              );
+              attemptLayout = alts[(attempt - 1) % Math.max(1, alts.length)] || attemptLayout;
+              console.warn(
+                `[SlideQC] Retry slide ${concept.index} attempt ${attempt + 1} with same-family layout '${attemptLayout}' ` +
+                `(prev: ${result?.failReason || 'soft'}). Slide will not be excluded.`,
+              );
             }
             result = await this.generateSlide({
               photoUrl: photoUrl || '',
@@ -881,9 +895,16 @@ CRITICAL IMAGE REQUIREMENTS:
             });
             if (!result.compositionFailed) break;
           }
-          if (!result || result.compositionFailed) {
-            console.error(`[SlideQC] Slide ${concept.index} still failed after retries (${result?.failReason}). Excluding from carousel.`);
+          // NEVER exclude a requested carousel slide — keep best rendered URL
+          if (!result?.url) {
+            console.error(`[SlideQC] Slide ${concept.index} produced no URL — excluding only due to hard failure.`);
             return null;
+          }
+          if (result.compositionFailed) {
+            console.warn(
+              `[SlideQC] Slide ${concept.index} soft-accepted after retries (${result.failReason || 'composition'}). ` +
+              `Keeping in carousel to preserve slide count.`,
+            );
           }
           return {
             url: result.url,
@@ -1019,11 +1040,24 @@ CRITICAL IMAGE REQUIREMENTS:
           const MAX_FRAME_ATTEMPTS = 3;
           let result: Awaited<ReturnType<AiImageGenerationService['generateSlide']>> | null = null;
           let attemptLayout = currentSlideLayout;
+          const frameQC = new CompositionQualityController();
+          const lockedFamily = frameQC.inferFamilyFromLayoutId(currentSlideLayout);
           for (let attempt = 0; attempt < MAX_FRAME_ATTEMPTS; attempt++) {
             if (attempt > 0) {
-              const fallbackPool = layoutPool.filter(id => id !== attemptLayout);
-              attemptLayout = fallbackPool[Math.floor(((frame.index || i) + attempt) % Math.max(1, fallbackPool.length))] || attemptLayout;
-              console.warn(`[SlideQC] Regenerating frame ${frame.index} attempt ${attempt + 1} with layout '${attemptLayout}'`);
+              const alts = frameQC.suggestAlternateLayouts(
+                attemptLayout,
+                layoutPool,
+                {
+                  visualPriority: agentDecisions[i]?.designSpec?.composition?.visualPriority,
+                  family: lockedFamily || undefined,
+                },
+                3,
+              );
+              attemptLayout = alts[(attempt - 1) % Math.max(1, alts.length)] || attemptLayout;
+              console.warn(
+                `[SlideQC] Retry frame ${frame.index} attempt ${attempt + 1} with same-family layout '${attemptLayout}'. ` +
+                `Frame will not be excluded.`,
+              );
             }
             result = await this.generateSlide({
               photoUrl: photoUrl || '',
@@ -1060,9 +1094,14 @@ CRITICAL IMAGE REQUIREMENTS:
             });
             if (!result.compositionFailed) break;
           }
-          if (!result || result.compositionFailed) {
-            console.error(`[SlideQC] Frame ${frame.index} still failed after retries. Excluding.`);
+          if (!result?.url) {
+            console.error(`[SlideQC] Frame ${frame.index} produced no URL — excluding only due to hard failure.`);
             return null;
+          }
+          if (result.compositionFailed) {
+            console.warn(
+              `[SlideQC] Frame ${frame.index} soft-accepted after retries. Keeping in story to preserve frame count.`,
+            );
           }
           return {
             url: result.url,
@@ -1509,126 +1548,185 @@ CRITICAL IMAGE REQUIREMENTS:
 
         if (optResult.suggestLayoutChange) {
           const meta0 = (optimizedDsl as any)?._compositionMeta || {};
-          const failedSignatures: Array<{ axis?: string; share?: number; category: string }> = [];
+          const failedSignatures: Array<{ axis?: string; share?: number; category: string; textKey?: string }> = [];
+          const visualPriority = designLanguage?.intent?.visualPriority || 'image_hero';
+          const lockedIntent = {
+            visualPriority,
+            readingFlow: designLanguage?.intent?.readingFlow,
+            family: designLanguage?.intent?.family
+              || compositionQC.inferFamilyFromLayoutId(computedLayoutType)
+              || undefined,
+          };
           let currentCategory = meta0.failureCategory || 'spatial_allocation';
+          const regionKey = (dsl: any) => {
+            const tr = dsl?._compositionMeta?.textRegion || dsl?.canvasRegions?.textRegion;
+            return tr ? `${Math.round(tr.x)},${Math.round(tr.y)},${Math.round(tr.width)},${Math.round(tr.height)}` : 'none';
+          };
           failedSignatures.push({
             axis: (optimizedDsl as any)?._spatialPolicy?.splitAxis,
             share: (optimizedDsl as any)?._spatialPolicy?.textShare,
             category: currentCategory,
+            textKey: regionKey(optimizedDsl),
           });
 
           console.warn(
-            `[CompositionQC] Layout '${computedLayoutType}' needs retry ` +
-            `(category=${currentCategory} gate=${JSON.stringify(meta0.gatePredicate || {})}). ` +
-            `Actions: ${optResult.fitActions.slice(-3).join(' | ')}`,
+            `[CompositionQC] Layout '${computedLayoutType}' needs repair ` +
+            `(category=${currentCategory} priority=${visualPriority} gate=${JSON.stringify(meta0.gatePredicate || {})}). ` +
+            `Preserving Template Agent selection — repair before alternate.`,
           );
 
-          // Escalate spatial contract IMMEDIATELY when geometry is the problem —
-          // do not burn alternate template IDs on the same overlay signature.
           let workingPolicy = (optimizedDsl as any)?._spatialPolicy || geometryOut.spatial;
-          const shouldEscalate =
-            !!meta0.needsSpatialEscalation
-            || currentCategory === 'spatial_allocation'
-            || currentCategory === 'collision'
-            || (meta0.qualityIssues || []).includes('whitespace_tight_to_subject');
+          const triedAxes: Array<'overlay' | 'vertical' | 'horizontal'> = [];
+          if (workingPolicy?.splitAxis) triedAxes.push(workingPolicy.splitAxis);
+          const seenRegions = new Set<string>([regionKey(optimizedDsl)]);
+          let bestAttempt = optResult;
+          let bestScore = meta0.qualityScore ?? 0;
 
-          if (shouldEscalate) {
-            workingPolicy = LayoutEngine.escalateSpatialPolicy(
-              workingPolicy,
-              designLanguage?.intent?.visualPriority || 'image_hero',
-              (meta0.qualityIssues || [])[0] || currentCategory,
-            );
-            // First retry: same template, new spatial contract
-            const sameLayoutRetry = runOptimize(computedLayoutType, rawDsl, workingPolicy);
-            console.log(
-              `[Diagnostic Fallback] Attempt 1 (spatial-only) | Template: ${computedLayoutType} | ` +
-              `Axis: ${(sameLayoutRetry.dsl as any)?._spatialPolicy?.splitAxis} ` +
-              `Share: ${((sameLayoutRetry.dsl as any)?._spatialPolicy?.textShare || 0).toFixed(2)} | ` +
-              `Category: ${(sameLayoutRetry.dsl as any)?._compositionMeta?.failureCategory || (sameLayoutRetry.suggestLayoutChange ? 'unknown' : 'PASS')}`,
-            );
-            if (!sameLayoutRetry.suggestLayoutChange) {
-              optimizedDsl = sameLayoutRetry.dsl;
-              optResult = sameLayoutRetry;
+          const considerBest = (res: typeof optResult) => {
+            const score = (res.dsl as any)?._compositionMeta?.qualityScore ?? 0;
+            if (score >= bestScore) {
+              bestScore = score;
+              bestAttempt = res;
+            }
+          };
+
+          // --- Same-template bounded repair (typography → in-place → escalate once) ---
+          const maxSameTemplateRepairs = 3;
+          for (let repair = 1; repair <= maxSameTemplateRepairs && optResult.suggestLayoutChange; repair++) {
+            const meta = (optResult.dsl as any)?._compositionMeta || {};
+            const issues: string[] = meta.qualityIssues || [];
+            currentCategory = meta.failureCategory || currentCategory;
+
+            let nextPolicy = workingPolicy;
+            if (meta.needsTypographyRepair || currentCategory === 'readability') {
+              // Typography first: same axis, flip bias / slight share — do NOT change axis
+              nextPolicy = LayoutEngine.adjustSpatialPolicyInPlace(
+                workingPolicy,
+                visualPriority,
+                meta.contentIntegrity?.reason || 'typography_repair',
+              );
+            } else if (currentCategory === 'collision' || issues.includes('subject_collision') || issues.includes('text_collision')) {
+              nextPolicy = LayoutEngine.adjustSpatialPolicyInPlace(
+                workingPolicy,
+                visualPriority,
+                'collision',
+              );
+            } else if (meta.needsSpatialEscalation || currentCategory === 'spatial_allocation') {
+              nextPolicy = LayoutEngine.escalateSpatialPolicy(
+                workingPolicy,
+                visualPriority,
+                issues[0] || currentCategory,
+                triedAxes,
+              );
             } else {
-              failedSignatures.push({
-                axis: (sameLayoutRetry.dsl as any)?._spatialPolicy?.splitAxis,
-                share: (sameLayoutRetry.dsl as any)?._spatialPolicy?.textShare,
-                category: (sameLayoutRetry.dsl as any)?._compositionMeta?.failureCategory || 'spatial_allocation',
-              });
-              workingPolicy = LayoutEngine.escalateSpatialPolicy(
-                (sameLayoutRetry.dsl as any)?._spatialPolicy || workingPolicy,
-                designLanguage?.intent?.visualPriority || 'image_hero',
-                'same_signature_retry',
+              nextPolicy = LayoutEngine.adjustSpatialPolicyInPlace(
+                workingPolicy,
+                visualPriority,
+                currentCategory,
               );
             }
+
+            const retry = runOptimize(computedLayoutType, rawDsl, nextPolicy);
+            const rk = regionKey(retry.dsl);
+            const axis = (retry.dsl as any)?._spatialPolicy?.splitAxis;
+            console.log(
+              `[Diagnostic Fallback] Attempt ${repair} (same-template) | Template: ${computedLayoutType} | ` +
+              `Axis: ${axis} Share: ${((retry.dsl as any)?._spatialPolicy?.textShare || 0).toFixed(2)} | ` +
+              `textRegion=${rk} | ` +
+              `Category: ${(retry.dsl as any)?._compositionMeta?.failureCategory || (retry.suggestLayoutChange ? 'unknown' : 'PASS')}`,
+            );
+
+            if (axis && !triedAxes.includes(axis)) triedAxes.push(axis);
+            considerBest(retry);
+
+            if (seenRegions.has(rk) && retry.suggestLayoutChange) {
+              console.warn(`[Diagnostic Fallback] textRegion unchanged (${rk}) — stopping this config`);
+              workingPolicy = nextPolicy;
+              optResult = retry;
+              optimizedDsl = retry.dsl;
+              break;
+            }
+            seenRegions.add(rk);
+
+            workingPolicy = (retry.dsl as any)?._spatialPolicy || nextPolicy;
+            optResult = retry;
+            optimizedDsl = retry.dsl;
+            failedSignatures.push({
+              axis,
+              share: (retry.dsl as any)?._spatialPolicy?.textShare,
+              category: (retry.dsl as any)?._compositionMeta?.failureCategory || currentCategory,
+              textKey: rk,
+            });
+
+            if (!retry.suggestLayoutChange) break;
           }
 
+          // --- Same-family Template Agent candidates (preserve intent) ---
           if (optResult.suggestLayoutChange) {
             const alternates = compositionQC.suggestAlternateLayouts(
               computedLayoutType,
               Object.keys(COMPILED_LAYOUTS),
-              {
-                visualPriority: designLanguage?.intent?.visualPriority,
-                readingFlow: designLanguage?.intent?.readingFlow,
-                family: designLanguage?.intent?.family,
-              },
-              4,
+              lockedIntent,
+              3,
               failedSignatures,
             );
 
-            let attempt = 1;
+            let attempt = maxSameTemplateRepairs;
             for (const altId of alternates) {
               attempt++;
               const altDsl = COMPILED_LAYOUTS[altId];
               if (!altDsl) continue;
 
-              // Always escalate when prior attempts shared the same axis
-              const axes = failedSignatures.map(f => f.axis).filter(Boolean);
-              const sameAxis = axes.length > 0 && axes.every(a => a === axes[0]);
-              if (sameAxis || shouldEscalate) {
-                workingPolicy = LayoutEngine.escalateSpatialPolicy(
-                  workingPolicy,
-                  designLanguage?.intent?.visualPriority || 'image_hero',
-                  sameAxis ? 'same_axis_family' : 'alternate_template',
-                );
-              }
-
-              const altResult = runOptimize(altId, altDsl, workingPolicy);
+              // Fresh policy derived from locked visualPriority — not a failed foreign geometry
+              const altPolicy = LayoutEngine.deriveSpatialPolicy(visualPriority, {
+                readingFlow: lockedIntent.readingFlow,
+              });
+              const altResult = runOptimize(altId, altDsl, altPolicy);
               const altAxis = (altResult.dsl as any)?._spatialPolicy?.splitAxis;
-              const altShare = (altResult.dsl as any)?._spatialPolicy?.textShare;
+              const altKey = regionKey(altResult.dsl);
               console.log(
-                `[Diagnostic Fallback] Attempt ${attempt} | Template: ${altId} | ` +
-                `Axis: ${altAxis} Share: ${(altShare || 0).toFixed(2)} | ` +
+                `[Diagnostic Fallback] Attempt ${attempt} (same-family) | Template: ${altId} | ` +
+                `Axis: ${altAxis} Share: ${((altResult.dsl as any)?._spatialPolicy?.textShare || 0).toFixed(2)} | ` +
+                `textRegion=${altKey} | priority=${visualPriority} | ` +
                 `Category: ${(altResult.dsl as any)?._compositionMeta?.failureCategory || (altResult.suggestLayoutChange ? 'unknown' : 'PASS')}`,
               );
+              considerBest(altResult);
 
               if (!altResult.suggestLayoutChange) {
                 computedLayoutType = altId;
                 optimizedDsl = altResult.dsl;
                 optResult = altResult;
-                console.log(`[CompositionQC] Accepted alternate arrangement '${altId}' (${altAxis}@${(altShare || 0).toFixed(2)})`);
+                console.log(`[CompositionQC] Accepted same-family alternate '${altId}' (priority=${visualPriority})`);
                 break;
               }
-
               failedSignatures.push({
                 axis: altAxis,
-                share: altShare,
+                share: (altResult.dsl as any)?._spatialPolicy?.textShare,
                 category: (altResult.dsl as any)?._compositionMeta?.failureCategory || 'spatial_allocation',
+                textKey: altKey,
               });
-              workingPolicy = (altResult.dsl as any)?._spatialPolicy || workingPolicy;
             }
           }
 
+          // Soft-accept best attempt — NEVER drop the slide from the carousel
           if (optResult.suggestLayoutChange) {
-            compositionFailed = true;
-            failReason = failReason || `visual_gate:${(optimizedDsl as any)?._compositionMeta?.qualityIssues?.join(',') || 'exhausted'}`;
-            console.warn(`[CompositionQC] No alternate passed visual gate — marking slide failed for regenerate`);
+            optimizedDsl = bestAttempt.dsl;
+            optResult = { ...bestAttempt, suggestLayoutChange: false };
+            if ((optimizedDsl as any)._compositionMeta) {
+              (optimizedDsl as any)._compositionMeta.softAccepted = true;
+              (optimizedDsl as any)._compositionMeta.suggestLayoutChange = false;
+            }
+            console.warn(
+              `[CompositionQC] Soft-accepting best composition for '${computedLayoutType}' ` +
+              `(score=${bestScore.toFixed?.(1) ?? bestScore}, priority=${visualPriority}). ` +
+              `Slide will remain in carousel.`,
+            );
           }
         } else if (optResult.fitActions.length) {
           console.log(`[CompositionQC] Fit cascade: ${optResult.fitActions.join(' | ')}`);
         }
 
-        // Incomplete slide: heading pocket missing or empty content
+        // Incomplete slide: ensure heading exists; if missing, keep soft-accepted DSL (still render)
         const textLayers = (optimizedDsl?.layers || []).filter((l: any) => l.type === 'text' || l.type === 'text_group');
         const hasHeadingBox = textLayers.some((l: any) =>
           (l.role === 'heading' || (l.children || []).some((c: any) => c.role === 'heading'))
@@ -1636,8 +1734,9 @@ CRITICAL IMAGE REQUIREMENTS:
           && !(l as any)._omitForComposition,
         );
         if (textLayers.length > 0 && !hasHeadingBox && (effectiveHeadline || overlayText)) {
-          compositionFailed = true;
-          failReason = failReason || 'missing_heading_allocation';
+          console.warn(`[CompositionQC] Missing heading allocation — rendering best-effort slide (not excluding)`);
+          failReason = failReason || 'missing_heading_allocation_soft';
+          // Do NOT set compositionFailed — carousel must keep this slide
         }
       }
 
