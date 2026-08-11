@@ -3,6 +3,14 @@ import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { ChatAnthropic } from '@langchain/anthropic';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
+import { MEDICAL_OUTCOME_TERMS, MEDICAL_URGENCY_TERMS } from '../config/medical-claim-terms';
+
+// Phase 4 (BRAND_DNA_GUIDED_V2 — /brand_dna_implementation_plan.md §7): the
+// LLM judge is told a pass threshold of 78 in its own prompt (see
+// runLlmJudge's systemPrompt below) — fine for a regular beauty business, but
+// AHPRA compliance must not rely on the model remembering a stricter number.
+// This constant is the code-enforced floor applied AFTER the judge responds.
+const MEDICAL_PASS_THRESHOLD = 88;
 
 export interface ScoringResult {
   passed: boolean;
@@ -57,6 +65,7 @@ export class ScoringGateService {
     generatedPhotoBuffer?: Buffer;
     faceBox?: { x: number; y: number; w: number; h: number };
     textBox?: { x: number; y: number; w: number; h: number };
+    isMedicalPractitioner?: boolean;
   }): Promise<ScoringResult> {
     const {
       caption,
@@ -72,7 +81,8 @@ export class ScoringGateService {
       originalPhotoBuffer,
       generatedPhotoBuffer,
       faceBox,
-      textBox
+      textBox,
+      isMedicalPractitioner = false,
     } = params;
 
     // ── Layer 1 & 2: Face Protection & Overlap Auditor (Gemini Vision) ──
@@ -178,6 +188,30 @@ Answer STRICTLY with a JSON object:
       };
     }
 
+    // AHPRA deterministic gate (medical-aesthetics only) — checked BEFORE the
+    // LLM judge runs, so a claim-like caption is never left to the judge's
+    // discretion. Zero tolerance: any single match is an immediate hard fail.
+    if (isMedicalPractitioner) {
+      const normalized = caption.toLowerCase();
+      const outcomeMatch = MEDICAL_OUTCOME_TERMS.find((t) => normalized.includes(t));
+      const urgencyMatch = MEDICAL_URGENCY_TERMS.find((t) => normalized.includes(t));
+      const claimMatch = outcomeMatch ?? urgencyMatch;
+      if (claimMatch) {
+        const tag = outcomeMatch ? 'ahpra_outcome_claim' : 'ahpra_urgency_tactic';
+        if (tenantId && prisma) {
+          await this.persistFailureLog(prisma, tenantId, 'CONTENT', tag, 0);
+        }
+        return {
+          passed: false,
+          score: 20,
+          failures: [`AHPRA compliance: caption contains a prohibited term for medical-aesthetics accounts: "${claimMatch}"`],
+          reason: 'Quality gate failed: AHPRA-regulated claim or urgency tactic detected.',
+          failureType: 'CONTENT',
+          reasonTag: tag,
+        };
+      }
+    }
+
     // ── Layer 3: Subjective Brand Check (Gemini Vision) ──
     if (generatedPhotoBuffer && geminiKey) {
       try {
@@ -243,6 +277,20 @@ Does this slide look visually balanced, premium, and free of any text overlappin
     } catch (err) {
       console.error('LLM Judge failed or timed out. Falling back to local rule-based heuristic scoring:', err);
       finalResult = this.runLocalFallbackScoring({ caption, hashtags, blacklist, isCarousel, slidesCount });
+    }
+
+    // Code-enforced stricter threshold for medical-aesthetics accounts — the
+    // LLM judge is only ever told the general 78 threshold in its own prompt,
+    // so a judge-passed result must be re-checked against the real AHPRA
+    // floor here rather than trusted at face value.
+    if (isMedicalPractitioner && finalResult.passed && finalResult.score < MEDICAL_PASS_THRESHOLD) {
+      finalResult = {
+        ...finalResult,
+        passed: false,
+        reason: `Quality gate failed: AHPRA-regulated accounts require a score of ${MEDICAL_PASS_THRESHOLD}+ (scored ${finalResult.score}).`,
+        failureType: 'CONTENT',
+        reasonTag: finalResult.reasonTag || 'ahpra_threshold_not_met',
+      };
     }
 
     // Persist failure logs strictly in DB

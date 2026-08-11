@@ -8,7 +8,7 @@ import { ConsentGuard } from '../guards/consent.guard';
 import { ModelRouter } from './model-router';
 import { PromptBuilder } from './prompt-builder';
 import { filterDnaForTier, tierDnaLabel } from '../config/brand-dna-tier-filter';
-import { isMedicalAestheticsBrand } from '../config/medical-compliance';
+import { isMedicalAestheticsBrand, isBeforeAfterAllowed } from '../config/medical-compliance';
 import { getEffectiveBlacklist } from '../config/brand-dna-blacklist.util';
 import { getEffectiveCurrentBrandDna } from '../../brand-dna/v2/brand-dna-v2.lookup';
 import { buildStyleDirectionBlock } from '../config/visual-style-library';
@@ -505,7 +505,8 @@ export class GenerationOrchestrator {
         captionResult.caption,
         payload.consentSnapshot,
         (appointment?.serviceCategory as any) || 'general',
-        tenantId
+        tenantId,
+        isMedicalPractitioner
       );
       if (validation.correctedOutput) captionResult.caption = validation.correctedOutput;
       if (validation.requiresRegeneration) {
@@ -1007,7 +1008,8 @@ ${consentShowFace
       hashtags: captionResult?.hashtags ?? [],
       blacklist: getEffectiveBlacklist(brandDNA),
       hasBefore: !!beforePhotoUrl,
-      beforeAfterAllowed: consentCheck.activeRestrictions?.allow_before_after !== false,
+      beforeAfterAllowed: isBeforeAfterAllowed(isMedicalPractitioner, consentCheck.activeRestrictions?.allow_before_after !== false),
+      isMedicalPractitioner,
       isCarousel: isCarousel,
       slidesCount: carouselSlides?.slides?.length ?? 0,
       tenantId,

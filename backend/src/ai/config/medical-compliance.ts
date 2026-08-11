@@ -31,3 +31,14 @@ export function isMedicalAestheticsBrand(brandDNA: {
 
   return isByServiceCategories;
 }
+
+// Phase 4 (BRAND_DNA_GUIDED_V2 — /brand_dna_implementation_plan.md §7):
+// medical-aesthetics accounts never get before/after treated as allowed,
+// regardless of client consent — consent covers usage rights (can this
+// client's photo be used at all), not clinical-claims compliance (can a
+// before/after transformation be shown at all). The two must not be
+// conflated: a client consenting to "use my photo" does not consent to
+// having an AHPRA-regulated outcome claim built from it.
+export function isBeforeAfterAllowed(isMedicalPractitioner: boolean, consentAllowsBeforeAfter: boolean): boolean {
+  return !isMedicalPractitioner && consentAllowsBeforeAfter;
+}

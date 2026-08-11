@@ -1,4 +1,4 @@
-import { isMedicalAestheticsBrand } from './medical-compliance';
+import { isMedicalAestheticsBrand, isBeforeAfterAllowed } from './medical-compliance';
 
 describe('isMedicalAestheticsBrand', () => {
   it('is false for a brand with neither signal set', () => {
@@ -51,5 +51,23 @@ describe('isMedicalAestheticsBrand', () => {
 
   it('handles missing serviceCategories entirely (undefined, not just empty array)', () => {
     expect(isMedicalAestheticsBrand({ brandDnaV2: null })).toBe(false);
+  });
+});
+
+describe('isBeforeAfterAllowed — Phase 4 AHPRA gate (client-image inputs)', () => {
+  it('is false for a medical practitioner even when the client explicitly consented to before/after', () => {
+    expect(isBeforeAfterAllowed(true, true)).toBe(false);
+  });
+
+  it('is false for a medical practitioner when consent also forbids it', () => {
+    expect(isBeforeAfterAllowed(true, false)).toBe(false);
+  });
+
+  it('is true for a non-medical practitioner when consent allows it', () => {
+    expect(isBeforeAfterAllowed(false, true)).toBe(true);
+  });
+
+  it('is false for a non-medical practitioner when consent forbids it', () => {
+    expect(isBeforeAfterAllowed(false, false)).toBe(false);
   });
 });
