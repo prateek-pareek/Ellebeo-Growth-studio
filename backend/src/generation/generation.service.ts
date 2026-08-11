@@ -5,6 +5,7 @@ import { GenerationGateway } from './generation.gateway';
 import { contentGenerationQueue } from '../ai/queues/queue.definitions';
 import { GenerationProgressTracker } from '../ai/services/generation-progress.tracker';
 import { AI_CONFIG, estimateTotalJobSeconds } from '../config/ai.config';
+import { getEffectiveCurrentBrandDna } from '../brand-dna/v2/brand-dna-v2.lookup';
 
 @Injectable()
 export class GenerationService {
@@ -57,9 +58,7 @@ export class GenerationService {
       }
     }
 
-    const brandDna = await this.prisma.brandDNA.findUnique({
-      where: { unique_current_brand_dna: { tenantId, isCurrent: true } }
-    });
+    const brandDna = await getEffectiveCurrentBrandDna(this.prisma, tenantId);
 
     if (!brandDna) {
       throw new BadRequestException('Brand DNA must be configured before generation');
@@ -409,9 +408,7 @@ export class GenerationService {
   }
 
   async previewPrompts(tenantId: string, dto: GenerateContentDto) {
-    const brandDna = await this.prisma.brandDNA.findUnique({
-      where: { unique_current_brand_dna: { tenantId, isCurrent: true } }
-    });
+    const brandDna = await getEffectiveCurrentBrandDna(this.prisma, tenantId);
     if (!brandDna) {
       throw new BadRequestException('Brand DNA must be configured before previewing prompts');
     }

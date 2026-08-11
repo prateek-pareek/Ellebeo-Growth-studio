@@ -172,39 +172,40 @@ model User {
 }
 
 model Tenant {
-  id                    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId                String           @unique @map("user_id") @db.Uuid
-  businessName          String           @map("business_name") @db.VarChar(255)
-  displayName           String?          @map("display_name") @db.VarChar(255)
-  subscriptionTier      SubscriptionTier @default(free) @map("subscription_tier")
-  subscriptionStartedAt DateTime?        @map("subscription_started_at") @db.Timestamptz
-  subscriptionExpiresAt DateTime?        @map("subscription_expires_at") @db.Timestamptz
-  status                TenantStatus     @default(active)
-  hasGrowthStudioAccess Boolean          @default(false) @map("has_growth_studio_access")
-  generationRestricted  Boolean          @default(false) @map("generation_restricted")
-  generationSuspended   Boolean          @default(false) @map("generation_suspended")
-  abuseFlagCount        Int              @default(0) @map("abuse_flag_count")
-  lastAbuseFlagAt       DateTime?        @map("last_abuse_flag_at") @db.Timestamptz
-  stripeCustomerId         String?          @map("stripe_customer_id") @db.VarChar(255)
-  stripeSubscriptionId     String?          @map("stripe_subscription_id") @db.VarChar(255)
-  appliedStripeSessionIds  String[]         @default([]) @map("applied_stripe_session_ids")
-  trialGenerationsUsed     Int              @default(0) @map("trial_generations_used")
-  planGenerationsTotal     Int              @default(0) @map("plan_generations_total")
-  planGenerationsUsed      Int              @default(0) @map("plan_generations_used")
-  timezone              String           @default("UTC") @db.VarChar(100)
-  locale                String           @default("en-AU") @db.VarChar(20)
-  avatarUrl             String?          @map("avatar_url") @db.VarChar(2000)
-  phone                 String?          @db.VarChar(50)
-  onboardingCompleted   Boolean          @default(false) @map("onboarding_completed")
-  onboardingStep        Int              @default(1) @map("onboarding_step")
-  termsAcceptedAt       DateTime?        @map("terms_accepted_at") @db.Timestamptz
-  createdAt             DateTime         @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt             DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  deletedAt             DateTime?        @map("deleted_at") @db.Timestamptz
+  id                      String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                  String           @unique @map("user_id") @db.Uuid
+  businessName            String           @map("business_name") @db.VarChar(255)
+  displayName             String?          @map("display_name") @db.VarChar(255)
+  subscriptionTier        SubscriptionTier @default(free) @map("subscription_tier")
+  subscriptionStartedAt   DateTime?        @map("subscription_started_at") @db.Timestamptz
+  subscriptionExpiresAt   DateTime?        @map("subscription_expires_at") @db.Timestamptz
+  status                  TenantStatus     @default(active)
+  hasGrowthStudioAccess   Boolean          @default(false) @map("has_growth_studio_access")
+  generationRestricted    Boolean          @default(false) @map("generation_restricted")
+  generationSuspended     Boolean          @default(false) @map("generation_suspended")
+  abuseFlagCount          Int              @default(0) @map("abuse_flag_count")
+  lastAbuseFlagAt         DateTime?        @map("last_abuse_flag_at") @db.Timestamptz
+  stripeCustomerId        String?          @map("stripe_customer_id") @db.VarChar(255)
+  stripeSubscriptionId    String?          @map("stripe_subscription_id") @db.VarChar(255)
+  appliedStripeSessionIds String[]         @default([]) @map("applied_stripe_session_ids")
+  trialGenerationsUsed    Int              @default(0) @map("trial_generations_used")
+  planGenerationsTotal    Int              @default(0) @map("plan_generations_total")
+  planGenerationsUsed     Int              @default(0) @map("plan_generations_used")
+  timezone                String           @default("UTC") @db.VarChar(100)
+  locale                  String           @default("en-AU") @db.VarChar(20)
+  avatarUrl               String?          @map("avatar_url") @db.VarChar(2000)
+  phone                   String?          @db.VarChar(50)
+  onboardingCompleted     Boolean          @default(false) @map("onboarding_completed")
+  onboardingStep          Int              @default(1) @map("onboarding_step")
+  termsAcceptedAt         DateTime?        @map("terms_accepted_at") @db.Timestamptz
+  createdAt               DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt               DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt               DateTime?        @map("deleted_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id])
 
   brandHistory           BrandDNA[]
+  brandDnaProfiles       BrandDnaProfile[]
   brandPillars           BrandPillar[]
   brandGoals             BrandGoal[]
   clients                Client[]
@@ -238,9 +239,9 @@ model Tenant {
 // real OpenAI cost data without a redeploy.
 model PlanSettings {
   id                  String   @id @default("default")
-  priceUsd             Float    @default(50) @map("price_usd")
-  generationsIncluded  Int      @default(100) @map("generations_included")
-  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  priceUsd            Float    @default(50) @map("price_usd")
+  generationsIncluded Int      @default(100) @map("generations_included")
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   @@map("plan_settings")
   @@schema("platform")
@@ -421,6 +422,105 @@ model BrandGoal {
   @@schema("platform")
 }
 
+enum BrandMood {
+  SOFT_GLAM
+  CLEAN_CLINICAL
+  EDITORIAL_MINIMAL
+  NATURAL_ORGANIC
+  BOLD_LUXE
+  PLAYFUL_FRESH
+
+  @@schema("platform")
+}
+
+enum BrandObjective {
+  PREMIUM_CLIENTS
+  FILL_QUIET_DAYS
+  EDUCATE_TRUST
+  PROMOTE_BRIDAL
+  LAUNCH_PRODUCT
+
+  @@schema("platform")
+}
+
+enum GenderFocus {
+  WOMEN
+  MEN
+  ALL
+
+  @@schema("platform")
+}
+
+enum LanguageVariant {
+  AU
+  UK
+  US
+
+  @@schema("platform")
+}
+
+// Brand DNA Guided v2 (BRAND_DNA_GUIDED_V2) — see /brand_dna_implementation_plan.md.
+// Added alongside BrandDNA (v1), non-destructive. Pipeline dual-reads this first, falls back to BrandDNA.
+model BrandDnaProfile {
+  id            String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String  @map("tenant_id") @db.Uuid
+  schemaVersion Int     @default(2) @map("schema_version")
+  isCurrent     Boolean @default(true) @map("is_current")
+  // true when this row was produced by heuristic migration from BrandDNA v1
+  // (not directly confirmed by the technician) — see migrate-brand-dna-v2.ts
+  needsReview   Boolean @default(false) @map("needs_review")
+
+  // identity
+  brandName         String    @map("brand_name") @db.VarChar(255)
+  logoAssetId       String?   @map("logo_asset_id") @db.VarChar(500)
+  palette           String[]  @map("palette")
+  mood              BrandMood @map("mood")
+  typographyHeading String?   @map("typography_heading") @db.VarChar(100)
+  typographyBody    String?   @map("typography_body") @db.VarChar(100)
+  essence           String[]  @map("essence")
+
+  // offering
+  serviceCategory String   @map("service_category") @db.VarChar(255)
+  services        String[] @map("services")
+  signatureHandle String?  @map("signature_handle") @db.VarChar(255)
+  serviceAreas    String[] @map("service_areas")
+
+  // audience
+  ageMin      Int         @default(18) @map("age_min")
+  ageMax      Int         @default(65) @map("age_max")
+  genderFocus GenderFocus @default(ALL) @map("gender_focus")
+  clientTypes String[]    @map("client_types")
+
+  // strategy
+  objective             BrandObjective @map("objective")
+  postsPerWeek          Int            @default(3) @map("posts_per_week")
+  bookingTargetPerMonth Int            @default(0) @map("booking_target_per_month")
+
+  // config
+  languageVariant             LanguageVariant @default(AU) @map("language_variant")
+  platformInstagram           Boolean         @default(true) @map("platform_instagram")
+  platformFacebook            Boolean         @default(false) @map("platform_facebook")
+  platformTiktok              Boolean         @default(false) @map("platform_tiktok")
+  medicalAestheticsCompliance Boolean         @default(false) @map("medical_aesthetics_compliance")
+  useAssetLibrary             Boolean         @default(true) @map("use_asset_library")
+
+  // story
+  userWrittenStory String? @map("user_written_story") @db.Text
+  aiDraftedStory   String? @map("ai_drafted_story") @db.Text
+
+  // meta
+  completedAt DateTime? @map("completed_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, isCurrent], name: "unique_current_brand_dna_profile")
+  @@index([tenantId])
+  @@map("brand_dna_profiles")
+  @@schema("platform")
+}
+
 model Client {
   id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId    String    @map("tenant_id") @db.Uuid
@@ -562,7 +662,7 @@ model ImageAsset {
 
 model ImageVisionCache {
   hash          String   @id @db.VarChar(64) // SHA256 of image bytes
-  model         String   @db.VarChar(100)    // e.g., 'gpt-4o'
+  model         String   @db.VarChar(100) // e.g., 'gpt-4o'
   promptVersion String   @map("prompt_version") @db.VarChar(50) // e.g., 'v1.0'
   result        Json
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
@@ -939,15 +1039,15 @@ model Notification {
 }
 
 model ContentFeedback {
-  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId      String      @map("tenant_id") @db.Uuid
-  contentItemId String      @map("content_item_id") @db.Uuid
-  actionType    String      @map("action_type") @db.VarChar(50) // 'rejected', 'edited', 'accepted'
-  reasonTag     String?     @map("reason_tag") @db.VarChar(100)
-  customComment String?     @map("custom_comment") @db.Text
-  originalText  String?     @map("original_text") @db.Text
-  editedText    String?     @map("edited_text") @db.Text
-  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  contentItemId String   @map("content_item_id") @db.Uuid
+  actionType    String   @map("action_type") @db.VarChar(50) // 'rejected', 'edited', 'accepted'
+  reasonTag     String?  @map("reason_tag") @db.VarChar(100)
+  customComment String?  @map("custom_comment") @db.Text
+  originalText  String?  @map("original_text") @db.Text
+  editedText    String?  @map("edited_text") @db.Text
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   tenant      Tenant      @relation(fields: [tenantId], references: [id])
   contentItem ContentItem @relation(fields: [contentItemId], references: [id])
@@ -958,17 +1058,17 @@ model ContentFeedback {
 }
 
 model PostPerformance {
-  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId      String      @map("tenant_id") @db.Uuid
-  contentItemId String      @map("content_item_id") @db.Uuid
-  saves         Int         @default(0)
-  shares        Int         @default(0)
-  comments      Int         @default(0)
-  bookingsCount Int         @default(0) @map("bookings_count")
-  profileClicks Int         @default(0) @map("profile_clicks")
-  layoutType    String      @map("layout_type") @db.VarChar(100)
-  contentPillar String      @map("content_pillar") @db.VarChar(100)
-  syncedAt      DateTime    @default(now()) @map("synced_at") @db.Timestamptz
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  contentItemId String   @map("content_item_id") @db.Uuid
+  saves         Int      @default(0)
+  shares        Int      @default(0)
+  comments      Int      @default(0)
+  bookingsCount Int      @default(0) @map("bookings_count")
+  profileClicks Int      @default(0) @map("profile_clicks")
+  layoutType    String   @map("layout_type") @db.VarChar(100)
+  contentPillar String   @map("content_pillar") @db.VarChar(100)
+  syncedAt      DateTime @default(now()) @map("synced_at") @db.Timestamptz
 
   tenant      Tenant      @relation(fields: [tenantId], references: [id])
   contentItem ContentItem @relation(fields: [contentItemId], references: [id])

@@ -10,6 +10,7 @@ import { PromptBuilder } from './prompt-builder';
 import { filterDnaForTier, tierDnaLabel } from '../config/brand-dna-tier-filter';
 import { isMedicalAestheticsBrand } from '../config/medical-compliance';
 import { getEffectiveBlacklist } from '../config/brand-dna-blacklist.util';
+import { getEffectiveCurrentBrandDna } from '../../brand-dna/v2/brand-dna-v2.lookup';
 import { buildStyleDirectionBlock } from '../config/visual-style-library';
 import { VisionAnalysisChain } from '../chains/vision-analysis.chain';
 import { CaptionGenerationChain } from '../chains/caption-generation.chain';
@@ -1106,10 +1107,7 @@ ${consentShowFace
       const contentItem = await this.prisma.contentItem.findUnique({ where: { id: tweakDto.contentItemId } });
       if (!contentItem) throw new Error(`Content item ${tweakDto.contentItemId} not found`);
 
-      const brandDna = await this.prisma.brandDNA.findFirst({
-        where: { tenantId, isCurrent: true },
-        include: { pillars: true },
-      });
+      const brandDna = await getEffectiveCurrentBrandDna(this.prisma, tenantId, { pillars: true });
 
       const blacklist: string[] = getEffectiveBlacklist(brandDna ?? {});
 

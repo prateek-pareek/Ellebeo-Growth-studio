@@ -1,0 +1,265 @@
+{
+  "mode": "write",
+  "totalCurrentBrandDnaRows": 5,
+  "toMigrate": 5,
+  "skipped": 0,
+  "tenantsWithDroppedData": 5,
+  "entries": [
+    {
+      "tenantId": "8f943db1-4038-4f27-9b53-797e4ba9eb00",
+      "businessName": "Lakshi",
+      "droppedNonEmptyFields": [
+        "doNotSay"
+      ],
+      "mapped": {
+        "tenantId": "8f943db1-4038-4f27-9b53-797e4ba9eb00",
+        "schemaVersion": 2,
+        "isCurrent": true,
+        "needsReview": true,
+        "brandName": "Lakshi",
+        "logoAssetId": null,
+        "palette": [
+          "#dd3636",
+          "#ffffff"
+        ],
+        "mood": "SOFT_GLAM",
+        "typographyHeading": null,
+        "typographyBody": null,
+        "essence": [
+          "Makeup"
+        ],
+        "serviceCategory": "",
+        "services": [],
+        "signatureHandle": null,
+        "serviceAreas": [],
+        "ageMin": 18,
+        "ageMax": 65,
+        "genderFocus": "ALL",
+        "clientTypes": [],
+        "objective": "PREMIUM_CLIENTS",
+        "postsPerWeek": 3,
+        "bookingTargetPerMonth": 0,
+        "languageVariant": "AU",
+        "platformInstagram": true,
+        "platformFacebook": false,
+        "platformTiktok": false,
+        "medicalAestheticsCompliance": false,
+        "useAssetLibrary": false,
+        "userWrittenStory": "Transformation",
+        "aiDraftedStory": null,
+        "completedAt": null
+      }
+    },
+    {
+      "tenantId": "b81ae891-47c0-4336-b175-c5c0f8e891fe",
+      "businessName": "Lakhi",
+      "droppedNonEmptyFields": [
+        "doNotSay"
+      ],
+      "mapped": {
+        "tenantId": "b81ae891-47c0-4336-b175-c5c0f8e891fe",
+        "schemaVersion": 2,
+        "isCurrent": true,
+        "needsReview": true,
+        "brandName": "Lakhi",
+        "logoAssetId": null,
+        "palette": [
+          "#3df330",
+          "#fff"
+        ],
+        "mood": "EDITORIAL_MINIMAL",
+        "typographyHeading": null,
+        "typographyBody": null,
+        "essence": [
+          "Warm"
+        ],
+        "serviceCategory": "",
+        "services": [],
+        "signatureHandle": null,
+        "serviceAreas": [],
+        "ageMin": 18,
+        "ageMax": 65,
+        "genderFocus": "ALL",
+        "clientTypes": [],
+        "objective": "PREMIUM_CLIENTS",
+        "postsPerWeek": 3,
+        "bookingTargetPerMonth": 0,
+        "languageVariant": "AU",
+        "platformInstagram": true,
+        "platformFacebook": false,
+        "platformTiktok": false,
+        "medicalAestheticsCompliance": false,
+        "useAssetLibrary": false,
+        "userWrittenStory": "Lived-in blonde",
+        "aiDraftedStory": null,
+        "completedAt": null
+      }
+    },
+    {
+      "tenantId": "16d34309-1150-4971-90ee-9e3c9fe814b2",
+      "businessName": "Ava",
+      "droppedNonEmptyFields": [
+        "visualRanking",
+        "moodboardUrls",
+        "brandWorldAnchor"
+      ],
+      "mapped": {
+        "tenantId": "16d34309-1150-4971-90ee-9e3c9fe814b2",
+        "schemaVersion": 2,
+        "isCurrent": true,
+        "needsReview": true,
+        "brandName": "Ava",
+        "logoAssetId": "https://storage.googleapis.com/ellebeo-39772.firebasestorage.app/logos/16d34309-1150-4971-90ee-9e3c9fe814b2/logo_1783060292403.jpg",
+        "palette": [
+          "#C9A96E",
+          "#D4A5A5",
+          "#FAF8F4",
+          "#1A1A2E",
+          "#8A7968"
+        ],
+        "mood": "BOLD_LUXE",
+        "typographyHeading": null,
+        "typographyBody": null,
+        "essence": [
+          "Precise. Quiet. Considered."
+        ],
+        "serviceCategory": "Lash Artist",
+        "services": [
+          "Lash Artist",
+          "Brow Specialist"
+        ],
+        "signatureHandle": null,
+        "serviceAreas": [
+          "Double Bay, Bondi, Paddington — in-studio only"
+        ],
+        "ageMin": 18,
+        "ageMax": 65,
+        "genderFocus": "ALL",
+        "clientTypes": [],
+        "objective": "PREMIUM_CLIENTS",
+        "postsPerWeek": 3,
+        "bookingTargetPerMonth": 0,
+        "languageVariant": "AU",
+        "platformInstagram": true,
+        "platformFacebook": false,
+        "platformTiktok": false,
+        "medicalAestheticsCompliance": false,
+        "useAssetLibrary": true,
+        "userWrittenStory": "The lightest, most natural-looking lash sets in Sydney. Clients say they forget they have them on.",
+        "aiDraftedStory": null,
+        "completedAt": null
+      }
+    },
+    {
+      "tenantId": "5c4a4400-bffd-4803-a179-65d91a2b453f",
+      "businessName": "Fresh & Botanical (Daily Rituals)",
+      "droppedNonEmptyFields": [
+        "visualRanking",
+        "moodboardUrls",
+        "brandWorldAnchor"
+      ],
+      "mapped": {
+        "tenantId": "5c4a4400-bffd-4803-a179-65d91a2b453f",
+        "schemaVersion": 2,
+        "isCurrent": true,
+        "needsReview": true,
+        "brandName": "Fresh & Botanical (Daily Rituals)",
+        "logoAssetId": "https://storage.googleapis.com/ellebeo-39772.firebasestorage.app/logos/5c4a4400-bffd-4803-a179-65d91a2b453f/logo_1782971259251.png",
+        "palette": [
+          "#F9F6F3",
+          "#F6EEE4",
+          "#CBBFB1",
+          "#B69B7A",
+          "#393939"
+        ],
+        "mood": "NATURAL_ORGANIC",
+        "typographyHeading": null,
+        "typographyBody": null,
+        "essence": [
+          "warm, confident, educational"
+        ],
+        "serviceCategory": "makeup",
+        "services": [
+          "makeup",
+          "eyelashes",
+          "skin",
+          "eyebrows"
+        ],
+        "signatureHandle": null,
+        "serviceAreas": [
+          "Studio"
+        ],
+        "ageMin": 18,
+        "ageMax": 65,
+        "genderFocus": "ALL",
+        "clientTypes": [],
+        "objective": "PREMIUM_CLIENTS",
+        "postsPerWeek": 3,
+        "bookingTargetPerMonth": 0,
+        "languageVariant": "AU",
+        "platformInstagram": true,
+        "platformFacebook": false,
+        "platformTiktok": false,
+        "medicalAestheticsCompliance": false,
+        "useAssetLibrary": true,
+        "userWrittenStory": "authentic, unfiltered beauty preservation",
+        "aiDraftedStory": null,
+        "completedAt": null
+      }
+    },
+    {
+      "tenantId": "2fd45162-4675-4905-b3e8-5c74ff4debec",
+      "businessName": "Luminous Glow Beauty",
+      "droppedNonEmptyFields": [
+        "vocabularyBlacklist",
+        "doNotSay"
+      ],
+      "mapped": {
+        "tenantId": "2fd45162-4675-4905-b3e8-5c74ff4debec",
+        "schemaVersion": 2,
+        "isCurrent": true,
+        "needsReview": true,
+        "brandName": "Luminous Glow Beauty",
+        "logoAssetId": null,
+        "palette": [
+          "#D4AF37",
+          "#000000"
+        ],
+        "mood": "BOLD_LUXE",
+        "typographyHeading": null,
+        "typographyBody": null,
+        "essence": [
+          "warm_professional"
+        ],
+        "serviceCategory": "hair_color",
+        "services": [
+          "hair_color",
+          "extensions"
+        ],
+        "signatureHandle": null,
+        "serviceAreas": [],
+        "ageMin": 18,
+        "ageMax": 65,
+        "genderFocus": "ALL",
+        "clientTypes": [
+          "brassy tones",
+          "high-maintenance colour",
+          "thinning hair"
+        ],
+        "objective": "PREMIUM_CLIENTS",
+        "postsPerWeek": 3,
+        "bookingTargetPerMonth": 0,
+        "languageVariant": "AU",
+        "platformInstagram": true,
+        "platformFacebook": false,
+        "platformTiktok": false,
+        "medicalAestheticsCompliance": false,
+        "useAssetLibrary": false,
+        "userWrittenStory": "Luxury boutique salon specializing in lived-in colour and extensions.",
+        "aiDraftedStory": null,
+        "completedAt": null
+      }
+    }
+  ],
+  "skippedEntries": []
+}
