@@ -1170,13 +1170,20 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
 
         // If the text layer defines a background component (e.g. editorial_sidebar, metric_panel), render it FIRST
         if (textLayer.component) {
+          // 'solid_card', 'pill_label', 'inset_card' are text-container components: their
+          // background rect is rendered by the TypographyEngine as part of the text pass,
+          // so PrimitiveEngine intentionally returns '' for them. Treat empty return as success.
+          const TEXT_CONTAINER_COMPONENTS = ['solid_card', 'pill_label', 'inset_card'];
+          const isDelegatedContainer = TEXT_CONTAINER_COMPONENTS.includes(textLayer.component);
+
           const renderedPrimitive = primitiveEngine.renderPrimitive(textLayer.component, primitiveCtx, textLayer);
           if (renderedPrimitive) {
             svg += renderedPrimitive;
-          } else {
+          } else if (!isDelegatedContainer) {
             console.error(`[Renderer Sprint] CRITICAL ERROR: Text Component '${textLayer.component}' not found in PrimitiveEngine!`);
           }
         }
+
 
         // CONDITIONAL SCRIM REMOVED IN SPRINT 3.
         // We now rely on high-contrast Structural Containers (Cards/Pills) instead of muddy full-bleed gradients.

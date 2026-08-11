@@ -1198,6 +1198,214 @@ export class PrimitiveEngine {
     this.registry['inset_card'] = { category: 'geometry', render: () => '' };
 
     // ==========================================
+    // BATCH 3 NEW PRIMITIVES (from 1040 new templates)
+    // ==========================================
+
+    // Subtle full-canvas texture: low-opacity grain overlay, similar to paper_texture but warmer
+    this.registry['textured_background'] = {
+      category: 'effects', render: (ctx) => `
+      <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" fill="${ctx.validBackgroundColor}" opacity="0.3" />
+      <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" style="mix-blend-mode: overlay;"
+        opacity="0.12">
+        <animate attributeName="opacity" values="0.10;0.14;0.10" dur="8s" repeatCount="indefinite"/>
+      </rect>
+      <filter id="bg_grain_filter" x="0" y="0" width="100%" height="100%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.70" numOctaves="4" stitchTiles="stitch"/>
+        <feColorMatrix type="saturate" values="0"/>
+        <feComposite in2="SourceGraphic" operator="in"/>
+      </filter>
+      <rect x="0" y="0" width="${ctx.w}" height="${ctx.h}" filter="url(#bg_grain_filter)" opacity="0.10" style="mix-blend-mode: overlay;"/>`
+    };
+
+    // Clean geometric circle accent — editorial ring or decorative element
+    this.registry['circle'] = {
+      category: 'geometry', render: (ctx) => {
+        const cx = Math.round(ctx.w / 2);
+        const r = Math.round(Math.min(ctx.w, ctx.h) * 0.18);
+        return `
+      <!-- Decorative editorial ring accent -->
+      <circle cx="${cx}" cy="${Math.round(ctx.h * 0.15)}" r="${r}" fill="none"
+        stroke="${ctx.validBrandColor}" stroke-width="1.5" opacity="0.35" />`;
+      }
+    };
+
+    // Thin inset frame border around the canvas edges — premium editorial look
+    this.registry['frame_border'] = {
+      category: 'geometry', render: (ctx) => {
+        const m = 20;
+        return `
+      <!-- Thin frame border -->
+      <rect x="${m}" y="${m}" width="${ctx.w - m * 2}" height="${ctx.h - m * 2}"
+        fill="none" stroke="${ctx.validBrandColor}" stroke-width="1.2" opacity="0.40" rx="2"/>`;
+      }
+    };
+
+    // Rounded-corner frame — softer, organic framing alternative to frame_border
+    this.registry['rounded_frame'] = {
+      category: 'geometry', render: (ctx) => {
+        const m = 18;
+        return `
+      <!-- Rounded frame -->
+      <rect x="${m}" y="${m}" width="${ctx.w - m * 2}" height="${ctx.h - m * 2}"
+        fill="none" stroke="${ctx.validBrandColor}" stroke-width="1.5" opacity="0.35" rx="24"/>`;
+      }
+    };
+
+    // Light stroke outline following the canvas — sits behind image/text
+    this.registry['outline'] = {
+      category: 'geometry', render: (ctx) => {
+        const m = 14;
+        return `
+      <!-- Structural outline -->
+      <rect x="${m}" y="${m}" width="${ctx.w - m * 2}" height="${ctx.h - m * 2}"
+        fill="none" stroke="${ctx.validBrandColor}" stroke-width="1" opacity="0.28" rx="0"/>`;
+      }
+    };
+
+    // Thin horizontal underline — accent beneath headings or brand labels
+    this.registry['underline'] = {
+      category: 'geometry', render: (ctx) => {
+        const x1 = Math.round(ctx.w * 0.1);
+        const x2 = Math.round(ctx.w * 0.9);
+        const y  = Math.round(ctx.h * 0.88);
+        return `
+      <!-- Editorial underline accent -->
+      <line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}"
+        stroke="${ctx.validBrandColor}" stroke-width="1.5" opacity="0.45"/>`;
+      }
+    };
+
+    // Dashed/dotted perimeter border — scrapbook / editorial feel
+    this.registry['dotted_border'] = {
+      category: 'geometry', render: (ctx) => {
+        const m = 22;
+        return `
+      <!-- Dotted decorative border -->
+      <rect x="${m}" y="${m}" width="${ctx.w - m * 2}" height="${ctx.h - m * 2}"
+        fill="none" stroke="${ctx.validBrandColor}" stroke-width="1.5"
+        stroke-dasharray="4 6" opacity="0.38" rx="3"/>`;
+      }
+    };
+
+    // Speech bubble shape — used by text_only and testimonial families
+    this.registry['speech_bubble'] = {
+      category: 'geometry', render: (ctx) => {
+        const bw = Math.round(ctx.w * 0.72);
+        const bh = 110;
+        const bx = Math.round((ctx.w - bw) / 2);
+        const by = Math.round(ctx.h * 0.1);
+        const tailX = Math.round(ctx.w / 2);
+        return `
+      <!-- Speech bubble decoration -->
+      <rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="18"
+        fill="${ctx.validSecondaryColor}" opacity="0.22"/>
+      <path d="M ${tailX - 14} ${by + bh} L ${tailX} ${by + bh + 22} L ${tailX + 14} ${by + bh} Z"
+        fill="${ctx.validSecondaryColor}" opacity="0.22"/>`;
+      }
+    };
+
+    // Soft heart shape — beauty / wellness accent
+    this.registry['heart'] = {
+      category: 'geometry', render: (ctx) => {
+        const cx = Math.round(ctx.w * 0.85);
+        const cy = Math.round(ctx.h * 0.12);
+        const s  = 28;
+        return `
+      <!-- Heart accent -->
+      <path d="M ${cx},${cy + s * 0.3}
+        C ${cx},${cy - s * 0.1} ${cx - s},${cy - s * 0.1} ${cx - s},${cy + s * 0.3}
+        C ${cx - s},${cy + s * 0.8} ${cx},${cy + s * 1.2} ${cx},${cy + s * 1.2}
+        C ${cx},${cy + s * 1.2} ${cx + s},${cy + s * 0.8} ${cx + s},${cy + s * 0.3}
+        C ${cx + s},${cy - s * 0.1} ${cx},${cy - s * 0.1} ${cx},${cy + s * 0.3} Z"
+        fill="${ctx.validBrandColor}" opacity="0.18"/>`;
+      }
+    };
+
+    // Floral SVG — delicate petal cluster for beauty/wellness layouts
+    this.registry['floral'] = {
+      category: 'geometry', render: (ctx) => {
+        const cx = Math.round(ctx.w * 0.88);
+        const cy = Math.round(ctx.h * 0.10);
+        return `
+      <!-- Floral accent -->
+      <g transform="translate(${cx},${cy})" opacity="0.18">
+        <ellipse rx="10" ry="22" fill="${ctx.validBrandColor}" transform="rotate(0)"/>
+        <ellipse rx="10" ry="22" fill="${ctx.validBrandColor}" transform="rotate(60)"/>
+        <ellipse rx="10" ry="22" fill="${ctx.validBrandColor}" transform="rotate(120)"/>
+        <circle r="8" fill="${ctx.validSecondaryColor}"/>
+      </g>`;
+      }
+    };
+
+    // Organic pattern — flowing wavy lines for organic/ayurvedic layouts
+    this.registry['organic_pattern'] = {
+      category: 'effects', render: (ctx) => {
+        return `
+      <!-- Organic wavy pattern -->
+      <path d="M 0 ${ctx.h * 0.75} Q ${ctx.w * 0.25} ${ctx.h * 0.68} ${ctx.w * 0.5} ${ctx.h * 0.75}
+               Q ${ctx.w * 0.75} ${ctx.h * 0.82} ${ctx.w} ${ctx.h * 0.75}"
+        fill="none" stroke="${ctx.validBrandColor}" stroke-width="1.5" opacity="0.18"/>
+      <path d="M 0 ${ctx.h * 0.80} Q ${ctx.w * 0.25} ${ctx.h * 0.73} ${ctx.w * 0.5} ${ctx.h * 0.80}
+               Q ${ctx.w * 0.75} ${ctx.h * 0.87} ${ctx.w} ${ctx.h * 0.80}"
+        fill="none" stroke="${ctx.validBrandColor}" stroke-width="1" opacity="0.12"/>`;
+      }
+    };
+
+    // Illustration placeholder — abstract geometric shape acting as a decorative illustration
+    this.registry['illustration'] = {
+      category: 'geometry', render: (ctx) => {
+        const cx = Math.round(ctx.w * 0.15);
+        const cy = Math.round(ctx.h * 0.82);
+        return `
+      <!-- Decorative illustration accent (abstract geometric) -->
+      <circle cx="${cx}" cy="${cy}" r="48" fill="${ctx.validBrandColor}" opacity="0.10"/>
+      <circle cx="${cx + 18}" cy="${cy - 18}" r="28" fill="${ctx.validSecondaryColor}" opacity="0.12"/>`;
+      }
+    };
+
+    // Polka dot pattern — playful repeating dots
+    this.registry['polka_dot_pattern'] = {
+      category: 'geometry', render: (ctx) => {
+        let dots = '';
+        const spacing = 48;
+        const r = 3;
+        for (let x = spacing; x < ctx.w; x += spacing) {
+          for (let y = spacing; y < ctx.h; y += spacing) {
+            dots += `<circle cx="${x}" cy="${y}" r="${r}" fill="${ctx.validBrandColor}" opacity="0.10"/>`;
+          }
+        }
+        return `<!-- Polka dot texture -->${dots}`;
+      }
+    };
+
+    // Simple directional arrow — used for transformation/process layouts
+    this.registry['arrow'] = {
+      category: 'geometry', render: (ctx) => {
+        const cx = Math.round(ctx.w / 2);
+        const y  = Math.round(ctx.h * 0.52);
+        const aw = 36;
+        const ah = 14;
+        return `
+      <!-- Directional arrow accent -->
+      <path d="M ${cx - aw} ${y} L ${cx} ${y} M ${cx - ah} ${y - ah} L ${cx} ${y} L ${cx - ah} ${y + ah}"
+        fill="none" stroke="${ctx.validBrandColor}" stroke-width="2" stroke-linecap="round"
+        stroke-linejoin="round" opacity="0.40"/>`;
+      }
+    };
+
+    // Repeated text watermark — ghost brand name in the background
+    this.registry['repeated text'] = {
+      category: 'geometry', render: (ctx) => {
+        const text = ctx.validBrandColor ? 'BRAND' : 'BRAND';
+        return `
+      <!-- Repeated text watermark -->
+      <text x="${ctx.w / 2}" y="${ctx.h / 2}" text-anchor="middle"
+        font-family="sans-serif" font-weight="900" font-size="180px"
+        fill="${ctx.validBrandColor}" opacity="0.04" letter-spacing="0.05em">${text}</text>`;
+      }
+    };
+
+    // ==========================================
     // PHASE 3 & 4: CLINICAL AND EDUCATIONAL PRIMITIVES
     // ==========================================
     this.registry['clinical_callout_box'] = {
