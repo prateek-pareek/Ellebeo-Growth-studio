@@ -91,9 +91,14 @@ export class CompositionOptimizer {
     const layoutEngine = new LayoutEngine(canvasW, canvasHeight, faceBox, subjectBox, additionalSubjects);
 
     // --- SPATIAL ALLOCATION (before typography fitting) ---
+    const behaviorProfile = (optimized as any)?.behavior;
     let policy = spatialPolicy || LayoutEngine.deriveSpatialPolicy(priority, {
-      negativeSpaceMultiplier: (optimized as any)?.behavior?.negativeSpaceMultiplier ?? 1,
+      negativeSpaceMultiplier: behaviorProfile?.negativeSpaceMultiplier ?? 1,
       readingFlow: flow,
+      density: behaviorProfile?.density,
+      whitespace: behaviorProfile?.whitespace
+        || (behaviorProfile?.negativeSpaceMultiplier >= 1.5 ? 'airy'
+          : behaviorProfile?.negativeSpaceMultiplier <= 0.7 ? 'tight' : 'comfortable'),
     });
 
     const roleWeight: Record<string, number> = { heading: 4, tagline: 3, body: 2, footnote: 1, cta: 0 };
@@ -124,7 +129,18 @@ export class CompositionOptimizer {
     let totalGroupHeight = estimated.total;
     const clusterGap = estimated.gap;
 
-    // Expand text share to fit content BEFORE allocating regions (image surrenders more)
+    // CTA / subject-present: prefer a real panel so type is not merely enlarged over the photo
+    if (!spatialPolicy && (priority === 'cta_hero' || (priority === 'image_hero' && (subjectBox || additionalSubjects.length)))) {
+      if (priority === 'cta_hero') {
+        policy = {
+          ...policy,
+          splitAxis: 'vertical',
+          textShare: Math.max(policy.textShare, 0.42),
+          maxTextShare: Math.max(policy.maxTextShare, 0.58),
+          preferredTextBias: 'end',
+        };
+      }
+    }
     const primaryAxis = policy.splitAxis === 'horizontal' ? canvasW : canvasHeight;
     const contentNeedPx = policy.splitAxis === 'horizontal'
       ? totalGroupHeight // still drive vertical need inside column via later fit
@@ -378,22 +394,69 @@ export class CompositionOptimizer {
       groupScale,
     });
 
-    let suggestLayoutChange = fit.suggestLayoutChange;
+    // Content integrity: required headline words must survive allocation estimates
+    const headlineText = (content?.headline || '').trim();
+    const contentIntegrity = this.validateContentIntegrity(
+      headlineText,
+      groupedTextLayers.find(l => l.role === 'heading'),
+      estimatedFontSizes,
+      regions.textRegion,
+      groupScale,
+    );
+
+    // GATE PREDICATE (single source of truth):
+    // suggestLayoutChange iff quality fails OR fit found no region OR content truncated
+    // OR soft spatial issues require geometry change.
+    // Do NOT keep fit.suggestLayoutChange when quality.pass and content is intact
+    // unless spatial escalation is needed.
+    const fitExhausted = fit.suggestLayoutChange && !fit.region;
+    let suggestLayoutChange =
+      !quality.pass
+      || fitExhausted
+      || !contentIntegrity.ok
+      || !!quality.needsSpatialEscalation;
+
     const allFitActions = [...fitActions];
+    allFitActions.push(
+      `gate:pass=${quality.pass} score=${quality.score.toFixed(1)} ` +
+      `threshold=${quality.passThreshold ?? 7.5} ` +
+      `critical=[${(quality.critical || []).join(',') || 'none'}] ` +
+      `fitExhausted=${fitExhausted} spatialEscalation=${!!quality.needsSpatialEscalation} ` +
+      `contentIntegrity=${contentIntegrity.ok ? 'ok' : contentIntegrity.reason}`,
+    );
 
     if (!quality.pass) {
       allFitActions.push(`quality_reject:score=${quality.score.toFixed(1)};issues=${quality.issues.join(',')}`);
-      suggestLayoutChange = true;
       for (const group of textGroupLayers) {
         (group as any)._suggestLayoutChange = true;
       }
       console.warn(
-        `[CompositionQC] Visual gate FAILED (score=${quality.score.toFixed(1)}). ` +
-        `Critical=${quality.critical.join('|') || 'none'} Issues=${quality.issues.join('|')}. Triggering alternate layout.`,
+        `[CompositionQC] Visual gate FAILED (score=${quality.score.toFixed(1)} ` +
+        `threshold=${quality.passThreshold ?? 7.5} critical=${quality.critical.join('|') || 'none'} ` +
+        `issues=${quality.issues.join('|') || 'none'}). Triggering alternate/spatial escalation.`,
       );
+    } else if (quality.needsSpatialEscalation) {
+      allFitActions.push(`quality_soft_fail:spatial_escalation;issues=${quality.issues.join(',')}`);
+      console.warn(
+        `[CompositionQC] Score PASSED (${quality.score.toFixed(1)}≥${quality.passThreshold ?? 7.5}) ` +
+        `but spatial escalation required (issues=${quality.issues.join(',')}).`,
+      );
+    } else if (!contentIntegrity.ok) {
+      allFitActions.push(`content_integrity_fail:${contentIntegrity.reason}`);
+      console.warn(`[CompositionQC] Content integrity FAILED: ${contentIntegrity.reason}`);
     } else {
       allFitActions.push(`quality_pass:score=${quality.score.toFixed(1)}`);
+      // Clear stale fit suggestion when quality+content are fine
+      suggestLayoutChange = false;
     }
+
+    // Stack heading + supporting copy as one cluster inside the text panel
+    this.applyTypographyGroupRhythm(
+      groupedTextLayers,
+      regions.textRegion,
+      clusterGap,
+      priority,
+    );
 
     (optimized as any)._compositionMeta = {
       suggestLayoutChange,
@@ -409,7 +472,20 @@ export class CompositionOptimizer {
       qualityIssues: quality.issues,
       qualityCritical: quality.critical,
       qualityMetrics: quality.metrics,
-      failureCategory: quality.failureCategory || 'none',
+      failureCategory: !contentIntegrity.ok
+        ? 'renderer'
+        : (quality.failureCategory || (suggestLayoutChange ? 'spatial_allocation' : 'none')),
+      needsSpatialEscalation: !!quality.needsSpatialEscalation || !contentIntegrity.ok,
+      contentIntegrity,
+      gatePredicate: {
+        pass: quality.pass,
+        score: quality.score,
+        threshold: quality.passThreshold ?? 7.5,
+        fitExhausted,
+        needsSpatialEscalation: !!quality.needsSpatialEscalation,
+        contentOk: contentIntegrity.ok,
+        suggestLayoutChange,
+      },
     };
 
     return {
@@ -417,6 +493,99 @@ export class CompositionOptimizer {
       suggestLayoutChange,
       fitActions: allFitActions,
     };
+  }
+
+  /**
+   * Ensure heading + tagline/body share one vertical rhythm inside the text panel
+   * (controlled gaps, no overlapping hierarchy).
+   */
+  private applyTypographyGroupRhythm(
+    layers: IDSLTextLayer[],
+    textRegion: BoundingBox,
+    clusterGap: number,
+    priority: string,
+  ): void {
+    const heading = layers.find(l => l.role === 'heading' && l.allocatedBox);
+    if (!heading?.allocatedBox) return;
+
+    let y = heading.allocatedBox.y + heading.allocatedBox.height;
+    const supportGap = Math.max(
+      clusterGap,
+      Math.round(textRegion.height * (priority === 'typography_hero' ? 0.06 : 0.04)),
+    );
+
+    for (const layer of layers) {
+      if (layer.role === 'heading' || !layer.allocatedBox) continue;
+      if (layer.role !== 'tagline' && layer.role !== 'body') continue;
+
+      const box = layer.allocatedBox;
+      const nextY = y + supportGap;
+      // Keep support copy inside panel and below heading — never overlap hero
+      box.y = Math.min(
+        nextY,
+        textRegion.y + textRegion.height - box.height,
+      );
+      box.y = Math.max(box.y, heading.allocatedBox.y + heading.allocatedBox.height + Math.round(supportGap * 0.75));
+      box.x = textRegion.x;
+      box.width = Math.min(box.width, textRegion.width);
+      y = box.y + box.height;
+    }
+  }
+
+  /**
+   * Verify the allocated pocket can hold the full headline (word count / measure),
+   * not just the first token.
+   */
+  private validateContentIntegrity(
+    headline: string,
+    headingLayer: IDSLTextLayer | undefined,
+    fontSizes: Record<string, number>,
+    textRegion: BoundingBox,
+    groupScale: number,
+  ): { ok: boolean; reason?: string; expectedWords?: number; estimableWords?: number } {
+    if (!headline) return { ok: true };
+    const words = headline.split(/\s+/).filter(Boolean);
+    if (words.length <= 1) return { ok: true };
+
+    const fontSize = (headingLayer
+      ? (fontSizes[headingLayer.id] || (headingLayer as any)._estimatedFontSize)
+      : undefined) || textRegion.height * 0.2;
+    const scaled = fontSize * (groupScale || 1);
+    const avgCharW = scaled * 0.62;
+    const maxCharsPerLine = Math.max(4, Math.floor(textRegion.width / Math.max(1, avgCharW)));
+    const lineH = scaled * 1.15;
+    const maxLines = Math.max(1, Math.floor(textRegion.height / Math.max(1, lineH)));
+
+    // Greedy whole-word pack estimate
+    let linesUsed = 1;
+    let lineChars = 0;
+    let fitted = 0;
+    for (const w of words) {
+      const need = (lineChars === 0 ? 0 : 1) + w.length;
+      if (lineChars + need <= maxCharsPerLine) {
+        lineChars += need;
+        fitted++;
+      } else if (linesUsed < maxLines && w.length <= maxCharsPerLine) {
+        linesUsed++;
+        lineChars = w.length;
+        fitted++;
+      } else if (linesUsed < maxLines) {
+        // word alone too wide — still count as needing space (integrity fail if we can't fit)
+        break;
+      } else {
+        break;
+      }
+    }
+
+    if (fitted < words.length) {
+      return {
+        ok: false,
+        reason: `headline_truncated:${fitted}/${words.length}_words fit in ${maxLines}×${maxCharsPerLine}ch pocket`,
+        expectedWords: words.length,
+        estimableWords: fitted,
+      };
+    }
+    return { ok: true, expectedWords: words.length, estimableWords: fitted };
   }
 
   private preferredAnchorsForFlow(

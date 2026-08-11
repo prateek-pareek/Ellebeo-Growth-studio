@@ -45,6 +45,9 @@ export interface VisualQualityResult {
   critical: string[];
   metrics: Record<string, number>;
   failureCategory?: 'spatial_allocation' | 'collision' | 'readability' | 'renderer' | 'none';
+  /** Soft spatial issues that require a different geometry contract even if score passes */
+  needsSpatialEscalation?: boolean;
+  passThreshold?: number;
 }
 
 /**
@@ -498,7 +501,8 @@ export class CompositionQualityController {
     }
 
     score = Math.max(0, Math.min(10, score));
-    const pass = score >= CompositionQualityController.PASS_SCORE && critical.length === 0;
+    const passThreshold = CompositionQualityController.PASS_SCORE;
+    const pass = score >= passThreshold && critical.length === 0;
 
     let failureCategory: 'spatial_allocation' | 'collision' | 'readability' | 'renderer' | 'none' = 'none';
     if (!pass) {
@@ -509,9 +513,40 @@ export class CompositionQualityController {
       } else {
         failureCategory = 'spatial_allocation';
       }
+    } else if (
+      issues.includes('whitespace_tight_to_subject')
+      || issues.includes('reading_flow_band')
+      || issues.includes('whitespace_crowded')
+    ) {
+      // Soft spatial issues: score may still "pass" but geometry must escalate
+      failureCategory = 'spatial_allocation';
     }
 
-    return { pass, score, issues: [...new Set(issues)], critical: [...new Set(critical)], metrics, failureCategory };
+    /** Soft spatial problems that require a different spatial contract, even if score passes */
+    const needsSpatialEscalation =
+      issues.includes('whitespace_tight_to_subject')
+      || issues.includes('subject_collision')
+      || issues.includes('reading_flow_band')
+      || critical.includes('subject_collision')
+      || critical.includes('text_clipping');
+
+    console.log(
+      `[CompositionQC] gate predicate: pass=${pass} score=${score.toFixed(2)} ` +
+      `threshold=${passThreshold} critical=[${critical.join(',')||'none'}] ` +
+      `issues=[${[...new Set(issues)].join(',')||'none'}] ` +
+      `needsSpatialEscalation=${needsSpatialEscalation} category=${failureCategory}`,
+    );
+
+    return {
+      pass,
+      score,
+      issues: [...new Set(issues)],
+      critical: [...new Set(critical)],
+      metrics,
+      failureCategory,
+      needsSpatialEscalation,
+      passThreshold,
+    };
   }
 
   /** @deprecated Use evaluateVisualQuality — kept for callers during transition */

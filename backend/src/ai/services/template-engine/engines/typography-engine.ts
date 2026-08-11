@@ -185,13 +185,24 @@ export class TypographyEngine {
       const pocketH = layer.allocatedBox.height;
       const originalLineHeightMultiplier = lineHeight / Math.max(1, style.fontSize);
 
-      // Prefer dropping whole lines before crushing hero type
-      if (lineHeight > 0) {
-        const roleCap = layer.role === 'tagline' ? 2 : layer.role === 'heading' ? (preserveHero ? 5 : 4) : 3;
+      // Prefer dropping whole lines before crushing hero type — but NEVER for headings
+      // when that would discard required words (content integrity).
+      if (lineHeight > 0 && layer.role !== 'heading') {
+        const roleCap = layer.role === 'tagline' ? 2 : 3;
         const maxLines = Math.min(roleCap, Math.max(1, Math.floor(pocketH / lineHeight)));
         if (escapedLines.length > maxLines) {
           escapedLines = escapedLines.slice(0, maxLines);
           textHeight = escapedLines.length * lineHeight;
+        }
+      } else if (lineHeight > 0 && layer.role === 'heading' && preserveHero) {
+        // Expand conceptually: keep words; shrink gently later if needed
+        const maxLines = Math.max(2, Math.min(5, Math.floor(pocketH / lineHeight) || 2));
+        if (escapedLines.length > maxLines) {
+          // Mark integrity failure rather than silently keeping "DULL."
+          (layer as any)._contentIntegrity = {
+            ok: false,
+            reason: `pocket_too_small_for_headline:${escapedLines.length}_lines_need_vs_${maxLines}_fit`,
+          };
         }
       }
 
@@ -211,8 +222,8 @@ export class TypographyEngine {
         style.fontSize = currentFontSize;
         escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, effectiveMaxW, trackingEm);
         textHeight = escapedLines.length * lineHeight;
-        if (lineHeight > 0) {
-          const roleCap = layer.role === 'tagline' ? 2 : layer.role === 'heading' ? 4 : 3;
+        if (lineHeight > 0 && layer.role !== 'heading') {
+          const roleCap = layer.role === 'tagline' ? 2 : 3;
           const maxLines = Math.min(roleCap, Math.max(1, Math.floor(pocketH / lineHeight)));
           if (escapedLines.length > maxLines) {
             escapedLines = escapedLines.slice(0, maxLines);
@@ -220,6 +231,14 @@ export class TypographyEngine {
           }
         }
         attempts++;
+      }
+
+      // If heading still overflows after gentle shrink, flag integrity — don't clip to "DULL."
+      if (layer.role === 'heading' && textHeight > pocketH * 1.02) {
+        (layer as any)._contentIntegrity = {
+          ok: false,
+          reason: `headline_overflow_after_fit:h=${Math.round(textHeight)}_pocket=${Math.round(pocketH)}`,
+        };
       }
 
       if (isSecondary && textHeight > pocketH * 1.02) {
@@ -603,8 +622,9 @@ export class TypographyEngine {
       if ((child.role === 'tagline' || child.role === 'body') && lines.length > 2) {
         lines = lines.slice(0, 2);
       }
-      if (child.role === 'heading' && lines.length > 4) {
-        lines = lines.slice(0, 4);
+      // Headings: keep all wrapped lines (up to 5) — never truncate to a single word
+      if (child.role === 'heading' && lines.length > 5) {
+        lines = lines.slice(0, 5);
       }
 
       const lineHeight = Math.round(style.fontSize * lineHeightMultiplier);
@@ -1139,10 +1159,29 @@ export class TypographyEngine {
       if (currentLine.trim()) smartLines.push(currentLine.trim());
     }
 
-    // Soft line caps — drop trailing whole words (no mid-word ellipsis / "Pull…")
-    const maxLines = layer.role === 'heading' ? 4 : layer.role === 'tagline' ? 2 : 3;
-    if (smartLines.length > maxLines) {
-      smartLines = smartLines.slice(0, maxLines);
+    // Soft line caps — for headings, NEVER drop words silently (content integrity).
+    // Prefer returning all lines; allocator/QC expands space or fails the slide.
+    if (layer.role !== 'heading') {
+      const maxLines = layer.role === 'tagline' ? 2 : 3;
+      if (smartLines.length > maxLines) {
+        smartLines = smartLines.slice(0, maxLines);
+      }
+    } else if (smartLines.length > 6) {
+      // Absolute safety ceiling only
+      smartLines = smartLines.slice(0, 6);
+    }
+
+    // Integrity annotation for callers
+    const renderedWords = smartLines.join(' ').split(/\s+/).filter(Boolean);
+    const sourceWords = words;
+    if (layer.role === 'heading' && sourceWords.length > 0 && renderedWords.length < sourceWords.length) {
+      (layer as any)._contentIntegrity = {
+        ok: false,
+        reason: `wrap_truncated:${renderedWords.length}/${sourceWords.length}`,
+        missing: sourceWords.filter(w => !renderedWords.includes(w)),
+      };
+    } else if (layer.role === 'heading') {
+      (layer as any)._contentIntegrity = { ok: true, wordCount: renderedWords.length };
     }
 
     const defaultEscape = (str: string) => str

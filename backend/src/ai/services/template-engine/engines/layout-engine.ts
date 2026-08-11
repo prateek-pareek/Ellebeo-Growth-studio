@@ -646,14 +646,25 @@ export class LayoutEngine {
    */
   public static deriveSpatialPolicy(
     visualPriority: string,
-    opts?: { negativeSpaceMultiplier?: number; readingFlow?: string },
+    opts?: {
+      negativeSpaceMultiplier?: number;
+      readingFlow?: string;
+      /** ArtDirection rhythm: tight|comfortable|airy|luxury mapped via multiplier already; density high|medium|low */
+      density?: string;
+      whitespace?: string;
+    },
   ): SpatialAllocationPolicy {
     const neg = Math.max(0.5, Math.min(2.0, opts?.negativeSpaceMultiplier ?? 1.0));
     const flow = opts?.readingFlow || 'center_down';
+    const density = (opts?.density || 'medium').toLowerCase();
+    const whitespace = (opts?.whitespace || '').toLowerCase();
+    // tight/high density → use more of available negative space (larger band), not leave huge empty regions
+    const fillBoost =
+      (density === 'high' ? 1.18 : density === 'low' ? 0.92 : 1.0)
+      * (whitespace === 'tight' ? 1.12 : whitespace === 'airy' || whitespace === 'luxury' ? 0.92 : 1.0);
 
     if (visualPriority === 'typography_hero') {
-      // Type owns a real panel; image surrenders canvas share
-      const textShare = Math.min(0.70, Math.max(0.52, 0.58 * (0.9 + 0.15 * neg)));
+      const textShare = Math.min(0.70, Math.max(0.52, 0.58 * (0.9 + 0.15 * neg) * fillBoost));
       const splitAxis: SpatialAllocationPolicy['splitAxis'] =
         flow === 'z_pattern' || flow === 'left_right' ? 'horizontal' : 'vertical';
       return {
@@ -666,28 +677,32 @@ export class LayoutEngine {
     }
 
     if (visualPriority === 'image_hero') {
+      // Overlay band should fill available negative space under tight/high rhythm —
+      // not leave a large unused lower third while type sits in a tiny top pocket.
+      const textShare = Math.min(0.42, Math.max(0.26, 0.30 * (0.95 + 0.05 * neg) * fillBoost));
       return {
-        textShare: Math.min(0.34, Math.max(0.24, 0.28 * (0.95 + 0.05 * neg))),
-        minTextShare: 0.22,
-        maxTextShare: 0.36,
+        textShare,
+        minTextShare: 0.24,
+        maxTextShare: 0.44,
         splitAxis: 'overlay',
         preferredTextBias: 'start',
       };
     }
 
     if (visualPriority === 'cta_hero') {
+      // CTA still prefers panel when possible — overlay only as base; escalation upgrades
+      const textShare = Math.min(0.48, Math.max(0.32, 0.36 * (0.95 + 0.05 * neg) * fillBoost));
       return {
-        textShare: Math.min(0.40, Math.max(0.30, 0.34 * (0.95 + 0.05 * neg))),
-        minTextShare: 0.28,
-        maxTextShare: 0.42,
+        textShare,
+        minTextShare: 0.30,
+        maxTextShare: 0.55,
         splitAxis: 'overlay',
         preferredTextBias: 'end',
       };
     }
 
-    // composition_hero — balanced panel split
     return {
-      textShare: Math.min(0.55, Math.max(0.40, 0.45 * (0.9 + 0.1 * neg))),
+      textShare: Math.min(0.55, Math.max(0.40, 0.45 * (0.9 + 0.1 * neg) * fillBoost)),
       minTextShare: 0.38,
       maxTextShare: 0.58,
       splitAxis: flow === 'center_down' ? 'vertical' : 'horizontal',
@@ -713,32 +728,41 @@ export class LayoutEngine {
   }
 
   /**
-   * Diagnostic Fallback Escalation (Phase 2):
-   * When a spatial policy fails QC repeatedly (e.g., subject collision or clipping),
-   * escalate to a structurally different axis or significantly larger textShare.
+   * Escalate to a structurally different spatial contract.
+   * overlay → vertical panel → horizontal column → larger share.
+   * Never returns the same axis+share signature.
    */
   public static escalateSpatialPolicy(
-    failedPolicy: SpatialAllocationPolicy,
+    failedPolicy: SpatialAllocationPolicy | undefined,
     priority: string,
+    reason?: string,
   ): SpatialAllocationPolicy {
-    const escalated = { ...failedPolicy };
-    
-    if (failedPolicy.splitAxis === 'overlay') {
-       // Overlay failed, try vertical band
-       escalated.splitAxis = 'vertical';
-       escalated.textShare = Math.max(0.40, failedPolicy.textShare * 1.25);
-    } else if (failedPolicy.splitAxis === 'vertical') {
-       // Vertical failed, try horizontal column
-       escalated.splitAxis = 'horizontal';
-       escalated.textShare = Math.max(0.40, failedPolicy.textShare * 1.25);
+    const base = failedPolicy || LayoutEngine.deriveSpatialPolicy(priority);
+    const escalated: SpatialAllocationPolicy = { ...base };
+
+    if (base.splitAxis === 'overlay' || reason === 'whitespace_tight_to_subject' || reason === 'collision') {
+      // Leave overlay family immediately — image must surrender space
+      escalated.splitAxis = 'vertical';
+      escalated.textShare = Math.min(0.62, Math.max(0.42, (base.textShare || 0.28) * 1.55));
+      escalated.preferredTextBias = base.preferredTextBias === 'start' ? 'end' : 'start';
+    } else if (base.splitAxis === 'vertical') {
+      escalated.splitAxis = 'horizontal';
+      escalated.textShare = Math.min(0.68, Math.max(0.45, base.textShare * 1.2));
+      escalated.preferredTextBias = base.preferredTextBias === 'start' ? 'end' : 'start';
     } else {
-       // All axes tried, just increase the text share aggressively
-       escalated.textShare = Math.min(0.85, failedPolicy.textShare * 1.4);
+      escalated.splitAxis = 'vertical';
+      escalated.textShare = Math.min(0.75, Math.max(0.50, base.textShare * 1.35));
+      escalated.preferredTextBias = base.preferredTextBias === 'start' ? 'end' : 'start';
     }
-    
-    // Ensure we respect basic bounds
-    escalated.minTextShare = Math.max(failedPolicy.minTextShare, escalated.textShare * 0.8);
-    escalated.maxTextShare = Math.min(1.0, escalated.textShare * 1.2);
+
+    escalated.minTextShare = Math.min(escalated.textShare, Math.max(base.minTextShare, escalated.textShare * 0.85));
+    escalated.maxTextShare = Math.min(0.85, Math.max(base.maxTextShare, escalated.textShare * 1.15));
+
+    console.log(
+      `[SpatialEscalation] ${base.splitAxis}@${(base.textShare || 0).toFixed(2)} ` +
+      `→ ${escalated.splitAxis}@${escalated.textShare.toFixed(2)} ` +
+      `(bias=${escalated.preferredTextBias} reason=${reason || 'retry'})`,
+    );
 
     return escalated;
   }
@@ -760,17 +784,24 @@ export class LayoutEngine {
       readingFlow: behavior.readingJourney === 'z_pattern' ? 'z_pattern' : 'center_down',
     });
 
-    // Legacy bleed overrides still honored when they force a stronger split
+    // Honor explicit spatial policy axis first. Bleed hints may UPGRADE overlay→split,
+    // but must NEVER downgrade an escalated vertical/horizontal panel back to overlay.
     let axis = policy.splitAxis;
-    if (behavior.imageBleedExtent === 'asymmetrical_65' && axis === 'overlay') {
-      axis = 'horizontal';
-    } else if (behavior.imageBleedExtent === 'split_50' && axis === 'overlay') {
-      axis = 'horizontal';
-    } else if (
-      (behavior.imageBleedExtent === 'full_bleed_band' || behavior.imageBleedExtent === 'full')
-      && (visualPriority === 'image_hero' || visualPriority === 'cta_hero')
-    ) {
-      axis = 'overlay';
+    const policyWasExplicit = !!spatialPolicy;
+    if (!policyWasExplicit || axis === 'overlay') {
+      if (behavior.imageBleedExtent === 'asymmetrical_65' && axis === 'overlay') {
+        axis = 'horizontal';
+      } else if (behavior.imageBleedExtent === 'split_50' && axis === 'overlay') {
+        axis = 'horizontal';
+      } else if (behavior.imageBleedExtent === 'panel_surrender' && axis === 'overlay') {
+        axis = 'vertical';
+      } else if (
+        !policyWasExplicit
+        && (behavior.imageBleedExtent === 'full_bleed_band' || behavior.imageBleedExtent === 'full')
+        && (visualPriority === 'image_hero' || visualPriority === 'cta_hero')
+      ) {
+        axis = 'overlay';
+      }
     }
 
     const bias = this.resolveTextBias(policy.preferredTextBias, axis, subjectHint);

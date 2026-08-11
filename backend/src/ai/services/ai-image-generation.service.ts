@@ -1508,58 +1508,117 @@ CRITICAL IMAGE REQUIREMENTS:
         optimizedDsl = optResult.dsl;
 
         if (optResult.suggestLayoutChange) {
+          const meta0 = (optimizedDsl as any)?._compositionMeta || {};
           const failedSignatures: Array<{ axis?: string; share?: number; category: string }> = [];
-          
-          let currentCategory = (optimizedDsl as any)?._compositionMeta?.failureCategory || 'spatial_allocation';
+          let currentCategory = meta0.failureCategory || 'spatial_allocation';
           failedSignatures.push({
             axis: (optimizedDsl as any)?._spatialPolicy?.splitAxis,
             share: (optimizedDsl as any)?._spatialPolicy?.textShare,
-            category: currentCategory
+            category: currentCategory,
           });
 
-          console.warn(`[CompositionQC] Layout '${computedLayoutType}' failed visual gate (${currentCategory}). Trying alternates… Actions: ${optResult.fitActions.join(' | ')}`);
-          
-          const alternates = compositionQC.suggestAlternateLayouts(
-            computedLayoutType,
-            Object.keys(COMPILED_LAYOUTS),
-            {
-              visualPriority: designLanguage?.intent?.visualPriority,
-              readingFlow: designLanguage?.intent?.readingFlow,
-              family: designLanguage?.intent?.family,
-            },
-            4,
-            failedSignatures
+          console.warn(
+            `[CompositionQC] Layout '${computedLayoutType}' needs retry ` +
+            `(category=${currentCategory} gate=${JSON.stringify(meta0.gatePredicate || {})}). ` +
+            `Actions: ${optResult.fitActions.slice(-3).join(' | ')}`,
           );
 
-          let attempt = 1;
-          for (const altId of alternates) {
-            attempt++;
-            const altDsl = COMPILED_LAYOUTS[altId];
-            if (!altDsl) continue;
+          // Escalate spatial contract IMMEDIATELY when geometry is the problem —
+          // do not burn alternate template IDs on the same overlay signature.
+          let workingPolicy = (optimizedDsl as any)?._spatialPolicy || geometryOut.spatial;
+          const shouldEscalate =
+            !!meta0.needsSpatialEscalation
+            || currentCategory === 'spatial_allocation'
+            || currentCategory === 'collision'
+            || (meta0.qualityIssues || []).includes('whitespace_tight_to_subject');
 
-            let escalatedPolicy: any = undefined;
-            const spatialFailures = failedSignatures.filter(f => f.category === 'spatial_allocation' || f.category === 'collision');
-            if (spatialFailures.length >= 2 && spatialFailures.every(f => f.axis === spatialFailures[0].axis)) {
-               escalatedPolicy = LayoutEngine.escalateSpatialPolicy((optimizedDsl as any)?._spatialPolicy, designLanguage?.intent?.visualPriority || 'image_hero');
-            }
-
-            const altResult = runOptimize(altId, altDsl, escalatedPolicy);
-            console.log(`[Diagnostic Fallback] Attempt ${attempt} | Template: ${altId} | Axis: ${escalatedPolicy?.splitAxis || (altResult.dsl as any)?._spatialPolicy?.splitAxis} | Category: ${(altResult.dsl as any)?._compositionMeta?.failureCategory || (altResult.suggestLayoutChange ? 'unknown' : 'PASS')}`);
-            
-            if (!altResult.suggestLayoutChange) {
-              computedLayoutType = altId;
-              optimizedDsl = altResult.dsl;
-              optResult = altResult;
-              console.log(`[CompositionQC] Accepted alternate arrangement '${altId}'`);
-              break;
+          if (shouldEscalate) {
+            workingPolicy = LayoutEngine.escalateSpatialPolicy(
+              workingPolicy,
+              designLanguage?.intent?.visualPriority || 'image_hero',
+              (meta0.qualityIssues || [])[0] || currentCategory,
+            );
+            // First retry: same template, new spatial contract
+            const sameLayoutRetry = runOptimize(computedLayoutType, rawDsl, workingPolicy);
+            console.log(
+              `[Diagnostic Fallback] Attempt 1 (spatial-only) | Template: ${computedLayoutType} | ` +
+              `Axis: ${(sameLayoutRetry.dsl as any)?._spatialPolicy?.splitAxis} ` +
+              `Share: ${((sameLayoutRetry.dsl as any)?._spatialPolicy?.textShare || 0).toFixed(2)} | ` +
+              `Category: ${(sameLayoutRetry.dsl as any)?._compositionMeta?.failureCategory || (sameLayoutRetry.suggestLayoutChange ? 'unknown' : 'PASS')}`,
+            );
+            if (!sameLayoutRetry.suggestLayoutChange) {
+              optimizedDsl = sameLayoutRetry.dsl;
+              optResult = sameLayoutRetry;
             } else {
               failedSignatures.push({
-                axis: (altResult.dsl as any)?._spatialPolicy?.splitAxis,
-                share: (altResult.dsl as any)?._spatialPolicy?.textShare,
-                category: (altResult.dsl as any)?._compositionMeta?.failureCategory || 'spatial_allocation'
+                axis: (sameLayoutRetry.dsl as any)?._spatialPolicy?.splitAxis,
+                share: (sameLayoutRetry.dsl as any)?._spatialPolicy?.textShare,
+                category: (sameLayoutRetry.dsl as any)?._compositionMeta?.failureCategory || 'spatial_allocation',
               });
+              workingPolicy = LayoutEngine.escalateSpatialPolicy(
+                (sameLayoutRetry.dsl as any)?._spatialPolicy || workingPolicy,
+                designLanguage?.intent?.visualPriority || 'image_hero',
+                'same_signature_retry',
+              );
             }
           }
+
+          if (optResult.suggestLayoutChange) {
+            const alternates = compositionQC.suggestAlternateLayouts(
+              computedLayoutType,
+              Object.keys(COMPILED_LAYOUTS),
+              {
+                visualPriority: designLanguage?.intent?.visualPriority,
+                readingFlow: designLanguage?.intent?.readingFlow,
+                family: designLanguage?.intent?.family,
+              },
+              4,
+              failedSignatures,
+            );
+
+            let attempt = 1;
+            for (const altId of alternates) {
+              attempt++;
+              const altDsl = COMPILED_LAYOUTS[altId];
+              if (!altDsl) continue;
+
+              // Always escalate when prior attempts shared the same axis
+              const axes = failedSignatures.map(f => f.axis).filter(Boolean);
+              const sameAxis = axes.length > 0 && axes.every(a => a === axes[0]);
+              if (sameAxis || shouldEscalate) {
+                workingPolicy = LayoutEngine.escalateSpatialPolicy(
+                  workingPolicy,
+                  designLanguage?.intent?.visualPriority || 'image_hero',
+                  sameAxis ? 'same_axis_family' : 'alternate_template',
+                );
+              }
+
+              const altResult = runOptimize(altId, altDsl, workingPolicy);
+              const altAxis = (altResult.dsl as any)?._spatialPolicy?.splitAxis;
+              const altShare = (altResult.dsl as any)?._spatialPolicy?.textShare;
+              console.log(
+                `[Diagnostic Fallback] Attempt ${attempt} | Template: ${altId} | ` +
+                `Axis: ${altAxis} Share: ${(altShare || 0).toFixed(2)} | ` +
+                `Category: ${(altResult.dsl as any)?._compositionMeta?.failureCategory || (altResult.suggestLayoutChange ? 'unknown' : 'PASS')}`,
+              );
+
+              if (!altResult.suggestLayoutChange) {
+                computedLayoutType = altId;
+                optimizedDsl = altResult.dsl;
+                optResult = altResult;
+                console.log(`[CompositionQC] Accepted alternate arrangement '${altId}' (${altAxis}@${(altShare || 0).toFixed(2)})`);
+                break;
+              }
+
+              failedSignatures.push({
+                axis: altAxis,
+                share: altShare,
+                category: (altResult.dsl as any)?._compositionMeta?.failureCategory || 'spatial_allocation',
+              });
+              workingPolicy = (altResult.dsl as any)?._spatialPolicy || workingPolicy;
+            }
+          }
+
           if (optResult.suggestLayoutChange) {
             compositionFailed = true;
             failReason = failReason || `visual_gate:${(optimizedDsl as any)?._compositionMeta?.qualityIssues?.join(',') || 'exhausted'}`;

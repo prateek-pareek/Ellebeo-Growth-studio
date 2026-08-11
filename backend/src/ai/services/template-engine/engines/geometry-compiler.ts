@@ -69,10 +69,14 @@ export class GeometryCompiler {
     const visualPriority =
       intent?.visualPriority || designSpec?.composition?.visualPriority || 'image_hero';
 
-    // 1b. SPATIAL POLICY — structural composition difference by priority
+    // 1b. SPATIAL POLICY — structural composition difference by priority + ArtDirection rhythm
     const spatial = LayoutEngine.deriveSpatialPolicy(visualPriority, {
       negativeSpaceMultiplier: behavior.negativeSpaceMultiplier,
       readingFlow: intent?.readingFlow,
+      density: (behavior as any).density,
+      whitespace: intent?.whitespace
+        || ((behavior.negativeSpaceMultiplier >= 1.5) ? 'airy'
+          : (behavior.negativeSpaceMultiplier <= 0.7) ? 'tight' : 'comfortable'),
     });
 
     // Expected text-panel size on the primary split axis (before subject carve)
