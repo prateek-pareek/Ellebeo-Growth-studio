@@ -1,5 +1,5 @@
 import { ICompiledLayoutDSL, IDSLTextLayer, IDSLTextGroupLayer } from '../interfaces';
-import { LayoutConstraints, LayoutEngine, BoundingBox, SpatialAllocationPolicy } from './layout-engine';
+import { LayoutConstraints, LayoutEngine, BoundingBox, SpatialAllocationPolicy, formatRect } from './layout-engine';
 import {
   CompositionQualityController,
   ContentBundle,
@@ -171,15 +171,21 @@ export class CompositionOptimizer {
       subjectBox || faceBox,
       policy,
     );
-    optimized.canvasRegions = regions;
+    // Typed canvasRegions — exact rectangles the renderer must consume
+    optimized.canvasRegions = {
+      imageRegion: regions.imageRegion,
+      textRegion: regions.textRegion,
+    };
     optimized.canonicalGeometry = regions.canonicalGeometry;
     (optimized as any)._spatialPolicy = regions.spatial;
 
     console.log(
       `[SpatialAlloc] priority=${priority} axis=${regions.spatial.splitAxis} ` +
       `textShare=${regions.spatial.textShare.toFixed(2)} ` +
-      `textRegion=${Math.round(regions.textRegion.width)}x${Math.round(regions.textRegion.height)} ` +
-      `imageRegion=${Math.round(regions.imageRegion.width)}x${Math.round(regions.imageRegion.height)}`,
+      `textRegion={${formatRect(regions.textRegion)}} ` +
+      `imageRegion={${formatRect(regions.imageRegion)}} ` +
+      `faceBox={${formatRect(regions.canonicalGeometry.faceBox)}} ` +
+      `subjectBox={${formatRect(regions.canonicalGeometry.subjectMass)}}`,
     );
 
     const protectedSubjects = layoutEngine.getProtectedSubjects();
@@ -377,6 +383,34 @@ export class CompositionOptimizer {
       currentY = layer.allocatedBox.y + h + clusterGap;
     }
 
+    // Stack heading + supporting copy BEFORE QC so the gate sees final boxes
+    this.applyTypographyGroupRhythm(
+      groupedTextLayers,
+      regions.textRegion,
+      clusterGap,
+      priority,
+    );
+
+    // Annotate expected render geometry for diagnostics / fidelity checks
+    for (const layer of [...groupedTextLayers, ...structuralLayers]) {
+      if (!layer.allocatedBox) continue;
+      (layer as any)._allocatedTextRegion = { ...regions.textRegion };
+      (layer as any)._expectedTextBounds = { ...layer.allocatedBox };
+      (layer as any)._finalAnchor = {
+        x: layer.allocatedBox.x,
+        y: layer.allocatedBox.y,
+        align: (layer as any).textAlign || layer.anchor || 'start',
+      };
+      console.log(
+        `[TextGeometry] id=${layer.id} role=${layer.role} ` +
+        `allocatedTextRegion={${formatRect(regions.textRegion)}} ` +
+        `actualTextBounds={${formatRect(layer.allocatedBox)}} ` +
+        `faceBox={${formatRect(regions.canonicalGeometry.faceBox)}} ` +
+        `subjectBox={${formatRect(regions.canonicalGeometry.subjectMass)}} ` +
+        `finalAnchor={${Math.round(layer.allocatedBox.x)},${Math.round(layer.allocatedBox.y)}}`,
+      );
+    }
+
     const quality = this.qc.evaluateVisualQuality({
       boxes: allTextLayers.map(l => ({
         role: l.role,
@@ -389,9 +423,13 @@ export class CompositionOptimizer {
       constraints,
       canvasW,
       canvasH: canvasHeight,
-      subjectBoxes: isDedicatedPanel ? [] : protectedSubjects,
+      // Always check protected zones — dedicated panels should not overlap subjects either
+      subjectBoxes: protectedSubjects,
       intent: { visualPriority: priority, readingFlow: flow },
       groupScale,
+      textRegion: regions.textRegion,
+      imageRegion: regions.imageRegion,
+      splitAxis: regions.spatial.splitAxis,
     });
 
     // Content integrity: required headline words must survive allocation estimates
@@ -404,24 +442,27 @@ export class CompositionOptimizer {
       groupScale,
     );
 
-    // GATE PREDICATE (single source of truth):
-    // suggestLayoutChange iff quality fails OR fit found no region OR content truncated
-    // OR soft spatial issues require geometry change.
-    // Do NOT keep fit.suggestLayoutChange when quality.pass and content is intact
-    // unless spatial escalation is needed.
+    // GATE PREDICATE:
+    // Hard fail / soft spatial / content integrity / fit exhausted → repair
+    // Soft composition (image underutilized) also suggests repair without treating as "collision"
     const fitExhausted = fit.suggestLayoutChange && !fit.region;
+    const softCompositionFail = (quality.softCompositionIssues || []).length > 0;
     let suggestLayoutChange =
       !quality.pass
       || fitExhausted
       || !contentIntegrity.ok
-      || !!quality.needsSpatialEscalation;
+      || !!quality.needsSpatialEscalation
+      || !!quality.needsRelocate
+      || !!quality.needsContentReflow
+      || softCompositionFail;
 
     const allFitActions = [...fitActions];
     allFitActions.push(
-      `gate:pass=${quality.pass} score=${quality.score.toFixed(1)} ` +
+      `gate:pass=${quality.pass} hardValid=${quality.hardValid !== false} score=${quality.score.toFixed(1)} ` +
       `threshold=${quality.passThreshold ?? 7.5} ` +
       `critical=[${(quality.critical || []).join(',') || 'none'}] ` +
-      `fitExhausted=${fitExhausted} spatialEscalation=${!!quality.needsSpatialEscalation} ` +
+      `fitExhausted=${fitExhausted} relocate=${!!quality.needsRelocate} ` +
+      `spatialEscalation=${!!quality.needsSpatialEscalation} contentReflow=${!!quality.needsContentReflow || !contentIntegrity.ok} ` +
       `contentIntegrity=${contentIntegrity.ok ? 'ok' : contentIntegrity.reason}`,
     );
 
@@ -433,30 +474,32 @@ export class CompositionOptimizer {
       console.warn(
         `[CompositionQC] Visual gate FAILED (score=${quality.score.toFixed(1)} ` +
         `threshold=${quality.passThreshold ?? 7.5} critical=${quality.critical.join('|') || 'none'} ` +
-        `issues=${quality.issues.join('|') || 'none'}). Triggering alternate/spatial escalation.`,
+        `issues=${quality.issues.join('|') || 'none'}). Triggering category-specific repair.`,
       );
-    } else if (quality.needsSpatialEscalation) {
+    } else if (quality.needsRelocate) {
+      allFitActions.push(`quality_soft_fail:relocate;issues=${quality.issues.join(',')}`);
+      console.warn(`[CompositionQC] Collision — relocate/re-anchor before axis change.`);
+    } else if (!contentIntegrity.ok || quality.needsContentReflow) {
+      allFitActions.push(`content_integrity_fail:${contentIntegrity.reason || 'reflow'}`);
+      console.warn(
+        `[CompositionQC] Content integrity / reflow required: ${contentIntegrity.reason || 'needsContentReflow'}. ` +
+        `Expand region before template switch.`,
+      );
+    } else if (quality.needsSpatialEscalation || softCompositionFail) {
       allFitActions.push(`quality_soft_fail:spatial_escalation;issues=${quality.issues.join(',')}`);
       console.warn(
-        `[CompositionQC] Score PASSED (${quality.score.toFixed(1)}≥${quality.passThreshold ?? 7.5}) ` +
-        `but spatial escalation required (issues=${quality.issues.join(',')}).`,
+        `[CompositionQC] Score ${quality.pass ? 'PASSED' : 'soft'} (${quality.score.toFixed(1)}) ` +
+        `but spatial/composition repair required (issues=${quality.issues.join(',')}).`,
       );
-    } else if (!contentIntegrity.ok) {
-      allFitActions.push(`content_integrity_fail:${contentIntegrity.reason}`);
-      console.warn(`[CompositionQC] Content integrity FAILED: ${contentIntegrity.reason}`);
     } else {
       allFitActions.push(`quality_pass:score=${quality.score.toFixed(1)}`);
-      // Clear stale fit suggestion when quality+content are fine
       suggestLayoutChange = false;
     }
 
-    // Stack heading + supporting copy as one cluster inside the text panel
-    this.applyTypographyGroupRhythm(
-      groupedTextLayers,
-      regions.textRegion,
-      clusterGap,
-      priority,
-    );
+    // Failure actions: content integrity → reflow (not axis escalate); collision → relocate
+    const failureCategory = !contentIntegrity.ok
+      ? 'renderer'
+      : (quality.failureCategory || (suggestLayoutChange ? 'spatial_allocation' : 'none'));
 
     (optimized as any)._compositionMeta = {
       suggestLayoutChange,
@@ -472,17 +515,22 @@ export class CompositionOptimizer {
       qualityIssues: quality.issues,
       qualityCritical: quality.critical,
       qualityMetrics: quality.metrics,
-      failureCategory: !contentIntegrity.ok
-        ? 'renderer'
-        : (quality.failureCategory || (suggestLayoutChange ? 'spatial_allocation' : 'none')),
-      needsSpatialEscalation: !!quality.needsSpatialEscalation || !contentIntegrity.ok,
+      softCompositionIssues: quality.softCompositionIssues || [],
+      failureCategory,
+      needsSpatialEscalation: !!quality.needsSpatialEscalation,
+      needsRelocate: !!quality.needsRelocate,
+      needsContentReflow: !!quality.needsContentReflow || !contentIntegrity.ok,
+      hardValid: quality.hardValid !== false,
       contentIntegrity,
       gatePredicate: {
         pass: quality.pass,
+        hardValid: quality.hardValid !== false,
         score: quality.score,
         threshold: quality.passThreshold ?? 7.5,
         fitExhausted,
         needsSpatialEscalation: !!quality.needsSpatialEscalation,
+        needsRelocate: !!quality.needsRelocate,
+        needsContentReflow: !!quality.needsContentReflow || !contentIntegrity.ok,
         contentOk: contentIntegrity.ok,
         suggestLayoutChange,
       },
