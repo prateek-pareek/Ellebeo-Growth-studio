@@ -1,3 +1,5 @@
+import { CanonicalGeometry } from '../interfaces';
+
 export type LayoutFamily = 'editorial' | 'architectural' | 'minimal' | 'vintage' | 'luxury' | 'clinical' | 'scrapbook' | 'premium' | 'split' | string;
 export type NegativeSpace = 'dense' | 'balanced' | 'generous' | 'extreme';
 
@@ -711,6 +713,37 @@ export class LayoutEngine {
   }
 
   /**
+   * Diagnostic Fallback Escalation (Phase 2):
+   * When a spatial policy fails QC repeatedly (e.g., subject collision or clipping),
+   * escalate to a structurally different axis or significantly larger textShare.
+   */
+  public static escalateSpatialPolicy(
+    failedPolicy: SpatialAllocationPolicy,
+    priority: string,
+  ): SpatialAllocationPolicy {
+    const escalated = { ...failedPolicy };
+    
+    if (failedPolicy.splitAxis === 'overlay') {
+       // Overlay failed, try vertical band
+       escalated.splitAxis = 'vertical';
+       escalated.textShare = Math.max(0.40, failedPolicy.textShare * 1.25);
+    } else if (failedPolicy.splitAxis === 'vertical') {
+       // Vertical failed, try horizontal column
+       escalated.splitAxis = 'horizontal';
+       escalated.textShare = Math.max(0.40, failedPolicy.textShare * 1.25);
+    } else {
+       // All axes tried, just increase the text share aggressively
+       escalated.textShare = Math.min(0.85, failedPolicy.textShare * 1.4);
+    }
+    
+    // Ensure we respect basic bounds
+    escalated.minTextShare = Math.max(failedPolicy.minTextShare, escalated.textShare * 0.8);
+    escalated.maxTextShare = Math.min(1.0, escalated.textShare * 1.2);
+
+    return escalated;
+  }
+
+  /**
    * Allocates image vs text regions from visualPriority spatial policy.
    * typography_hero / composition_hero: image surrenders a real panel (non-overlapping).
    * image_hero / cta_hero: photo stays full-bleed; text gets a subject-aware overlay band.
@@ -722,7 +755,7 @@ export class LayoutEngine {
     visualPriority: string = 'image_hero',
     subjectHint?: BoundingBox,
     spatialPolicy?: SpatialAllocationPolicy,
-  ): { imageRegion: BoundingBox; textRegion: BoundingBox; spatial: SpatialAllocationPolicy } {
+  ): { imageRegion: BoundingBox; textRegion: BoundingBox; spatial: SpatialAllocationPolicy; canonicalGeometry: CanonicalGeometry } {
     const policy = spatialPolicy || LayoutEngine.deriveSpatialPolicy(visualPriority, {
       readingFlow: behavior.readingJourney === 'z_pattern' ? 'z_pattern' : 'center_down',
     });
@@ -743,6 +776,18 @@ export class LayoutEngine {
     const bias = this.resolveTextBias(policy.preferredTextBias, axis, subjectHint);
     const gutter = Math.max(24, Math.round(constraints.safeX * 0.5));
 
+    const canonicalGeometry: CanonicalGeometry = {
+      faceBox: this.faceBox,
+      headBox: this.faceBox ? {
+        ...this.faceBox,
+        y: Math.max(0, this.faceBox.y - Math.round(this.faceBox.height * 0.15)),
+        height: this.faceBox.height + Math.round(this.faceBox.height * 0.15)
+      } : undefined,
+      subjectMass: this.subjectBox,
+      protectedZones: this.protectedSubjects.length ? this.protectedSubjects : (this.subjectBox || this.faceBox ? [this.subjectBox || this.faceBox!] : []),
+      safeMargins: { x: constraints.safeX, y: constraints.safeY }
+    };
+
     if (axis === 'horizontal') {
       // Image surrenders width — text gets a dedicated column
       const textW = Math.round(this.canvasWidth * policy.textShare);
@@ -760,10 +805,14 @@ export class LayoutEngine {
           width: imageW,
           height: this.canvasHeight,
         };
+        const carvedTextRegion = this.carveSubjectsFromRegion(textRegion, axis);
+        canonicalGeometry.imageRegion = imageRegion;
+        canonicalGeometry.textRegion = carvedTextRegion;
         return {
           imageRegion,
-          textRegion: this.carveSubjectsFromRegion(textRegion),
+          textRegion: carvedTextRegion,
           spatial: { ...policy, splitAxis: axis, preferredTextBias: bias },
+          canonicalGeometry
         };
       }
       const textRegion = {
@@ -773,10 +822,14 @@ export class LayoutEngine {
         height: this.canvasHeight - constraints.safeY - constraints.margins.bottom,
       };
       const imageRegion = { x: 0, y: 0, width: imageW, height: this.canvasHeight };
+      const carvedTextRegion = this.carveSubjectsFromRegion(textRegion, axis);
+      canonicalGeometry.imageRegion = imageRegion;
+      canonicalGeometry.textRegion = carvedTextRegion;
       return {
         imageRegion,
-        textRegion: this.carveSubjectsFromRegion(textRegion),
+        textRegion: carvedTextRegion,
         spatial: { ...policy, splitAxis: axis, preferredTextBias: bias },
+        canonicalGeometry
       };
     }
 
@@ -797,10 +850,14 @@ export class LayoutEngine {
           width: this.canvasWidth,
           height: imageH,
         };
+        const carvedTextRegion = this.carveSubjectsFromRegion(textRegion, axis);
+        canonicalGeometry.imageRegion = imageRegion;
+        canonicalGeometry.textRegion = carvedTextRegion;
         return {
           imageRegion,
-          textRegion: this.carveSubjectsFromRegion(textRegion),
+          textRegion: carvedTextRegion,
           spatial: { ...policy, splitAxis: axis, preferredTextBias: bias },
+          canonicalGeometry
         };
       }
       const textRegion = {
@@ -810,10 +867,14 @@ export class LayoutEngine {
         height: Math.max(100, this.canvasHeight - imageH - constraints.margins.bottom - gutter / 2),
       };
       const imageRegion = { x: 0, y: 0, width: this.canvasWidth, height: imageH };
+      const carvedTextRegion = this.carveSubjectsFromRegion(textRegion, axis);
+      canonicalGeometry.imageRegion = imageRegion;
+      canonicalGeometry.textRegion = carvedTextRegion;
       return {
         imageRegion,
-        textRegion: this.carveSubjectsFromRegion(textRegion),
+        textRegion: carvedTextRegion,
         spatial: { ...policy, splitAxis: axis, preferredTextBias: bias },
+        canonicalGeometry
       };
     }
 
@@ -841,10 +902,14 @@ export class LayoutEngine {
       };
     }
 
+    const carvedTextRegion = this.carveSubjectsFromRegion(textRegion, 'overlay');
+    canonicalGeometry.imageRegion = imageRegion;
+    canonicalGeometry.textRegion = carvedTextRegion;
     return {
       imageRegion,
-      textRegion: this.carveSubjectsFromRegion(textRegion),
+      textRegion: carvedTextRegion,
       spatial: { ...policy, splitAxis: 'overlay', preferredTextBias: bias },
+      canonicalGeometry
     };
   }
 
@@ -867,7 +932,7 @@ export class LayoutEngine {
    * After panel allocation, shrink text region away from protected subjects that still intersect.
    * Keeps composition valid before QC instead of relying on font crush.
    */
-  private carveSubjectsFromRegion(region: BoundingBox): BoundingBox {
+  private carveSubjectsFromRegion(region: BoundingBox, axis: string = 'overlay'): BoundingBox {
     const subjects = this.protectedSubjects.length
       ? this.protectedSubjects
       : (this.subjectBox || this.faceBox ? [this.subjectBox || this.faceBox!] : []);
@@ -879,6 +944,13 @@ export class LayoutEngine {
         result.x < s.x + s.width && result.x + result.width > s.x
         && result.y < s.y + s.height && result.y + result.height > s.y;
       if (!overlaps) continue;
+
+      // GPT Rule: Do not repeatedly carve a dedicated panel (horizontal/vertical) 
+      // until a 40% share becomes a 99px sliver. If a dedicated panel conflicts, 
+      // do not carve it; let QC detect the collision and repair the composition.
+      if (axis !== 'overlay') {
+        continue;
+      }
 
       const spaceLeft = s.x - result.x;
       const spaceRight = (result.x + result.width) - (s.x + s.width);

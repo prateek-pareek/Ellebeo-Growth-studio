@@ -227,6 +227,50 @@ export class TypographyEngine {
       }
     }
 
+    // ==========================================
+    // TWO-PASS TYPOGRAPHY OCCUPANCY BOOST
+    // ==========================================
+    // For typography_hero headings: if text significantly underutilizes its
+    // allocated region, boost font size proportionally. This is a single
+    // controlled pass — no infinite loops.
+    if (preserveHero && layer.role === 'heading' && layer.allocatedBox) {
+      const allocatedArea = layer.allocatedBox.width * layer.allocatedBox.height;
+      const actualArea = effectiveMaxW * textHeight;
+      const occupancy = allocatedArea > 0 ? actualArea / allocatedArea : 1;
+
+      if (occupancy < 0.45) {
+        // Text is using less than 45% of its allocated region — boost
+        const targetOccupancy = 0.65;
+        const boostRatio = Math.min(1.35, Math.sqrt(targetOccupancy / Math.max(0.05, occupancy)));
+        const boostedSize = Math.round(style.fontSize * boostRatio);
+        const maxAllowedSize = Math.round(Math.min(
+          layer.allocatedBox.height * 0.45, // Don't exceed ~45% of pocket height per line
+          layer.allocatedBox.width * 0.12,   // Don't exceed ~12% of pocket width as char height
+          ctx.h * 0.12,                       // Absolute canvas ceiling
+        ));
+        const newSize = Math.min(boostedSize, maxAllowedSize);
+
+        if (newSize > style.fontSize) {
+          const originalLineHeightMult = lineHeight / Math.max(1, style.fontSize);
+          style.fontSize = newSize;
+          lineHeight = Math.max(1, Math.round(newSize * originalLineHeightMult));
+          escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, effectiveMaxW, trackingEm);
+
+          // Cap lines to prevent overflow after boost
+          const maxLines = Math.max(1, Math.floor(layer.allocatedBox.height / lineHeight));
+          if (escapedLines.length > maxLines) {
+            escapedLines = escapedLines.slice(0, maxLines);
+          }
+          textHeight = escapedLines.length * lineHeight;
+
+          console.log(
+            `[TypographyOccupancy] Boosted heading: ${style.fontSize}px (ratio=${boostRatio.toFixed(2)}) ` +
+            `occupancy=${(occupancy * 100).toFixed(0)}% → ~${((effectiveMaxW * textHeight) / allocatedArea * 100).toFixed(0)}%`
+          );
+        }
+      }
+    }
+
     let x = ctx.w / 2;
     let y = ctx.h / 2;
 

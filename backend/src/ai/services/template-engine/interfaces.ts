@@ -1,3 +1,5 @@
+import { BoundingBox as LayoutBoundingBox } from './engines/layout-engine';
+
 export interface BoundingBox {
   yMinPercent: number; // 0-100
   yMaxPercent: number; // 0-100
@@ -138,6 +140,7 @@ export interface ICompiledLayoutDSL {
     imageRegion: { x: number; y: number; width: number; height: number };
     textRegion: { x: number; y: number; width: number; height: number };
   };
+  canonicalGeometry?: CanonicalGeometry;
   primitiveTokens?: Partial<PrimitiveTokens>;
 }
 
@@ -227,6 +230,7 @@ export interface IDesignIntent {
   balance: 'symmetrical' | 'asymmetrical' | 'dynamic';
   readingFlow: 'z_pattern' | 'center_down' | 'circular' | 'scattered' | 'center_anchored';
   visualPriority: 'typography_hero' | 'image_hero' | 'composition_hero' | 'cta_hero';
+  role?: string;
   whitespace: 'tight' | 'comfortable' | 'airy' | 'luxury';
   mood: 'luxury' | 'organic' | 'clinical' | 'pop' | 'minimalist';
   primitives: {
@@ -292,6 +296,17 @@ export interface TextureRecipe {
 
 export interface HeroRecipe {
   focalPoint: 'photography' | 'typography' | 'product' | 'composition';
+}
+
+export interface CanonicalGeometry {
+  faceBox?: LayoutBoundingBox;
+  headBox?: LayoutBoundingBox;       // faceBox padded upward by ~15% for hair/head
+  subjectMass?: LayoutBoundingBox;   // expandFaceToSubject output
+  protectedZones: LayoutBoundingBox[]; // merged subjects array
+  textRegion?: LayoutBoundingBox;
+  imageRegion?: LayoutBoundingBox;
+  safeMargins: { x: number; y: number };
+  splitAxis?: 'overlay' | 'vertical' | 'horizontal';
 }
 
 export interface ILayoutState {

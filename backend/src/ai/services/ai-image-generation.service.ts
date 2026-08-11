@@ -1321,9 +1321,9 @@ CRITICAL IMAGE REQUIREMENTS:
 
       // NEW ARCHITECTURE: Pull semantic rules from the Art Direction Engine using the layout ID!
       const intent = this.artDirectionEngine.generateDesignIntent(layoutType, Math.max(0, (index || 1) - 1), totalSlides || 1, designSpec);
-      // Final slide must be a clear CTA composition
+      // Final slide must function as a CTA, but preserve its visual priority (e.g. typography_hero)
       if (isLast) {
-        intent.visualPriority = 'cta_hero';
+        intent.role = 'cta';
         intent.readingFlow = intent.readingFlow || 'center_down';
       }
       const behavior = this.artDirectionEngine.mapIntentToBehavior(intent);
@@ -1462,7 +1462,7 @@ CRITICAL IMAGE REQUIREMENTS:
         failReason = 'missing_headline';
       }
 
-      const runOptimize = (_layoutId: string, dslIn: any) => {
+      const runOptimize = (_layoutId: string, dslIn: any, escalatedPolicy?: any) => {
         let dslWork = JSON.parse(JSON.stringify(dslIn));
         const designCompiler = new DesignCompiler();
         if (designLanguage) dslWork = designCompiler.compile(dslWork, designLanguage);
@@ -1499,7 +1499,7 @@ CRITICAL IMAGE REQUIREMENTS:
           designLanguage?.intent?.readingFlow,
           { headline: effectiveHeadline, subheadline: effectiveSubheadline, cta: effectiveCta },
           additionalSubjects,
-          geometryOut.spatial,
+          escalatedPolicy || geometryOut.spatial,
         );
       };
 
@@ -1508,7 +1508,17 @@ CRITICAL IMAGE REQUIREMENTS:
         optimizedDsl = optResult.dsl;
 
         if (optResult.suggestLayoutChange) {
-          console.warn(`[CompositionQC] Layout '${computedLayoutType}' failed visual gate. Trying alternates… Actions: ${optResult.fitActions.join(' | ')}`);
+          const failedSignatures: Array<{ axis?: string; share?: number; category: string }> = [];
+          
+          let currentCategory = (optimizedDsl as any)?._compositionMeta?.failureCategory || 'spatial_allocation';
+          failedSignatures.push({
+            axis: (optimizedDsl as any)?._spatialPolicy?.splitAxis,
+            share: (optimizedDsl as any)?._spatialPolicy?.textShare,
+            category: currentCategory
+          });
+
+          console.warn(`[CompositionQC] Layout '${computedLayoutType}' failed visual gate (${currentCategory}). Trying alternates… Actions: ${optResult.fitActions.join(' | ')}`);
+          
           const alternates = compositionQC.suggestAlternateLayouts(
             computedLayoutType,
             Object.keys(COMPILED_LAYOUTS),
@@ -1518,18 +1528,36 @@ CRITICAL IMAGE REQUIREMENTS:
               family: designLanguage?.intent?.family,
             },
             4,
+            failedSignatures
           );
+
+          let attempt = 1;
           for (const altId of alternates) {
+            attempt++;
             const altDsl = COMPILED_LAYOUTS[altId];
             if (!altDsl) continue;
-            const altResult = runOptimize(altId, altDsl);
-            console.log(`[CompositionQC] Alternate '${altId}' → suggestChange=${altResult.suggestLayoutChange} actions=${altResult.fitActions.slice(-2).join(';')}`);
+
+            let escalatedPolicy: any = undefined;
+            const spatialFailures = failedSignatures.filter(f => f.category === 'spatial_allocation' || f.category === 'collision');
+            if (spatialFailures.length >= 2 && spatialFailures.every(f => f.axis === spatialFailures[0].axis)) {
+               escalatedPolicy = LayoutEngine.escalateSpatialPolicy((optimizedDsl as any)?._spatialPolicy, designLanguage?.intent?.visualPriority || 'image_hero');
+            }
+
+            const altResult = runOptimize(altId, altDsl, escalatedPolicy);
+            console.log(`[Diagnostic Fallback] Attempt ${attempt} | Template: ${altId} | Axis: ${escalatedPolicy?.splitAxis || (altResult.dsl as any)?._spatialPolicy?.splitAxis} | Category: ${(altResult.dsl as any)?._compositionMeta?.failureCategory || (altResult.suggestLayoutChange ? 'unknown' : 'PASS')}`);
+            
             if (!altResult.suggestLayoutChange) {
               computedLayoutType = altId;
               optimizedDsl = altResult.dsl;
               optResult = altResult;
               console.log(`[CompositionQC] Accepted alternate arrangement '${altId}'`);
               break;
+            } else {
+              failedSignatures.push({
+                axis: (altResult.dsl as any)?._spatialPolicy?.splitAxis,
+                share: (altResult.dsl as any)?._spatialPolicy?.textShare,
+                category: (altResult.dsl as any)?._compositionMeta?.failureCategory || 'spatial_allocation'
+              });
             }
           }
           if (optResult.suggestLayoutChange) {

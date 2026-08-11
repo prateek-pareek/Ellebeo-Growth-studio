@@ -349,9 +349,18 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
           const splitPhoto = await processPortraitFit(ctx.imageBuffer, size, size, ctx.validBackgroundColor);
           const roundedPhoto = await sharp(splitPhoto).composite([{ input: Buffer.from(circleSvg), blend: 'dest-in' }]).png().toBuffer();
 
-          const baseImageBuffer = await sharp({
-            create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor },
-          }).composite([{ input: roundedPhoto, top: topOffset, left: leftOffset }]).png().toBuffer();
+          // Background: Blurry, toned version of the original client image
+          const bgImage = await sharp(ctx.imageBuffer)
+              .resize(ctx.w, ctx.h, { fit: 'cover' })
+              .blur(40)
+              .modulate({ brightness: 0.8, saturation: 0.9 })
+              .toBuffer();
+
+          const baseImageBuffer = await sharp(bgImage)
+            .composite([
+              { input: Buffer.from(`<svg><rect width="${ctx.w}" height="${ctx.h}" fill="${ctx.validSecondaryColor}" fill-opacity="0.5" /></svg>`), blend: 'over' },
+              { input: roundedPhoto, top: topOffset, left: leftOffset }
+            ]).png().toBuffer();
 
           const isRight = imageLayer.anchor?.includes('right');
           const isLeft = imageLayer.anchor?.includes('left');
@@ -413,11 +422,18 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
 
           const scaledPhoto = await processPortraitFit(ctx.imageBuffer, targetW, targetH, ctx.validBackgroundColor);
 
-          const backgroundCanvas = sharp({
-            create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validBackgroundColor },
-          });
+          // Background: Blurry, toned version of the original client image
+          const bgImage = await sharp(ctx.imageBuffer)
+              .resize(ctx.w, ctx.h, { fit: 'cover' })
+              .blur(40)
+              .modulate({ brightness: 0.8, saturation: 0.9 })
+              .toBuffer();
 
-          const baseImageBuffer = await backgroundCanvas.composite([{ input: scaledPhoto, top, left }]).png().toBuffer();
+          const baseImageBuffer = await sharp(bgImage)
+            .composite([
+              { input: Buffer.from(`<svg><rect width="${ctx.w}" height="${ctx.h}" fill="${ctx.validBackgroundColor}" fill-opacity="0.8" /></svg>`), blend: 'over' },
+              { input: scaledPhoto, top, left }
+            ]).png().toBuffer();
           const baseImage = sharp(baseImageBuffer);
 
           // Canva-Level Polish: Dynamically adjust text boundaries to dodge the photo
@@ -478,11 +494,22 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
     const frameW = minDim + 60;
     const frameH = minDim + 160;
     const polaroidFrame = await sharp({ create: { width: frameW, height: frameH, channels: 3, background: '#ffffff' } }).png().toBuffer();
-    const baseImage = sharp({ create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor } })
+    
+    // Background: Blurry, toned version of the original client image
+    const bgImage = await sharp(ctx.imageBuffer)
+        .resize(ctx.w, ctx.h, { fit: 'cover' })
+        .blur(40)
+        .modulate({ brightness: 0.8, saturation: 0.9 })
+        .toBuffer();
+        
+    const baseImage = sharp(bgImage)
       .composite([
+        // Darken overlay to ensure frame pops and text is legible
+        { input: Buffer.from(`<svg><rect width="${ctx.w}" height="${ctx.h}" fill="${ctx.validSecondaryColor}" fill-opacity="0.5" /></svg>`), blend: 'over' },
         { input: polaroidFrame, top: Math.floor((ctx.h - frameH) / 2), left: Math.floor((ctx.w - frameW) / 2) },
         { input: photo, top: Math.floor((ctx.h - frameH) / 2) + 30, left: Math.floor((ctx.w - frameW) / 2) + 30 }
       ]);
+      
     return { baseImage, compositeTop: Math.floor((ctx.h - frameH) / 2) + minDim + 50, compositeBottom: ctx.paddingBottom, compositeLeft: Math.floor((ctx.w - frameW) / 2) + 40, compositeRight: Math.floor((ctx.w - frameW) / 2) + 40 };
   },
 
@@ -491,8 +518,19 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
     const photo = await processPortraitFit(ctx.imageBuffer, minDim, minDim, ctx.validBackgroundColor);
     const circleSvg = Buffer.from(`<svg width="${minDim}" height="${minDim}"><circle cx="${minDim / 2}" cy="${minDim / 2}" r="${minDim / 2}" fill="white"/></svg>`);
     const masked = await sharp(photo).composite([{ input: circleSvg, blend: 'dest-in' }]).png().toBuffer();
-    const baseImage = sharp({ create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor } })
-      .composite([{ input: masked, top: Math.floor((ctx.h - minDim) / 2), left: Math.floor((ctx.w - minDim) / 2) }]);
+    
+    // Background: Blurry, toned version of the original client image
+    const bgImage = await sharp(ctx.imageBuffer)
+        .resize(ctx.w, ctx.h, { fit: 'cover' })
+        .blur(40)
+        .modulate({ brightness: 0.8, saturation: 0.9 })
+        .toBuffer();
+
+    const baseImage = sharp(bgImage)
+      .composite([
+        { input: Buffer.from(`<svg><rect width="${ctx.w}" height="${ctx.h}" fill="${ctx.validSecondaryColor}" fill-opacity="0.5" /></svg>`), blend: 'over' },
+        { input: masked, top: Math.floor((ctx.h - minDim) / 2), left: Math.floor((ctx.w - minDim) / 2) }
+      ]);
     return { baseImage, compositeTop: Math.floor((ctx.h - minDim) / 2) + minDim + 40, compositeBottom: ctx.paddingBottom, compositeLeft: ctx.paddingX, compositeRight: ctx.paddingX };
   },
 
@@ -504,8 +542,19 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
         <path d="M 0 0 L ${ctx.w} 0 L ${ctx.w} ${ctx.h - 150} Q ${ctx.w * 0.75} ${ctx.h - 180} ${ctx.w / 2} ${ctx.h - 130} T 0 ${ctx.h - 160} Z" fill="white"/>
       </svg>`);
     const masked = await sharp(photo).composite([{ input: tearSvg, blend: 'dest-in' }]).png().toBuffer();
-    const baseImage = sharp({ create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor } })
-      .composite([{ input: masked, top: 0, left: 0 }]);
+
+    // Background: Blurry, toned version of the original client image
+    const bgImage = await sharp(ctx.imageBuffer)
+        .resize(ctx.w, ctx.h, { fit: 'cover' })
+        .blur(40)
+        .modulate({ brightness: 0.8, saturation: 0.9 })
+        .toBuffer();
+
+    const baseImage = sharp(bgImage)
+      .composite([
+        { input: Buffer.from(`<svg><rect width="${ctx.w}" height="${ctx.h}" fill="${ctx.validSecondaryColor}" fill-opacity="0.5" /></svg>`), blend: 'over' },
+        { input: masked, top: 0, left: 0 }
+      ]);
     return { baseImage, compositeTop: ctx.h - 120, compositeBottom: 20, compositeLeft: ctx.paddingX, compositeRight: ctx.paddingX };
   },
 };
@@ -1002,7 +1051,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     }
 
     // Check if we need to apply a global overlay (like noise) based on brand DNA
-    let overlayLayers = dsl.layers.filter((l: any) => l.type === 'decoration' || l.type === 'text' || (l.type === 'image' && l.component));
+    let overlayLayers = dsl.layers.filter((l: any) => l.type === 'decoration' || l.type === 'text' || l.type === 'text_group' || (l.type === 'image' && l.component));
 
     // Generate the Visual Recipe instead of relying on rigid family names
     let visualRecipe;
@@ -1119,7 +1168,8 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       layoutState: { occupiedRegions: [], family, renderedStrings: [] },
       colorHierarchy,
       recipe: visualRecipe.primitive,
-      tokens: (dsl as any).primitiveTokens
+      tokens: (dsl as any).primitiveTokens,
+      canonicalGeometry: (dsl as any).canonicalGeometry
     };
 
     const layoutState = primitiveCtx.layoutState!;

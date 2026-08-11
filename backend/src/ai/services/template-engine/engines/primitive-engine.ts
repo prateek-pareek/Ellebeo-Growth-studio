@@ -1,5 +1,5 @@
-import { IDSLDecorationLayer, IDSLTextLayer } from '../interfaces';
-import { LayoutConstraints } from './layout-engine';
+import { IDSLDecorationLayer, IDSLTextLayer, CanonicalGeometry } from '../interfaces';
+import { LayoutConstraints, BoundingBox } from './layout-engine';
 
 export type PrimitiveCategory = 'geometry' | 'layout' | 'effects' | 'typography' | 'illustration';
 
@@ -16,11 +16,13 @@ export interface PrimitiveContext {
   colorHierarchy?: import('./color-composition-engine').ColorHierarchy;
   recipe?: import('../interfaces').PrimitiveRecipe;
   tokens?: Partial<import('../interfaces').PrimitiveTokens>;
+  canonicalGeometry?: CanonicalGeometry;
   
   // Helper methods injected at runtime
   scaleStroke?: (basePx: number) => number;
   resolveOpacity?: (baseOpacity: number) => number;
   resolveShadow?: (intent: 'soft' | 'medium' | 'deep') => string;
+  isSafePlacement?: (candidateBox: BoundingBox) => boolean;
 }
 
 export type PrimitiveRenderer = (ctx: PrimitiveContext, layer?: IDSLDecorationLayer | IDSLTextLayer) => string;
@@ -78,18 +80,35 @@ export class PrimitiveEngine {
         const strokeWidth = profile?.strokeWidth ?? 4;
         const opacity = profile?.opacity ?? 1.0;
 
-        // Find the split seam. Usually the image occupies one half.
-        // If there's an image block in layoutState, use its edge.
-        let splitX = ctx.w / 2;
-        if (ctx.layoutState && ctx.layoutState.occupiedRegions) {
-          const img = ctx.layoutState.occupiedRegions.find(r => r.role === 'image' && r.id !== 'hero-image');
-          if (img) {
-            splitX = (img.x < ctx.w / 2) ? img.x + img.width : img.x;
+        // Use canonicalGeometry to find the exact edge of the text panel
+        let isHorizontal = false;
+        let splitCoord = ctx.w / 2;
+
+        if (ctx.canonicalGeometry?.splitAxis === 'vertical') {
+          isHorizontal = true;
+          // Vertical split means text/image are top/bottom. Line should be horizontal.
+          if (ctx.canonicalGeometry.textRegion) {
+             const tr = ctx.canonicalGeometry.textRegion;
+             // If text is top, line is at bottom of text region. If text is bottom, line is at top.
+             splitCoord = (tr.y < ctx.h / 2) ? tr.y + tr.height + 10 : tr.y - 10;
+          } else {
+             splitCoord = ctx.h / 2;
+          }
+        } else {
+          // Horizontal split means text/image are left/right. Line should be vertical.
+          if (ctx.canonicalGeometry?.textRegion) {
+             const tr = ctx.canonicalGeometry.textRegion;
+             splitCoord = (tr.x < ctx.w / 2) ? tr.x + tr.width + 10 : tr.x - 10;
+          } else if (ctx.layoutState && ctx.layoutState.occupiedRegions) {
+            const img = ctx.layoutState.occupiedRegions.find(r => r.role === 'image' && r.id !== 'hero-image');
+            if (img) splitCoord = (img.x < ctx.w / 2) ? img.x + img.width : img.x;
           }
         }
-        return `
-        <line x1="${splitX}" y1="0" x2="${splitX}" y2="${ctx.h}" stroke="${ctx.validBrandColor}" stroke-width="${strokeWidth}" opacity="${opacity}" />
-      `;
+
+        if (isHorizontal) {
+           return `<line x1="0" y1="${splitCoord}" x2="${ctx.w}" y2="${splitCoord}" stroke="${ctx.validBrandColor}" stroke-width="${strokeWidth}" opacity="${opacity}" />`;
+        }
+        return `<line x1="${splitCoord}" y1="0" x2="${splitCoord}" y2="${ctx.h}" stroke="${ctx.validBrandColor}" stroke-width="${strokeWidth}" opacity="${opacity}" />`;
       }
     };
 
@@ -136,9 +155,19 @@ export class PrimitiveEngine {
       render: (ctx) => {
         const weight = ctx.behavior?.dividerStrokeWeight || 2;
         const padding = ctx.behavior?.dividerPadding || 60;
+        
+        let cx = ctx.w / 2;
+        let cy = ctx.h / 2 + 100;
+        
+        // Follow the text flow center if available
+        if (ctx.canonicalGeometry?.textRegion) {
+            const tr = ctx.canonicalGeometry.textRegion;
+            cx = tr.x + (tr.width / 2);
+        }
+
         return `
-          <line x1="${ctx.w / 2 - padding}" y1="${ctx.h / 2 + 100}" x2="${ctx.w / 2 + padding}" y2="${ctx.h / 2 + 100}" stroke="${ctx.validBrandColor}" stroke-width="${weight}" opacity="${ctx.resolveOpacity!(0.5)}" />
-          <circle cx="${ctx.w / 2}" cy="${ctx.h / 2 + 100}" r="${weight * 2}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="${weight}" />
+          <line x1="${cx - padding}" y1="${cy}" x2="${cx + padding}" y2="${cy}" stroke="${ctx.validBrandColor}" stroke-width="${weight}" opacity="${ctx.resolveOpacity!(0.5)}" />
+          <circle cx="${cx}" cy="${cy}" r="${weight * 2}" fill="none" stroke="${ctx.validBrandColor}" stroke-width="${weight}" />
         `;
       }
     };
@@ -749,27 +778,35 @@ export class PrimitiveEngine {
 
     this.registry['premium_stars'] = {
       category: 'effects', render: (ctx) => {
-        const headlineRegion = ctx.layoutState?.occupiedRegions?.find(r => r.role === 'heading');
         let sx1 = ctx.constraints.safeX + 50;
         let sy1 = ctx.constraints.safeY + 80;
         let sx2 = ctx.w - ctx.constraints.safeX - 80;
         let sy2 = ctx.h * 0.6;
 
-        if (headlineRegion) {
-          // Anchor strategically around the headline bounding box
-          sx1 = Math.max(ctx.constraints.safeX, headlineRegion.x - 40);
-          sy1 = Math.max(ctx.constraints.safeY, headlineRegion.y - 40);
-          sx2 = Math.min(ctx.w - ctx.constraints.safeX, headlineRegion.x + headlineRegion.width + 40);
-          sy2 = Math.min(ctx.h - ctx.constraints.safeY, headlineRegion.y + headlineRegion.height + 40);
+        if (ctx.canonicalGeometry?.textRegion) {
+          const tr = ctx.canonicalGeometry.textRegion;
+          sx1 = Math.max(ctx.constraints.safeX, tr.x - 40);
+          sy1 = Math.max(ctx.constraints.safeY, tr.y - 40);
+          sx2 = Math.min(ctx.w - ctx.constraints.safeX, tr.x + tr.width + 40);
+          sy2 = Math.min(ctx.h - ctx.constraints.safeY, tr.y + tr.height + 40);
+        } else {
+          const headlineRegion = ctx.layoutState?.occupiedRegions?.find(r => r.role === 'heading');
+          if (headlineRegion) {
+            sx1 = Math.max(ctx.constraints.safeX, headlineRegion.x - 40);
+            sy1 = Math.max(ctx.constraints.safeY, headlineRegion.y - 40);
+            sx2 = Math.min(ctx.w - ctx.constraints.safeX, headlineRegion.x + headlineRegion.width + 40);
+            sy2 = Math.min(ctx.h - ctx.constraints.safeY, headlineRegion.y + headlineRegion.height + 40);
+          }
         }
 
         const drawStar = (x: number, y: number, r: number) => {
           return `<path d="M ${x} ${y - r} Q ${x} ${y} ${x + r} ${y} Q ${x} ${y} ${x} ${y + r} Q ${x} ${y} ${x - r} ${y} Q ${x} ${y} ${x} ${y - r} Z" />`;
         };
 
+        // Added wrapper with dataset for collision engine
         return `
       <!-- Premium Four-Point Stars (Anchored to Focal Point) -->
-      <g fill="${ctx.validAccentColor || ctx.validBrandColor}" opacity="${ctx.resolveOpacity!(1.0)}">
+      <g data-bounds="${sx1},${sy1},${Math.abs(sx2-sx1)+40},${Math.abs(sy2-sy1)+40}" fill="${ctx.validAccentColor || ctx.validBrandColor}" opacity="${ctx.resolveOpacity!(1.0)}">
         ${drawStar(sx1, sy1, 24)}
         <g opacity="${ctx.resolveOpacity!(0.8)}">
            ${drawStar(sx2, sy2, 16)}
@@ -1821,6 +1858,25 @@ export class PrimitiveEngine {
       return Math.min(1.0, Math.max(0.02, parseFloat(finalOpacity.toFixed(2))));
     };
 
+    ctx.isSafePlacement = (candidateBox: BoundingBox): boolean => {
+      if (!ctx.canonicalGeometry) return true; // graceful fallback
+      const zones = ctx.canonicalGeometry.protectedZones;
+      const halo = Math.round(Math.min(ctx.w, ctx.h) * 0.03);
+      for (const zone of zones) {
+        const expanded = {
+          x: zone.x - halo, y: zone.y - halo,
+          width: zone.width + halo * 2, height: zone.height + halo * 2,
+        };
+        if (candidateBox.x < expanded.x + expanded.width &&
+            candidateBox.x + candidateBox.width > expanded.x &&
+            candidateBox.y < expanded.y + expanded.height &&
+            candidateBox.y + candidateBox.height > expanded.y) {
+          return false;
+        }
+      }
+      return true;
+    };
+
     ctx.resolveShadow = (intent: 'soft' | 'medium' | 'deep') => {
       const depth = ctx.tokens?.shadowDepth || intent;
       if (depth === 'none') return '';
@@ -1832,6 +1888,44 @@ export class PrimitiveEngine {
     
     let rawSvg = primitive.render(ctx, layer);
     if (!rawSvg.trim()) return '';
+
+    // ==========================================
+    // PRIMITIVE COLLISION ENGINE
+    // ==========================================
+    
+    // Attempt to extract position to check collision
+    // Look for data-bounds="x,y,w,h" OR translate(x, y) OR cx="x" cy="y"
+    let bounds: BoundingBox | null = null;
+    const boundsMatch = rawSvg.match(/data-bounds="([^"]+)"/);
+    if (boundsMatch) {
+       const parts = boundsMatch[1].split(',').map(Number);
+       if (parts.length === 4) bounds = { x: parts[0], y: parts[1], width: parts[2], height: parts[3] };
+    } else {
+       const translateMatch = rawSvg.match(/translate\(\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\)/);
+       if (translateMatch) {
+         bounds = { x: parseFloat(translateMatch[1]), y: parseFloat(translateMatch[2]), width: 100, height: 100 };
+       }
+    }
+
+    if (bounds && ctx.isSafePlacement && !ctx.isSafePlacement(bounds)) {
+       // 1. Attempt minor Relocation (shift down or away)
+       const relocatedBounds = { ...bounds, y: bounds.y + (ctx.h * 0.1) }; // Push it down slightly
+       if (ctx.isSafePlacement(relocatedBounds)) {
+           rawSvg = `<g transform="translate(0, ${ctx.h * 0.1})">${rawSvg}</g>`;
+           console.warn(`[PrimitiveEngine] Collision detected for '${name}' - relocated Y`);
+       } else {
+           // 2. Minor Scale Down (0.8 instead of crushing 0.5)
+           const shrunkBounds = { ...bounds, width: bounds.width * 0.8, height: bounds.height * 0.8 };
+           if (ctx.isSafePlacement(shrunkBounds)) {
+               rawSvg = `<g transform="scale(0.8) translate(${bounds.x * 0.2}, ${bounds.y * 0.2})">${rawSvg}</g>`;
+               console.warn(`[PrimitiveEngine] Collision detected for '${name}' - scaled to 80%`);
+           } else {
+               // 3. Disable
+               console.warn(`[PrimitiveEngine] Hard collision detected for '${name}' - Silently disabling primitive.`);
+               return ''; // Disable primitive completely
+           }
+       }
+    }
 
     // ==========================================
     // PRIMITIVE VISIBILITY ENGINE

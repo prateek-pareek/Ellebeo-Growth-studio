@@ -1646,11 +1646,12 @@ export class CompositionEngine {
       layers.push({ id: 'fb_text', type: 'text', zIndex: 30, anchor: 'center', role: 'heading', alignment: 'center', maxWidthPercent: 80 } as IDSLTextLayer);
     }
 
-    // Filter out hardcoded decorations that aren't structural, allowing dynamic primitive injection
-    const structuralIds = ['split_border', 'breather_ghost_text', 'split_line', 'fb_gradient', 'mag_masthead', 'port_image'];
-    const filteredLayers = layers.filter(l => l.type !== 'decoration' || structuralIds.includes(l.id));
+    // Preserve ALL recipe-defined layers (including decoration primitives like premium_stars).
+    // The old filter aggressively stripped non-structural decorations, causing recipe-defined
+    // primitives to silently disappear from the render pipeline.
+    const filteredLayers = [...layers];
 
-    // Dynamically inject family primitives
+    // Dynamically inject family primitives (additive — skips components already present)
     const familyId = layoutId.split('_')[0];
     this.injectFamilyPrimitives(familyId, filteredLayers);
 
@@ -1703,18 +1704,27 @@ export class CompositionEngine {
     }
 
     if (primitivesToInject.length > 0) {
-      // Inject 1-2 random primitives
-      const numToInject = Math.floor(Math.random() * 2) + 1; // 1 or 2
-      for (let i = 0; i < numToInject; i++) {
-        const primitive = primitivesToInject[Math.floor(Math.random() * primitivesToInject.length)];
-        layers.push({
-          id: `dyn_prim_${familyId}_${i}`,
-          type: 'decoration',
-          zIndex: 25 + i, // Above images, below top text
-          component: primitive as any,
-          anchor: randomAnchor(),
-          offsetPercent: Math.floor(Math.random() * 10)
-        } as IDSLDecorationLayer);
+      // Collect components already present in the recipe-defined layers
+      const existingComponents = new Set(
+        layers.filter((l: any) => l.type === 'decoration' && l.component)
+              .map((l: any) => l.component)
+      );
+
+      // Only inject primitives not already present
+      const candidates = primitivesToInject.filter(p => !existingComponents.has(p));
+      if (candidates.length > 0) {
+        const numToInject = Math.min(candidates.length, Math.floor(Math.random() * 2) + 1);
+        for (let i = 0; i < numToInject; i++) {
+          const primitive = candidates[Math.floor(Math.random() * candidates.length)];
+          layers.push({
+            id: `dyn_prim_${familyId}_${i}`,
+            type: 'decoration',
+            zIndex: 25 + i, // Above images, below top text
+            component: primitive as any,
+            anchor: randomAnchor(),
+            offsetPercent: Math.floor(Math.random() * 10)
+          } as IDSLDecorationLayer);
+        }
       }
     }
   }

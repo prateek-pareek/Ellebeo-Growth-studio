@@ -15,6 +15,7 @@ export interface CompositionIntent {
   visualPriority?: VisualPriority;
   readingFlow?: ReadingFlow;
   family?: string;
+  role?: string;
 }
 
 export interface ContentBundle {
@@ -43,6 +44,7 @@ export interface VisualQualityResult {
   issues: string[];
   critical: string[];
   metrics: Record<string, number>;
+  failureCategory?: 'spatial_allocation' | 'collision' | 'readability' | 'renderer' | 'none';
 }
 
 /**
@@ -497,7 +499,19 @@ export class CompositionQualityController {
 
     score = Math.max(0, Math.min(10, score));
     const pass = score >= CompositionQualityController.PASS_SCORE && critical.length === 0;
-    return { pass, score, issues: [...new Set(issues)], critical: [...new Set(critical)], metrics };
+
+    let failureCategory: 'spatial_allocation' | 'collision' | 'readability' | 'renderer' | 'none' = 'none';
+    if (!pass) {
+      if (critical.includes('text_collision') || critical.includes('subject_collision')) {
+        failureCategory = 'collision';
+      } else if (critical.includes('unreadable_heading') || critical.includes('contrast') || critical.includes('dominance_over_scaled')) {
+        failureCategory = 'readability';
+      } else {
+        failureCategory = 'spatial_allocation';
+      }
+    }
+
+    return { pass, score, issues: [...new Set(issues)], critical: [...new Set(critical)], metrics, failureCategory };
   }
 
   /** @deprecated Use evaluateVisualQuality — kept for callers during transition */
@@ -525,30 +539,47 @@ export class CompositionQualityController {
     return (hash >>> 0) % 4;
   }
 
-  /**
-   * Pick alternate layout IDs when the current arrangement fails visual QC.
-   * Preference: same family → same reading flow → different flow — never hardcodes slide coords.
-   */
   public suggestAlternateLayouts(
     currentLayoutId: string,
     availableIds: string[],
     intent: CompositionIntent,
     max = 4,
+    failedSignatures: Array<{ axis?: string; share?: number; category: string }> = [],
   ): string[] {
     const flow = String(intent.readingFlow || 'center_down');
     const familyHint = intent.family || this.inferFamilyFromLayoutId(currentLayoutId);
+    const roleHint = intent.role || 'default';
     const others = availableIds.filter(id => id !== currentLayoutId);
+
     const scored = others
       .map(id => {
-        let s = 1; // every alternate is eligible — never hardcode slide coords
-        if (familyHint && id.toLowerCase().includes(String(familyHint).toLowerCase())) s += 5;
-        if (id.includes(flow)) s += 4;
+        let s = 1; // base score
+
+        // 1. Same family (Highest Priority)
+        if (familyHint && id.toLowerCase().includes(String(familyHint).toLowerCase())) {
+          s += 50; 
+        } 
+        
+        // 2. Semantically compatible family based on Role/Intent
+        if (roleHint === 'cta' || intent.visualPriority === 'cta_hero') {
+          if (id.includes('cta') || id.includes('promo') || id.includes('premium')) {
+             s += 30; // Strongly prefer other conversion-oriented templates
+          }
+        }
+        if (intent.visualPriority === 'typography_hero') {
+          if (id.includes('quote') || id.includes('minimal') || id.includes('editorial')) {
+             s += 20;
+          }
+        }
+
+        // 3. Flow and Structure matching
+        if (id.includes(flow)) s += 10;
         if (flow === 'center_down' && id.includes('z_pattern')) s += 3;
         if (flow === 'z_pattern' && (id.includes('center_down') || id.includes('center'))) s += 3;
-        if (intent.visualPriority === 'image_hero' && (id.includes('hero') || id.includes('editorial') || id.includes('bleed'))) s += 2;
-        if (intent.visualPriority === 'typography_hero' && (id.includes('quote') || id.includes('minimal') || id.includes('type'))) s += 2;
-        // Prefer a different reading-flow family when current arrangement failed
-        if (familyHint && !id.toLowerCase().includes(String(familyHint).toLowerCase())) s += 1;
+
+        // Note: We NO LONGER penalize the family just because we are escalating.
+        // Escalation means changing the spatial policy (axis/share) *within* a compatible layout.
+
         return { id, s };
       })
       .sort((a, b) => b.s - a.s);
@@ -557,7 +588,7 @@ export class CompositionQualityController {
   }
 
   private inferFamilyFromLayoutId(id: string): string | null {
-    const families = ['editorial', 'minimalist', 'minimal', 'clinical', 'premium', 'scrapbook', 'architectural', 'split', 'luxury', 'vintage'];
+    const families = ['editorial', 'minimalist', 'minimal', 'clinical', 'premium', 'scrapbook', 'architectural', 'split', 'luxury', 'vintage', 'polaroid', 'countdown', 'testimonial'];
     return families.find(f => id.includes(f)) || null;
   }
 }

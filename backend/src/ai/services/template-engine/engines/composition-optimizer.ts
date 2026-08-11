@@ -156,6 +156,7 @@ export class CompositionOptimizer {
       policy,
     );
     optimized.canvasRegions = regions;
+    optimized.canonicalGeometry = regions.canonicalGeometry;
     (optimized as any)._spatialPolicy = regions.spatial;
 
     console.log(
@@ -408,6 +409,7 @@ export class CompositionOptimizer {
       qualityIssues: quality.issues,
       qualityCritical: quality.critical,
       qualityMetrics: quality.metrics,
+      failureCategory: quality.failureCategory || 'none',
     };
 
     return {
