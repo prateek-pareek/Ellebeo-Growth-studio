@@ -31,21 +31,6 @@ export interface SpatialAllocationPolicy {
   /** overlay = photo full-bleed + text band; horizontal/vertical = image surrenders space */
   splitAxis: 'horizontal' | 'vertical' | 'overlay';
   preferredTextBias: 'start' | 'end';
-  /** visualPriority that authored this policy — preserved across repairs */
-  visualPriority?: string;
-}
-
-/** Priority-aware caps so escalation cannot destroy image_hero dominance. */
-export interface PriorityShareBounds {
-  maxTextShare: number;
-  minImageShare: number;
-  /** Same-template spatial repair attempts before template family switch */
-  maxSameTemplateRepairs: number;
-}
-
-export function formatRect(r?: { x: number; y: number; width: number; height: number } | null): string {
-  if (!r) return 'none';
-  return `${Math.round(r.x)},${Math.round(r.y)} ${Math.round(r.width)}x${Math.round(r.height)}`;
 }
 
 export interface LayoutConstraints {
@@ -688,7 +673,6 @@ export class LayoutEngine {
         maxTextShare: 0.72,
         splitAxis,
         preferredTextBias: 'start',
-        visualPriority,
       };
     }
 
@@ -702,7 +686,6 @@ export class LayoutEngine {
         maxTextShare: 0.44,
         splitAxis: 'overlay',
         preferredTextBias: 'start',
-        visualPriority,
       };
     }
 
@@ -715,7 +698,6 @@ export class LayoutEngine {
         maxTextShare: 0.55,
         splitAxis: 'overlay',
         preferredTextBias: 'end',
-        visualPriority,
       };
     }
 
@@ -725,45 +707,6 @@ export class LayoutEngine {
       maxTextShare: 0.58,
       splitAxis: flow === 'center_down' ? 'vertical' : 'horizontal',
       preferredTextBias: 'start',
-      visualPriority,
-    };
-  }
-
-  /**
-   * Priority-specific share caps derived from the base policy — not absolute magic numbers.
-   * image_hero keeps image dominance; typography_hero may claim a larger panel.
-   */
-  public static priorityShareBounds(visualPriority: string): PriorityShareBounds {
-    const base = LayoutEngine.deriveSpatialPolicy(visualPriority);
-    // Modest headroom above declared max for content fit; never invert priority roles.
-    const headroom =
-      visualPriority === 'image_hero' ? 1.08
-        : visualPriority === 'cta_hero' ? 1.12
-          : visualPriority === 'typography_hero' ? 1.15
-            : 1.10;
-    const maxTextShare = Math.min(
-      visualPriority === 'image_hero' ? 0.48 : 0.72,
-      Math.max(base.maxTextShare, base.textShare) * headroom,
-    );
-    return {
-      maxTextShare,
-      minImageShare: Math.max(0.28, 1 - maxTextShare),
-      maxSameTemplateRepairs: visualPriority === 'image_hero' ? 3 : 4,
-    };
-  }
-
-  /** Clamp any policy to the priority's max text share (preserves visualPriority intent). */
-  public static clampPolicyToPriority(
-    policy: SpatialAllocationPolicy,
-    visualPriority: string,
-  ): SpatialAllocationPolicy {
-    const bounds = LayoutEngine.priorityShareBounds(visualPriority);
-    const textShare = Math.min(bounds.maxTextShare, Math.max(policy.minTextShare, policy.textShare));
-    return {
-      ...policy,
-      textShare,
-      maxTextShare: Math.min(policy.maxTextShare, bounds.maxTextShare),
-      visualPriority: policy.visualPriority || visualPriority,
     };
   }
 
@@ -785,64 +728,9 @@ export class LayoutEngine {
   }
 
   /**
-   * Collision / text_collision repair: flip text bias and recompute region on the SAME axis.
-   * Does not change splitAxis — axis escalation is reserved for spatial failures.
-   */
-  public static relocateSpatialPolicy(
-    failedPolicy: SpatialAllocationPolicy | undefined,
-    priority: string,
-    reason?: string,
-  ): SpatialAllocationPolicy {
-    const base = failedPolicy || LayoutEngine.deriveSpatialPolicy(priority);
-    const relocated: SpatialAllocationPolicy = {
-      ...base,
-      preferredTextBias: base.preferredTextBias === 'start' ? 'end' : 'start',
-      visualPriority: base.visualPriority || priority,
-    };
-    const clamped = LayoutEngine.clampPolicyToPriority(relocated, priority);
-    console.log(
-      `[SpatialRelocate] ${base.splitAxis}@${(base.textShare || 0).toFixed(2)} ` +
-      `bias ${base.preferredTextBias}→${clamped.preferredTextBias} ` +
-      `(reason=${reason || 'collision'} priority=${priority})`,
-    );
-    return clamped;
-  }
-
-  /**
-   * Content-integrity / insufficient text space: grow textShare on the SAME axis
-   * toward the priority max — fit the full headline, do not change template or axis yet.
-   */
-  public static expandSpatialPolicyForContent(
-    failedPolicy: SpatialAllocationPolicy | undefined,
-    priority: string,
-    reason?: string,
-  ): SpatialAllocationPolicy {
-    const base = failedPolicy || LayoutEngine.deriveSpatialPolicy(priority);
-    const bounds = LayoutEngine.priorityShareBounds(priority);
-    const grown = Math.min(
-      bounds.maxTextShare,
-      Math.max(base.textShare * 1.22, base.textShare + 0.06, base.minTextShare),
-    );
-    const expanded: SpatialAllocationPolicy = {
-      ...base,
-      textShare: grown,
-      maxTextShare: Math.max(base.maxTextShare, grown),
-      visualPriority: base.visualPriority || priority,
-    };
-    const clamped = LayoutEngine.clampPolicyToPriority(expanded, priority);
-    console.log(
-      `[SpatialExpand] ${base.splitAxis}@${(base.textShare || 0).toFixed(2)} ` +
-      `→ ${clamped.splitAxis}@${clamped.textShare.toFixed(2)} ` +
-      `(reason=${reason || 'content'} priority=${priority} max=${bounds.maxTextShare.toFixed(2)})`,
-    );
-    return clamped;
-  }
-
-  /**
    * Escalate to a structurally different spatial contract.
-   * Reserved for spatial failures (whitespace_tight, image_underutilized, insufficient space).
-   * NOT the first response to text_collision — use relocateSpatialPolicy first.
-   * Always clamps to priorityShareBounds so image_hero cannot become typography-heavy.
+   * overlay → vertical panel → horizontal column → larger share.
+   * Never returns the same axis+share signature.
    */
   public static escalateSpatialPolicy(
     failedPolicy: SpatialAllocationPolicy | undefined,
@@ -850,95 +738,33 @@ export class LayoutEngine {
     reason?: string,
   ): SpatialAllocationPolicy {
     const base = failedPolicy || LayoutEngine.deriveSpatialPolicy(priority);
-    const bounds = LayoutEngine.priorityShareBounds(priority);
-    const escalated: SpatialAllocationPolicy = {
-      ...base,
-      visualPriority: base.visualPriority || priority,
-    };
+    const escalated: SpatialAllocationPolicy = { ...base };
 
-    const spatialReasons = new Set([
-      'whitespace_tight_to_subject',
-      'image_underutilized',
-      'insufficient_text_space',
-      'spatial_allocation',
-      'same_signature_retry',
-      'same_axis_family',
-      'reading_flow_band',
-      'whitespace_crowded',
-      'geometry_violation',
-      'visual_priority_violation',
-      'unused_area_excessive',
-      'text_image_ratio_imbalanced',
-    ]);
-    // Collision must not force axis change here — callers should relocate first.
-    const forceAxis =
-      base.splitAxis === 'overlay'
-      || spatialReasons.has(String(reason || ''))
-      || reason === 'alternate_template';
-
-    // Image dominance repair: shrink text share / flip bias — do NOT grow toward typography-heavy
-    const imageDominanceRepair =
-      reason === 'image_underutilized'
-      || reason === 'visual_priority_violation'
-      || reason === 'text_image_ratio_imbalanced'
-      || reason === 'unused_area_excessive';
-
-    if (imageDominanceRepair) {
-      const basePolicy = LayoutEngine.deriveSpatialPolicy(priority);
-      escalated.textShare = Math.min(
-        bounds.maxTextShare,
-        Math.max(basePolicy.minTextShare, Math.min(base.textShare * 0.85, basePolicy.textShare * 1.05)),
-      );
-      escalated.preferredTextBias = base.preferredTextBias === 'start' ? 'end' : 'start';
-      // Prefer keeping a real panel if already split; if overlay+unused, try vertical with modest share
-      if (base.splitAxis === 'overlay' && (reason === 'unused_area_excessive' || String(reason) === 'reading_flow_band')) {
-        escalated.splitAxis = 'vertical';
-        escalated.textShare = Math.min(bounds.maxTextShare, Math.max(basePolicy.textShare, basePolicy.minTextShare));
-      }
-    } else if (forceAxis && base.splitAxis === 'overlay') {
-      // Leave overlay — image surrenders a real panel, but stay within priority max share
+    if (base.splitAxis === 'overlay' || reason === 'whitespace_tight_to_subject' || reason === 'collision') {
+      // Leave overlay family immediately — image must surrender space
       escalated.splitAxis = 'vertical';
-      escalated.textShare = Math.min(
-        bounds.maxTextShare,
-        Math.max(base.minTextShare, (base.textShare || 0.28) * 1.35),
-      );
+      escalated.textShare = Math.min(0.62, Math.max(0.42, (base.textShare || 0.28) * 1.55));
       escalated.preferredTextBias = base.preferredTextBias === 'start' ? 'end' : 'start';
-    } else if (forceAxis && base.splitAxis === 'vertical') {
+    } else if (base.splitAxis === 'vertical') {
       escalated.splitAxis = 'horizontal';
-      escalated.textShare = Math.min(
-        bounds.maxTextShare,
-        Math.max(base.minTextShare, base.textShare * 1.12),
-      );
-      escalated.preferredTextBias = base.preferredTextBias === 'start' ? 'end' : 'start';
-    } else if (forceAxis) {
-      escalated.splitAxis = 'vertical';
-      escalated.textShare = Math.min(
-        bounds.maxTextShare,
-        Math.max(base.minTextShare, base.textShare * 1.15),
-      );
+      escalated.textShare = Math.min(0.68, Math.max(0.45, base.textShare * 1.2));
       escalated.preferredTextBias = base.preferredTextBias === 'start' ? 'end' : 'start';
     } else {
-      // Soft escalate: grow share / flip bias without axis change
-      escalated.textShare = Math.min(bounds.maxTextShare, base.textShare * 1.18);
+      escalated.splitAxis = 'vertical';
+      escalated.textShare = Math.min(0.75, Math.max(0.50, base.textShare * 1.35));
       escalated.preferredTextBias = base.preferredTextBias === 'start' ? 'end' : 'start';
     }
 
-    escalated.minTextShare = Math.min(
-      escalated.textShare,
-      Math.max(base.minTextShare, escalated.textShare * 0.85),
-    );
-    escalated.maxTextShare = Math.min(bounds.maxTextShare, Math.max(base.maxTextShare, escalated.textShare));
-
-    const clamped = LayoutEngine.clampPolicyToPriority(escalated, priority);
+    escalated.minTextShare = Math.min(escalated.textShare, Math.max(base.minTextShare, escalated.textShare * 0.85));
+    escalated.maxTextShare = Math.min(0.85, Math.max(base.maxTextShare, escalated.textShare * 1.15));
 
     console.log(
       `[SpatialEscalation] ${base.splitAxis}@${(base.textShare || 0).toFixed(2)} ` +
-      `→ ${clamped.splitAxis}@${clamped.textShare.toFixed(2)} ` +
-      `(bias=${clamped.preferredTextBias} reason=${reason || 'retry'} ` +
-      `priority=${priority} maxText=${bounds.maxTextShare.toFixed(2)} minImg=${bounds.minImageShare.toFixed(2)})`,
+      `→ ${escalated.splitAxis}@${escalated.textShare.toFixed(2)} ` +
+      `(bias=${escalated.preferredTextBias} reason=${reason || 'retry'})`,
     );
 
-    return clamped;
+    return escalated;
   }
 
   /**
@@ -954,12 +780,9 @@ export class LayoutEngine {
     subjectHint?: BoundingBox,
     spatialPolicy?: SpatialAllocationPolicy,
   ): { imageRegion: BoundingBox; textRegion: BoundingBox; spatial: SpatialAllocationPolicy; canonicalGeometry: CanonicalGeometry } {
-    const policy = LayoutEngine.clampPolicyToPriority(
-      spatialPolicy || LayoutEngine.deriveSpatialPolicy(visualPriority, {
-        readingFlow: behavior.readingJourney === 'z_pattern' ? 'z_pattern' : 'center_down',
-      }),
-      visualPriority,
-    );
+    const policy = spatialPolicy || LayoutEngine.deriveSpatialPolicy(visualPriority, {
+      readingFlow: behavior.readingJourney === 'z_pattern' ? 'z_pattern' : 'center_down',
+    });
 
     // Honor explicit spatial policy axis first. Bleed hints may UPGRADE overlay→split,
     // but must NEVER downgrade an escalated vertical/horizontal panel back to overlay.
@@ -993,8 +816,7 @@ export class LayoutEngine {
       } : undefined,
       subjectMass: this.subjectBox,
       protectedZones: this.protectedSubjects.length ? this.protectedSubjects : (this.subjectBox || this.faceBox ? [this.subjectBox || this.faceBox!] : []),
-      safeMargins: { x: constraints.safeX, y: constraints.safeY },
-      splitAxis: axis,
+      safeMargins: { x: constraints.safeX, y: constraints.safeY }
     };
 
     if (axis === 'horizontal') {

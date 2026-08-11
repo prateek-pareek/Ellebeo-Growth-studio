@@ -1510,8 +1510,6 @@ CRITICAL IMAGE REQUIREMENTS:
         if (optResult.suggestLayoutChange) {
           const meta0 = (optimizedDsl as any)?._compositionMeta || {};
           const failedSignatures: Array<{ axis?: string; share?: number; category: string }> = [];
-          const visualPriority = designLanguage?.intent?.visualPriority || 'image_hero';
-          const shareBounds = LayoutEngine.priorityShareBounds(visualPriority);
           let currentCategory = meta0.failureCategory || 'spatial_allocation';
           failedSignatures.push({
             axis: (optimizedDsl as any)?._spatialPolicy?.splitAxis,
@@ -1520,95 +1518,52 @@ CRITICAL IMAGE REQUIREMENTS:
           });
 
           console.warn(
-            `[CompositionQC] Layout '${computedLayoutType}' needs repair ` +
+            `[CompositionQC] Layout '${computedLayoutType}' needs retry ` +
             `(category=${currentCategory} gate=${JSON.stringify(meta0.gatePredicate || {})}). ` +
-            `Actions: ${optResult.fitActions.slice(-3).join(' | ')}. ` +
-            `Template Agent selection preserved — same-template spatial repair first.`,
+            `Actions: ${optResult.fitActions.slice(-3).join(' | ')}`,
           );
 
+          // Escalate spatial contract IMMEDIATELY when geometry is the problem —
+          // do not burn alternate template IDs on the same overlay signature.
           let workingPolicy = (optimizedDsl as any)?._spatialPolicy || geometryOut.spatial;
-          let repairAttempt = 0;
-          const maxSameTemplate = shareBounds.maxSameTemplateRepairs;
+          const shouldEscalate =
+            !!meta0.needsSpatialEscalation
+            || currentCategory === 'spatial_allocation'
+            || currentCategory === 'collision'
+            || (meta0.qualityIssues || []).includes('whitespace_tight_to_subject');
 
-          // Deterministic category → action. Never swap template until same-template repairs exhausted.
-          while (optResult.suggestLayoutChange && repairAttempt < maxSameTemplate) {
-            repairAttempt++;
-            const meta = (optResult.dsl as any)?._compositionMeta || {};
-            const issues: string[] = meta.qualityIssues || [];
-            const category = meta.failureCategory || currentCategory;
-            currentCategory = category;
-
-            let action: 'relocate' | 'expand' | 'escalate' = 'escalate';
-            let reason = issues[0] || category;
-
-            if (meta.needsRelocate || category === 'collision'
-              || issues.includes('text_collision') || issues.includes('subject_collision')) {
-              // Collision: relocate/re-anchor on SAME axis — do not change splitAxis yet
-              action = repairAttempt === 1 || meta.needsRelocate ? 'relocate' : 'escalate';
-              reason = issues.includes('subject_collision') ? 'subject_collision' : 'text_collision';
-            } else if (
-              meta.needsContentReflow
-              || category === 'renderer'
-              || category === 'readability'
-              || !meta.contentIntegrity?.ok
-            ) {
-              // Content integrity / readability: expand region / reflow before axis or template change
-              action = repairAttempt <= 2 ? 'expand' : 'escalate';
-              reason = meta.contentIntegrity?.reason || 'insufficient_text_space';
-            } else if (
-              meta.needsSpatialEscalation
-              || category === 'spatial_allocation'
-              || issues.includes('whitespace_tight_to_subject')
-              || issues.includes('image_underutilized')
-              || issues.includes('visual_priority_violation')
-              || issues.includes('geometry_violation')
-            ) {
-              action = 'escalate';
-              reason = issues.find((i: string) =>
-                ['whitespace_tight_to_subject', 'image_underutilized', 'visual_priority_violation',
-                  'geometry_violation', 'reading_flow_band', 'unused_area_excessive'].includes(i),
-              ) || 'spatial_allocation';
-            }
-
-            if (action === 'relocate') {
-              workingPolicy = LayoutEngine.relocateSpatialPolicy(workingPolicy, visualPriority, reason);
-            } else if (action === 'expand') {
-              workingPolicy = LayoutEngine.expandSpatialPolicyForContent(workingPolicy, visualPriority, reason);
-            } else {
-              workingPolicy = LayoutEngine.escalateSpatialPolicy(workingPolicy, visualPriority, reason);
-            }
-
+          if (shouldEscalate) {
+            workingPolicy = LayoutEngine.escalateSpatialPolicy(
+              workingPolicy,
+              designLanguage?.intent?.visualPriority || 'image_hero',
+              (meta0.qualityIssues || [])[0] || currentCategory,
+            );
+            // First retry: same template, new spatial contract
             const sameLayoutRetry = runOptimize(computedLayoutType, rawDsl, workingPolicy);
             console.log(
-              `[Diagnostic Fallback] Attempt ${repairAttempt} (${action}, same-template) | ` +
-              `Template: ${computedLayoutType} | ` +
+              `[Diagnostic Fallback] Attempt 1 (spatial-only) | Template: ${computedLayoutType} | ` +
               `Axis: ${(sameLayoutRetry.dsl as any)?._spatialPolicy?.splitAxis} ` +
               `Share: ${((sameLayoutRetry.dsl as any)?._spatialPolicy?.textShare || 0).toFixed(2)} | ` +
               `Category: ${(sameLayoutRetry.dsl as any)?._compositionMeta?.failureCategory || (sameLayoutRetry.suggestLayoutChange ? 'unknown' : 'PASS')}`,
             );
-
             if (!sameLayoutRetry.suggestLayoutChange) {
               optimizedDsl = sameLayoutRetry.dsl;
               optResult = sameLayoutRetry;
-              break;
+            } else {
+              failedSignatures.push({
+                axis: (sameLayoutRetry.dsl as any)?._spatialPolicy?.splitAxis,
+                share: (sameLayoutRetry.dsl as any)?._spatialPolicy?.textShare,
+                category: (sameLayoutRetry.dsl as any)?._compositionMeta?.failureCategory || 'spatial_allocation',
+              });
+              workingPolicy = LayoutEngine.escalateSpatialPolicy(
+                (sameLayoutRetry.dsl as any)?._spatialPolicy || workingPolicy,
+                designLanguage?.intent?.visualPriority || 'image_hero',
+                'same_signature_retry',
+              );
             }
-
-            failedSignatures.push({
-              axis: (sameLayoutRetry.dsl as any)?._spatialPolicy?.splitAxis,
-              share: (sameLayoutRetry.dsl as any)?._spatialPolicy?.textShare,
-              category: (sameLayoutRetry.dsl as any)?._compositionMeta?.failureCategory || category,
-            });
-            workingPolicy = (sameLayoutRetry.dsl as any)?._spatialPolicy || workingPolicy;
-            optResult = sameLayoutRetry;
-            optimizedDsl = sameLayoutRetry.dsl;
           }
 
-          // Template family switch ONLY when selected family is structurally exhausted
           if (optResult.suggestLayoutChange) {
-            console.warn(
-              `[CompositionQC] Same-template repairs exhausted (${maxSameTemplate}) for '${computedLayoutType}' — ` +
-              `considering alternate families (structural impossibility).`,
-            );
             const alternates = compositionQC.suggestAlternateLayouts(
               computedLayoutType,
               Object.keys(COMPILED_LAYOUTS),
@@ -1621,23 +1576,21 @@ CRITICAL IMAGE REQUIREMENTS:
               failedSignatures,
             );
 
-            let attempt = repairAttempt;
+            let attempt = 1;
             for (const altId of alternates) {
               attempt++;
               const altDsl = COMPILED_LAYOUTS[altId];
               if (!altDsl) continue;
 
-              // Carry forward a priority-clamped policy; escalate only if same-axis still stuck
+              // Always escalate when prior attempts shared the same axis
               const axes = failedSignatures.map(f => f.axis).filter(Boolean);
               const sameAxis = axes.length > 0 && axes.every(a => a === axes[0]);
-              if (sameAxis) {
+              if (sameAxis || shouldEscalate) {
                 workingPolicy = LayoutEngine.escalateSpatialPolicy(
                   workingPolicy,
-                  visualPriority,
-                  'same_axis_family',
+                  designLanguage?.intent?.visualPriority || 'image_hero',
+                  sameAxis ? 'same_axis_family' : 'alternate_template',
                 );
-              } else {
-                workingPolicy = LayoutEngine.clampPolicyToPriority(workingPolicy, visualPriority);
               }
 
               const altResult = runOptimize(altId, altDsl, workingPolicy);
@@ -1669,7 +1622,7 @@ CRITICAL IMAGE REQUIREMENTS:
           if (optResult.suggestLayoutChange) {
             compositionFailed = true;
             failReason = failReason || `visual_gate:${(optimizedDsl as any)?._compositionMeta?.qualityIssues?.join(',') || 'exhausted'}`;
-            console.warn(`[CompositionQC] No repair passed visual gate — marking slide failed for regenerate`);
+            console.warn(`[CompositionQC] No alternate passed visual gate — marking slide failed for regenerate`);
           }
         } else if (optResult.fitActions.length) {
           console.log(`[CompositionQC] Fit cascade: ${optResult.fitActions.join(' | ')}`);

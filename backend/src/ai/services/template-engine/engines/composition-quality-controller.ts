@@ -47,15 +47,7 @@ export interface VisualQualityResult {
   failureCategory?: 'spatial_allocation' | 'collision' | 'readability' | 'renderer' | 'none';
   /** Soft spatial issues that require a different geometry contract even if score passes */
   needsSpatialEscalation?: boolean;
-  /** Collision: relocate/re-anchor before axis change */
-  needsRelocate?: boolean;
-  /** Content / insufficient pocket: expand share / reflow before template switch */
-  needsContentReflow?: boolean;
-  /** Soft composition issues (image tiny, unused space) — quality, not hard validity */
-  softCompositionIssues?: string[];
   passThreshold?: number;
-  /** Hard geometric validity separate from aesthetic quality score */
-  hardValid?: boolean;
 }
 
 /**
@@ -317,41 +309,15 @@ export class CompositionQualityController {
     groupScale?: number;
     surfaceLuminance?: number; // 0–1
     textLuminance?: number; // 0–1
-    /** Canonical text panel — every box must be ⊆ this rect */
-    textRegion?: BoundingBox;
-    /** Canonical image rect — occupancy / priority soft metrics */
-    imageRegion?: BoundingBox;
-    splitAxis?: string;
   }): VisualQualityResult {
     let score = 10;
     const issues: string[] = [];
     const critical: string[] = [];
-    const softCompositionIssues: string[] = [];
     const metrics: Record<string, number> = {};
     const priority = params.intent?.visualPriority || 'image_hero';
     const flow = params.intent?.readingFlow || 'center_down';
     const active = params.boxes.filter(b => b.box && !b.omitted);
     const subjects = params.subjectBoxes || [];
-    const textRegion = params.textRegion;
-    const imageRegion = params.imageRegion;
-    const canvasArea = Math.max(1, params.canvasW * params.canvasH);
-
-    // --- 0. Hard geometry: allocated boxes must live inside textRegion ---
-    if (textRegion) {
-      for (const item of active) {
-        const box = item.box!;
-        const inside =
-          box.x >= textRegion.x - 1
-          && box.y >= textRegion.y - 1
-          && box.x + box.width <= textRegion.x + textRegion.width + 1
-          && box.y + box.height <= textRegion.y + textRegion.height + 1;
-        if (!inside) {
-          score -= 4;
-          issues.push('geometry_violation');
-          critical.push('geometry_violation');
-        }
-      }
-    }
 
     // --- 1. Text clipping ---
     for (const item of active) {
@@ -438,6 +404,7 @@ export class CompositionQualityController {
     // --- 6. Whitespace quality ---
     if (active.length > 0) {
       const textArea = active.reduce((sum, b) => sum + (b.box!.width * b.box!.height), 0);
+      const canvasArea = params.canvasW * params.canvasH;
       const coverage = textArea / canvasArea;
       metrics.textCoverage = coverage;
       const maxCoverage = priority === 'image_hero' ? 0.28 : priority === 'typography_hero' ? 0.45 : 0.36;
@@ -533,105 +500,41 @@ export class CompositionQualityController {
       }
     }
 
-    // --- 9. Soft composition metrics (quality ≠ only "no collision") ---
-    const shareBounds = LayoutEngine.priorityShareBounds(priority);
-    if (imageRegion) {
-      const imageArea = Math.max(0, imageRegion.width * imageRegion.height);
-      const imageOccupancy = imageArea / canvasArea;
-      metrics.image_occupancy = imageOccupancy;
-      const textAreaForRatio = textRegion
-        ? textRegion.width * textRegion.height
-        : active.reduce((s, b) => s + b.box!.width * b.box!.height, 0);
-      const textImageRatio = textAreaForRatio / Math.max(1, imageArea);
-      metrics.text_image_ratio = textImageRatio;
-
-      const usedText = active.reduce((s, b) => s + b.box!.width * b.box!.height, 0);
-      const unusedArea = Math.max(0, 1 - imageOccupancy - usedText / canvasArea);
-      metrics.unused_area = unusedArea;
-
-      const minImageOcc =
-        priority === 'image_hero' ? shareBounds.minImageShare * 0.92
-          : priority === 'cta_hero' ? shareBounds.minImageShare * 0.85
-            : 0.22;
-      metrics.visual_priority_violation = 0;
-      if (imageOccupancy < minImageOcc) {
-        softCompositionIssues.push('image_underutilized', 'visual_priority_violation');
-        issues.push('image_underutilized', 'visual_priority_violation');
-        score -= 1.8;
-        metrics.visual_priority_violation = 1;
-      }
-      if (unusedArea > 0.42 && imageOccupancy < 0.55 && priority === 'image_hero') {
-        softCompositionIssues.push('unused_area_excessive');
-        issues.push('unused_area_excessive');
-        score -= 1.2;
-      }
-      if (priority === 'image_hero' && textImageRatio > (1 / Math.max(0.2, shareBounds.minImageShare))) {
-        softCompositionIssues.push('text_image_ratio_imbalanced', 'visual_priority_violation');
-        issues.push('text_image_ratio_imbalanced', 'visual_priority_violation');
-        score -= 1.5;
-        metrics.visual_priority_violation = 1;
-      }
-    }
-
     score = Math.max(0, Math.min(10, score));
     const passThreshold = CompositionQualityController.PASS_SCORE;
-    const hardValid = critical.length === 0 && !issues.includes('geometry_violation');
     const pass = score >= passThreshold && critical.length === 0;
 
     let failureCategory: 'spatial_allocation' | 'collision' | 'readability' | 'renderer' | 'none' = 'none';
-    if (!pass || softCompositionIssues.length > 0 || issues.includes('whitespace_tight_to_subject')) {
+    if (!pass) {
       if (critical.includes('text_collision') || critical.includes('subject_collision')) {
         failureCategory = 'collision';
       } else if (critical.includes('unreadable_heading') || critical.includes('contrast') || critical.includes('dominance_over_scaled')) {
         failureCategory = 'readability';
-      } else if (critical.includes('geometry_violation') || issues.includes('geometry_violation')) {
-        failureCategory = 'spatial_allocation';
-      } else if (
-        issues.includes('whitespace_tight_to_subject')
-        || issues.includes('reading_flow_band')
-        || issues.includes('whitespace_crowded')
-        || issues.includes('image_underutilized')
-        || issues.includes('visual_priority_violation')
-        || issues.includes('unused_area_excessive')
-      ) {
-        failureCategory = 'spatial_allocation';
-      } else if (!pass) {
+      } else {
         failureCategory = 'spatial_allocation';
       }
-    }
-
-    const needsRelocate =
-      critical.includes('text_collision')
-      || critical.includes('subject_collision')
-      || issues.includes('subject_collision')
-      || issues.includes('text_collision');
-
-    const needsContentReflow =
-      issues.includes('unreadable_heading')
-      || issues.includes('dominance_over_scaled')
-      || issues.includes('hierarchy_ratio');
-
-    // Axis/share escalation — spatial failures only (not collision; relocate first)
-    const needsSpatialEscalation =
+    } else if (
       issues.includes('whitespace_tight_to_subject')
       || issues.includes('reading_flow_band')
-      || issues.includes('image_underutilized')
-      || issues.includes('visual_priority_violation')
-      || issues.includes('unused_area_excessive')
-      || critical.includes('text_clipping')
-      || critical.includes('geometry_violation')
-      || issues.includes('geometry_violation');
+      || issues.includes('whitespace_crowded')
+    ) {
+      // Soft spatial issues: score may still "pass" but geometry must escalate
+      failureCategory = 'spatial_allocation';
+    }
+
+    /** Soft spatial problems that require a different spatial contract, even if score passes */
+    const needsSpatialEscalation =
+      issues.includes('whitespace_tight_to_subject')
+      || issues.includes('subject_collision')
+      || issues.includes('reading_flow_band')
+      || critical.includes('subject_collision')
+      || critical.includes('text_clipping');
 
     console.log(
-      `[CompositionQC] gate predicate: pass=${pass} hardValid=${hardValid} score=${score.toFixed(2)} ` +
-      `threshold=${passThreshold} critical=[${critical.join(',') || 'none'}] ` +
-      `issues=[${[...new Set(issues)].join(',') || 'none'}] ` +
-      `soft=[${[...new Set(softCompositionIssues)].join(',') || 'none'}] ` +
-      `needsRelocate=${needsRelocate} needsSpatialEscalation=${needsSpatialEscalation} ` +
-      `needsContentReflow=${needsContentReflow} category=${failureCategory} ` +
-      `image_occ=${(metrics.image_occupancy ?? -1).toFixed?.(2) ?? metrics.image_occupancy} ` +
-      `textRegion=${textRegion ? `${Math.round(textRegion.x)},${Math.round(textRegion.y)} ${Math.round(textRegion.width)}x${Math.round(textRegion.height)}` : 'none'} ` +
-      `imageRegion=${imageRegion ? `${Math.round(imageRegion.x)},${Math.round(imageRegion.y)} ${Math.round(imageRegion.width)}x${Math.round(imageRegion.height)}` : 'none'}`,
+      `[CompositionQC] gate predicate: pass=${pass} score=${score.toFixed(2)} ` +
+      `threshold=${passThreshold} critical=[${critical.join(',')||'none'}] ` +
+      `issues=[${[...new Set(issues)].join(',')||'none'}] ` +
+      `needsSpatialEscalation=${needsSpatialEscalation} category=${failureCategory}`,
     );
 
     return {
@@ -642,11 +545,7 @@ export class CompositionQualityController {
       metrics,
       failureCategory,
       needsSpatialEscalation,
-      needsRelocate,
-      needsContentReflow,
-      softCompositionIssues: [...new Set(softCompositionIssues)],
       passThreshold,
-      hardValid,
     };
   }
 

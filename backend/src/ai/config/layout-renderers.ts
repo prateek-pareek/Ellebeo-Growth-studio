@@ -1264,7 +1264,6 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           designSpec: ctx.designSpec,
           designLanguage: ctx.designLanguage,
           visualPriority: ctx.designLanguage?.intent?.visualPriority || ctx.designSpec?.composition?.visualPriority,
-          canonicalGeometry: (dsl as any).canonicalGeometry,
           escapeXml: (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
         };
         svg += typographyEngine.renderTextLayer(typoCtx, textLayer);
@@ -1282,7 +1281,6 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           designSpec: ctx.designSpec,
           designLanguage: ctx.designLanguage,
           visualPriority: ctx.designLanguage?.intent?.visualPriority || ctx.designSpec?.composition?.visualPriority,
-          canonicalGeometry: (dsl as any).canonicalGeometry,
           escapeXml: (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
         };
         svg += typographyEngine.renderTextGroupLayer(typoCtx, textGroupLayer);

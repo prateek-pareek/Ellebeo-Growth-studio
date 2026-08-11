@@ -24,8 +24,6 @@ export interface TypographyContext {
   designSpec?: import('../interfaces').ISemanticDesignSpec;
   designLanguage?: { intent?: { visualPriority?: string } };
   visualPriority?: string;
-  /** Canonical regions from CompositionOptimizer — renderer must honor these rects */
-  canonicalGeometry?: import('../interfaces').CanonicalGeometry;
   typographyMetrics?: {
     heroSize: number;
     primarySize: number;
@@ -277,14 +275,9 @@ export class TypographyEngine {
           lineHeight = Math.max(1, Math.round(newSize * originalLineHeightMult));
           escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, effectiveMaxW, trackingEm);
 
-          // Cap lines after boost — headings must keep full content (integrity), not slice words
+          // Cap lines to prevent overflow after boost
           const maxLines = Math.max(1, Math.floor(layer.allocatedBox.height / lineHeight));
-          if (escapedLines.length > maxLines && layer.role === 'heading') {
-            (layer as any)._contentIntegrity = {
-              ok: false,
-              reason: `headline_overflow_after_boost:lines=${escapedLines.length}_max=${maxLines}`,
-            };
-          } else if (escapedLines.length > maxLines) {
+          if (escapedLines.length > maxLines) {
             escapedLines = escapedLines.slice(0, maxLines);
           }
           textHeight = escapedLines.length * lineHeight;
@@ -420,17 +413,10 @@ export class TypographyEngine {
         attempts++;
       }
       if (textHeight > availableHeight && lineHeight > 0) {
-        if (layer.role === 'heading') {
-          (layer as any)._contentIntegrity = {
-            ok: false,
-            reason: `headline_overflow_no_slice:h=${Math.round(textHeight)}_avail=${Math.round(availableHeight)}`,
-          };
-        } else {
-          const roleCap = layer.role === 'tagline' ? 2 : 3;
-          const maxLines = Math.min(roleCap, Math.max(1, Math.floor(availableHeight / lineHeight)));
-          escapedLines = escapedLines.slice(0, maxLines);
-          textHeight = escapedLines.length * lineHeight;
-        }
+        const roleCap = layer.role === 'tagline' ? 2 : layer.role === 'heading' ? 4 : 3;
+        const maxLines = Math.min(roleCap, Math.max(1, Math.floor(availableHeight / lineHeight)));
+        escapedLines = escapedLines.slice(0, maxLines);
+        textHeight = escapedLines.length * lineHeight;
       }
       if (isSecondary && textHeight > availableHeight) {
         return '';
@@ -456,76 +442,6 @@ export class TypographyEngine {
     let boxX = x;
     if (anchor === 'middle') boxX = x - effectiveMaxW / 2;
     else if (anchor === 'end') boxX = x - effectiveMaxW;
-
-    // Enforce actualTextBounds ⊆ allocatedTextRegion (hard lock to canonical geometry)
-    const allocatedRegion = layer.allocatedBox
-      || (layer as any)._allocatedTextRegion
-      || ctx.canonicalGeometry?.textRegion;
-    let actualTextBounds = {
-      x: boxX,
-      y,
-      width: effectiveMaxW,
-      height: textHeight,
-    };
-    if (allocatedRegion) {
-      // Clamp ink into the allocated pocket — never drift onto the photo/face
-      actualTextBounds.x = Math.max(allocatedRegion.x, Math.min(actualTextBounds.x, allocatedRegion.x + allocatedRegion.width - actualTextBounds.width));
-      actualTextBounds.y = Math.max(allocatedRegion.y, Math.min(actualTextBounds.y, allocatedRegion.y + allocatedRegion.height - actualTextBounds.height));
-      actualTextBounds.width = Math.min(actualTextBounds.width, allocatedRegion.width);
-      actualTextBounds.height = Math.min(actualTextBounds.height, allocatedRegion.height);
-      boxX = actualTextBounds.x;
-      y = actualTextBounds.y;
-      if (anchor === 'middle') x = boxX + effectiveMaxW / 2;
-      else if (anchor === 'end') x = boxX + effectiveMaxW;
-      else x = boxX;
-    }
-
-    const faceBox = ctx.canonicalGeometry?.faceBox;
-    const subjectBox = ctx.canonicalGeometry?.subjectMass;
-    const protectedZones: Array<{ x: number; y: number; width: number; height: number }> =
-      ctx.canonicalGeometry?.protectedZones || [];
-
-    const intersects = (a: typeof actualTextBounds, b: { x: number; y: number; width: number; height: number }) =>
-      a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
-
-    let geometryValid = true;
-    if (allocatedRegion) {
-      const contained =
-        actualTextBounds.x >= allocatedRegion.x - 1
-        && actualTextBounds.y >= allocatedRegion.y - 1
-        && actualTextBounds.x + actualTextBounds.width <= allocatedRegion.x + allocatedRegion.width + 1
-        && actualTextBounds.y + actualTextBounds.height <= allocatedRegion.y + allocatedRegion.height + 1;
-      if (!contained) geometryValid = false;
-    }
-    for (const zone of protectedZones) {
-      if (intersects(actualTextBounds, zone)) {
-        geometryValid = false;
-        break;
-      }
-    }
-    if (faceBox && intersects(actualTextBounds, faceBox)) geometryValid = false;
-    if (subjectBox && intersects(actualTextBounds, subjectBox)) geometryValid = false;
-
-    (layer as any)._renderGeometry = {
-      allocatedTextRegion: allocatedRegion || null,
-      actualTextBounds,
-      faceBox: faceBox || null,
-      subjectBox: subjectBox || null,
-      finalAnchor: { x, y, textAnchor: anchor },
-      geometryValid,
-    };
-    console.log(
-      `[TextRender] id=${layer.id} role=${layer.role} ` +
-      `allocatedTextRegion={${allocatedRegion ? `${Math.round(allocatedRegion.x)},${Math.round(allocatedRegion.y)} ${Math.round(allocatedRegion.width)}x${Math.round(allocatedRegion.height)}` : 'none'}} ` +
-      `actualTextBounds={${Math.round(actualTextBounds.x)},${Math.round(actualTextBounds.y)} ${Math.round(actualTextBounds.width)}x${Math.round(actualTextBounds.height)}} ` +
-      `faceBox={${faceBox ? `${Math.round(faceBox.x)},${Math.round(faceBox.y)} ${Math.round(faceBox.width)}x${Math.round(faceBox.height)}` : 'none'}} ` +
-      `subjectBox={${subjectBox ? `${Math.round(subjectBox.x)},${Math.round(subjectBox.y)} ${Math.round(subjectBox.width)}x${Math.round(subjectBox.height)}` : 'none'}} ` +
-      `finalAnchor={${Math.round(x)},${Math.round(y)}} geometryValid=${geometryValid}`,
-    );
-    if (!geometryValid) {
-      (layer as any)._geometryViolation = true;
-      console.warn(`[TextRender] GEOMETRY VIOLATION for ${layer.id} — bounds escape allocated region or hit protected zone`);
-    }
 
     // If measured text still exceeds safe width, shrink font to fit whole words
     const longestLineChars = escapedLines.reduce((m, l) => Math.max(m, l.replace(/&[a-z]+;/gi, ' ').length), 0);
@@ -594,30 +510,18 @@ export class TypographyEngine {
     if (layer.component === 'pill_label' || layer.component === 'solid_card' || layer.component === 'inset_card') {
       const padX = layer.component === 'pill_label' ? 24 : 40;
       const padY = layer.component === 'pill_label' ? 12 : 30;
-      // Keep card chrome inside allocated pocket when present
-      const cardX = allocatedRegion
-        ? Math.max(allocatedRegion.x, boxX - padX)
-        : boxX - padX;
-      const cardY = allocatedRegion
-        ? Math.max(allocatedRegion.y, y - padY)
-        : y - padY;
-      const cardW = allocatedRegion
-        ? Math.min(effectiveMaxW + padX * 2, allocatedRegion.x + allocatedRegion.width - cardX)
-        : effectiveMaxW + padX * 2;
-      const cardH = allocatedRegion
-        ? Math.min(textHeight + padY * 2, allocatedRegion.y + allocatedRegion.height - cardY)
-        : textHeight + padY * 2;
-      const radius = layer.component === 'pill_label' ? cardH / 2 : (layer.component === 'inset_card' ? 8 : 0);
+      const radius = layer.component === 'pill_label' ? (textHeight + padY * 2) / 2 : (layer.component === 'inset_card' ? 8 : 0);
 
       let bgFill = '#FFFFFF';
       if (ctx.colorHierarchy) {
         bgFill = layer.role === 'heading' ? ctx.colorHierarchy.cardSurface : ctx.colorHierarchy.accent;
+        // Ensure text contrasts with the new background
         style.fill = layer.role === 'heading' ? ctx.colorHierarchy.primaryText : ctx.colorHierarchy.primaryBackground;
       }
 
       containerSvg = `
           <!-- Structural Container: ${layer.component} -->
-          <rect x="${cardX}" y="${cardY}" width="${cardW}" height="${cardH}" rx="${radius}" fill="${bgFill}" filter="url(#premium_shadow)" />
+          <rect x="${boxX - padX}" y="${y - padY}" width="${effectiveMaxW + padX * 2}" height="${textHeight + padY * 2}" rx="${radius}" fill="${bgFill}" filter="url(#premium_shadow)" />
         `;
     }
 
@@ -630,14 +534,14 @@ export class TypographyEngine {
         role: layer.role,
         x: boxX,
         y: y,
-        width: effectiveMaxW,
+        width: maxW,
         height: textHeight,
         baseline: baselineY,
         fontSize: style.fontSize,
         lineHeight: lineHeight,
         zIndex: layer.zIndex,
         visualWeight: style.fontWeight,
-        opticalCenter: { x: boxX + effectiveMaxW / 2, y: y + textHeight / 2 }
+        opticalCenter: { x: boxX + maxW / 2, y: y + textHeight / 2 }
       });
     }
 
