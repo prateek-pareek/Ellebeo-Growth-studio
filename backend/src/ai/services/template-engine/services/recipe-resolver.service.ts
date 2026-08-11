@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DesignFamilyRecipe, VariantRecipe } from '../types/design-recipe.type';
 import { designFamilyRecipes } from '../config/design-families.recipe';
+import { getEffectiveFonts } from '../../../config/brand-dna-fonts.util';
 
 @Injectable()
 export class RecipeResolverService {
@@ -252,11 +253,12 @@ export class RecipeResolverService {
     }
 
     // IMMUTABLE BRAND ASSETS: BrandDNA defines the font family, family defines expression
-    if (brandDNA.fonts?.headline || brandDNA.primaryFont) {
-      updated.typographyScale.fontFamilies.headline = brandDNA.fonts?.headline || brandDNA.primaryFont;
+    const fonts = getEffectiveFonts(brandDNA);
+    if (fonts.headline) {
+      updated.typographyScale.fontFamilies.headline = fonts.headline;
     }
-    if (brandDNA.fonts?.body || brandDNA.secondaryFont) {
-      updated.typographyScale.fontFamilies.body = brandDNA.fonts?.body || brandDNA.secondaryFont;
+    if (fonts.body) {
+      updated.typographyScale.fontFamilies.body = fonts.body;
     }
 
     // Adjust spacing based on brand tier (keeping structural tweaks only)

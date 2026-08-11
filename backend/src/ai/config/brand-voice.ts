@@ -4,6 +4,8 @@
 // matches the technician's tone, vocabulary, and blacklist — not generic copy.
 // ============================================================================
 
+import { getEffectiveBlacklist } from './brand-dna-blacklist.util';
+
 export interface BrandVoiceContext {
   primaryTone?: string;
   secondaryTone?: string;
@@ -62,7 +64,7 @@ export function extractBrandVoice(dna: Record<string, any>): BrandVoiceContext {
     primaryTone: dna['primaryTone'],
     secondaryTone: dna['secondaryTone'],
     preferredVocabulary: dna['vocabularyPreferred'] ?? dna['preferredVocabulary'],
-    blacklistedWords: dna['vocabularyBlacklist'] ?? dna['blacklistedWords'],
+    blacklistedWords: getEffectiveBlacklist(dna).length ? getEffectiveBlacklist(dna) : dna['blacklistedWords'],
     emojiPolicy: dna['emojiPolicy'],
     clientTerminology: dna['clientTerminology'],
   };

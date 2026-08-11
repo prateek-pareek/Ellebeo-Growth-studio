@@ -9,6 +9,7 @@ import { ITemplateCandidate, ITemplateContext, ISemanticDesignSpec } from './tem
 import { LayoutAssemblerService } from './template-engine/layout-assembler.service';
 import { registerDynamicLayout } from '../config/layout-renderers';
 import { DesignKnowledgeService, normalizeReadingFlow } from './template-engine/design-knowledge.service';
+import { getEffectiveFonts } from '../config/brand-dna-fonts.util';
 
 interface ICandidateGrounding {
   source: 'mined_exact' | 'mined_family_stats';
@@ -125,18 +126,16 @@ export class TemplateAgentService {
   }
 
   /**
-   * BrandDNA extensibility seam. A future BrandDNA Agent would populate either
-   * `params.brandDNA` (passed in here) or `spec.brandOverrides` (settable directly on
-   * the DesignIntent contract, e.g. by a caller that already merged brand data earlier
-   * in the pipeline) with primaryColor/secondaryColor/fontFamily. Neither is populated
-   * by anything today, so this is a documented no-op: it changes nothing until a real
-   * caller starts passing brand data through one of those two paths.
+   * BrandDNA extensibility seam. `params.brandDNA` is now threaded in from
+   * generation-orchestrator.ts's live selectTemplate() call, so this actually
+   * fires — it previously read `brandDNA.fonts?.headline`/`primaryFont`, fields
+   * that don't exist on the schema, so the override was always a no-op.
    */
   private applyBrandOverrides(spec: ISemanticDesignSpec, brandDNA?: any): ISemanticDesignSpec {
     const overrides = spec.brandOverrides || (brandDNA ? {
       primaryColor: brandDNA.primaryBrandColor,
       secondaryColor: brandDNA.secondaryBrandColor,
-      fontFamily: { headline: brandDNA.fonts?.headline || brandDNA.primaryFont, body: brandDNA.fonts?.body || brandDNA.secondaryFont },
+      fontFamily: getEffectiveFonts(brandDNA),
     } : undefined);
 
     if (!overrides) return spec;
@@ -245,6 +244,7 @@ CONTEXT:
 ${params.gridConstraints ? `- GRID CONSTRAINTS: ${params.gridConstraints}` : ''}
 ${context.visionResult?.suitabilityScores ? `- PHOTO SUITABILITY: Technical Quality=${context.visionResult.suitabilityScores.technicalQuality}/100, Brand Compatibility=${context.visionResult.suitabilityScores.brandCompatibility}/100. CRITICAL: If Brand Compatibility is low (<50), choose a layout with heavy masks to hide the background.` : ''}
 ${params.triptychAlreadyUsed ? `- TRIPTYCH ALREADY USED: An earlier slide in this carousel already used the 3-panel triptych photo split. Do NOT set photo.imageExecution="triptych" again — pick "standard" so slides don't all look visually identical.` : ''}
+${params.brandDNA ? `- REAL BRAND COLORS: primary=${params.brandDNA.primaryBrandColor || 'n/a'}, secondary=${params.brandDNA.secondaryBrandColor || 'n/a'}, background=${params.brandDNA.backgroundBrandColor || 'n/a'}, accent=${params.brandDNA.accentBrandColor || 'n/a'}. CRITICAL: your "style.mood" choice must be visually compatible with these actual brand colors — e.g. do NOT pick "luxury_black" for a brand with a light/white background, and do NOT pick "clinical_white" for a brand with a dark background.` : ''}
 
 BRIEF FOR THIS SLIDE:
 ${context.brief || 'Standard beautifully aesthetic post.'}

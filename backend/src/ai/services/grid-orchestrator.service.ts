@@ -83,16 +83,49 @@ export class GridOrchestratorService {
       }
     });
 
+    type ConstraintMode = 'avoid_heavy' | 'prefer_structured' | 'avoid_split' | 'none';
     let gridConstraints = "No strict constraints. Prioritize the most beautiful and contextually appropriate layout.";
+    let constraintMode: ConstraintMode = 'none';
     if (heavyTextCount >= 2) {
       gridConstraints = "AVOID heavy text overlays and blocky layouts. MUST select a minimal, image-heavy, or full-bleed layout to balance the grid.";
+      constraintMode = 'avoid_heavy';
     } else if (minimalCount >= 2) {
       gridConstraints = "PREFER layouts with strong typography or structured text frames (like split screen or passepartout).";
+      constraintMode = 'prefer_structured';
     } else if (splitCount >= 2) {
       gridConstraints = "AVOID split-screen layouts. PREFER full bleed or asymmetric layouts.";
+      constraintMode = 'avoid_split';
     }
 
-    const randomLayout = layouts.length > 0 ? layouts[Math.floor(Math.random() * layouts.length)]! : 'single_hero';
+    // Classify each candidate layout the same way recent-post history is classified above,
+    // so the constraint we just derived from that history actually narrows the candidate pool
+    // instead of being advisory text nobody reads.
+    const classify = (layoutId: string): { heavy: boolean; split: boolean; minimal: boolean } => {
+      const t = legacyTemplates[layoutId] || newTemplates[layoutId] || {};
+      const textRegion = t.textTemplate || t.visual_structure?.text_regions || '';
+      const baseRegion = t.base || t.concept || t.category || '';
+      const str = (textRegion + ' ' + baseRegion + ' ' + layoutId).toLowerCase();
+      return {
+        heavy: /passepartout|large|overlay|poster/.test(str),
+        split: /split|diptyque/.test(str),
+        minimal: /clean|full_bleed|transparent/.test(str),
+      };
+    };
+
+    let candidatePool = layouts;
+    if (constraintMode === 'avoid_heavy') {
+      candidatePool = layouts.filter((l) => !classify(l).heavy);
+    } else if (constraintMode === 'avoid_split') {
+      candidatePool = layouts.filter((l) => !classify(l).split);
+    } else if (constraintMode === 'prefer_structured') {
+      const structured = layouts.filter((l) => classify(l).split || classify(l).heavy);
+      if (structured.length > 0) candidatePool = structured;
+    }
+    // If a constraint filters out every candidate (small/legacy layout pools), fall back to
+    // the full list rather than throwing — a slightly repetitive post beats a crash.
+    if (candidatePool.length === 0) candidatePool = layouts;
+
+    const randomLayout = candidatePool.length > 0 ? candidatePool[Math.floor(Math.random() * candidatePool.length)]! : 'single_hero';
 
     return {
       pillar: selectedPillar,

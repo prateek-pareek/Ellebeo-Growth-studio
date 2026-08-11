@@ -15,6 +15,7 @@ import type { VisionAnalysisResult, AssembledPrompt } from '../types/chain-outpu
 import { PromptCache } from './prompt-cache';
 import { getGuardrailsForService, type ServiceCategory } from '../config/service-guardrails';
 import { isMedicalAestheticsBrand } from '../config/medical-compliance';
+import { getEffectiveBlacklist } from '../config/brand-dna-blacklist.util';
 
 // Business goal → prompt framing instruction
 const GOAL_FRAMING: Record<BusinessGoalType, string> = {
@@ -284,7 +285,7 @@ You MUST format/orient this post to align with the '${contentPillar.toUpperCase(
 
     const systemPrompt = `You are editing a social media caption for ${brandDNA.businessName}.
 Their brand voice is: ${(brandDNA.primaryTone ?? '').replace(/_/g, ' ')}.
-They NEVER use these words: ${brandDNA.vocabularyBlacklist.join(', ')}.
+They NEVER use these words: ${getEffectiveBlacklist(brandDNA).join(', ')}.
 Make ONLY the specific change requested. Preserve the brand voice exactly.
 Return JSON with the same structure as the original caption.`;
 

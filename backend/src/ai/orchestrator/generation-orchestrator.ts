@@ -9,6 +9,7 @@ import { ModelRouter } from './model-router';
 import { PromptBuilder } from './prompt-builder';
 import { filterDnaForTier, tierDnaLabel } from '../config/brand-dna-tier-filter';
 import { isMedicalAestheticsBrand } from '../config/medical-compliance';
+import { getEffectiveBlacklist } from '../config/brand-dna-blacklist.util';
 import { buildStyleDirectionBlock } from '../config/visual-style-library';
 import { VisionAnalysisChain } from '../chains/vision-analysis.chain';
 import { CaptionGenerationChain } from '../chains/caption-generation.chain';
@@ -370,7 +371,7 @@ export class GenerationOrchestrator {
     });
 
     // ——— Pre-Launch: Parallel Image Processing Task —————————————————────────
-    const isMedicalPractitioner = (brandDNA as any).serviceCategory === 'injectables_cosmetic' || (brandDNA as any).serviceCategory === 'laser_treatments' || ['medical', 'injectables', 'laser', 'nurse'].some(k => brandDNA.businessName?.toLowerCase().includes(k)); // simple proxy for isMedicalAestheticsBrand if not imported; wait, isMedicalAestheticsBrand is available globally in the file? Let me check line 538.
+    const isMedicalPractitioner = isMedicalAestheticsBrand(brandDNA);
     const consentShowFace = !!(consentCheck.activeRestrictions as any)?.show_face;
     let nonMedicalImageProcessingPromise: Promise<ImageProcessingResult | null> = Promise.resolve(null);
 
@@ -427,7 +428,7 @@ export class GenerationOrchestrator {
     modelUsed = `${llmConfig.provider}/${llmConfig.modelId}`;
 
     try {
-      const blacklist = brandDNA.vocabularyBlacklist;
+      const blacklist = getEffectiveBlacklist(brandDNA);
 
       const antiAIGlossary = ["transformation", "radiant", "rejuvenated", "delve", "journey", "oasis", "sanctuary", "meticulous", "nestled", "whimsical", "unveil", "elevate", "glow up", "game-changer", "luxurious", "indulge"];
 
@@ -539,6 +540,7 @@ export class GenerationOrchestrator {
         totalSlides: isCarouselOpt ? 4 : 1,
         gridConstraints: determinedGrid.gridConstraints,
         visionResult: visionResult,
+        brandDNA,
       }).catch(err => {
         console.error('[Orchestrator Step 3.5 Template Agent Error]:', err);
         return null;
@@ -1002,7 +1004,7 @@ ${consentShowFace
     const scoringResult = await this.scoringGate.evaluate({
       caption: captionResult?.caption ?? '',
       hashtags: captionResult?.hashtags ?? [],
-      blacklist: brandDNA.vocabularyBlacklist,
+      blacklist: getEffectiveBlacklist(brandDNA),
       hasBefore: !!beforePhotoUrl,
       beforeAfterAllowed: consentCheck.activeRestrictions?.allow_before_after !== false,
       isCarousel: isCarousel,
@@ -1109,10 +1111,7 @@ ${consentShowFace
         include: { pillars: true },
       });
 
-      const blacklist: string[] = [
-        ...((brandDna?.vocabularyBlacklist ?? []) as string[]),
-        ...((brandDna?.doNotSay ?? []) as string[]),
-      ];
+      const blacklist: string[] = getEffectiveBlacklist(brandDna ?? {});
 
       const { systemPrompt, userPrompt } = this.promptBuilder.assembleTweakPrompt({
         previousCaption: contentItem.caption ?? '',
@@ -1121,8 +1120,8 @@ ${consentShowFace
         brandDNA: {
           businessName: brandDna?.businessName ?? 'Beauty Business',
           primaryTone: (brandDna?.primaryTone ?? 'professional_warm') as any,
-          blacklistedWords: blacklist,
           ...(brandDna ?? {}),
+          vocabularyBlacklist: blacklist,
         } as any,
         platform: 'instagram',
       });

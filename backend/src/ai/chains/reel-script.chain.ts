@@ -13,6 +13,7 @@ import type { BrandDNARecord } from '../types/job-payload.types';
 import type { CaptionGenerationResult, VisionAnalysisResult } from '../types/chain-output.types';
 import type { ModelRouter } from '../orchestrator/model-router';
 import { wrapSystemPrompt } from '../config/platform-system-prompt';
+import { getEffectiveBlacklist } from '../config/brand-dna-blacklist.util';
 
 function parseReelScriptOutput(raw: string, brandTone: string): ReelScriptResult {
   const cleaned = raw.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
@@ -91,7 +92,7 @@ STRICT RULES:
 - Maximum ${maxWords} words (spoken at natural pace = 15 seconds maximum)
 - No filler words (um, uh, like, basically)
 - Must hook immediately — first 3 words must be compelling
-- Never use these words: ${brandDNA.vocabularyBlacklist.join(', ')}
+- Never use these words: ${getEffectiveBlacklist(brandDNA).join(', ')}
 - Written to be SPOKEN, not read — use natural speech rhythm`;
 
     const userPrompt = `Write a voiceover script for a Reel based on this content:
