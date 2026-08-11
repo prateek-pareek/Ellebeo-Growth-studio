@@ -158,6 +158,7 @@ export class TemplateAgentService {
     excludeLayouts?: string[];
     templateIntent?: 'educational' | 'promotion' | 'testimonial' | 'before_after' | 'brand_story';
     slideType?: string;
+    semanticIntent?: import('../services/narrative-planner.service').SemanticSlide['semanticIntent'];
     requiredTraits?: import('../services/narrative-planner.service').SemanticSlide['requiredTraits'];
     /** True if an earlier slide in this same carousel/story already used the triptych photo split. */
     triptychAlreadyUsed?: boolean;
@@ -165,7 +166,7 @@ export class TemplateAgentService {
     brandDNA?: any;
   }): Promise<{ selected_layout_id: string; reasoning: string; designSpec?: import('./template-engine/interfaces').ISemanticDesignSpec }> {
 
-    const context: ITemplateContext & { slideType?: string; requiredTraits?: any } = {
+    const context: ITemplateContext & { slideType?: string; semanticIntent?: any } = {
       brief: params.brief,
       brandName: params.brandName,
       aesthetic: params.aesthetic,
@@ -175,7 +176,7 @@ export class TemplateAgentService {
       visionResult: params.visionResult,
       templateIntent: params.templateIntent,
       slideType: params.slideType,
-      requiredTraits: params.requiredTraits
+      semanticIntent: params.semanticIntent
     };
 
     try {
@@ -230,7 +231,8 @@ We have mathematically narrowed down our layout library to the absolute Top ${to
 Your job has two parts: (1) select the single best structural variant from this shortlist, and (2) author a complete Design Intent for it so the renderer can faithfully recreate your decision instead of guessing.
 
 Do NOT default to "minimal" or "high-end fashion" unless it perfectly matches the Brand Aesthetic. Adapt dynamically.
-CRITICAL DESIGN RULE: You MUST rotate across different Design Families (e.g., if previous slides used 'editorial', you must actively select 'minimalist_quote', 'clinical_hero', 'split', 'countdown_promo', 'product_showcase', 'before_after', 'testimonial', 'scrapbook', 'quadrant', 'transformation', 'magazine', 'polaroid', 'notification_card', 'announcement' or other distinct families). Variants from the same design family must NOT be used continuously. Ensure each slide is distinct visually while maintaining brand coherence.
+CRITICAL DESIGN RULE 1: Do NOT default to "hero" layouts just because it is the first slide. Choose layouts that structurally fit the brief (e.g. text-heavy briefs need split or text_only layouts).
+CRITICAL DESIGN RULE 2: You MUST rotate across different Design Families (e.g., if previous slides used 'editorial', you must actively select 'minimalist_quote', 'clinical_hero', 'split', 'countdown_promo', 'product_showcase', 'before_after', 'testimonial', 'scrapbook', 'quadrant', 'transformation', 'magazine', 'polaroid', 'notification_card', 'announcement' or other distinct families). Variants from the same design family must NOT be used continuously. Ensure each slide is distinct visually while maintaining brand coherence.
 
 GROUNDING RULE: Each candidate below may list "REAL MINED DATA" — actual measured facts about that template (or its family) from real analyzed designs. Treat "balance" and "readingFlow" as structural facts about the template itself: cite them as-is in your designSpec, do not invent different values. "energy" describes the template's inherent character; let it inform (not override) your own creative fields like mood/emphasis/spacing, which should also react to THIS specific brief and content.
 
@@ -274,12 +276,14 @@ JSON SCHEMA:
       "imageExecution": "standard" // Can be "triptych" for multi-panel splits
     },
     "typography": {
-      "hierarchy": "editorial",
+      "hierarchy": "editorial", // Must be exactly one of: "editorial", "bold", "minimal", "technical"
       "dominance": "high",
       "headlineTreatment": "standard",
       "alignment": "left" // one of: left, center, right
     },
-    "decorations": { "density": "medium" },
+    "decorations": { 
+      "density": "medium" // Must be exactly one of: "none", "low", "medium", "high"
+    },
     "style": { "mood": "warm_paper" /* one of: warm_paper, luxury_black, clinical_white, vibrant_pop */ },
     "hierarchy": {
       "primaryElement": "image", // one of: image, headline, body, cta, badge — what leads the eye

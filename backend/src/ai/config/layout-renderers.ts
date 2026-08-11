@@ -27,6 +27,21 @@ const primitiveEngine = new PrimitiveEngine();
 const typographyEngine = new TypographyEngine();
 const artDirectionEngine = new ArtDirectionEngine();
 
+function getLuminanceSafe(hex: string): number {
+  try {
+    const cleaned = hex.replace('#', '');
+    const rgb = parseInt(cleaned.length === 3
+      ? cleaned.split('').map(c => c + c).join('')
+      : cleaned, 16);
+    const r = (rgb >> 16) & 0xff;
+    const g = (rgb >> 8) & 0xff;
+    const b = rgb & 0xff;
+    return 0.299 * r + 0.587 * g + 0.114 * b;
+  } catch {
+    return 128;
+  }
+}
+
 export const COMPILED_LAYOUTS: Record<string, ICompiledLayoutDSL> = { ...compiledLayouts } as any;
 
 import { ColorCompositionEngine, ColorPalette } from '../services/template-engine/engines/color-composition-engine';
@@ -40,6 +55,10 @@ import { CompositionOptimizer } from '../services/template-engine/engines/compos
 const designCompiler = new DesignCompiler();
 const optimizer = new CompositionOptimizer();
 const visualEngine = new VisualResourceEngine();
+import { DesignLanguageResolver } from '../services/template-engine/engines/design-language-resolver';
+const designLanguageResolver = new DesignLanguageResolver();
+import { CompositionQualityController } from '../services/template-engine/engines/composition-quality-controller';
+const compositionQC = new CompositionQualityController();
 
 
 export type LayoutTemplate = {
@@ -104,6 +123,10 @@ export type BaseCtx = {
   designSpec?: ISemanticDesignSpec;
   designLanguage?: IDesignLanguage;
   faceCoordinates?: { eyesYPercent: number; mouthYPercent: number; };
+  faceBox?: any;
+  subjectBox?: any;
+  additionalSubjects?: any[];
+  optimizedDsl?: any;
 };
 
 export type BaseResult = {
@@ -233,48 +256,45 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
   },
 
   universal_dynamic_base: async (ctx) => {
-    let dsl = COMPILED_LAYOUTS[ctx.layoutType];
-
-    // Phase 2.5: Design Compiler takes semantic intent and mutates the DSL mathematically.
-    // designLanguage (the generic family/energy-driven behavior profile) runs first as
-    // a baseline; designSpec runs second so the more specific, per-selection photo.role/
-    // treatment intent — grounded for this exact template — wins on imageLayer.paddingPercent/
-    // anchor rather than being silently clobbered by the generic behavior profile.
-    // Previously this compiler only ever ran against ctx.designLanguage here, so
-    // designSpec.photo never affected image geometry outside the decoration path.
-    if (ctx.designLanguage && dsl) {
-      dsl = designCompiler.compile(dsl, ctx.designLanguage);
-    }
-    if (ctx.designSpec && dsl) {
-      dsl = designCompiler.compile(dsl, ctx.designSpec);
-    }
-
-    // Phase 2.6: Composition Optimizer balances whitespace and assigns strict bounding boxes
-    if (dsl) {
-      let faceBox: BoundingBox | undefined = undefined;
-      if (ctx.faceCoordinates) {
-        // Approximate a box covering the face based on Y percentages
-        const eyesY = Math.round((ctx.faceCoordinates.eyesYPercent / 100) * ctx.h);
-        const mouthY = Math.round((ctx.faceCoordinates.mouthYPercent / 100) * ctx.h);
-        const faceTop = Math.max(0, eyesY - (ctx.h * 0.05)); // 5% above eyes
-        const faceBottom = Math.min(ctx.h, mouthY + (ctx.h * 0.08)); // 8% below mouth
-        // We assume the face is roughly centered horizontally
-        faceBox = { x: Math.round(ctx.w * 0.2), y: faceTop, width: Math.round(ctx.w * 0.6), height: faceBottom - faceTop };
-      }
-
-      const layoutEngine = new LayoutEngine(ctx.w, ctx.h, faceBox);
-      const constraints = layoutEngine.calculateConstraints('minimal', 'balanced');
-      dsl = optimizer.optimize(dsl, constraints, ctx.w, ctx.h);
-    }
+    let dsl = ctx.optimizedDsl || COMPILED_LAYOUTS[ctx.layoutType];
 
     if (dsl && dsl.layers) {
       const isEditorial = ctx.layoutType.includes('editorial');
-      const imageLayer = dsl.layers.find(l => l.type === 'image') as IDSLImageLayer;
+      const imageLayer = dsl.layers.find((l: any) => l.type === 'image') as IDSLImageLayer;
 
       if (imageLayer) {
+        if (imageLayer.layoutMode === 'triptych' || ctx.designSpec?.photo?.imageExecution === 'triptych') {
+          // CANVA-STYLE TRIPTYCH AS SVG MASK: Splits the photo into 3 distinct vertical panels over the brand background
+          const panelW = Math.floor(ctx.w * 0.28);
+          const gap = Math.floor(ctx.w * 0.04);
+          const startX = Math.floor((ctx.w - (panelW * 3 + gap * 2)) / 2);
+          const panelH = Math.floor(ctx.h * 0.75);
+          const startY = Math.floor((ctx.h - panelH) / 2);
+
+          const triptychSvg = `
+            <svg width="${ctx.w}" height="${ctx.h}" xmlns="http://www.w3.org/2000/svg">
+              <rect x="${startX}" y="${startY}" width="${panelW}" height="${panelH}" fill="#fff"/>
+              <rect x="${startX + panelW + gap}" y="${startY}" width="${panelW}" height="${panelH}" fill="#fff"/>
+              <rect x="${startX + (panelW + gap) * 2}" y="${startY}" width="${panelW}" height="${panelH}" fill="#fff"/>
+            </svg>`;
+
+          const fullPhoto = await processPortraitFit(ctx.imageBuffer, ctx.w, ctx.h, ctx.validBackgroundColor);
+          const maskedPhoto = await sharp(fullPhoto).composite([{ input: Buffer.from(triptychSvg), blend: 'dest-in' }]).png().toBuffer();
+
+          const baseImageBuffer = await sharp({
+            create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validBackgroundColor },
+          }).composite([{ input: maskedPhoto, top: 0, left: 0 }]).png().toBuffer();
+
+          return {
+            baseImage: sharp(baseImageBuffer),
+            compositeTop: dsl.canvasRegions ? dsl.canvasRegions.textRegion.y : startY,
+            compositeBottom: 0,
+            compositeLeft: dsl.canvasRegions ? dsl.canvasRegions.textRegion.x : startX,
+            compositeRight: ctx.w - (dsl.canvasRegions ? dsl.canvasRegions.textRegion.x + dsl.canvasRegions.textRegion.width : ctx.w)
+          };
+        }
+
         // AI ART DIRECTION UPGRADE: Region-Based Extraction
-        // If the optimizer successfully allocated rigorous Image and Text Regions,
-        // use those explicit mathematical coordinates.
         if (dsl.canvasRegions && (!imageLayer.mask || imageLayer.mask === 'rectangle' || imageLayer.mask === 'split')) {
           const region = dsl.canvasRegions.imageRegion;
 
@@ -302,33 +322,6 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
           // single-photo crop. Falls back to a single-photo treatment inside
           // stitchBeforeAfterImages() when no before-photo is available.
           return stitchBeforeAfterImages(ctx, imageLayer.orientation === 'horizontal' ? 'horizontal' : 'vertical');
-        } else if (ctx.designSpec?.photo?.imageExecution === 'triptych') {
-          // CANVA-STYLE TRIPTYCH: Split the photo into 3 distinct vertical panels
-          const panelW = Math.floor(ctx.w * 0.28);
-          const gap = Math.floor(ctx.w * 0.04);
-          const startX = Math.floor((ctx.w - (panelW * 3 + gap * 2)) / 2);
-          const panelH = Math.floor(ctx.h * 0.75);
-          const startY = Math.floor((ctx.h - panelH) / 2);
-
-          const fullPhoto = await processPortraitFit(ctx.imageBuffer, ctx.w, ctx.h, ctx.validBackgroundColor);
-
-          const extractPanel = async (x: number) => {
-            return sharp(fullPhoto).extract({ left: x, top: startY, width: panelW, height: panelH }).toBuffer();
-          };
-
-          const p1 = await extractPanel(startX);
-          const p2 = await extractPanel(startX + panelW + gap);
-          const p3 = await extractPanel(startX + (panelW + gap) * 2);
-
-          const baseImageBuffer = await sharp({
-            create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor },
-          }).composite([
-            { input: p1, top: startY, left: startX },
-            { input: p2, top: startY, left: startX + panelW + gap },
-            { input: p3, top: startY, left: startX + (panelW + gap) * 2 },
-          ]).png().toBuffer();
-
-          return { baseImage: sharp(baseImageBuffer), compositeTop: startY, compositeBottom: startY, compositeLeft: startX, compositeRight: startX };
         } else if (imageLayer.mask === 'circle') {
           const size = Math.floor(Math.min(ctx.w, ctx.h) * 0.6); // 60% of canvas width
           const paddingPx = Math.floor(ctx.w * (imageLayer.paddingPercent || 15) / 100);
@@ -895,7 +888,13 @@ export type DecoCtx = {
   designLanguage?: IDesignLanguage;
   structuredText?: { headline?: string; subheadline?: string; cta?: string; };
   typographyMetrics?: any;
+  faceBox?: any;
+  subjectBox?: any;
+  additionalSubjects?: any[];
+  optimizedDsl?: any;
   activeTheme?: string;
+  visualRanking?: string[];
+  capitalizationRule?: string;
 };
 
 export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
@@ -978,46 +977,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
   },
 
   universal_dynamic_deco: (ctx) => {
-    let dsl = COMPILED_LAYOUTS[ctx.layoutType];
-
-    // Phase 2.5: Design Compiler mutates text widths and alignments based on semantic intent
-    if (ctx.designSpec && dsl) {
-      dsl = designCompiler.compile(dsl, ctx.designSpec);
-    }
-
-    // Compile DSL rules dynamically based on semantic intent
-    if (ctx.designLanguage) {
-      dsl = designCompiler.compile(dsl, ctx.designLanguage);
-    }
-
-    // Extract faceBox early for the optimizer
-    let faceBox: any | undefined = undefined;
-    if (ctx.faceCoordinates && ctx.faceCoordinates.eyesYPercent) {
-      const eyesY = Math.round((ctx.faceCoordinates.eyesYPercent / 100) * ctx.h);
-      const mouthY = ctx.faceCoordinates.mouthYPercent
-        ? Math.round((ctx.faceCoordinates.mouthYPercent / 100) * ctx.h)
-        : Math.round(eyesY + (ctx.h * 0.15));
-
-      const faceTop = Math.max(0, eyesY - Math.round(ctx.h * 0.08));
-      const faceBottom = Math.min(ctx.h, mouthY + Math.round(ctx.h * 0.08));
-      const faceHeight = faceBottom - faceTop;
-      const faceWidth = Math.round(ctx.w * 0.45);
-      const faceX = Math.round((ctx.w - faceWidth) / 2);
-      faceBox = { x: faceX, y: faceTop, width: faceWidth, height: faceHeight };
-      
-      console.log(`[LayoutRenderer] Applied GPT face coordinates. Computed FaceBox for avoidance:`, faceBox);
-    } else {
-      console.log(`[LayoutRenderer] No faceCoordinates provided to renderer. Text will not dodge faces.`);
-    }
-
-    // Phase 2.6: Composition Optimizer
-    if (dsl) {
-      const layoutEngine = new LayoutEngine(ctx.w, ctx.h, faceBox);
-      const optFamily = (ctx.designLanguage?.intent?.family as any) || 'minimal';
-      const behaviorProfile = (dsl as any)?.behavior;
-      const constraints = layoutEngine.calculateConstraints(optFamily, 'balanced', false, behaviorProfile);
-      dsl = optimizer.optimize(dsl, constraints, ctx.w, ctx.h, faceBox, ctx.designLanguage?.intent?.visualPriority, ctx.structuredText);
-    }
+    let dsl = ctx.optimizedDsl || COMPILED_LAYOUTS[ctx.layoutType];
 
     if (!dsl || !dsl.layers) return '';
 
@@ -1027,7 +987,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     const contract = (dsl as any).contract;
     if (contract && Array.isArray(contract.required)) {
       for (const req of contract.required) {
-        const hasPrimitive = dsl.layers.some(l => ('component' in l && l.component === req)) ||
+        const hasPrimitive = dsl.layers.some((l: any) => ('component' in l && l.component === req)) ||
           (ctx.injectedFeatures || []).includes(req);
         if (!hasPrimitive) {
           console.warn(`[Renderer] Template '${dsl.id}' is missing required primitive: '${req}'.`);
@@ -1036,7 +996,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     }
 
     // Check if we need to apply a global overlay (like noise) based on brand DNA
-    let overlayLayers = dsl.layers.filter(l => l.type === 'decoration' || l.type === 'text' || (l.type === 'image' && l.component));
+    let overlayLayers = dsl.layers.filter((l: any) => l.type === 'decoration' || l.type === 'text' || (l.type === 'image' && l.component));
 
     // Generate the Visual Recipe instead of relying on rigid family names
     let visualRecipe;
@@ -1068,7 +1028,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       : themeEngine.getMoodDecorations(visualRecipe.texture);
     overlayLayers = [...overlayLayers, ...moodDecorations];
 
-    overlayLayers.sort((a, b) => a.zIndex - b.zIndex);
+    overlayLayers.sort((a: any, b: any) => a.zIndex - b.zIndex);
 
 
 
@@ -1077,42 +1037,70 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     // Construct an estimated face BoundingBox from the vision result's Y coordinates
     // (Already extracted above for the optimizer)
 
-    const layoutEngine = new LayoutEngine(ctx.w, ctx.h, faceBox);
+    const layoutEngine = new LayoutEngine(
+      ctx.w,
+      ctx.h,
+      ctx.faceBox,
+      ctx.subjectBox,
+      ctx.additionalSubjects || [],
+    );
     const isTensionEnabled = family === 'editorial';
     const behaviorProfile = (dsl as any)?.behavior;
     const constraints = layoutEngine.calculateConstraints(family, 'balanced', isTensionEnabled, behaviorProfile);
 
-    // Determinstic hash based on layoutType and rawName (acting as variant/tenant proxy)
-    const hashString = ctx.layoutType + '_' + (ctx.rawName || 'default');
-    let hash = 2166136261;
-    for (let i = 0; i < hashString.length; i++) {
-      hash ^= hashString.charCodeAt(i);
-      hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-    }
-    const rotationIndex = (hash >>> 0) % 4;
-
-    // Rotate Brand, Secondary, Accent, Depth. Background is explicitly locked.
-    const rotatableColors = [
-      ctx.validBrandColor,
-      ctx.validSecondaryColor,
-      ctx.validAccentColor || ctx.validBrandColor,
-      ctx.validDepthColor || ctx.validBrandColor
-    ];
-
-    const rBrand = rotatableColors[(0 + rotationIndex) % 4];
-    const rSecondary = rotatableColors[(1 + rotationIndex) % 4];
-    const rAccent = rotatableColors[(2 + rotationIndex) % 4];
-    const rDepth = rotatableColors[(3 + rotationIndex) % 4];
-
-    const colorPalette: ColorPalette = {
-      brandColor: rBrand,
-      secondaryColor: rSecondary,
-      backgroundColor: ctx.validBackgroundColor, // Locked
-      accentColor: rAccent,
-      depthColor: rDepth
+    // BrandDNA palette: background is canvas-locked; primary/secondary/accent/depth
+    // may rotate for visual variety — never use background as text ink.
+    const basePalette: ColorPalette = {
+      brandColor: ctx.validBrandColor,
+      secondaryColor: ctx.validSecondaryColor,
+      backgroundColor: ctx.validBackgroundColor,
+      accentColor: ctx.validAccentColor || ctx.validBrandColor,
+      depthColor: ctx.validDepthColor || ctx.validBrandColor,
+      textColor: ctx.validDepthColor || ctx.dynamicTextColor,
     };
+    const rotationIndex = compositionQC.hashRotationIndex(
+      `${ctx.layoutType || ''}_${ctx.rawName || 'brand'}_${ctx.activeTheme || ''}`,
+    );
+    const colorPalette = compositionQC.rotateInkPalette(basePalette, rotationIndex);
 
     const colorHierarchy = colorEngine.resolveHierarchy(colorPalette, visualRecipe.color);
+
+    // Ensure text inks never equal the locked background
+    const bg = (ctx.validBackgroundColor || '').toUpperCase();
+    if (colorHierarchy.primaryText?.toUpperCase() === bg) {
+      colorHierarchy.primaryText = colorEngine.resolveTextInk(
+        colorHierarchy.cardSurface || colorHierarchy.primaryBackground,
+        colorPalette,
+        'primary',
+      );
+    }
+    if (colorHierarchy.secondaryText?.toUpperCase() === bg) {
+      colorHierarchy.secondaryText = colorEngine.resolveTextInk(
+        colorHierarchy.cardSurface || colorHierarchy.primaryBackground,
+        colorPalette,
+        'secondary',
+      );
+    }
+
+    // Resolve typography recipe from family + BrandDNA visual ranking / casing
+    const brandStyle = Array.isArray(ctx.visualRanking) && ctx.visualRanking[0]
+      ? String(ctx.visualRanking[0])
+      : String(ctx.activeTheme || 'balanced');
+    const designRecipe = designLanguageResolver.generateRecipe(
+      ctx.layoutType || dsl.id || 'layout',
+      String(family),
+      brandStyle,
+    );
+    if (ctx.capitalizationRule) {
+      const rule = String(ctx.capitalizationRule).toLowerCase();
+      if (rule === 'uppercase' || rule === 'force_uppercase') {
+        designRecipe.typography.casing = 'force_uppercase';
+      } else if (rule === 'lowercase' || rule === 'force_lowercase') {
+        designRecipe.typography.casing = 'force_lowercase';
+      } else if (rule === 'natural' || rule === 'sentence') {
+        designRecipe.typography.casing = 'natural';
+      }
+    }
 
     const primitiveCtx: PrimitiveContext = {
       w: ctx.w,
@@ -1122,21 +1110,27 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       validBackgroundColor: ctx.validBackgroundColor,
       constraints,
       behavior: behaviorProfile,
-      layoutState: { occupiedRegions: [], family },
+      layoutState: { occupiedRegions: [], family, renderedStrings: [] },
       colorHierarchy,
       recipe: visualRecipe.primitive
     };
 
     const layoutState = primitiveCtx.layoutState!;
-    layoutState.occupiedRegions.push({
-      id: 'hero-image',
-      role: 'image',
-      x: ctx.paddingX,
-      y: ctx.paddingTop,
-      width: ctx.innerW,
-      height: ctx.innerH,
-      zIndex: 10
-    });
+    // Do not seed a fake full-frame hero-image occupied region — that lied about free space
+    // for any fallback path without allocatedBox.
+
+    // Text-band readability scrim: when type sits in a dedicated band over the photo
+    const textBand = (dsl as any)?.canvasRegions?.textRegion;
+    const priority = ctx.designLanguage?.intent?.visualPriority || ctx.designSpec?.composition?.visualPriority;
+    if (textBand && (priority === 'image_hero' || priority === 'cta_hero' || priority === 'composition_hero')) {
+      const pad = 16;
+      const scrimOpacity = priority === 'cta_hero' ? 0.55 : 0.42;
+      const scrimFill = (ctx.validDepthColor && getLuminanceSafe(ctx.validDepthColor) < 140)
+        ? ctx.validDepthColor
+        : '#0A0A0A';
+      svg += `<rect x="${Math.max(0, textBand.x - pad)}" y="${Math.max(0, textBand.y - pad)}" width="${textBand.width + pad * 2}" height="${textBand.height + pad * 2}" fill="${scrimFill}" fill-opacity="${scrimOpacity}" rx="12" />`;
+    }
+
     // Iteratively render each layer using the Primitive Engine
     for (const layer of overlayLayers) {
       if (layer.type === 'decoration') {
@@ -1196,9 +1190,30 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           colorHierarchy,
           designTokens: ctx.designTokens,
           typographyMetrics: ctx.typographyMetrics,
+          typographyTokens: designRecipe.typography,
+          designSpec: ctx.designSpec,
+          designLanguage: ctx.designLanguage,
+          visualPriority: ctx.designLanguage?.intent?.visualPriority || ctx.designSpec?.composition?.visualPriority,
           escapeXml: (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
         };
         svg += typographyEngine.renderTextLayer(typoCtx, textLayer);
+      } else if (layer.type === 'text_group') {
+        const textGroupLayer = layer as import('../services/template-engine/interfaces').IDSLTextGroupLayer;
+        const typoCtx: import('../services/template-engine/engines/typography-engine').TypographyContext = {
+          ...ctx,
+          constraints,
+          layoutEngine,
+          layoutState,
+          colorHierarchy,
+          designTokens: ctx.designTokens,
+          typographyMetrics: ctx.typographyMetrics,
+          typographyTokens: designRecipe.typography,
+          designSpec: ctx.designSpec,
+          designLanguage: ctx.designLanguage,
+          visualPriority: ctx.designLanguage?.intent?.visualPriority || ctx.designSpec?.composition?.visualPriority,
+          escapeXml: (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
+        };
+        svg += typographyEngine.renderTextGroupLayer(typoCtx, textGroupLayer);
       }
     }
 

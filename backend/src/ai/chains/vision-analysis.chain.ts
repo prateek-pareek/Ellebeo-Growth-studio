@@ -13,17 +13,20 @@ import { AI_CONFIG } from '../../config/ai.config';
 import type { VisionAnalysisResult } from '../types/chain-output.types';
 import type { ModelRouter } from '../orchestrator/model-router';
 import { wrapSystemPrompt } from '../config/platform-system-prompt';
+import { firebaseStorage } from '../../config/firebase.client';
 
-const VISION_PROMPT_VERSION = 'v2.4';
+const VISION_PROMPT_VERSION = 'v2.6';
 
 // Zod-validated output schema enforcer (inline for strict mode)
 function parseVisionOutput(raw: string): VisionAnalysisResult {
-  // Strip markdown code fences if model wraps output in ```json ... ```
-  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+  // Extract the first JSON object from the string, ignoring conversational filler or markdown
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  const cleaned = jsonMatch ? jsonMatch[0] : raw;
+  
   let parsed: unknown;
   try {
     parsed = JSON.parse(cleaned);
-  } catch {
+  } catch (error) {
     throw new VisionParseError(`Vision model returned non-JSON: ${raw.slice(0, 200)}`);
   }
 
@@ -51,14 +54,39 @@ function parseVisionOutput(raw: string): VisionAnalysisResult {
     if (typeof coords.eyesYPercent === 'number' && typeof coords.mouthYPercent === 'number') {
       result.faceCoordinates = {
         eyesYPercent: coords.eyesYPercent,
-        mouthYPercent: coords.mouthYPercent
+        mouthYPercent: coords.mouthYPercent,
+        faceCenterXPercent: typeof coords.faceCenterXPercent === 'number' ? coords.faceCenterXPercent : undefined,
+        faceWidthPercent: typeof coords.faceWidthPercent === 'number' ? coords.faceWidthPercent : undefined,
       };
-      console.log(`[Vision Model] Successfully extracted face coordinates: Eyes at ${coords.eyesYPercent}%, Mouth at ${coords.mouthYPercent}%`);
+      console.log(`[Vision Model] Successfully extracted face coordinates: Eyes at ${coords.eyesYPercent}%, Mouth at ${coords.mouthYPercent}%, X at ${coords.faceCenterXPercent ?? 'n/a'}%`);
     } else {
       console.log(`[Vision Model] GPT returned malformed faceCoordinates:`, coords);
     }
   } else {
     console.log(`[Vision Model] No faceCoordinates detected by GPT in this image.`);
+  }
+
+  if (Array.isArray(obj['protectedSubjects'])) {
+    const parsedSubjects = (obj['protectedSubjects'] as any[])
+      .map((s) => ({
+        type: String(s?.type || 'other') as any,
+        centerXPercent: Number(s?.centerXPercent),
+        centerYPercent: Number(s?.centerYPercent),
+        widthPercent: Number(s?.widthPercent),
+        heightPercent: Number(s?.heightPercent),
+      }))
+      .filter(s =>
+        Number.isFinite(s.centerXPercent) &&
+        Number.isFinite(s.centerYPercent) &&
+        Number.isFinite(s.widthPercent) &&
+        Number.isFinite(s.heightPercent) &&
+        s.widthPercent > 3 &&
+        s.heightPercent > 3
+      );
+    if (parsedSubjects.length > 0) {
+      result.protectedSubjects = parsedSubjects;
+      console.log(`[Vision Model] Protected subjects: ${parsedSubjects.map(s => s.type).join(', ')}`);
+    }
   }
 
   if (!result.servicePerformed) {
@@ -119,16 +147,16 @@ export class VisionAnalysisChain {
   }
 
   // --------------------------------------------------------------------------
-  // Main Entry — Cache-first. Returns cached result if available.
+  // Main Entry — Buffer-First Pipeline with Deterministic Caching
   // --------------------------------------------------------------------------
 
   async analyse(params: {
-    imageUrl: string;   // Cloudinary CDN URL (processed, accessible)
-    storagePath: string; // Used to compute the cache key if no imageHash
-    imageHash?: string | null; // s3ObjectHash if available
-    cachedResult?: string | null; // Pre-fetched from job payload if already cached
+    imageUrl: string;    // Legacy fallback URL (not used for extraction anymore)
+    storagePath: string; // Raw storage path (Firebase or HTTP)
+    imageHash?: string | null; 
+    cachedResult?: string | null; 
   }): Promise<{ result: VisionAnalysisResult; fromCache: boolean }> {
-    const { imageUrl, storagePath, imageHash, cachedResult } = params;
+    const { storagePath, imageHash, cachedResult } = params;
 
     // 1. Check in-payload cache (fastest — already in memory)
     if (cachedResult) {
@@ -139,34 +167,79 @@ export class VisionAnalysisChain {
           return { result: parsed, fromCache: true };
         } else {
           console.log(`[Vision Model] CACHE HIT: No faceCoordinates detected in cached result. Forcing re-evaluation...`);
-          // Fall through to re-evaluation
         }
       } catch {
-        // Corrupted cache — fall through to DB check
+        // Corrupted cache — fall through
       }
     }
 
-    // 2. Compute image hash and check PostgreSQL cache
-    const finalHash = imageHash || createHash('sha256').update(storagePath).digest('hex');
+    // 2. Download Image to Buffer Securely (Bypasses 403s and prepares for Gemini Base64)
+    let imageBuffer: Buffer;
+    try {
+      imageBuffer = await this.downloadImageToBuffer(storagePath);
+    } catch (err: any) {
+      console.error(`[Vision Model] FATAL: Failed to download image for analysis: ${err.message}`);
+      throw err; // Fail fast rather than sending garbage to Gemini
+    }
+
+    // 3. Compute deterministic hash from raw bytes (Perfect cache key)
+    const finalHash = imageHash || createHash('sha256').update(imageBuffer).digest('hex');
     const dbCached = await this.checkDBCache(finalHash);
     if (dbCached) {
       return { result: dbCached, fromCache: true };
     }
 
-    // 3. No cache hit — call GPT-4o Vision
-    const result = await this.callVisionModel(imageUrl);
+    // 4. Encode to Base64 Data URI (Strict requirement for Gemini multimodal)
+    // We assume JPEG/PNG based on common usage; Gemini accepts generic image/jpeg data uris fine
+    const base64DataUri = `data:image/jpeg;base64,${imageBuffer.toString('base64')}`;
 
-    // 4. Save to PostgreSQL cache
+    // 5. Call Vision Model
+    const result = await this.callVisionModel(base64DataUri);
+
+    // 6. Save to PostgreSQL cache
     await this.saveToDBCache(finalHash, result);
 
     return { result, fromCache: false };
   }
 
   // --------------------------------------------------------------------------
-  // GPT-4o Vision API Call
+  // Image Loading Service (Internal)
   // --------------------------------------------------------------------------
 
-  private async callVisionModel(imageUrl: string): Promise<VisionAnalysisResult> {
+  private async downloadImageToBuffer(storagePath: string): Promise<Buffer> {
+    // If it's a standard HTTP(S) public URL, fetch it directly
+    if (storagePath.startsWith('http://') || storagePath.startsWith('https://')) {
+      const response = await fetch(storagePath);
+      if (!response.ok) {
+        throw new Error(`HTTP error fetching image: ${response.status} ${response.statusText}`);
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      return Buffer.from(arrayBuffer);
+    }
+
+    // Otherwise, assume it's a Firebase Storage path (e.g. tenants/...)
+    if (!firebaseStorage) {
+      throw new Error('Firebase Storage is not configured. Cannot fetch raw image for Vision Pipeline.');
+    }
+    
+    // Use the backend's admin credentials to pull the file directly over gRPC
+    console.log(`[Vision Model] Downloading image buffer securely from Firebase Admin SDK...`);
+    const bucket = firebaseStorage.bucket();
+    const file = bucket.file(storagePath);
+    
+    try {
+      const [buffer] = await file.download();
+      return buffer;
+    } catch (err: any) {
+      throw new Error(`Firebase Admin download failed for path '${storagePath}': ${err.message}`);
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // GPT-4o / Gemini Vision API Call
+  // --------------------------------------------------------------------------
+
+  private async callVisionModel(base64DataUri: string): Promise<VisionAnalysisResult> {
     const systemPrompt = `You are a senior beauty industry analyst with 15 years of hands-on experience across hair colour, skin treatments, lashes, brows, nails, and injectables.
 Your job is to extract precise, technically accurate information from beauty treatment photos so a copywriter can write a specific, authentic social media caption.
 The quality of your analysis directly determines whether the caption sounds generic or genuinely expert.
@@ -188,8 +261,14 @@ Return ONLY valid JSON — no markdown, no explanation, no preamble.`;
   "facesDetected": true,
   "faceCoordinates": {
     "eyesYPercent": 35,
-    "mouthYPercent": 50
+    "mouthYPercent": 50,
+    "faceCenterXPercent": 50,
+    "faceWidthPercent": 35
   },
+  "protectedSubjects": [
+    { "type": "face", "centerXPercent": 50, "centerYPercent": 38, "widthPercent": 35, "heightPercent": 40 },
+    { "type": "product", "centerXPercent": 72, "centerYPercent": 70, "widthPercent": 20, "heightPercent": 25 }
+  ],
   "settingDetected": "salon chair|nail table|treatment bed|studio|outdoor|home — be specific",
   "framingType": "macro|portrait|wide|unknown — macro is very close up, portrait is head/shoulders, wide is full body/room",
   "suitabilityScores": {
@@ -199,13 +278,14 @@ Return ONLY valid JSON — no markdown, no explanation, no preamble.`;
   }
 }
 
-If facesDetected is true, you MUST include faceCoordinates. Imagine a vertical grid from 0 (top) to 100 (bottom). Estimate the Y position of the client's eyes and mouth to the nearest 5%. If no face is detected, omit faceCoordinates entirely.
+If facesDetected is true, you MUST include faceCoordinates. Imagine a grid from 0–100 on both axes (0 = top/left, 100 = bottom/right). Estimate eyesYPercent and mouthYPercent to the nearest 5%. Also estimate faceCenterXPercent (horizontal center of the face) and faceWidthPercent (how wide the face is relative to the frame — typically 25–45 for portraits, wider for macros). If no face is detected, omit faceCoordinates entirely.
+Also return protectedSubjects: every visually important region that text must NOT cover — faces, products/bottles, hands, nails/treatment areas, tools, body focal zones. Use type from: face|product|hands|treatment_area|tool|body|other. Give centerX/Y and width/height as % of the image. Include 1–4 subjects. Omit empty array if nothing meaningful.
 CRITICAL: Score technicalQuality (0-100) on sharpness, exposure, and noise. Score brandCompatibility (0-100) purely on the background and setting (is it a messy peeling wall/distracting=20, or a clean luxury salon/aesthetic=95?). Score composition (0-100) on framing and subject placement.
 Be specific. Vague answers like 'hair was coloured' or 'skin looks better' are useless. Use the technical vocabulary a professional technician would use.`,
         },
         {
           type: 'image_url',
-          image_url: { url: imageUrl, detail: 'high' },
+          image_url: { url: base64DataUri, detail: 'high' },
         },
       ],
     });

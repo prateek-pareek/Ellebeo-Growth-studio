@@ -18,6 +18,16 @@ export interface ITemplateMetadata {
   premiumStyleScore: number; // 1-10
   occupiedTextZones: BoundingBox[]; // Used for collision avoidance
   
+  // Semantic Traits for unified source-agnostic ranking
+  visualPriority?: 'image_hero' | 'typography_hero' | 'composition_hero' | 'cta_hero';
+  readingFlow?: string;
+  balance?: string;
+  energy?: string;
+  negativeSpace?: string;
+  imageExecution?: string;
+  slideType?: string;
+  family?: string;
+
   // HYBRID ARCHITECTURE FIELDS
   type: 'rigid' | 'procedural'; // Rigid = fixed compiled layout. Procedural = generated via Design Family.
   familyConfig?: IDesignFamily; // Only present if type === 'procedural'
@@ -49,10 +59,19 @@ export interface ITemplateContext {
   visualRanking?: string[];
   activeTheme?: string;
   slideType?: string;
-  requiredTraits?: {
-    visualPriority?: string;
-    energy?: string;
-    readingFlow?: string;
+  semanticIntent?: {
+    required: {
+      visualPriority?: string;
+    };
+    preferred: {
+      energy?: string;
+      readingFlow?: string;
+    };
+    weights: {
+      visualPriority: number;
+      readingFlow: number;
+      energy: number;
+    };
   };
 }
 
@@ -76,6 +95,7 @@ export interface IDSLBaseLayer {
 export interface IDSLImageLayer extends IDSLBaseLayer {
   type: 'image';
   mask: 'full_bleed' | 'rectangle' | 'circle' | 'arch' | 'die_cut' | 'split' | 'polaroid' | 'before_after_split';
+  layoutMode?: 'single' | 'triptych' | 'diptych' | 'stack' | 'film_strip' | 'collage';
   paddingPercent: number; // e.g., 0 for full-bleed, 10 for inset
   anchor?: LayoutAnchor; // Used for corner positioning
   component?: string; // Optional device frame component (e.g. desktop_monitor_mockup, tablet_device_mockup)
@@ -90,7 +110,7 @@ export interface IDSLDecorationLayer extends IDSLBaseLayer {
 
 export interface IDSLTextLayer extends IDSLBaseLayer {
   type: 'text';
-  role: 'heading' | 'tagline' | 'watermark' | 'footnote' | 'body';
+  role: 'heading' | 'tagline' | 'watermark' | 'footnote' | 'body' | 'cta';
   anchor: LayoutAnchor;
   alignment: 'left' | 'center' | 'right';
   maxWidthPercent: number; // restricts text from hitting edges
@@ -98,7 +118,16 @@ export interface IDSLTextLayer extends IDSLBaseLayer {
   rotation?: number; // Optional rotation in degrees (e.g. 90, -90)
 }
 
-export type IDSLSceneLayer = IDSLImageLayer | IDSLDecorationLayer | IDSLTextLayer;
+export interface IDSLTextGroupLayer extends IDSLBaseLayer {
+  type: 'text_group';
+  role: 'cluster';
+  anchor: LayoutAnchor;
+  alignment: 'left' | 'center' | 'right';
+  children: IDSLTextLayer[]; // Inner layers that make up the group
+  maxWidthPercent?: number; // Optional restriction on the whole group
+}
+
+export type IDSLSceneLayer = IDSLImageLayer | IDSLDecorationLayer | IDSLTextLayer | IDSLTextGroupLayer;
 
 export interface ICompiledLayoutDSL {
   schemaVersion: "1.0";
@@ -139,6 +168,7 @@ export interface ISemanticDesignSpec {
     hero: CompositionHero;
     balance: CompositionBalance;
     negativeSpace: NegativeSpace;
+    visualPriority?: 'typography_hero' | 'image_hero' | 'composition_hero' | 'cta_hero';
     readingFlow?: DesignReadingFlow; // grounded reading flow, optional for back-compat with older callers
   };
   photo: {
@@ -149,7 +179,7 @@ export interface ISemanticDesignSpec {
   typography: {
     hierarchy: TypographyHierarchy;
     dominance: TypographyDominance;
-    headlineTreatment?: 'experimental' | 'standard';
+    headlineTreatment?: 'experimental' | 'standard' | 'modern_minimal' | 'editorial_serif' | 'bold_condensed';
     alignment?: 'left' | 'center' | 'right';
   };
   decorations: {
@@ -266,6 +296,7 @@ export interface HeroRecipe {
 export interface ILayoutState {
   occupiedRegions: ILayoutRegion[];
   family?: string; // Optional family identifier (e.g., 'editorial', 'clinical')
+  renderedStrings?: string[]; // Tracks strings already rendered to prevent duplicate fallback rendering
 }
 
 // ============================================================================
@@ -273,11 +304,22 @@ export interface ILayoutState {
 // ============================================================================
 
 export interface TypographyTokens {
+  heroScale?: number;
+  bodyScale?: number;
+  lineHeightMultiplier?: number;
   headlineWeight: 'light' | 'medium' | 'heavy' | 'hero';
   bodyWeight: 'light' | 'medium' | 'heavy';
   tracking: 'tight' | 'standard' | 'airy' | 'wide';
   casing: 'force_uppercase' | 'force_lowercase' | 'sentence' | 'natural';
   contrast: 'low' | 'medium' | 'high';
+}
+
+export interface DecorationPolicy {
+  count: number;
+  opacityMultiplier: number;
+  maxAreaPercent: number;
+  allowedTypes: string[];
+  spacing: 'tight' | 'comfortable' | 'airy';
 }
 
 export interface VisualTokens {

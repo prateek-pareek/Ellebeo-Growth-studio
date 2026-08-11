@@ -49,42 +49,57 @@ async function main() {
       primaryBrandColor: '#D4AF37',
       secondaryBrandColor: '#000000',
       aestheticDirection: 'bold_luxury',
+      serviceCategories: ['hair_color', 'extensions'],
+      clientPainPoints: ['brassy tones', 'high-maintenance colour', 'thinning hair'],
       vocabularyPreferred: ['obsessed', 'flawless', 'lived-in', 'dimension'],
       vocabularyBlacklist: ['cheap', 'quick', 'deal', 'discount'],
+      doNotSay: ['bargain', 'sale'],
+      moodboardUrls: [],
+      moodboardLabels: [],
+      visualRanking: [],
       emojiPolicy: 'minimal',
     },
   });
 
   // 4. Create a Client
-  const client = await prisma.client.upsert({
-    where: { id: '00000000-0000-0000-0000-000000000001' }, // Dummy UUID just to have a fixed point if needed, or findFirst
-    update: {},
-    create: {
-      tenantId: tenant.id,
-      firstName: 'Sarah',
-      lastName: 'Smith',
-      email: 'sarah.smith@example.com',
-      phone: '+61400000000',
-    },
+  let client = await prisma.client.findFirst({
+    where: { tenantId: tenant.id, email: 'sarah.smith@example.com' },
   });
+  if (!client) {
+    client = await prisma.client.create({
+      data: {
+        tenantId: tenant.id,
+        firstName: 'Sarah',
+        lastName: 'Smith',
+        email: 'sarah.smith@example.com',
+        phone: '+61400000000',
+      },
+    });
+  }
 
-  // 5. Create Consent Record
-  await prisma.consentRecord.create({
-    data: {
-      tenantId: tenant.id,
-      clientId: client.id,
-      status: 'granted',
-      allowShowFace: true,
-      allowUseName: true,
-      allowTagSocial: false,
-      allowPlatformPromotion: true,
-      allowInternalUse: true,
-      allowMarketingContent: true,
-      consentMethod: 'digital_form',
-    },
+  // 5. Create Consent Record (skip if one already exists for this client)
+  const existingConsent = await prisma.consentRecord.findFirst({
+    where: { tenantId: tenant.id, clientId: client.id },
   });
+  if (!existingConsent) {
+    await prisma.consentRecord.create({
+      data: {
+        tenantId: tenant.id,
+        clientId: client.id,
+        status: 'granted',
+        allowShowFace: true,
+        allowUseName: true,
+        allowTagSocial: false,
+        allowPlatformPromotion: true,
+        allowInternalUse: true,
+        allowMarketingContent: true,
+        consentMethod: 'digital_form',
+      },
+    });
+  }
 
   console.log('Seeding completed successfully!');
+  console.log('Login: admin@ellebeo.com / password123');
 }
 
 main()

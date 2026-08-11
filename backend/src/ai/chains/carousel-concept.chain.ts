@@ -70,16 +70,18 @@ export class CarouselConceptChain {
 
     const systemPrompt = `You generate Instagram carousel slide concepts for beauty and wellness businesses.
 Every slide must sound like the technician wrote it — on-brand, specific, never generic.
-You are writing TYPOGRAPHY-READY INSTAGRAM COPY. Instagram users have 1-3 seconds of attention.
-You MUST follow these strict Content Density constraints:
-- headline: 1-3 words MAX (Extremely punchy. If it is longer, you have failed.)
-- subheadline: 6-12 words MAX (Optional context)
-- cta: 2-4 words MAX (Optional)
-CRITICAL BRAND CONTENT RULE for Body Slides:
-- Ensure all body slides closely follow the provided Narrative Template. Do not deviate.
-- Set the slideType JSON property strictly to the [Type] provided in the Narrative Template.
-NEVER inject variable placeholders, hex codes, or technical IDs.
-NEVER write marketing paragraphs. Treat copy as a precise design object.
+You are writing TYPOGRAPHY-READY INSTAGRAM COPY that also TEACHES on educational carousels.
+
+Content density by slide role:
+- HOOK: headline 3–5 words; optional short subheadline (≤12 words). Scroll-stopping, not a lecture.
+- PROBLEM / EXPLANATION / SOLUTION / CONTEXT / TECHNIQUE / WHAT_IS_INCLUDED: headline 3–7 words; subheadline MUST teach something concrete (10–20 words). Include a real tip, mechanism, or process detail for the service — not empty vibe words.
+- CTA: headline 3–6 words inviting action; cta field REQUIRED (2–5 words, e.g. "Book a consult", "DM to book"). subheadline can reinforce urgency (≤12 words).
+
+CRITICAL:
+- Follow the Narrative Template slideType order exactly (Hook → Problem → Explanation → Solution/Process → CTA when provided).
+- Set slideType JSON to the [Type] from the template.
+- Never use placeholders, hex codes, or technical IDs.
+- Prefer specific service language over generic beauty fluff.
 Return ONLY valid JSON, no markdown, no explanation.`;
 
     let narrativeTemplate = '';
@@ -87,12 +89,14 @@ Return ONLY valid JSON, no markdown, no explanation.`;
       narrativeTemplate = semanticFlow.map((slide, idx) => {
         let desc = slide.description;
         if (idx === 0) desc = desc.replace('using hook', `using hook: "${hookSentence}"`);
-        if (idx === semanticFlow.length - 1) desc = desc.replace('using CTA', `using cta: "${callToAction}"`);
+        if (idx === semanticFlow.length - 1) desc = desc.replace('using CTA', `using cta: "${callToAction}"`).replace('using cta', `using cta: "${callToAction}"`);
         return `- Slide ${idx + 1}: [Type: ${slide.slideType}] ${desc}`;
       }).join('\n');
     } else {
-      // Fallback if semanticFlow isn't passed
-      narrativeTemplate = `- Slide 1: [Type: HOOK] Cover\n- Slide 2: [Type: CONTEXT] Context\n- Slide ${count}: [Type: CTA] Call to Action`;
+      narrativeTemplate = `- Slide 1: [Type: HOOK] Cover hook
+- Slide 2: [Type: PROBLEM] Name the client problem with educational context
+- Slide 3: [Type: EXPLANATION] Teach the mechanism/technique
+- Slide ${count}: [Type: CTA] Clear booking CTA using cta: "${callToAction}"`;
     }
 
     const userPrompt = `Create ${count} carousel slide concepts for this beauty appointment post.
@@ -104,13 +108,16 @@ ${voiceBlock ? `\n${voiceBlock}\n` : ''}
 Generate exactly ${count} slides using this strict Narrative Template:
 ${narrativeTemplate}
 
+Educational carousels must feel useful: middle slides should answer "what is going wrong?", "why does this treatment work?", and "what happens in the process?".
+
 Return exactly this JSON shape:
 {
   "concepts": [
-    { "index": 1, "slideType": "HOOK", "title": "01 · Cover", "headline": "Reveal Your Glow", "subheadline": "Ayurvedic Facial Therapy", "cta": "" },
-    { "index": 2, "slideType": "PROBLEM", "title": "02 · The technique", "headline": "Deep Hydration", "subheadline": "Using active botanicals specific to our holistic approach", "cta": "" },
-    { "index": 3, "slideType": "EXPLANATION", "title": "03 · The result", "headline": "Glass Skin", "subheadline": "Safe, proven results with zero downtime", "cta": "" },
-    { "index": 4, "slideType": "CTA", "title": "04 · Book now", "headline": "Claim Your Slot", "subheadline": "", "cta": "Book via Link" }
+    { "index": 1, "slideType": "HOOK", "title": "01 · Cover", "headline": "Reveal Your Glow", "subheadline": "What clogged pores are really doing to your skin", "cta": "" },
+    { "index": 2, "slideType": "PROBLEM", "title": "02 · The problem", "headline": "Congestion Builds Quietly", "subheadline": "Dead cells and oil trap bacteria until breakouts or dullness show up", "cta": "" },
+    { "index": 3, "slideType": "EXPLANATION", "title": "03 · Why it works", "headline": "Extraction Clears Pathways", "subheadline": "We clear blockages so actives absorb evenly and inflammation calms", "cta": "" },
+    { "index": 4, "slideType": "SOLUTION", "title": "04 · The process", "headline": "Calm. Clear. Reset.", "subheadline": "Cleanse, extract, treat, then seal with barrier-supportive care", "cta": "" },
+    { "index": 5, "slideType": "CTA", "title": "05 · Book now", "headline": "Ready for clearer skin?", "subheadline": "Same-week consults available", "cta": "Book via Link" }
   ]
 }`;
 

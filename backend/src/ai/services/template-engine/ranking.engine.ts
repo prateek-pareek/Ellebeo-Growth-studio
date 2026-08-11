@@ -31,10 +31,8 @@ export class RankingEngine {
       }
 
       // 2. Slide Position Matching (Weight: +15)
-      // Cover slides (index 0) usually benefit from High Impact / Hero layouts
-      if (context.slideIndex === 0 && template.id.includes('hero')) {
-        score += 15;
-      }
+      // Cover slides (index 0) benefit from high impact layouts. We rely on the LLM to pick the right structural vibe.
+      // Removed the hardcoded 'hero' bonus to allow diverse variants (split, text_only) to compete for Slide 0.
       
       // End slides often benefit from CTAs
       if (context.slideIndex === context.totalSlides - 1 && template.id.includes('cta')) {
@@ -56,29 +54,86 @@ export class RankingEngine {
         score -= 50; // Heavily penalize full-bleed for long text, forcing framed/split layouts
       }
       
-      // 3.5 Semantic Trait Scoring (Weight: +25 for visualPriority)
-      if (context.requiredTraits && context.requiredTraits.visualPriority) {
-        const vp = context.requiredTraits.visualPriority;
-        if (vp === 'image_hero' && (template.id.includes('hero') || template.id.includes('portrait'))) {
-          score += 25;
-        } else if (vp === 'typography_hero' && (template.id.includes('quote') || template.id.includes('text') || template.id.includes('editorial') || template.textDensity === 'high')) {
-          score += 25;
-        } else if (vp === 'composition_hero' && (template.id.includes('split') || template.id.includes('grid') || template.id.includes('collage') || template.id.includes('composition'))) {
-          score += 25;
-        } else if (vp === 'cta_hero' && template.id.includes('cta')) {
-          score += 25;
+      // 3.5 Semantic Trait Scoring
+      let visPriScore = 0;
+      let flowScore = 0;
+      let energyScore = 0;
+
+      if (context.semanticIntent) {
+        const { required, preferred, weights } = context.semanticIntent;
+        
+        if (required?.visualPriority && template.visualPriority === required.visualPriority) {
+          visPriScore = weights.visualPriority || 30;
+          score += visPriScore;
+        }
+        if (preferred?.readingFlow && template.readingFlow === preferred.readingFlow) {
+          flowScore = weights.readingFlow || 15;
+          score += flowScore;
+        }
+        if (preferred?.energy && template.energy === preferred.energy) {
+          energyScore = weights.energy || 10;
+          score += energyScore;
         }
       }
 
-      // 4. Random Jitter (Weight: +0 to +8)
+      // 4. Random Jitter (Weight: +0 to +25)
       // This ensures that when 50 templates match perfectly, we get a rotating organic mix of top candidates instead of the exact same 8 every time.
-      const jitter = Math.floor(Math.random() * 8);
+      const jitter = Math.floor(Math.random() * 25);
       score += jitter;
+
+      // Store breakdown for logging
+      (template as any)._scoreBreakdown = {
+        base: 50,
+        aesthetic: score - 50 - visPriScore - flowScore - energyScore - jitter,
+        visPri: visPriScore,
+        flow: flowScore,
+        energy: energyScore,
+        jitter: jitter
+      };
 
       return { ...template, score };
     });
 
-    // Sort by highest score first
-    return ranked.sort((a, b) => (b.score || 0) - (a.score || 0));
+    // Sort by highest score first initially
+    ranked.sort((a, b) => (b.score || 0) - (a.score || 0));
+
+    // Soft Diversity Reranker
+    const familyCounts: Record<string, number> = {};
+    for (let i = 0; i < ranked.length; i++) {
+      const template = ranked[i];
+      if (template.family) {
+        const count = familyCounts[template.family] || 0;
+        if (count > 0) {
+          const penalty = count * 5; // -5 points for each previous occurrence
+          template.score = (template.score || 0) - penalty;
+          (template as any)._scoreBreakdown.diversity = -penalty;
+        } else {
+          (template as any)._scoreBreakdown.diversity = 0;
+        }
+        familyCounts[template.family] = count + 1;
+      }
+    }
+
+    // Re-sort after diversity penalty
+    ranked.sort((a, b) => (b.score || 0) - (a.score || 0));
+
+    // Log the Top 8 Breakdown
+    const top8 = ranked.slice(0, 8);
+    console.log(`\n[Ranking] Top 8 candidates for Slide ${context.slideIndex}:`);
+    const tableData = top8.map(t => {
+      const b = (t as any)._scoreBreakdown;
+      return {
+        ID: t.id,
+        Source: t.type,
+        VisPri: `+${b?.visPri || 0}`,
+        Flow: `+${b?.flow || 0}`,
+        Energy: `+${b?.energy || 0}`,
+        Diversity: b?.diversity || 0,
+        Total: t.score
+      };
+    });
+    console.table(tableData);
+
+    return ranked;
   }
 }

@@ -35,13 +35,118 @@ export class LayoutEngine {
   private canvasWidth: number;
   private canvasHeight: number;
   private faceBox?: BoundingBox;
+  /** Broader subject/body mass — text should clear this, not only eyes/mouth. */
+  private subjectBox?: BoundingBox;
+  /** All protected visual subjects (face, product, hands, treatment area, etc.) */
+  private protectedSubjects: BoundingBox[] = [];
   private isStory: boolean;
 
-  constructor(canvasWidth: number, canvasHeight: number, faceBox?: BoundingBox) {
+  constructor(
+    canvasWidth: number,
+    canvasHeight: number,
+    faceBox?: BoundingBox,
+    subjectBox?: BoundingBox,
+    additionalSubjects: BoundingBox[] = [],
+  ) {
     this.canvasWidth = canvasWidth;
     this.canvasHeight = canvasHeight;
     this.faceBox = faceBox;
-    this.isStory = (canvasHeight / canvasWidth) > 1.3; // Detect 9:16 or similar vertical layouts
+    this.subjectBox = subjectBox || (faceBox ? LayoutEngine.expandFaceToSubject(faceBox, canvasWidth, canvasHeight) : undefined);
+    this.isStory = (canvasHeight / canvasWidth) > 1.3;
+
+    const subjects: BoundingBox[] = [];
+    if (this.subjectBox) subjects.push(this.subjectBox);
+    else if (faceBox) subjects.push(faceBox);
+    for (const s of additionalSubjects) {
+      if (s && s.width > 0 && s.height > 0) subjects.push(s);
+    }
+    this.protectedSubjects = LayoutEngine.mergeOverlappingBoxes(subjects);
+  }
+
+  /**
+   * Expand facial landmarks into a subject protection zone (shoulders / upper torso)
+   * so type clears the client image, not only the face rectangle.
+   */
+  public static expandFaceToSubject(face: BoundingBox, canvasW: number, canvasH: number): BoundingBox {
+    const footerReserve = Math.round(canvasH * 0.12);
+    const extendDown = Math.round(Math.max(face.height * 1.75, canvasH * 0.22));
+    const extendUp = Math.round(face.height * 0.2);
+    const widen = Math.round(face.width * 0.18);
+    const y = Math.max(0, face.y - extendUp);
+    const bottom = Math.min(canvasH - footerReserve, face.y + face.height + extendDown);
+    const x = Math.max(0, face.x - widen);
+    const width = Math.min(canvasW - x, face.width + widen * 2);
+    return { x, y, width, height: Math.max(face.height, bottom - y) };
+  }
+
+  /** Merge overlapping boxes into unions — scalable multi-subject protection. */
+  public static mergeOverlappingBoxes(boxes: BoundingBox[]): BoundingBox[] {
+    if (boxes.length <= 1) return boxes.slice();
+    const result: BoundingBox[] = boxes.map(b => ({ ...b }));
+    let merged = true;
+    while (merged) {
+      merged = false;
+      for (let i = 0; i < result.length; i++) {
+        for (let j = i + 1; j < result.length; j++) {
+          const a = result[i];
+          const b = result[j];
+          const overlap =
+            a.x < b.x + b.width && a.x + a.width > b.x &&
+            a.y < b.y + b.height && a.y + a.height > b.y;
+          // Also merge if nearly adjacent (small gap)
+          const gapX = Math.max(0, Math.max(b.x - (a.x + a.width), a.x - (b.x + b.width)));
+          const gapY = Math.max(0, Math.max(b.y - (a.y + a.height), a.y - (b.y + b.height)));
+          const near = gapX < 24 && gapY < 24 &&
+            (a.x < b.x + b.width + 24 && a.x + a.width + 24 > b.x) &&
+            (a.y < b.y + b.height + 24 && a.y + a.height + 24 > b.y);
+          if (overlap || near) {
+            const x = Math.min(a.x, b.x);
+            const y = Math.min(a.y, b.y);
+            const right = Math.max(a.x + a.width, b.x + b.width);
+            const bottom = Math.max(a.y + a.height, b.y + b.height);
+            result[i] = { x, y, width: right - x, height: bottom - y };
+            result.splice(j, 1);
+            merged = true;
+            break;
+          }
+        }
+        if (merged) break;
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Map a %-based vision subject box onto canvas coords for fit:contain letterboxing.
+   */
+  public static mapPercentBoxToCanvas(
+    pct: { centerXPercent: number; centerYPercent: number; widthPercent: number; heightPercent: number },
+    canvasW: number,
+    canvasH: number,
+    drawnW: number,
+    drawnH: number,
+    offsetX: number,
+    offsetY: number,
+  ): BoundingBox {
+    const w = Math.round(drawnW * (Math.min(90, Math.max(8, pct.widthPercent)) / 100));
+    const h = Math.round(drawnH * (Math.min(90, Math.max(8, pct.heightPercent)) / 100));
+    const cx = offsetX + (pct.centerXPercent / 100) * drawnW;
+    const cy = offsetY + (pct.centerYPercent / 100) * drawnH;
+    const x = Math.max(0, Math.min(canvasW - w, Math.round(cx - w / 2)));
+    const y = Math.max(0, Math.min(canvasH - h, Math.round(cy - h / 2)));
+    return { x, y, width: w, height: h };
+  }
+
+  public getSubjectBox(): BoundingBox | undefined {
+    return this.subjectBox;
+  }
+
+  public getFaceBox(): BoundingBox | undefined {
+    return this.faceBox;
+  }
+
+  public getProtectedSubjects(): BoundingBox[] {
+    return this.protectedSubjects;
   }
 
   private getGeometrySignature(family: LayoutFamily): GeometrySignature {
@@ -57,23 +162,25 @@ export class LayoutEngine {
 
     if (family === 'editorial') {
       sig.baseMarginY = this.isStory ? 240 : 140;
-      sig.allowHeroOverlap = true; // Editorial tension allows some overlap
-      sig.faceHaloPadding = 20;
+      // Editorial can hug margins, but must never cover faces
+      sig.allowHeroOverlap = false;
+      sig.faceHaloPadding = 48;
     } else if (family === 'clinical') {
       sig.baseMarginX = 80; // stricter margins
       sig.maxTextCoverage = 0.5;
-      sig.faceHaloPadding = 60; // clinical strictly avoids face
+      sig.faceHaloPadding = 72; // clinical strictly avoids face
       sig.allowHeroOverlap = false;
     } else if (family === 'premium') {
       sig.baseMarginX = 120; // huge luxury margins
       sig.baseMarginY = this.isStory ? 300 : 180;
       sig.maxTextCoverage = 0.4;
-      sig.faceHaloPadding = 80;
+      sig.faceHaloPadding = 64;
+      sig.allowHeroOverlap = false;
     } else if (family === 'scrapbook') {
       sig.baseMarginX = 40; // tight margins, messy feel
       sig.baseMarginY = this.isStory ? 160 : 80;
-      sig.faceHaloPadding = 30;
-      sig.allowHeroOverlap = true; // overlapping is allowed
+      sig.faceHaloPadding = 48;
+      sig.allowHeroOverlap = false; // scrapbook clutter still must clear faces
     } else if (family === 'split') {
       sig.baseMarginX = 50;
       sig.maxTextCoverage = 0.45;
@@ -108,10 +215,24 @@ export class LayoutEngine {
 
     let safeX = tension ? Math.round(signature.baseMarginX * 0.3) : Math.round(signature.baseMarginX * multiplier);
     let safeY = tension ? Math.round(signature.baseMarginY * 0.3) : Math.round(signature.baseMarginY * multiplier);
+
+    // Consistent safe margins for all text / UI — never hug the edge
+    const MIN_SAFE = Math.round(Math.min(this.canvasWidth, this.canvasHeight) * 0.045);
+    safeX = Math.max(MIN_SAFE, safeX);
+    safeY = Math.max(MIN_SAFE, safeY);
     
+    let bottomMargin = safeY;
+    if (this.isStory) {
+      bottomMargin = Math.max(safeY, Math.round(this.canvasHeight * 0.15));
+    } else {
+      bottomMargin = Math.max(safeY, 110);
+    }
+
     if (behavior && behavior.marginHugging) {
-      safeX = 10;
-      safeY = 10;
+      // Still keep a readable inset — "hugging" must not mean edge-clipped type
+      safeX = Math.max(Math.round(MIN_SAFE * 0.85), 36);
+      safeY = Math.max(Math.round(MIN_SAFE * 0.85), 36);
+      bottomMargin = this.isStory ? Math.max(safeY, Math.round(this.canvasHeight * 0.12)) : Math.max(96, safeY);
     }
 
     // Apply Density (from ArtDirection Engine) to text width constraints
@@ -140,7 +261,7 @@ export class LayoutEngine {
       contentMaxWidth,
       margins: {
         top: safeY,
-        bottom: safeY,
+        bottom: bottomMargin,
         left: safeX,
         right: safeX
       },
@@ -158,68 +279,74 @@ export class LayoutEngine {
    * Returns a new Y coordinate that pushes the element into a safe zone.
    */
   public resolveFaceCollision(targetBox: BoundingBox, constraints: LayoutConstraints, family: LayoutFamily = 'minimal'): BoundingBox {
-    if (!this.faceBox) return targetBox; // No face, no collision
+    const subjects = this.protectedSubjects.length
+      ? this.protectedSubjects
+      : (this.subjectBox || this.faceBox ? [this.subjectBox || this.faceBox!] : []);
+    if (subjects.length === 0) return targetBox;
 
     const signature = this.getGeometrySignature(family);
-    
-    // Calculate the protected halo around the face
-    const halo = signature.faceHaloPadding;
-    const faceSafeZone: BoundingBox = {
-      x: this.faceBox.x - halo,
-      y: this.faceBox.y - halo,
-      width: this.faceBox.width + (halo * 2),
-      height: this.faceBox.height + (halo * 2)
-    };
-    
-    // Check intersection
-    const overlapsX = targetBox.x < faceSafeZone.x + faceSafeZone.width && targetBox.x + targetBox.width > faceSafeZone.x;
-    const overlapsY = targetBox.y < faceSafeZone.y + faceSafeZone.height && targetBox.y + targetBox.height > faceSafeZone.y;
+    let current = { ...targetBox };
 
-    if (!(overlapsX && overlapsY)) return targetBox; // No collision with halo
+    for (const protectedBox of subjects) {
+      const halo = signature.faceHaloPadding;
+      const faceSafeZone: BoundingBox = {
+        x: protectedBox.x - halo,
+        y: protectedBox.y - halo,
+        width: protectedBox.width + (halo * 2),
+        height: protectedBox.height + (halo * 2),
+      };
 
-    if (signature.allowHeroOverlap) {
-      // Family explicitly allows tension/overlap with hero subject
-      return targetBox; 
+      const overlapsX = current.x < faceSafeZone.x + faceSafeZone.width && current.x + current.width > faceSafeZone.x;
+      const overlapsY = current.y < faceSafeZone.y + faceSafeZone.height && current.y + current.height > faceSafeZone.y;
+      if (!(overlapsX && overlapsY)) continue;
+
+      const remainingWidthLeft = faceSafeZone.x - current.x;
+      if (remainingWidthLeft > 140) {
+        current = { ...current, width: remainingWidthLeft - 20 };
+        continue;
+      }
+
+      const spaceRightStart = faceSafeZone.x + faceSafeZone.width + 20;
+      if (spaceRightStart < this.canvasWidth - constraints.safeX - 140) {
+        const newWidth = Math.min(current.width, this.canvasWidth - constraints.safeX - spaceRightStart);
+        if (newWidth > 140) {
+          current = { ...current, x: spaceRightStart, width: newWidth };
+          continue;
+        }
+      }
+
+      const bottomClear = Math.max(constraints.margins?.bottom ?? constraints.safeY, 96) + 16;
+      const spaceBelow = (this.canvasHeight - bottomClear) - (faceSafeZone.y + faceSafeZone.height);
+      const spaceAbove = faceSafeZone.y - constraints.safeY;
+      const needH = current.height;
+
+      if (spaceBelow >= needH + 16 && spaceBelow >= spaceAbove) {
+        current = { ...current, y: faceSafeZone.y + faceSafeZone.height + 16 };
+        continue;
+      }
+      if (spaceAbove >= needH + 16) {
+        current = { ...current, y: Math.max(constraints.safeY, faceSafeZone.y - needH - 16) };
+        continue;
+      }
+      if (spaceBelow >= 60) {
+        current = { ...current, y: faceSafeZone.y + faceSafeZone.height + 12, height: Math.min(needH, spaceBelow - 12) };
+        continue;
+      }
+      if (spaceAbove >= 60) {
+        const newH = Math.min(needH, spaceAbove - 12);
+        current = { ...current, y: Math.max(constraints.safeY, faceSafeZone.y - newH - 12), height: newH };
+        continue;
+      }
+
+      current = {
+        ...current,
+        y: Math.max(constraints.safeY, this.canvasHeight - bottomClear - needH),
+        width: Math.min(current.width, constraints.contentMaxWidth),
+        x: constraints.safeX,
+      };
     }
 
-    // Constraint Solver Degradation sequence:
-    // 1. Shrink width
-    const remainingWidthLeft = faceSafeZone.x - targetBox.x;
-    if (remainingWidthLeft > 150) {
-       // We can just shrink the text box to fit on the left
-       return { ...targetBox, width: remainingWidthLeft - 20 };
-    }
-
-    const remainingWidthRight = (targetBox.x + targetBox.width) - (faceSafeZone.x + faceSafeZone.width);
-    if (remainingWidthRight > 150 && targetBox.x >= faceSafeZone.x + faceSafeZone.width - 20) {
-       // It's mostly on the right, push it right and shrink
-       return { ...targetBox, x: faceSafeZone.x + faceSafeZone.width + 20, width: remainingWidthRight - 20 };
-    }
-
-    // 2. Shift slightly vertically if it's close to the edge
-    if (targetBox.y > faceSafeZone.y && targetBox.y < faceSafeZone.y + 60) {
-       // Push below face
-       let newY = faceSafeZone.y + faceSafeZone.height + 20;
-       if (newY + targetBox.height <= this.canvasHeight - constraints.safeY) {
-         return { ...targetBox, y: newY };
-       }
-    }
-
-    if (targetBox.y + targetBox.height > faceSafeZone.y - 60 && targetBox.y < faceSafeZone.y) {
-       // Push above face
-       let newY = faceSafeZone.y - targetBox.height - 20;
-       if (newY >= constraints.safeY) {
-         return { ...targetBox, y: newY };
-       }
-    }
-
-    // Last Resort: Fallback to a completely safe region (e.g. top center or bottom center)
-    // For now, if we can't cleanly shift/shrink, we push it down forcefully (legacy fallback)
-    let newY = faceSafeZone.y + faceSafeZone.height + 20;
-    if (newY + targetBox.height > this.canvasHeight - constraints.safeY) {
-      newY = Math.max(constraints.safeY, faceSafeZone.y - targetBox.height - 20);
-    }
-    return { ...targetBox, y: newY };
+    return current;
   }
 
   /**
@@ -242,12 +369,15 @@ export class LayoutEngine {
 
     let semanticRegion = { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 
-    // Resolve Face Collision strictly within this semantic quadrant
-    if (this.faceBox) {
-       const faceX = this.faceBox.x;
-       const faceY = this.faceBox.y;
-       const faceW = this.faceBox.width;
-       const faceH = this.faceBox.height;
+    // Resolve all protected subjects within this semantic quadrant
+    const subjects = this.protectedSubjects.length
+      ? this.protectedSubjects
+      : (this.subjectBox || this.faceBox ? [this.subjectBox || this.faceBox!] : []);
+    for (const obstacle of subjects) {
+       const faceX = obstacle.x;
+       const faceY = obstacle.y;
+       const faceW = obstacle.width;
+       const faceH = obstacle.height;
 
        const overlapX = faceX < minX + semanticRegion.width && faceX + faceW > minX;
        const overlapY = faceY < minY + semanticRegion.height && faceY + faceH > minY;
@@ -286,6 +416,164 @@ export class LayoutEngine {
   }
 
   /**
+   * Generates all maximal empty rectangles (candidate regions) in the canvas by subtracting obstacles.
+   */
+  public generateCandidateRegions(constraints: LayoutConstraints, occupiedRegions: BoundingBox[] = []): BoundingBox[] {
+    const safeZone: BoundingBox = {
+      x: constraints.safeX,
+      y: constraints.safeY,
+      width: this.canvasWidth - (constraints.safeX * 2),
+      height: this.canvasHeight - (constraints.safeY * 2)
+    };
+
+    let candidates = [safeZone];
+    const obstacles = [...occupiedRegions];
+
+    // All protected visual subjects (face, torso, product, hands, treatment…) as obstacles
+    const subjects = this.protectedSubjects.length
+      ? this.protectedSubjects
+      : (this.subjectBox || this.faceBox ? [this.subjectBox || this.faceBox!] : []);
+    const halo = Math.round(Math.min(this.canvasWidth, this.canvasHeight) * 0.04);
+    for (const subject of subjects) {
+      obstacles.push({
+        x: Math.max(0, subject.x - halo),
+        y: Math.max(0, subject.y - halo),
+        width: subject.width + halo * 2,
+        height: subject.height + halo * 2,
+      });
+    }
+
+    for (const obs of obstacles) {
+      let nextCandidates: BoundingBox[] = [];
+      for (const c of candidates) {
+        const overlapX = obs.x < c.x + c.width && obs.x + obs.width > c.x;
+        const overlapY = obs.y < c.y + c.height && obs.y + obs.height > c.y;
+
+        if (overlapX && overlapY) {
+          // Split candidate into up to 4 sub-rectangles avoiding the obstacle
+          if (obs.y > c.y) {
+            nextCandidates.push({ x: c.x, y: c.y, width: c.width, height: obs.y - c.y });
+          }
+          if (obs.y + obs.height < c.y + c.height) {
+            nextCandidates.push({ x: c.x, y: obs.y + obs.height, width: c.width, height: (c.y + c.height) - (obs.y + obs.height) });
+          }
+          if (obs.x > c.x) {
+            nextCandidates.push({ x: c.x, y: c.y, width: obs.x - c.x, height: c.height });
+          }
+          if (obs.x + obs.width < c.x + c.width) {
+            nextCandidates.push({ x: obs.x + obs.width, y: c.y, width: (c.x + c.width) - (obs.x + obs.width), height: c.height });
+          }
+        } else {
+          nextCandidates.push(c);
+        }
+      }
+      
+      // Filter subsumed rectangles
+      candidates = nextCandidates.filter((c1, i, arr) => {
+        // Is c1 strictly contained in any other rectangle c2?
+        return !arr.some((c2, j) => 
+          i !== j &&
+          c1.x >= c2.x &&
+          c1.y >= c2.y &&
+          c1.x + c1.width <= c2.x + c2.width &&
+          c1.y + c1.height <= c2.y + c2.height
+        );
+      });
+    }
+
+    // Filter out candidates that are too small to be useful (e.g. height < 80)
+    return candidates.filter(c => c.height >= 80 && c.width >= 100);
+  }
+
+  /**
+   * Evaluates a candidate region based on semantic intent and returns a score.
+   */
+  public scoreRegion(
+    candidate: BoundingBox, 
+    intent: { readingFlow?: string; visualPriority?: string; role?: string },
+    layerHeight: number
+  ): number {
+    let score = 10.0;
+    
+    // 1. Whitespace Quality (Size)
+    const area = candidate.width * candidate.height;
+    const canvasArea = this.canvasWidth * this.canvasHeight;
+    score += (area / canvasArea) * 2.0;
+
+    // 2. Subject clearance — prefer pockets away from ALL protected visual subjects
+    const subjects = this.protectedSubjects.length
+      ? this.protectedSubjects
+      : (this.subjectBox || this.faceBox ? [this.subjectBox || this.faceBox!] : []);
+    if (subjects.length > 0) {
+      const cMidY = candidate.y + candidate.height / 2;
+      const cMidX = candidate.x + candidate.width / 2;
+      let bestSubjectScore = -999;
+      for (const subject of subjects) {
+        const sMidY = subject.y + subject.height / 2;
+        const sMidX = subject.x + subject.width / 2;
+        const normDist = Math.hypot(cMidX - sMidX, cMidY - sMidY) / Math.hypot(this.canvasWidth, this.canvasHeight);
+        let local = normDist * 8.0;
+
+        const aboveSubject = candidate.y + Math.min(layerHeight, candidate.height) <= subject.y - 12;
+        const belowSubject = candidate.y >= subject.y + subject.height + 12;
+        const besideSubject =
+          (candidate.x + candidate.width <= subject.x - 12) ||
+          (candidate.x >= subject.x + subject.width + 12);
+
+        if (intent.visualPriority === 'image_hero') {
+          if (aboveSubject || belowSubject) local += 7.0;
+          else if (besideSubject) local += 4.0;
+          else local -= 6.0;
+        } else {
+          if (aboveSubject || belowSubject) local += 3.0;
+          else if (besideSubject) local += 2.0;
+        }
+        bestSubjectScore = Math.max(bestSubjectScore, local);
+      }
+      score += bestSubjectScore;
+    }
+
+    // 3. Reading Flow
+    const isTopHalf = candidate.y < this.canvasHeight / 2;
+    const isBottomHalf = candidate.y + candidate.height > this.canvasHeight / 2;
+    const isLeftHalf = candidate.x < this.canvasWidth / 2;
+    const topBand = candidate.y < this.canvasHeight * 0.28;
+    const bottomBand = candidate.y + Math.min(layerHeight, candidate.height) > this.canvasHeight * 0.72;
+    
+    if (intent.readingFlow === 'z_pattern') {
+      if (intent.role === 'heading' && isTopHalf && isLeftHalf) score += 6.0;
+      if (intent.role === 'footnote' && isBottomHalf) score += 6.0;
+    } else if (intent.readingFlow === 'center_down') {
+      const isCentered = candidate.x + (candidate.width / 2) > (this.canvasWidth / 2) - 100 &&
+                         candidate.x + (candidate.width / 2) < (this.canvasWidth / 2) + 100;
+      if (intent.visualPriority === 'image_hero') {
+        // Image-first: prefer edge/band placement over dead-center overlay
+        if (topBand || bottomBand || !isCentered) score += 4.0;
+        else score -= 2.0;
+      } else if (isCentered) {
+        score += 6.0;
+      } else {
+        score -= 5.0;
+      }
+      if (intent.role === 'heading' && isTopHalf) score += 3.0;
+    }
+
+    // 4. Role-specific heuristics
+    if (intent.role === 'heading' || intent.role === 'group') {
+      if (candidate.height < layerHeight) score -= 10.0;
+      if (isBottomHalf && !isTopHalf && intent.visualPriority !== 'image_hero') score -= 2.0;
+      if (intent.visualPriority === 'image_hero' && topBand) score += 2.5;
+    }
+
+    if (intent.role === 'footnote' || intent.role === 'tagline') {
+      if (isTopHalf && !isBottomHalf) score -= 1.0;
+      if (bottomBand) score += 2.0;
+    }
+
+    return score;
+  }
+
+  /**
    * Resolves absolute X, Y coordinates from semantic layout anchors using Whitespace Topology.
    */
   public resolveAnchor(
@@ -321,11 +609,14 @@ export class LayoutEngine {
 
   /**
    * Deterministically allocates canvas space into non-overlapping regions for Image and Text.
-   * This ensures text never floats randomly over photo content unless explicitly designed (full bleed).
+   * For image_hero / cta_hero full-bleed, keeps the photo full-bleed but reserves a text band
+   * in negative space (top or bottom) so type does not land randomly on the subject.
    */
   public allocateRegions(
     behavior: { imageBleedExtent?: string; readingJourney?: string },
-    constraints: LayoutConstraints
+    constraints: LayoutConstraints,
+    visualPriority: string = 'image_hero',
+    subjectHint?: BoundingBox,
   ): { imageRegion: BoundingBox; textRegion: BoundingBox } {
     const isZPattern = behavior.readingJourney === 'z_pattern';
     
@@ -333,14 +624,17 @@ export class LayoutEngine {
     let imageRegion: BoundingBox = { x: 0, y: 0, width: this.canvasWidth, height: this.canvasHeight };
     let textRegion: BoundingBox = { x: constraints.safeX, y: constraints.safeY, width: constraints.contentMaxWidth, height: this.canvasHeight - constraints.safeY * 2 };
 
+    let textRatio = 0.50;
+    if (visualPriority === 'typography_hero') textRatio = 0.65;
+    else if (visualPriority === 'image_hero') textRatio = 0.30;
+    else if (visualPriority === 'cta_hero') textRatio = 0.42;
+
     if (behavior.imageBleedExtent === 'asymmetrical_65') {
-      const splitW = Math.floor(this.canvasWidth * (isZPattern ? 0.65 : 0.35));
+      const splitW = Math.floor(this.canvasWidth * (isZPattern ? textRatio : (1.0 - textRatio)));
       if (isZPattern) {
-        // Image on Left, Text on Right
         imageRegion = { x: 0, y: 0, width: splitW, height: this.canvasHeight };
         textRegion = { x: splitW + 40, y: constraints.safeY, width: (this.canvasWidth - splitW) - 40 - constraints.safeX, height: this.canvasHeight - constraints.safeY * 2 };
       } else {
-        // Text on Left, Image on Right
         imageRegion = { x: this.canvasWidth - splitW, y: 0, width: splitW, height: this.canvasHeight };
         textRegion = { x: constraints.safeX, y: constraints.safeY, width: (this.canvasWidth - splitW) - 40 - constraints.safeX, height: this.canvasHeight - constraints.safeY * 2 };
       }
@@ -352,6 +646,39 @@ export class LayoutEngine {
       } else {
         imageRegion = { x: splitW, y: 0, width: splitW, height: this.canvasHeight };
         textRegion = { x: constraints.safeX, y: constraints.safeY, width: splitW - 40 - constraints.safeX, height: this.canvasHeight - constraints.safeY * 2 };
+      }
+    } else if (
+      behavior.imageBleedExtent === 'full_bleed_band'
+      || visualPriority === 'image_hero'
+      || visualPriority === 'cta_hero'
+    ) {
+      // Photo stays full-bleed; text is constrained to a safe band away from the subject
+      imageRegion = { x: 0, y: 0, width: this.canvasWidth, height: this.canvasHeight };
+      const bandRatio = visualPriority === 'cta_hero' ? 0.34 : 0.28;
+      const bandH = Math.max(
+        Math.round(this.canvasHeight * bandRatio),
+        Math.round(constraints.safeY + this.canvasHeight * 0.18),
+      );
+      const subjectCy = subjectHint
+        ? subjectHint.y + subjectHint.height / 2
+        : this.canvasHeight * 0.45;
+      // Prefer the band farther from the subject mass
+      const preferBottom = subjectCy < this.canvasHeight * 0.55;
+      if (preferBottom) {
+        const y = this.canvasHeight - constraints.margins.bottom - bandH;
+        textRegion = {
+          x: constraints.safeX,
+          y: Math.max(constraints.safeY, y),
+          width: constraints.contentMaxWidth,
+          height: bandH,
+        };
+      } else {
+        textRegion = {
+          x: constraints.safeX,
+          y: constraints.safeY,
+          width: constraints.contentMaxWidth,
+          height: bandH,
+        };
       }
     }
 

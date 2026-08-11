@@ -481,20 +481,22 @@ export class ArtDirectionEngine {
     // Apply strict geometric overrides based on philosophical intent
 
     if (intent.visualPriority === 'typography_hero') {
-      profile.heroBaseFontSize = 140;
+      profile.heroBaseFontSize = 110;
       profile.metadataBaseFontSize = 20;
       profile.bodyBaseFontSize = 28;
-      profile.elementOverlapAllowed = true;
+      profile.elementOverlapAllowed = false;
       profile.marginHugging = true;
-      profile.typographyScaleMultiplier = 1.3;
+      profile.typographyScaleMultiplier = 1.15;
     } else {
-      profile.heroBaseFontSize = 100;
+      profile.heroBaseFontSize = 84;
+      // image_hero = photo owns the FRAME via placement/whitespace, NOT micro-type.
+      // Type stays readable and present; it simply sits in clear bands.
       if (intent.visualPriority === 'image_hero') {
-        profile.typographyScaleMultiplier = 0.65;
+        profile.typographyScaleMultiplier = 0.94;
       } else if (intent.visualPriority === 'composition_hero') {
         profile.typographyScaleMultiplier = 0.9;
       } else if (intent.visualPriority === 'cta_hero') {
-        profile.typographyScaleMultiplier = 1.1;
+        profile.typographyScaleMultiplier = 0.95;
       }
     }
 
@@ -605,10 +607,16 @@ export class ArtDirectionEngine {
     }
 
     if (intent.primitives.textureIntensity === 'heavy') {
-      texture.style = isOrganic ? 'paper' : 'grain';
+      // Rotate through premium textures instead of always picking paper for organic/editorial
+      const heavyTextures: Array<'paper' | 'grain' | 'noise'> = isOrganic
+        ? ['paper', 'grain', 'paper', 'noise'] // paper weighted 2x for organic but not exclusive
+        : ['grain', 'noise', 'grain', 'paper'];   // grain/noise for non-organic
+      texture.style = heavyTextures[Math.floor(Math.random() * heavyTextures.length)] as any;
       texture.intensity = 'heavy';
     } else if (intent.primitives.textureIntensity === 'subtle' || intent.primitives.textureIntensity === 'medium') {
-      texture.style = 'linen';
+      // For non-heavy: grain or none — linen is not in the supported style union
+      const lightTextures: Array<'grain' | 'noise' | 'none'> = ['grain', 'noise', 'none'];
+      texture.style = lightTextures[Math.floor(Math.random() * lightTextures.length)] as any;
       texture.intensity = intent.primitives.textureIntensity;
     } else {
       texture.style = 'none';
