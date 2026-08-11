@@ -1112,7 +1112,8 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       behavior: behaviorProfile,
       layoutState: { occupiedRegions: [], family, renderedStrings: [] },
       colorHierarchy,
-      recipe: visualRecipe.primitive
+      recipe: visualRecipe.primitive,
+      tokens: (dsl as any).primitiveTokens
     };
 
     const layoutState = primitiveCtx.layoutState!;

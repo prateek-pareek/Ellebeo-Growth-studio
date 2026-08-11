@@ -138,6 +138,7 @@ export interface ICompiledLayoutDSL {
     imageRegion: { x: number; y: number; width: number; height: number };
     textRegion: { x: number; y: number; width: number; height: number };
   };
+  primitiveTokens?: Partial<PrimitiveTokens>;
 }
 
 // ============================================================================
@@ -343,6 +344,15 @@ export interface PrimitiveTokens {
   borders: boolean;
   ghostHeadline: boolean;
   cornerBadges: boolean;
+  
+  // Responsive / Contextual styling modifiers
+  opacityMultiplier?: number;
+  baseStrokeWeight?: number;
+  shadowDepth?: 'soft' | 'medium' | 'deep' | 'none';
+  moodAdjustments?: {
+    contrast: number;
+    saturation: number;
+  };
 }
 
 export interface ImageTreatmentTokens {

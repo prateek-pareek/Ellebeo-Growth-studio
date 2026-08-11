@@ -178,6 +178,18 @@ export class DesignCompiler {
         }
         return true;
       });
+
+      // Export PrimitiveTokens downstream so decorations are responsive and not just statically filtered by count
+      compiledDsl.primitiveTokens = {
+        opacityMultiplier: opacityMultiplier,
+        // E.g. base stroke weight scales slightly up for higher densities to compete, down for luxury
+        baseStrokeWeight: spec.style.mood === 'luxury' ? 1.0 : (spec.decorations.density === 'high' ? 2.0 : 1.5),
+        shadowDepth: spec.style.mood === 'luxury' ? 'soft' : 'medium',
+        moodAdjustments: {
+          contrast: spec.style.mood === 'minimalist' ? 0.7 : 1.0,
+          saturation: spec.style.mood === 'organic' ? 1.1 : 1.0
+        }
+      };
     }
 
 
