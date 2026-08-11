@@ -23,6 +23,16 @@ export const GENDER_FOCUS_OPTIONS = ["WOMEN", "MEN", "ALL"] as const;
 
 export const LANGUAGE_VARIANTS = ["AU", "UK", "US"] as const;
 
+export const ESSENCE_WORDS = [
+  "WARM", "FEMININE", "PREMIUM", "BOLD", "MINIMAL", "PLAYFUL",
+  "CLINICAL", "LUXURIOUS", "EARTHY", "EDGY", "ROMANTIC", "CONFIDENT",
+  "CALM", "VIBRANT", "REFINED", "APPROACHABLE", "MODERN", "TIMELESS",
+] as const;
+
+export const TYPE_PAIRINGS = [
+  "CLASSIC_SERIF", "MODERN_SANS", "EDITORIAL_MIX", "WARM_ROUNDED", "BOLD_DISPLAY", "SOFT_SCRIPT",
+] as const;
+
 export type BrandMoodV2 = (typeof BRAND_MOODS)[number];
 export type BrandObjectiveV2 = (typeof BRAND_OBJECTIVES)[number];
 export type GenderFocusV2 = (typeof GENDER_FOCUS_OPTIONS)[number];
