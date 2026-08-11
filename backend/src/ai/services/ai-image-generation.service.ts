@@ -842,16 +842,6 @@ CRITICAL IMAGE REQUIREMENTS:
           let attemptLayout = currentSlideLayout;
           for (let attempt = 0; attempt < MAX_SLIDE_ATTEMPTS; attempt++) {
             if (attempt > 0) {
-              // Layout-only failures already exhausted repair inside generateSlide — do NOT regenerate AI image
-              if (result?.failReason?.startsWith('layout_exhausted')
-                || result?.failReason?.includes('subject_collision')
-                || result?.failReason?.includes('visual_gate')) {
-                console.warn(
-                  `[SlideQC] Slide ${concept.index} layout repair exhausted (${result.failReason}) — ` +
-                  `skipping AI image regeneration`,
-                );
-                break;
-              }
               const fallbackPool = layoutPool.filter(id => id !== attemptLayout);
               attemptLayout = fallbackPool[Math.floor(((concept.index || i) + attempt) % Math.max(1, fallbackPool.length))] || attemptLayout;
               console.warn(`[SlideQC] Regenerating slide ${concept.index} attempt ${attempt + 1} with layout '${attemptLayout}' (prev fail: ${result?.failReason || 'unknown'})`);
@@ -890,10 +880,6 @@ CRITICAL IMAGE REQUIREMENTS:
               designSpec: agentDecisions[i].designSpec,
             });
             if (!result.compositionFailed) break;
-            if (result.failReason?.startsWith('layout_exhausted')
-              || result.failReason?.includes('subject_collision')) {
-              break;
-            }
           }
           if (!result || result.compositionFailed) {
             console.error(`[SlideQC] Slide ${concept.index} still failed after retries (${result?.failReason}). Excluding from carousel.`);
@@ -1035,15 +1021,6 @@ CRITICAL IMAGE REQUIREMENTS:
           let attemptLayout = currentSlideLayout;
           for (let attempt = 0; attempt < MAX_FRAME_ATTEMPTS; attempt++) {
             if (attempt > 0) {
-              if (result?.failReason?.startsWith('layout_exhausted')
-                || result?.failReason?.includes('subject_collision')
-                || result?.failReason?.includes('visual_gate')) {
-                console.warn(
-                  `[SlideQC] Frame ${frame.index} layout repair exhausted (${result.failReason}) — ` +
-                  `skipping AI image regeneration`,
-                );
-                break;
-              }
               const fallbackPool = layoutPool.filter(id => id !== attemptLayout);
               attemptLayout = fallbackPool[Math.floor(((frame.index || i) + attempt) % Math.max(1, fallbackPool.length))] || attemptLayout;
               console.warn(`[SlideQC] Regenerating frame ${frame.index} attempt ${attempt + 1} with layout '${attemptLayout}'`);
@@ -1082,10 +1059,6 @@ CRITICAL IMAGE REQUIREMENTS:
               designSpec: agentDecisions[i].designSpec,
             });
             if (!result.compositionFailed) break;
-            if (result.failReason?.startsWith('layout_exhausted')
-              || result.failReason?.includes('subject_collision')) {
-              break;
-            }
           }
           if (!result || result.compositionFailed) {
             console.error(`[SlideQC] Frame ${frame.index} still failed after retries. Excluding.`);
@@ -1556,12 +1529,6 @@ CRITICAL IMAGE REQUIREMENTS:
           let workingPolicy = (optimizedDsl as any)?._spatialPolicy || geometryOut.spatial;
           let repairAttempt = 0;
           const maxSameTemplate = shareBounds.maxSameTemplateRepairs;
-          const seenTextRegions = new Set<string>();
-          const regionKey = (dsl: any) => {
-            const tr = dsl?._compositionMeta?.textRegion || dsl?.canvasRegions?.textRegion;
-            return tr ? `${Math.round(tr.x)},${Math.round(tr.y)},${Math.round(tr.width)},${Math.round(tr.height)}` : 'none';
-          };
-          seenTextRegions.add(regionKey(optimizedDsl));
 
           // Deterministic category → action. Never swap template until same-template repairs exhausted.
           while (optResult.suggestLayoutChange && repairAttempt < maxSameTemplate) {
@@ -1576,20 +1543,16 @@ CRITICAL IMAGE REQUIREMENTS:
 
             if (meta.needsRelocate || category === 'collision'
               || issues.includes('text_collision') || issues.includes('subject_collision')) {
-              // Collision: relocate to a different clear pocket (locked bias + placementSlot)
-              // If the same textRegion repeats, escalate axis instead of looping forever
-              action = 'relocate';
+              // Collision: relocate/re-anchor on SAME axis — do not change splitAxis yet
+              action = repairAttempt === 1 || meta.needsRelocate ? 'relocate' : 'escalate';
               reason = issues.includes('subject_collision') ? 'subject_collision' : 'text_collision';
-              if (repairAttempt >= 2 && seenTextRegions.size <= 1) {
-                action = 'escalate';
-                reason = 'subject_collision_stuck_geometry';
-              }
             } else if (
               meta.needsContentReflow
               || category === 'renderer'
               || category === 'readability'
               || !meta.contentIntegrity?.ok
             ) {
+              // Content integrity / readability: expand region / reflow before axis or template change
               action = repairAttempt <= 2 ? 'expand' : 'escalate';
               reason = meta.contentIntegrity?.reason || 'insufficient_text_space';
             } else if (
@@ -1616,27 +1579,13 @@ CRITICAL IMAGE REQUIREMENTS:
             }
 
             const sameLayoutRetry = runOptimize(computedLayoutType, rawDsl, workingPolicy);
-            const newKey = regionKey(sameLayoutRetry.dsl);
             console.log(
               `[Diagnostic Fallback] Attempt ${repairAttempt} (${action}, same-template) | ` +
               `Template: ${computedLayoutType} | ` +
               `Axis: ${(sameLayoutRetry.dsl as any)?._spatialPolicy?.splitAxis} ` +
               `Share: ${((sameLayoutRetry.dsl as any)?._spatialPolicy?.textShare || 0).toFixed(2)} | ` +
-              `textRegion=${newKey} | ` +
               `Category: ${(sameLayoutRetry.dsl as any)?._compositionMeta?.failureCategory || (sameLayoutRetry.suggestLayoutChange ? 'unknown' : 'PASS')}`,
             );
-
-            if (seenTextRegions.has(newKey) && sameLayoutRetry.suggestLayoutChange) {
-              console.warn(
-                `[Diagnostic Fallback] textRegion unchanged (${newKey}) after ${action} — forcing axis escalation next`,
-              );
-              workingPolicy = LayoutEngine.escalateSpatialPolicy(
-                (sameLayoutRetry.dsl as any)?._spatialPolicy || workingPolicy,
-                visualPriority,
-                'unchanged_text_region',
-              );
-            }
-            seenTextRegions.add(newKey);
 
             if (!sameLayoutRetry.suggestLayoutChange) {
               optimizedDsl = sameLayoutRetry.dsl;
@@ -1658,7 +1607,7 @@ CRITICAL IMAGE REQUIREMENTS:
           if (optResult.suggestLayoutChange) {
             console.warn(
               `[CompositionQC] Same-template repairs exhausted (${maxSameTemplate}) for '${computedLayoutType}' — ` +
-              `considering alternate families with FRESH geometry (not the failed allocation).`,
+              `considering alternate families (structural impossibility).`,
             );
             const alternates = compositionQC.suggestAlternateLayouts(
               computedLayoutType,
@@ -1673,28 +1622,30 @@ CRITICAL IMAGE REQUIREMENTS:
             );
 
             let attempt = repairAttempt;
-            let altIndex = 0;
             for (const altId of alternates) {
               attempt++;
-              altIndex++;
               const altDsl = COMPILED_LAYOUTS[altId];
               if (!altDsl) continue;
 
-              // Fresh policy per alternate — never reuse the failed spatial allocation
-              const altPolicy = LayoutEngine.freshPolicyForAlternate(
-                visualPriority,
-                failedSignatures,
-                altIndex,
-              );
+              // Carry forward a priority-clamped policy; escalate only if same-axis still stuck
+              const axes = failedSignatures.map(f => f.axis).filter(Boolean);
+              const sameAxis = axes.length > 0 && axes.every(a => a === axes[0]);
+              if (sameAxis) {
+                workingPolicy = LayoutEngine.escalateSpatialPolicy(
+                  workingPolicy,
+                  visualPriority,
+                  'same_axis_family',
+                );
+              } else {
+                workingPolicy = LayoutEngine.clampPolicyToPriority(workingPolicy, visualPriority);
+              }
 
-              const altResult = runOptimize(altId, altDsl, altPolicy);
+              const altResult = runOptimize(altId, altDsl, workingPolicy);
               const altAxis = (altResult.dsl as any)?._spatialPolicy?.splitAxis;
               const altShare = (altResult.dsl as any)?._spatialPolicy?.textShare;
-              const altKey = regionKey(altResult.dsl);
               console.log(
                 `[Diagnostic Fallback] Attempt ${attempt} | Template: ${altId} | ` +
                 `Axis: ${altAxis} Share: ${(altShare || 0).toFixed(2)} | ` +
-                `textRegion=${altKey} | ` +
                 `Category: ${(altResult.dsl as any)?._compositionMeta?.failureCategory || (altResult.suggestLayoutChange ? 'unknown' : 'PASS')}`,
               );
 
@@ -1711,17 +1662,14 @@ CRITICAL IMAGE REQUIREMENTS:
                 share: altShare,
                 category: (altResult.dsl as any)?._compositionMeta?.failureCategory || 'spatial_allocation',
               });
+              workingPolicy = (altResult.dsl as any)?._spatialPolicy || workingPolicy;
             }
           }
 
           if (optResult.suggestLayoutChange) {
             compositionFailed = true;
-            const issues = (optimizedDsl as any)?._compositionMeta?.qualityIssues || [];
-            failReason = failReason || `layout_exhausted:${issues.join(',') || currentCategory}`;
-            console.warn(
-              `[CompositionQC] No valid composition after layout repair — marking slide failed ` +
-              `(will NOT regenerate AI image). reason=${failReason}`,
-            );
+            failReason = failReason || `visual_gate:${(optimizedDsl as any)?._compositionMeta?.qualityIssues?.join(',') || 'exhausted'}`;
+            console.warn(`[CompositionQC] No repair passed visual gate — marking slide failed for regenerate`);
           }
         } else if (optResult.fitActions.length) {
           console.log(`[CompositionQC] Fit cascade: ${optResult.fitActions.join(' | ')}`);
