@@ -33,6 +33,16 @@ export interface SpatialAllocationPolicy {
   preferredTextBias: 'start' | 'end';
   /** visualPriority that authored this policy — preserved across repairs */
   visualPriority?: string;
+  /**
+   * When true, allocateRegions must honor preferredTextBias exactly.
+   * Relocate sets this so subject-aware auto-bias cannot undo the repair.
+   */
+  lockTextBias?: boolean;
+  /**
+   * Cycle index into ranked subject-clear pockets.
+   * Relocate/alternate increments this so each attempt gets different coordinates.
+   */
+  placementSlot?: number;
 }
 
 /** Priority-aware caps so escalation cannot destroy image_hero dominance. */
@@ -785,8 +795,8 @@ export class LayoutEngine {
   }
 
   /**
-   * Collision / text_collision repair: flip text bias and recompute region on the SAME axis.
-   * Does not change splitAxis — axis escalation is reserved for spatial failures.
+   * Collision repair: flip bias, LOCK it, and advance placementSlot so the next
+   * allocateRegions call yields different coordinates (not the same subject-derived bias).
    */
   public static relocateSpatialPolicy(
     failedPolicy: SpatialAllocationPolicy | undefined,
@@ -794,18 +804,53 @@ export class LayoutEngine {
     reason?: string,
   ): SpatialAllocationPolicy {
     const base = failedPolicy || LayoutEngine.deriveSpatialPolicy(priority);
+    const nextSlot = (base.placementSlot ?? 0) + 1;
     const relocated: SpatialAllocationPolicy = {
       ...base,
       preferredTextBias: base.preferredTextBias === 'start' ? 'end' : 'start',
+      lockTextBias: true,
+      placementSlot: nextSlot,
       visualPriority: base.visualPriority || priority,
     };
     const clamped = LayoutEngine.clampPolicyToPriority(relocated, priority);
     console.log(
       `[SpatialRelocate] ${base.splitAxis}@${(base.textShare || 0).toFixed(2)} ` +
       `bias ${base.preferredTextBias}→${clamped.preferredTextBias} ` +
+      `slot ${(base.placementSlot ?? 0)}→${nextSlot} lockBias=true ` +
       `(reason=${reason || 'collision'} priority=${priority})`,
     );
     return clamped;
+  }
+
+  /**
+   * Fresh policy for an alternate template — do NOT reuse the failed allocation.
+   * Derives from visualPriority and picks an unused placement slot/bias/axis hint.
+   */
+  public static freshPolicyForAlternate(
+    priority: string,
+    failedSignatures: Array<{ axis?: string; share?: number; category: string }>,
+    attemptIndex: number,
+  ): SpatialAllocationPolicy {
+    const base = LayoutEngine.deriveSpatialPolicy(priority);
+    const usedAxes = new Set(failedSignatures.map(f => f.axis).filter(Boolean));
+    let splitAxis = base.splitAxis;
+    // Prefer an axis not yet exhausted by failed attempts
+    if (usedAxes.has(splitAxis)) {
+      if (!usedAxes.has('vertical')) splitAxis = 'vertical';
+      else if (!usedAxes.has('horizontal')) splitAxis = 'horizontal';
+      else if (!usedAxes.has('overlay')) splitAxis = 'overlay';
+      else splitAxis = splitAxis === 'vertical' ? 'horizontal' : 'vertical';
+    }
+    const bias: 'start' | 'end' = attemptIndex % 2 === 0 ? 'start' : 'end';
+    const policy: SpatialAllocationPolicy = {
+      ...base,
+      splitAxis,
+      preferredTextBias: bias,
+      lockTextBias: true,
+      placementSlot: attemptIndex,
+      visualPriority: priority,
+    };
+    return LayoutEngine.clampPolicyToPriority(policy, priority);
   }
 
   /**
@@ -854,6 +899,8 @@ export class LayoutEngine {
     const escalated: SpatialAllocationPolicy = {
       ...base,
       visualPriority: base.visualPriority || priority,
+      lockTextBias: true,
+      placementSlot: (base.placementSlot ?? 0) + 1,
     };
 
     const spatialReasons = new Set([
@@ -869,6 +916,8 @@ export class LayoutEngine {
       'visual_priority_violation',
       'unused_area_excessive',
       'text_image_ratio_imbalanced',
+      'unchanged_text_region',
+      'subject_collision_stuck_geometry',
     ]);
     // Collision must not force axis change here — callers should relocate first.
     const forceAxis =
@@ -945,7 +994,7 @@ export class LayoutEngine {
    * Allocates image vs text regions from visualPriority spatial policy.
    * typography_hero / composition_hero: image surrenders a real panel (non-overlapping).
    * image_hero / cta_hero: photo stays full-bleed; text gets a subject-aware overlay band.
-   * Subject/face protection chooses which side the text panel occupies.
+   * Text regions are forced outside protectedZones whenever a clear pocket exists.
    */
   public allocateRegions(
     behavior: { imageBleedExtent?: string; readingJourney?: string },
@@ -981,8 +1030,9 @@ export class LayoutEngine {
       }
     }
 
-    const bias = this.resolveTextBias(policy.preferredTextBias, axis, subjectHint);
+    const bias = this.resolveTextBias(policy.preferredTextBias, axis, subjectHint, !!policy.lockTextBias);
     const gutter = Math.max(24, Math.round(constraints.safeX * 0.5));
+    const subjects = this.getAllocationSubjects(subjectHint);
 
     const canonicalGeometry: CanonicalGeometry = {
       faceBox: this.faceBox,
@@ -992,145 +1042,306 @@ export class LayoutEngine {
         height: this.faceBox.height + Math.round(this.faceBox.height * 0.15)
       } : undefined,
       subjectMass: this.subjectBox,
-      protectedZones: this.protectedSubjects.length ? this.protectedSubjects : (this.subjectBox || this.faceBox ? [this.subjectBox || this.faceBox!] : []),
+      protectedZones: this.protectedSubjects.length
+        ? this.protectedSubjects
+        : (this.subjectBox || this.faceBox ? [this.subjectBox || this.faceBox!] : []),
       safeMargins: { x: constraints.safeX, y: constraints.safeY },
       splitAxis: axis,
     };
 
+    // Ranked subject-clear pockets — relocate cycles placementSlot through these
+    const pockets = this.enumerateSubjectClearPockets(constraints, axis, policy.textShare, gutter, subjects);
+    const slot = Math.max(0, policy.placementSlot ?? 0);
+    const preferredPocket = pockets.length > 0 ? pockets[slot % pockets.length] : null;
+
+    let textRegion: BoundingBox;
+    let imageRegion: BoundingBox;
+
     if (axis === 'horizontal') {
-      // Image surrenders width — text gets a dedicated column
       const textW = Math.round(this.canvasWidth * policy.textShare);
       const imageW = this.canvasWidth - textW;
       if (bias === 'start') {
-        const textRegion = {
+        textRegion = {
           x: constraints.safeX,
           y: constraints.safeY,
           width: Math.max(120, textW - constraints.safeX - gutter / 2),
           height: this.canvasHeight - constraints.safeY - constraints.margins.bottom,
         };
-        const imageRegion = {
-          x: textW,
-          y: 0,
-          width: imageW,
-          height: this.canvasHeight,
+        imageRegion = { x: textW, y: 0, width: imageW, height: this.canvasHeight };
+      } else {
+        textRegion = {
+          x: imageW + gutter / 2,
+          y: constraints.safeY,
+          width: Math.max(120, this.canvasWidth - imageW - constraints.safeX - gutter / 2),
+          height: this.canvasHeight - constraints.safeY - constraints.margins.bottom,
         };
-        const carvedTextRegion = this.carveSubjectsFromRegion(textRegion, axis);
-        canonicalGeometry.imageRegion = imageRegion;
-        canonicalGeometry.textRegion = carvedTextRegion;
-        return {
-          imageRegion,
-          textRegion: carvedTextRegion,
-          spatial: { ...policy, splitAxis: axis, preferredTextBias: bias },
-          canonicalGeometry
-        };
+        imageRegion = { x: 0, y: 0, width: imageW, height: this.canvasHeight };
       }
-      const textRegion = {
-        x: imageW + gutter / 2,
-        y: constraints.safeY,
-        width: Math.max(120, this.canvasWidth - imageW - constraints.safeX - gutter / 2),
-        height: this.canvasHeight - constraints.safeY - constraints.margins.bottom,
-      };
-      const imageRegion = { x: 0, y: 0, width: imageW, height: this.canvasHeight };
-      const carvedTextRegion = this.carveSubjectsFromRegion(textRegion, axis);
-      canonicalGeometry.imageRegion = imageRegion;
-      canonicalGeometry.textRegion = carvedTextRegion;
-      return {
-        imageRegion,
-        textRegion: carvedTextRegion,
-        spatial: { ...policy, splitAxis: axis, preferredTextBias: bias },
-        canonicalGeometry
-      };
-    }
-
-    if (axis === 'vertical') {
-      // Image surrenders height — text gets a dedicated row panel
+    } else if (axis === 'vertical') {
       const textH = Math.round(this.canvasHeight * policy.textShare);
       const imageH = this.canvasHeight - textH;
       if (bias === 'start') {
-        const textRegion = {
+        textRegion = {
           x: constraints.safeX,
           y: constraints.safeY,
           width: constraints.contentMaxWidth,
           height: Math.max(100, textH - constraints.safeY - gutter / 2),
         };
-        const imageRegion = {
-          x: 0,
-          y: textH,
-          width: this.canvasWidth,
-          height: imageH,
+        imageRegion = { x: 0, y: textH, width: this.canvasWidth, height: imageH };
+      } else {
+        textRegion = {
+          x: constraints.safeX,
+          y: imageH + gutter / 2,
+          width: constraints.contentMaxWidth,
+          height: Math.max(100, this.canvasHeight - imageH - constraints.margins.bottom - gutter / 2),
         };
-        const carvedTextRegion = this.carveSubjectsFromRegion(textRegion, axis);
-        canonicalGeometry.imageRegion = imageRegion;
-        canonicalGeometry.textRegion = carvedTextRegion;
-        return {
-          imageRegion,
-          textRegion: carvedTextRegion,
-          spatial: { ...policy, splitAxis: axis, preferredTextBias: bias },
-          canonicalGeometry
+        imageRegion = { x: 0, y: 0, width: this.canvasWidth, height: imageH };
+      }
+    } else {
+      // Overlay band
+      imageRegion = { x: 0, y: 0, width: this.canvasWidth, height: this.canvasHeight };
+      const bandH = Math.max(
+        Math.round(this.canvasHeight * policy.textShare),
+        Math.round(constraints.safeY + this.canvasHeight * 0.16),
+      );
+      if (bias === 'end') {
+        const y = this.canvasHeight - constraints.margins.bottom - bandH;
+        textRegion = {
+          x: constraints.safeX,
+          y: Math.max(constraints.safeY, y),
+          width: constraints.contentMaxWidth,
+          height: bandH,
+        };
+      } else {
+        textRegion = {
+          x: constraints.safeX,
+          y: constraints.safeY,
+          width: constraints.contentMaxWidth,
+          height: bandH,
         };
       }
-      const textRegion = {
-        x: constraints.safeX,
-        y: imageH + gutter / 2,
-        width: constraints.contentMaxWidth,
-        height: Math.max(100, this.canvasHeight - imageH - constraints.margins.bottom - gutter / 2),
-      };
-      const imageRegion = { x: 0, y: 0, width: this.canvasWidth, height: imageH };
-      const carvedTextRegion = this.carveSubjectsFromRegion(textRegion, axis);
-      canonicalGeometry.imageRegion = imageRegion;
-      canonicalGeometry.textRegion = carvedTextRegion;
-      return {
-        imageRegion,
-        textRegion: carvedTextRegion,
-        spatial: { ...policy, splitAxis: axis, preferredTextBias: bias },
-        canonicalGeometry
-      };
     }
 
-    // Overlay band — photo full-bleed; text in subject-aware band (image_hero / cta_hero)
-    const imageRegion: BoundingBox = { x: 0, y: 0, width: this.canvasWidth, height: this.canvasHeight };
-    const bandH = Math.max(
-      Math.round(this.canvasHeight * policy.textShare),
-      Math.round(constraints.safeY + this.canvasHeight * 0.16),
+    // Force subject clearance: carve, then if still overlapping use ranked clear pocket
+    const beforeRect = { ...textRegion };
+    textRegion = this.carveSubjectsFromRegion(textRegion, axis, subjects);
+    if (this.regionIntersectsAny(textRegion, subjects)) {
+      if (preferredPocket) {
+        console.log(
+          `[SpatialAlloc] subject overlap after carve — using clear pocket slot=${slot % Math.max(1, pockets.length)} ` +
+          `{${formatRect(preferredPocket)}} (axis-native was {${formatRect(beforeRect)}})`,
+        );
+        textRegion = { ...preferredPocket };
+        // For dedicated panels, re-derive imageRegion opposite the chosen pocket
+        if (axis === 'horizontal') {
+          const textOnLeft = textRegion.x + textRegion.width / 2 < this.canvasWidth / 2;
+          if (textOnLeft) {
+            const splitX = Math.min(this.canvasWidth - 80, textRegion.x + textRegion.width + gutter);
+            imageRegion = { x: splitX, y: 0, width: this.canvasWidth - splitX, height: this.canvasHeight };
+          } else {
+            const splitX = Math.max(80, textRegion.x - gutter);
+            imageRegion = { x: 0, y: 0, width: splitX, height: this.canvasHeight };
+          }
+        } else if (axis === 'vertical') {
+          const textOnTop = textRegion.y + textRegion.height / 2 < this.canvasHeight / 2;
+          if (textOnTop) {
+            const splitY = Math.min(this.canvasHeight - 80, textRegion.y + textRegion.height + gutter);
+            imageRegion = { x: 0, y: splitY, width: this.canvasWidth, height: this.canvasHeight - splitY };
+          } else {
+            const splitY = Math.max(80, textRegion.y - gutter);
+            imageRegion = { x: 0, y: 0, width: this.canvasWidth, height: splitY };
+          }
+        }
+      } else {
+        console.warn(
+          `[SpatialAlloc] NO subject-clear pocket available — textRegion still overlaps protected zones ` +
+          `(text={${formatRect(textRegion)}} subjects=${subjects.map(formatRect).join('|')})`,
+        );
+      }
+    } else if (policy.lockTextBias && preferredPocket && slot > 0) {
+      // Relocate explicitly asked for a different pocket — use it even if carve already cleared
+      const nativeClear = !this.regionIntersectsAny(beforeRect, subjects);
+      if (!nativeClear || this.rectsDiffer(beforeRect, preferredPocket)) {
+        // Prefer pocket that differs from the previous failed native region
+        if (this.rectsDiffer(textRegion, preferredPocket)) {
+          console.log(
+            `[SpatialAlloc] relocate slot=${slot} → pocket {${formatRect(preferredPocket)}} ` +
+            `(was {${formatRect(textRegion)}} bias=${bias} locked)`,
+          );
+          textRegion = { ...preferredPocket };
+          if (axis === 'horizontal') {
+            const textOnLeft = textRegion.x + textRegion.width / 2 < this.canvasWidth / 2;
+            if (textOnLeft) {
+              const splitX = Math.min(this.canvasWidth - 80, textRegion.x + textRegion.width + gutter);
+              imageRegion = { x: splitX, y: 0, width: this.canvasWidth - splitX, height: this.canvasHeight };
+            } else {
+              const splitX = Math.max(80, textRegion.x - gutter);
+              imageRegion = { x: 0, y: 0, width: splitX, height: this.canvasHeight };
+            }
+          } else if (axis === 'vertical') {
+            const textOnTop = textRegion.y + textRegion.height / 2 < this.canvasHeight / 2;
+            if (textOnTop) {
+              const splitY = Math.min(this.canvasHeight - 80, textRegion.y + textRegion.height + gutter);
+              imageRegion = { x: 0, y: splitY, width: this.canvasWidth, height: this.canvasHeight - splitY };
+            } else {
+              const splitY = Math.max(80, textRegion.y - gutter);
+              imageRegion = { x: 0, y: 0, width: this.canvasWidth, height: splitY };
+            }
+          }
+        }
+      }
+    }
+
+    // Final safety: never inflate into subjects
+    textRegion = this.carveSubjectsFromRegion(textRegion, axis, subjects);
+
+    canonicalGeometry.imageRegion = imageRegion;
+    canonicalGeometry.textRegion = textRegion;
+    canonicalGeometry.splitAxis = axis;
+
+    const stillCollides = this.regionIntersectsAny(textRegion, subjects);
+    const spatialOut: SpatialAllocationPolicy = {
+      ...policy,
+      splitAxis: axis,
+      preferredTextBias: bias,
+      lockTextBias: policy.lockTextBias,
+      placementSlot: policy.placementSlot,
+    };
+
+    console.log(
+      `[SpatialAlloc] priority=${visualPriority} axis=${axis} bias=${bias}` +
+      `${policy.lockTextBias ? '(locked)' : ''} slot=${slot} ` +
+      `textShare=${policy.textShare.toFixed(2)} ` +
+      `textRegion={${formatRect(textRegion)}} imageRegion={${formatRect(imageRegion)}} ` +
+      `pockets=${pockets.length} subjectClear=${!stillCollides}`,
     );
-    let textRegion: BoundingBox;
-    if (bias === 'end') {
-      const y = this.canvasHeight - constraints.margins.bottom - bandH;
-      textRegion = {
-        x: constraints.safeX,
-        y: Math.max(constraints.safeY, y),
-        width: constraints.contentMaxWidth,
-        height: bandH,
-      };
-    } else {
-      textRegion = {
+
+    return {
+      imageRegion,
+      textRegion,
+      spatial: spatialOut,
+      canonicalGeometry,
+    };
+  }
+
+  private getAllocationSubjects(subjectHint?: BoundingBox): BoundingBox[] {
+    if (this.protectedSubjects.length) return this.protectedSubjects;
+    if (this.subjectBox) return [this.subjectBox];
+    if (this.faceBox) return [this.faceBox];
+    if (subjectHint) return [subjectHint];
+    return [];
+  }
+
+  private regionIntersectsAny(region: BoundingBox, subjects: BoundingBox[]): boolean {
+    return subjects.some(s =>
+      region.x < s.x + s.width && region.x + region.width > s.x
+      && region.y < s.y + s.height && region.y + region.height > s.y,
+    );
+  }
+
+  private rectsDiffer(a: BoundingBox, b: BoundingBox, tol = 8): boolean {
+    return Math.abs(a.x - b.x) > tol
+      || Math.abs(a.y - b.y) > tol
+      || Math.abs(a.width - b.width) > tol
+      || Math.abs(a.height - b.height) > tol;
+  }
+
+  /**
+   * Enumerate free rectangles outside protected subjects, ranked for the active axis.
+   * Relocate cycles placementSlot through this list to guarantee different coordinates.
+   */
+  private enumerateSubjectClearPockets(
+    constraints: LayoutConstraints,
+    axis: string,
+    textShare: number,
+    gutter: number,
+    subjects: BoundingBox[],
+  ): BoundingBox[] {
+    const minW = Math.max(100, Math.round(this.canvasWidth * 0.16));
+    const minH = Math.max(80, Math.round(this.canvasHeight * 0.12));
+    const targetH = Math.max(minH, Math.round(this.canvasHeight * Math.min(0.45, Math.max(0.14, textShare))));
+    const targetW = Math.max(minW, Math.round(constraints.contentMaxWidth * Math.min(1, textShare + 0.35)));
+    const contentBottom = this.canvasHeight - constraints.margins.bottom;
+    const contentRight = this.canvasWidth - constraints.safeX;
+
+    const candidates: Array<{ box: BoundingBox; score: number }> = [];
+    const push = (box: BoundingBox, axisAffinity: number) => {
+      if (box.width < minW || box.height < minH) return;
+      if (this.regionIntersectsAny(box, subjects)) return;
+      const area = box.width * box.height;
+      const sizeFit = Math.min(1, box.width / targetW) * Math.min(1, box.height / targetH);
+      candidates.push({ box, score: area * (0.55 + 0.45 * sizeFit) * axisAffinity });
+    };
+
+    // Full-canvas side strips (work even with large subjects)
+    if (subjects.length === 0) {
+      push({
         x: constraints.safeX,
         y: constraints.safeY,
         width: constraints.contentMaxWidth,
-        height: bandH,
-      };
+        height: Math.min(targetH, contentBottom - constraints.safeY),
+      }, 1);
+      push({
+        x: constraints.safeX,
+        y: Math.max(constraints.safeY, contentBottom - targetH),
+        width: constraints.contentMaxWidth,
+        height: targetH,
+      }, 1);
     }
 
-    const carvedTextRegion = this.carveSubjectsFromRegion(textRegion, 'overlay');
-    canonicalGeometry.imageRegion = imageRegion;
-    canonicalGeometry.textRegion = carvedTextRegion;
-    return {
-      imageRegion,
-      textRegion: carvedTextRegion,
-      spatial: { ...policy, splitAxis: 'overlay', preferredTextBias: bias },
-      canonicalGeometry
-    };
+    for (const s of subjects) {
+      // Left of subject
+      push({
+        x: constraints.safeX,
+        y: constraints.safeY,
+        width: Math.min(targetW, s.x - constraints.safeX - gutter),
+        height: contentBottom - constraints.safeY,
+      }, axis === 'horizontal' ? 1.4 : 1.0);
+      // Right of subject
+      const rightX = s.x + s.width + gutter;
+      push({
+        x: rightX,
+        y: constraints.safeY,
+        width: Math.min(targetW, contentRight - rightX),
+        height: contentBottom - constraints.safeY,
+      }, axis === 'horizontal' ? 1.4 : 1.0);
+      // Above subject
+      push({
+        x: constraints.safeX,
+        y: constraints.safeY,
+        width: constraints.contentMaxWidth,
+        height: Math.min(targetH, s.y - constraints.safeY - gutter),
+      }, axis === 'vertical' || axis === 'overlay' ? 1.4 : 1.0);
+      // Below subject
+      const belowY = s.y + s.height + gutter;
+      push({
+        x: constraints.safeX,
+        y: belowY,
+        width: constraints.contentMaxWidth,
+        height: Math.min(targetH, contentBottom - belowY),
+      }, axis === 'vertical' || axis === 'overlay' ? 1.4 : 1.0);
+    }
+
+    // Deduplicate near-identical rects, sort by score desc
+    candidates.sort((a, b) => b.score - a.score);
+    const unique: BoundingBox[] = [];
+    for (const c of candidates) {
+      if (unique.some(u => !this.rectsDiffer(u, c.box, 24))) continue;
+      unique.push(c.box);
+    }
+    return unique;
   }
 
   private resolveTextBias(
     preferred: 'start' | 'end',
     axis: 'horizontal' | 'vertical' | 'overlay',
     subjectHint?: BoundingBox,
+    lockBias = false,
   ): 'start' | 'end' {
-    if (!subjectHint) return preferred;
+    // Relocate/repair must be able to force the opposite side — do not undo it
+    if (lockBias || !subjectHint) return preferred;
     if (axis === 'horizontal') {
       const cx = subjectHint.x + subjectHint.width / 2;
-      // Put text opposite the subject mass
       return cx < this.canvasWidth * 0.5 ? 'end' : 'start';
     }
     const cy = subjectHint.y + subjectHint.height / 2;
@@ -1138,13 +1349,19 @@ export class LayoutEngine {
   }
 
   /**
-   * After panel allocation, shrink text region away from protected subjects that still intersect.
-   * Keeps composition valid before QC instead of relying on font crush.
+   * Shrink text region away from protected subjects that intersect it.
+   * Applies to ALL axes (overlay and dedicated panels). Never re-inflates into subjects.
    */
-  private carveSubjectsFromRegion(region: BoundingBox, axis: string = 'overlay'): BoundingBox {
-    const subjects = this.protectedSubjects.length
-      ? this.protectedSubjects
-      : (this.subjectBox || this.faceBox ? [this.subjectBox || this.faceBox!] : []);
+  private carveSubjectsFromRegion(
+    region: BoundingBox,
+    _axis: string = 'overlay',
+    subjectsOverride?: BoundingBox[],
+  ): BoundingBox {
+    const subjects = subjectsOverride ?? (
+      this.protectedSubjects.length
+        ? this.protectedSubjects
+        : (this.subjectBox || this.faceBox ? [this.subjectBox || this.faceBox!] : [])
+    );
     if (subjects.length === 0) return region;
 
     let result = { ...region };
@@ -1154,37 +1371,49 @@ export class LayoutEngine {
         && result.y < s.y + s.height && result.y + result.height > s.y;
       if (!overlaps) continue;
 
-      // GPT Rule: Do not repeatedly carve a dedicated panel (horizontal/vertical) 
-      // until a 40% share becomes a 99px sliver. If a dedicated panel conflicts, 
-      // do not carve it; let QC detect the collision and repair the composition.
-      if (axis !== 'overlay') {
-        continue;
-      }
-
       const spaceLeft = s.x - result.x;
       const spaceRight = (result.x + result.width) - (s.x + s.width);
       const spaceTop = s.y - result.y;
       const spaceBottom = (result.y + result.height) - (s.y + s.height);
       const best = Math.max(spaceLeft, spaceRight, spaceTop, spaceBottom);
-      if (best <= 40) continue;
+      const minKeep = 40;
 
-      if (best === spaceLeft && spaceLeft > 40) {
+      if (best < minKeep) {
+        // Cannot carve meaningfully — leave for pocket replacement
+        continue;
+      }
+
+      if (best === spaceLeft && spaceLeft >= minKeep) {
         result.width = spaceLeft;
-      } else if (best === spaceRight && spaceRight > 40) {
+      } else if (best === spaceRight && spaceRight >= minKeep) {
         const nx = s.x + s.width;
         result.width = result.x + result.width - nx;
         result.x = nx;
-      } else if (best === spaceTop && spaceTop > 40) {
+      } else if (best === spaceTop && spaceTop >= minKeep) {
         result.height = spaceTop;
-      } else if (best === spaceBottom && spaceBottom > 40) {
+      } else if (best === spaceBottom && spaceBottom >= minKeep) {
         const ny = s.y + s.height;
         result.height = result.y + result.height - ny;
         result.y = ny;
       }
     }
 
-    result.width = Math.max(80, result.width);
-    result.height = Math.max(60, result.height);
+    // Do NOT Math.max inflate back into subjects — keep carved size (floor only if still clear)
+    result.width = Math.max(1, result.width);
+    result.height = Math.max(1, result.height);
+    if (this.regionIntersectsAny(result, subjects)) {
+      // Carve failed to clear — return as-is so caller can swap to a clear pocket
+      return result;
+    }
+    // Safe minimums only when still clear
+    if (result.width < 80 && result.x + 80 <= this.canvasWidth) {
+      const grown = { ...result, width: 80 };
+      if (!this.regionIntersectsAny(grown, subjects)) result = grown;
+    }
+    if (result.height < 60 && result.y + 60 <= this.canvasHeight) {
+      const grown = { ...result, height: 60 };
+      if (!this.regionIntersectsAny(grown, subjects)) result = grown;
+    }
     return result;
   }
 }
