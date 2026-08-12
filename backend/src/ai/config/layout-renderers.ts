@@ -27,6 +27,12 @@ const primitiveEngine = new PrimitiveEngine();
 const typographyEngine = new TypographyEngine();
 const artDirectionEngine = new ArtDirectionEngine();
 
+// Gate the visible red "MISSING COMPONENT" debug banner behind an explicit opt-in.
+// It must NEVER be baked into a creative asset that ships to a user/client — it exists
+// purely so engineers can spot a genuinely unregistered DSL component name while developing
+// new layout families locally.
+const DEBUG_PLACEHOLDERS = process.env.RENDER_DEBUG_PLACEHOLDERS === 'true';
+
 function getLuminanceSafe(hex: string): number {
   try {
     const cleaned = hex.replace('#', '');
@@ -1083,7 +1089,10 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       : themeEngine.getMoodDecorations(visualRecipe.texture);
     overlayLayers = [...overlayLayers, ...moodDecorations];
 
-    overlayLayers.sort((a: any, b: any) => a.zIndex - b.zIndex);
+    // Default a missing zIndex to 0 — `undefined - undefined` is NaN, and Array#sort treats a
+    // NaN comparator result as "don't move", which makes stacking order unstable/inconsistent
+    // between runs for any layer (e.g. dynamically injected moodDecorations) that lacks one.
+    overlayLayers.sort((a: any, b: any) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
 
 
 
@@ -1178,16 +1187,26 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
 
     // Text-band / panel readability: scrim only when type overlays the photo (overlay axis).
     // Dedicated panels sit on brand background — no scrim needed.
-    const textBand = (dsl as any)?.canvasRegions?.textRegion;
+    // Prefer the post-fit `actualTextRegion` (real union bounds of the placed text layers) so the
+    // scrim lines up with where the glyphs actually landed — obstacle/subject avoidance can move
+    // text to a different y/height than the pre-fit `canvasRegions.textRegion` candidate.
+    const textBand = (dsl as any)?._compositionMeta?.actualTextRegion || (dsl as any)?.canvasRegions?.textRegion;
     const spatialAxis = (dsl as any)?._spatialPolicy?.splitAxis
       || ((dsl as any)?.canvasRegions?.imageRegion?.width < ctx.w - 2
         || (dsl as any)?.canvasRegions?.imageRegion?.height < ctx.h - 2
         ? 'panel'
         : 'overlay');
     const priority = ctx.designLanguage?.intent?.visualPriority || ctx.designSpec?.composition?.visualPriority;
-    if (textBand && spatialAxis === 'overlay' && (priority === 'image_hero' || priority === 'cta_hero' || priority === 'composition_hero')) {
+    // Safety net: if Composition QC still flagged text sitting on top of a protected subject
+    // (face/subject) even in its best/soft-accepted attempt — see `[SlideQC] soft-accepted`
+    // logs in ai-image-generation.service.ts — force the readability scrim on regardless of
+    // visualPriority. Shipping unprotected text over a face is worse than an extra scrim.
+    const qualityCritical: string[] = (dsl as any)?._compositionMeta?.qualityCritical || [];
+    const forceScrimForSafety = qualityCritical.includes('subject_collision') || qualityCritical.includes('text_collision');
+    if (textBand && spatialAxis === 'overlay'
+      && (forceScrimForSafety || priority === 'image_hero' || priority === 'cta_hero' || priority === 'composition_hero')) {
       const pad = 16;
-      const scrimOpacity = priority === 'cta_hero' ? 0.55 : 0.42;
+      const scrimOpacity = forceScrimForSafety ? 0.6 : (priority === 'cta_hero' ? 0.55 : 0.42);
       const scrimFill = (ctx.validDepthColor && getLuminanceSafe(ctx.validDepthColor) < 140)
         ? ctx.validDepthColor
         : '#0A0A0A';
@@ -1204,16 +1223,22 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
         if (renderedPrimitive) {
           console.log(`[Renderer Sprint] SUCCESS: Applied primitive decoration '${componentName}' to layout.`);
           svg += renderedPrimitive;
-        } else {
-          // Strict Validation: Unknown components fail loudly
+        } else if (renderedPrimitive === null) {
+          // Strict Validation: genuinely unregistered components fail loudly (dev-only signal —
+          // never gated behind this in production output; see DEBUG_PLACEHOLDERS below).
           console.error(`[Renderer Sprint] CRITICAL ERROR: Component '${componentName}' requested by DSL but not found in PrimitiveEngine!`);
-          // Render a visible placeholder block so developers see the missing component immediately
-          svg += `
-            <g transform="translate(40, ${Math.floor(Math.random() * (ctx.h - 100))})">
-              <rect width="300" height="40" fill="red" opacity="0.8" />
-              <text x="10" y="25" fill="white" font-weight="bold" font-family="sans-serif">MISSING COMPONENT: ${componentName}</text>
-            </g>
-          `;
+          if (DEBUG_PLACEHOLDERS) {
+            svg += `
+              <g transform="translate(40, ${Math.floor(Math.random() * (ctx.h - 100))})">
+                <rect width="300" height="40" fill="red" opacity="0.8" />
+                <text x="10" y="25" fill="white" font-weight="bold" font-family="sans-serif">MISSING COMPONENT: ${componentName}</text>
+              </g>
+            `;
+          }
+        } else {
+          // '' → component was found and handled but intentionally produced no output
+          // (e.g. hard-collision-disabled by the Collision Engine). Not an error — skip silently.
+          console.log(`[Renderer Sprint] Primitive '${componentName}' intentionally suppressed no output (collision or delegated render).`);
         }
       } else if (layer.type === 'image') {
         // Many layout families (like desktop_course_hero, tablet_workbook_cover) define device mockups
@@ -1224,7 +1249,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           if (renderedPrimitive) {
             console.log(`[Renderer Sprint] SUCCESS: Applied primitive image component '${imageLayer.component}' to layout.`);
             svg += renderedPrimitive;
-          } else {
+          } else if (renderedPrimitive === null) {
             console.error(`[Renderer Sprint] CRITICAL ERROR: Image Component '${imageLayer.component}' not found in PrimitiveEngine!`);
           }
         }
@@ -1242,7 +1267,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           const renderedPrimitive = primitiveEngine.renderPrimitive(textLayer.component, primitiveCtx, textLayer);
           if (renderedPrimitive) {
             svg += renderedPrimitive;
-          } else if (!isDelegatedContainer) {
+          } else if (renderedPrimitive === null && !isDelegatedContainer) {
             console.error(`[Renderer Sprint] CRITICAL ERROR: Text Component '${textLayer.component}' not found in PrimitiveEngine!`);
           }
         }

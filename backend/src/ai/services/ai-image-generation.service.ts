@@ -1519,11 +1519,22 @@ CRITICAL IMAGE REQUIREMENTS:
         };
 
         if (!effectiveHeadline || !String(effectiveHeadline).trim()) {
-          const source = [overlayText, subheadline, cta].filter(s => s && String(s).trim()).join(' ').trim();
-          const { lead, rest } = splitLoudLead(source || 'Ready when you are');
+          // Pick ONE authoritative source field and split lead/rest only within it — never
+          // concatenate different copy fields into one blob first. Joining e.g. "Keep your glow
+          // consistent" + "by reserving your next facial" and then hard-cutting by word count
+          // produces grammatically broken fragments ("YOUR GLOW CONSISTENT BY RESERVING YOUR")
+          // because the cut point falls mid-clause, straddling two unrelated sentences.
+          const primarySource = [overlayText, subheadline, cta].find(s => s && String(s).trim())?.trim() || '';
+          const { lead, rest } = splitLoudLead(primarySource || 'Ready when you are');
           effectiveHeadline = lead || 'Ready when you are';
-          if (rest) {
-            effectiveSubheadline = [rest, effectiveSubheadline].filter(Boolean).join(' ').trim();
+          // Whatever wasn't consumed into the lead (from the primary source) becomes support
+          // copy, plus any other still-untouched fields — each appended as its own clause,
+          // never spliced mid-sentence with another field's words.
+          const leftoverFields = [rest, ...[overlayText, subheadline, cta].filter(s => s && String(s).trim() && s.trim() !== primarySource)]
+            .map(s => (s || '').trim())
+            .filter(Boolean);
+          if (leftoverFields.length) {
+            effectiveSubheadline = [...leftoverFields, effectiveSubheadline].filter(Boolean).join(' ').trim();
           }
         } else if (overlayText && overlayText.trim() && !effectiveSubheadline) {
           // Headline present — put leftover overlay into support so it is not discarded

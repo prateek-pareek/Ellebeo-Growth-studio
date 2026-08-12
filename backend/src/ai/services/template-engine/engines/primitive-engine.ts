@@ -123,16 +123,10 @@ export class PrimitiveEngine {
       }
     };
 
-    this.registry['handmade_mark'] = {
-      category: 'effects',
-      render: (ctx, layer) => {
-        const color = ctx.colorHierarchy ? ctx.colorHierarchy.accent : ctx.validBrandColor;
-        return `
-        <!-- Abstract Handmade Mark (Brush Stroke) -->
-        <path d="M${ctx.w * 0.8},${ctx.h * 0.15} Q${ctx.w * 0.85},${ctx.h * 0.12} ${ctx.w * 0.9},${ctx.h * 0.16} T${ctx.w * 0.95},${ctx.h * 0.14}" fill="none" stroke="${color}" stroke-width="${ctx.scaleStroke!(4)}" stroke-linecap="round" opacity="${ctx.resolveOpacity!(0.6)}" />
-      `;
-      }
-    };
+    // NOTE: 'handmade_mark' used to be registered here as a single brush-stroke primitive, but it
+    // was immediately overwritten below (~line 869) by a random-delegate version. That made this
+    // definition permanently dead code, so it has been removed — the delegate at line 869 is the
+    // one real registration.
 
     this.registry['museum_border'] = {
       category: 'geometry',
@@ -1834,7 +1828,18 @@ export class PrimitiveEngine {
     return 0.299 * r + 0.587 * g + 0.114 * b;
   }
 
-  public renderPrimitive(name: string, ctx: PrimitiveContext, layer?: IDSLDecorationLayer | IDSLTextLayer): string {
+  /**
+   * Renders a primitive by name.
+   *
+   * Return value carries meaning that callers MUST distinguish:
+   *  - `null`   → the component name is genuinely unregistered (a real DSL/authoring error).
+   *  - `''`     → the component was found and handled, but intentionally produced no visual
+   *               output (e.g. delegated to another engine, or hard-collision-disabled by the
+   *               Collision Engine below). This is an expected, silent outcome — NOT an error —
+   *               and must never be surfaced as a "missing component" placeholder.
+   *  - non-empty string → the rendered SVG fragment.
+   */
+  public renderPrimitive(name: string, ctx: PrimitiveContext, layer?: IDSLDecorationLayer | IDSLTextLayer): string | null {
     // Aliases for family-inject / theme names that map to real registry entries
     const ALIASES: Record<string, string> = {
       gallery_frame: 'museum_border',
@@ -1846,7 +1851,7 @@ export class PrimitiveEngine {
     const primitive = this.registry[resolvedName];
     if (!primitive) {
       console.warn(`[PrimitiveEngine] Warning: Primitive '${name}'${resolvedName !== name ? ` (alias→${resolvedName})` : ''} not found.`);
-      return '';
+      return null;
     }
     if (resolvedName !== name) {
       console.log(`[PrimitiveEngine] Aliased '${name}' → '${resolvedName}'`);

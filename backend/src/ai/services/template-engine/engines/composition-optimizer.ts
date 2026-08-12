@@ -390,6 +390,26 @@ export class CompositionOptimizer {
       currentY = layer.allocatedBox.y + h + clusterGap;
     }
 
+    // Capture the ACTUAL union bounding box of every layer that was just placed above
+    // (groupedTextLayers / textGroupLayers / structuralLayers all got a real `allocatedBox`).
+    // `regions.textRegion` is the pre-fit candidate region computed before content-fitting and
+    // obstacle-avoidance ran, so it can diverge from where the glyphs really landed (obstacle
+    // avoidance can pick a different y/height inside it). Consumers that need the *readability
+    // scrim* to line up with the real text — not the candidate region — should read this instead.
+    const placedBoxes: BoundingBox[] = [
+      ...groupedTextLayers.map(l => l.allocatedBox),
+      ...textGroupLayers.map(g => g.allocatedBox),
+      ...structuralLayers.map(l => l.allocatedBox),
+    ].filter((b): b is BoundingBox => !!b);
+    const actualTextBounds: BoundingBox | undefined = placedBoxes.length
+      ? {
+          x: Math.min(...placedBoxes.map(b => b.x)),
+          y: Math.min(...placedBoxes.map(b => b.y)),
+          width: Math.max(...placedBoxes.map(b => b.x + b.width)) - Math.min(...placedBoxes.map(b => b.x)),
+          height: Math.max(...placedBoxes.map(b => b.y + b.height)) - Math.min(...placedBoxes.map(b => b.y)),
+        }
+      : undefined;
+
     const quality = this.qc.evaluateVisualQuality({
       boxes: allTextLayers.map(l => ({
         role: l.role,
@@ -504,6 +524,10 @@ export class CompositionOptimizer {
       wrapWidthFactor,
       spatial: regions.spatial,
       textRegion: regions.textRegion,
+      // Real, post-fit union bounds of the placed text layers — prefer this over `textRegion`
+      // whenever you need to draw something (e.g. a readability scrim) that must align with
+      // where the text actually rendered. Falls back to `textRegion` when nothing was placed.
+      actualTextRegion: actualTextBounds || regions.textRegion,
       imageRegion: regions.imageRegion,
       qualityScore: quality.score,
       qualityIssues: quality.issues,

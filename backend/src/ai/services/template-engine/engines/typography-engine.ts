@@ -1193,23 +1193,44 @@ export class TypographyEngine {
     if (layer.role !== 'heading') {
       const maxLines = layer.role === 'tagline' ? 2 : 3;
       if (smartLines.length > maxLines) {
+        const droppedLines = smartLines.length - maxLines;
         smartLines = smartLines.slice(0, maxLines);
+        // Never let the cap silently swallow words mid-sentence with no visual trace — that's
+        // what produced copy that just stops ("...RESERVING YOUR"). Mark the cut with an
+        // ellipsis so it reads as intentionally-shortened copy instead of a broken fragment.
+        const lastIdx = smartLines.length - 1;
+        let lastLine = smartLines[lastIdx];
+        if (lastLine && !/[.!?…]$/.test(lastLine)) {
+          if (lastLine.length > maxCharsPerLine - 1) {
+            const budget = lastLine.slice(0, maxCharsPerLine - 1);
+            const lastSpace = budget.lastIndexOf(' ');
+            lastLine = lastSpace > 0 ? budget.slice(0, lastSpace) : budget;
+          }
+          smartLines[lastIdx] = `${lastLine}…`;
+        }
+        console.warn(
+          `[TypographyEngine] Line cap dropped ${droppedLines} line(s) for role='${layer.role}' — ellipsis applied to avoid a silently truncated sentence.`,
+        );
       }
     } else if (smartLines.length > 6) {
       // Absolute safety ceiling only
       smartLines = smartLines.slice(0, 6);
     }
 
-    // Integrity annotation for callers
+    // Integrity annotation for callers (all roles — not just headings — so truncation from
+    // either the wrap pass above or the line-cap above is visible to logging/QC).
     const renderedWords = smartLines.join(' ').split(/\s+/).filter(Boolean);
     const sourceWords = words;
-    if (layer.role === 'heading' && sourceWords.length > 0 && renderedWords.length < sourceWords.length) {
+    if (sourceWords.length > 0 && renderedWords.length < sourceWords.length) {
       (layer as any)._contentIntegrity = {
-        ok: false,
+        // Headings must still hard-fail (upstream relies on ok:false to trigger repair/reject).
+        // Non-heading roles are now visually flagged with an ellipsis above, so treat this as a
+        // soft/non-blocking notice rather than a gate failure.
+        ok: layer.role !== 'heading' ? true : false,
         reason: `wrap_truncated:${renderedWords.length}/${sourceWords.length}`,
         missing: sourceWords.filter(w => !renderedWords.includes(w)),
       };
-    } else if (layer.role === 'heading') {
+    } else {
       (layer as any)._contentIntegrity = { ok: true, wordCount: renderedWords.length };
     }
 
