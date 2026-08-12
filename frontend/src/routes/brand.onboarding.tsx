@@ -1,497 +1,872 @@
-import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { z } from "zod";
-import { Lock } from "lucide-react";
-import { loadBrandDnaRecord, saveBrandDnaRecord } from "@/lib/providers/brand-dna-save";
-import { EMPTY_BRAND_DNA, SECTIONS, type BrandDnaRecord, type SectionId, type SectionDef } from "@/lib/brand-dna/schema";
-import { SectionBody } from "@/lib/brand-dna/sections";
-import { computeCompletion } from "@/lib/brand-dna/completion";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Upload, Check } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
-
-// Hard lock — section is fully blocked below the required tier.
-const SECTION_TIER_GATE: Partial<Record<string, { minTier: number; label: string }>> = {
-  moodboard:        { minTier: 3, label: "Tier 3 — Premium" },
-  asset_library:    { minTier: 3, label: "Tier 3 — Premium" },
-  signature_system: { minTier: 3, label: "Tier 3 — Premium" },
-};
-
-// Soft note — section is accessible but some fields are locked at the AI level.
-const SECTION_TIER_NOTE: Partial<Record<string, { minTier: number; label: string; note: string }>> = {
-  essence:          { minTier: 2, label: "Partial — Tier 2+", note: "Brand world anchor requires Tier 2 — your input is saved but won't reach the AI until you upgrade." },
-  image_direction:  { minTier: 2, label: "Partial — Tier 2+", note: "Advanced visual direction (composition, finish, environment) requires Tier 2. Basic lighting and texture are active on all tiers." },
-  visual_identity:  { minTier: 2, label: "Partial — Tier 2+", note: "Logo usage rules and the full 5-colour palette require Tier 2 — your primary colours and style ranking are active on all tiers." },
-  ideal_client:     { minTier: 3, label: "Partial — Tier 3+", note: "Full client psychology (fears, trust triggers, buying motivation, visual taste) requires Tier 3 — these fields are saved but filtered from AI prompts below Tier 3." },
-  content_strategy: { minTier: 3, label: "Partial — Tier 3+", note: "Per-pillar content strategy treatment requires Tier 3. Your pillars are still used at all tiers." },
-};
-
-const TIER_RANK: Record<string, number> = {
-  free: 0, standard: 1, premium: 3,
-  tier1: 1, tier2: 2, tier3: 3, tier4: 4, tier5: 5,
-};
-
-function tierRank(tier: string): number {
-  return TIER_RANK[tier] ?? 0;
-}
-
-const searchSchema = z.object({
-  section: z.string().optional(),
-});
+import { useAuth } from "@/lib/providers/auth-provider";
+import {
+  BRAND_MOODS, BRAND_OBJECTIVES, GENDER_FOCUS_OPTIONS, LANGUAGE_VARIANTS, ESSENCE_WORDS, TYPE_PAIRINGS,
+  type BrandDnaV2Contract, type BrandMoodV2,
+} from "@/lib/brand-dna/v2-schema";
 
 export const Route = createFileRoute("/brand/onboarding")({
-  validateSearch: searchSchema,
   head: () => ({
     meta: [
-      { title: "Brand DNA — Elle.Be.O Growth" },
-      { name: "description", content: "Your brand bible, built for AI." },
+      { title: "Brand DNA — Guided Setup — Elle.Be.O Growth" },
+      { name: "description", content: "AI proposes, you confirm — build your Brand DNA in minutes." },
     ],
   }),
-  component: BrandDnaForm,
+  component: BrandDnaOnboardingV2,
 });
 
-const GROUPS = ["Brand", "Visual", "Voice", "Commercial", "Compliance", "Output"] as const;
-type GroupName = (typeof GROUPS)[number];
+// ── Static, non-AI presentation metadata (real AI suggestions override this
+// per-technician; this is the zero-network fallback / initial render state) ──
 
-// ── Section fill count & status helpers ──────────────────────────────────────
+const MOOD_META: Record<(typeof BRAND_MOODS)[number], { label: string; hint: string; palette: string[] }> = {
+  SOFT_GLAM: { label: "Soft Glam", hint: "Romantic, polished, feminine warmth.", palette: ["#F5D6D0", "#C98A8A", "#FFF7F3", "#8A5A5A", "#3D2A2A"] },
+  CLEAN_CLINICAL: { label: "Clean Clinical", hint: "Precise, sterile, trust-first.", palette: ["#EAF2F2", "#3A7C7C", "#FFFFFF", "#1F3D3D", "#0F1F1F"] },
+  EDITORIAL_MINIMAL: { label: "Editorial Minimal", hint: "Sleek, refined, quietly confident.", palette: ["#EDEDED", "#1A1A1A", "#FFFFFF", "#5C5C5C", "#000000"] },
+  NATURAL_ORGANIC: { label: "Natural Organic", hint: "Earthy, gentle, hands-on craft.", palette: ["#F4EFE6", "#8A7355", "#FAF8F4", "#4E4335", "#2A241C"] },
+  BOLD_LUXE: { label: "Bold Luxe", hint: "High-end, dramatic, statement-making.", palette: ["#D4AF37", "#1A1A2E", "#FFFFFF", "#8A7968", "#000000"] },
+  PLAYFUL_FRESH: { label: "Playful Fresh", hint: "Vibrant, energetic, fun-first.", palette: ["#FFE5B4", "#FF6F61", "#FFFFFF", "#4ECDC4", "#2D2D2D"] },
+};
 
-const T = (v: unknown): boolean =>
-  typeof v === "string" ? v.trim().length > 0 : Array.isArray(v) ? v.length > 0 : Boolean(v);
+const TYPE_META: Record<(typeof TYPE_PAIRINGS)[number], { name: string; headClass: string }> = {
+  CLASSIC_SERIF: { name: "Classic Serif", headClass: "font-serif font-normal" },
+  MODERN_SANS: { name: "Modern Sans", headClass: "font-sans font-bold tracking-tight" },
+  EDITORIAL_MIX: { name: "Editorial Mix", headClass: "font-serif italic font-normal" },
+  WARM_ROUNDED: { name: "Warm Rounded", headClass: "font-serif font-normal" },
+  BOLD_DISPLAY: { name: "Bold Display", headClass: "font-sans font-extrabold uppercase tracking-wide text-[0.85em]" },
+  SOFT_SCRIPT: { name: "Soft Script", headClass: "font-serif italic font-normal text-[1.15em]" },
+};
 
-function sectionFill(id: string, r: BrandDnaRecord): { filled: number; total: number } | null {
-  switch (id) {
-    case "foundations": {
-      const f = r.foundations;
-      const checks = [
-        T(f.professional_name),
-        T(f.category) || f.categories.length > 0,
-        T(f.location) || T(f.service_area),
-        T(f.niche),
-        T(f.known_for),
-        T(f.reputation_asset),
-      ];
-      return { filled: checks.filter(Boolean).length, total: 6 };
-    }
-    case "essence": {
-      const f = r.essence;
-      return { filled: [f.one_sentence, f.world_anchor, f.image_energy].filter(T).length, total: 3 };
-    }
-    case "visual_identity": {
-      const p = r.visual_identity.palette;
-      const checks = [T(p.primary), T(p.background), T(p.accent), r.visual_identity.style_ranking.length > 0, T(r.visual_identity.logo_usage_rules)];
-      return { filled: checks.filter(Boolean).length, total: 5 };
-    }
-    case "moodboard": {
-      const n = r.moodboard.filter((m) => m.usage !== "private").length;
-      return { filled: Math.min(n, 5), total: 5 };
-    }
-    case "image_direction": {
-      const d = r.image_direction;
-      const checks = [
-        d.lighting.length > 0,
-        d.composition.length > 0,
-        d.environments.length > 0 || T(d.environments_other),
-        d.textures.length > 0,
-        T(d.realism),
-        T(d.people),
-      ];
-      return { filled: checks.filter(Boolean).length, total: 6 };
-    }
-    case "typography": {
-      const ty = r.typography;
-      return { filled: [ty.personality, ty.heading_font, ty.body_font, ty.text_placement].filter(T).length, total: 4 };
-    }
-    case "asset_library": {
-      const n = r.asset_library.filter((a) => T(a.consent_status) && a.consent_status !== "no_consent").length;
-      return { filled: Math.min(n, 5), total: 5 };
-    }
-    case "signature_system": {
-      const s = r.signature_system;
-      return { filled: [s.recurring_motif, s.framing_habit, s.colour_discipline, s.type_rule, s.finish, s.light_signature, s.always_absent].filter(T).length, total: 7 };
-    }
-    case "voice": {
-      const v = r.voice_v2;
-      return { filled: [v.three_words, v.perception, v.proof, v.caption_length, v.emoji_usage, v.caption_style].filter(T).length, total: 6 };
-    }
-    case "written_conventions": {
-      const w = r.written_conventions;
-      return { filled: [w.always_write, w.avoid_phrases, w.punctuation_rules].filter(T).length, total: 3 };
-    }
-    case "commercial": {
-      const c = r.commercial;
-      const checks = [T(c.hero_service), T(c.desired_outcome), T(c.market_tier), c.content_objectives.length > 0, T(c.cta_style)];
-      return { filled: checks.filter(Boolean).length, total: 5 };
-    }
-    case "ideal_client": {
-      const ic = r.ideal_client_v2;
-      return { filled: [ic.summary, ic.problem, ic.feeling_after_booking, ic.fears_objections, ic.trust_signals, ic.age_range, ic.buying_motivation, ic.visual_taste].filter(T).length, total: 8 };
-    }
-    case "content_strategy": {
-      const cs = r.content_strategy;
-      const checks = [cs.pillars_ranked.length > 0, T(cs.targets.bookings_per_week), T(cs.targets.posts_per_week), cs.output_formats.length > 0];
-      return { filled: checks.filter(Boolean).length, total: 4 };
-    }
-    case "compliance": {
-      const c = r.compliance;
-      const checks = [T(c.before_after_rules), T(c.claims_to_avoid), c.regulated_ack || c.medical_aesthetics_practitioner];
-      return { filled: checks.filter(Boolean).length, total: 3 };
-    }
-    case "output_formats": {
-      const o = r.output_formats;
-      const checks = [o.platforms.length > 0, o.aspect_ratios.length > 0, o.finish.length > 0];
-      return { filled: checks.filter(Boolean).length, total: 3 };
-    }
-    default:
-      return null;
-  }
+const OBJECTIVE_META: Record<(typeof BRAND_OBJECTIVES)[number], { name: string; desc: string }> = {
+  PREMIUM_CLIENTS: { name: "Attract premium clients", desc: "Position for higher-value bookings and fewer discount-seekers." },
+  FILL_QUIET_DAYS: { name: "Fill quiet days", desc: "Drive last-minute and off-peak bookings." },
+  EDUCATE_TRUST: { name: "Educate & build trust", desc: "Establish authority before someone books at all." },
+  PROMOTE_BRIDAL: { name: "Promote bridal & events", desc: "Lead with occasion-based, higher-ticket packages." },
+  LAUNCH_PRODUCT: { name: "Launch a new service", desc: "Introduce something new to your existing audience." },
+};
+
+// Real categorisation used elsewhere in the app (service-guardrails.ts ServiceCategory) — not invented for this flow.
+const SERVICE_CATEGORIES: { id: string; label: string }[] = [
+  { id: "hair_colour", label: "Hair Colour" },
+  { id: "hair_cut_style", label: "Hair Cut & Style" },
+  { id: "hair_extensions", label: "Hair Extensions" },
+  { id: "laser_treatments", label: "Laser Treatments" },
+  { id: "injectables_cosmetic", label: "Injectables & Cosmetic" },
+  { id: "skin_treatments", label: "Skin Treatments" },
+  { id: "nail_services", label: "Nail Services" },
+  { id: "makeup", label: "Makeup" },
+  { id: "lashes_brows", label: "Lashes & Brows" },
+  { id: "massage_body", label: "Massage & Body" },
+  { id: "general", label: "General / Other" },
+];
+
+const STEPS = [
+  { n: 1, label: "Autofill", sub: "Logo, name, category" },
+  { n: 2, label: "Identity", sub: "Mood, palette, type" },
+  { n: 3, label: "Audience", sub: "Who you're speaking to" },
+  { n: 4, label: "Strategy", sub: "Objective & cadence" },
+  { n: 5, label: "Config", sub: "Language, platforms" },
+  { n: 6, label: "Your words", sub: "One optional line" },
+  { n: 7, label: "Confirm", sub: "Review & finish" },
+] as const;
+
+const ANNOTATIONS: Record<number, string> = {
+  1: "Brand name is pre-filled from your account. Logo has no earlier source today, so this is a real, fresh upload.",
+  2: "Palette and essence hints come from the AI suggestion endpoint when available, and fall back to fixed presets if it's offline. Custom is the one escape hatch: a label + explicit hex values, never free text.",
+  3: "Sliders and chips instead of a “describe your ideal client” paragraph.",
+  4: "5 fixed objective cards instead of a goals paragraph.",
+  5: "Compliance is an explicit toggle — never inferred from text. Turning it on enforces AHPRA guardrails in code.",
+  6: "The only free-text moment in the whole flow, and it's optional.",
+  7: "Saving here writes the fixed schemaVersion: 2 object — enums and hex codes, plus one optional sentence.",
+};
+
+function emptyContract(tenantId: string, brandName: string): BrandDnaV2Contract {
+  return {
+    schemaVersion: 2,
+    technicianId: tenantId,
+    identity: { brandName, logoAssetId: null, palette: MOOD_META.SOFT_GLAM.palette, mood: "SOFT_GLAM", customMoodLabel: null, typography: { heading: null, body: null }, essence: [] },
+    offering: { serviceCategory: "", services: [], signatureHandle: null, serviceAreas: [] },
+    audience: { ageMin: 18, ageMax: 65, genderFocus: "ALL", clientTypes: [] },
+    strategy: { objective: "PREMIUM_CLIENTS", postsPerWeek: 3, bookingTargetPerMonth: 0 },
+    config: { languageVariant: "AU", platforms: { instagram: true, facebook: false, tiktok: false }, medicalAestheticsCompliance: false, useAssetLibrary: true },
+    story: { userWritten: null, aiDrafted: null },
+    meta: { completedAt: null, source: "guided_v2" },
+  };
 }
 
-function sectionDotStatus(id: string, r: BrandDnaRecord, locked: boolean): "done" | "partial" | "empty" | "locked" {
-  if (locked) return "locked";
-  const fill = sectionFill(id, r);
-  if (!fill || fill.total === 0) return "empty";
-  const pct = fill.filled / fill.total;
-  if (pct >= 0.99) return "done";
-  if (pct >= 0.33) return "partial";
-  return "empty";
+function paletteForMood(contract: BrandDnaV2Contract): string[] {
+  if (contract.identity.mood === "CUSTOM") return contract.identity.palette;
+  return MOOD_META[contract.identity.mood]?.palette ?? contract.identity.palette;
 }
 
-function StatusDot({ status, size = "sm" }: { status: "done" | "partial" | "empty" | "locked"; size?: "sm" | "md" }) {
-  const dim = size === "md" ? "w-2 h-2" : "w-[5px] h-[5px]";
-  const base = `${dim} rounded-full flex-shrink-0 transition-colors`;
-  if (status === "done")    return <div className={`${base} bg-sage`} />;
-  if (status === "partial") return <div className={`${base} border-2 border-taupe`} />;
-  if (status === "locked")  return <div className={`${base} border border-dashed border-taupe/40`} />;
-  return <div className={`${base} bg-border`} />;
+function moodLabel(contract: BrandDnaV2Contract): string {
+  return contract.identity.mood === "CUSTOM"
+    ? contract.identity.customMoodLabel || "Your custom mood"
+    : MOOD_META[contract.identity.mood]?.label ?? contract.identity.mood;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+type IdentitySuggestion = { moods: { id: string; label: string; palette: string[]; essenceHints: string[] }[]; typePairing: string };
 
-function BrandDnaForm() {
-  const [record, setRecord] = useState<BrandDnaRecord>(EMPTY_BRAND_DNA);
-  const [openSection, setOpenSection] = useState<string>(SECTIONS[0].id);
-  const [activeGroup, setActiveGroup] = useState<GroupName>("Brand");
-  const [saving, setSaving] = useState<"draft" | "published" | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [savedAt, setSavedAt] = useState<string | null>(null);
-  const [published, setPublished] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [currentTier, setCurrentTier] = useState<string>("free");
+// ── Small presentational pieces ─────────────────────────────────────────────
 
-  const patch = useCallback(
-    (partial: Partial<BrandDnaRecord>) => setRecord((prev) => ({ ...prev, ...partial })),
-    [],
+function Chip({ selected, disabled, onClick, children }: { selected?: boolean; disabled?: boolean; onClick?: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`rounded-full border px-4 py-2 text-sm transition-colors ${
+        selected ? "bg-brass border-brass text-white" : disabled ? "opacity-40 cursor-not-allowed border-border" : "border-border bg-background hover:border-taupe"
+      }`}
+    >
+      {children}
+    </button>
   );
+}
 
-  const completion = useMemo(() => computeCompletion(record), [record]);
+function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
+  return (
+    <div className="text-xs font-medium mb-2.5 flex items-center gap-2">
+      {children}
+      {hint && <span className="text-taupe font-normal">{hint}</span>}
+    </div>
+  );
+}
 
-  const jumpToSection = useCallback((id: SectionId) => {
-    const target = SECTIONS.find((s) => s.id === id);
-    if (!target) return;
-    setActiveGroup(target.group as GroupName);
-    setOpenSection(target.id);
-    window.setTimeout(() => {
-      document.getElementById(`section-${target.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 60);
-  }, []);
+function Stepper({ value, step = 1, onChange }: { value: number; step?: number; onChange: (v: number) => void }) {
+  return (
+    <div className="inline-flex items-center rounded-full border border-border overflow-hidden">
+      <button type="button" className="w-8 h-8 hover:bg-muted" onClick={() => onChange(Math.max(0, value - step))}>–</button>
+      <span className="w-12 text-center text-sm tabular-nums">{value}</span>
+      <button type="button" className="w-8 h-8 hover:bg-muted" onClick={() => onChange(value + step)}>+</button>
+    </div>
+  );
+}
 
-  const { section: sectionParam } = useSearch({ from: "/brand/onboarding" });
+function ToggleRow({ name, desc, on, onToggle }: { name: string; desc?: string; on: boolean; onToggle: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-3 border-b border-border/60 last:border-b-0">
+      <div>
+        <div className="text-sm">{name}</div>
+        {desc && <div className="text-xs text-taupe max-w-[40ch] mt-0.5 leading-relaxed">{desc}</div>}
+      </div>
+      <button
+        type="button"
+        onClick={onToggle}
+        className={`relative w-10 h-[23px] rounded-full flex-shrink-0 transition-colors ${on ? "bg-brass" : "bg-border"}`}
+      >
+        <span className={`absolute top-[2px] left-[2px] w-[19px] h-[19px] rounded-full bg-white shadow transition-transform ${on ? "translate-x-[17px]" : ""}`} />
+      </button>
+    </div>
+  );
+}
+
+// ── Main component ──────────────────────────────────────────────────────────
+
+function BrandDnaOnboardingV2() {
+  const { user } = useAuth();
+  const [step, setStep] = useState(1);
+  const [contract, setContract] = useState<BrandDnaV2Contract | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [identitySuggestion, setIdentitySuggestion] = useState<IdentitySuggestion | null>(null);
+  const [suggestLoading, setSuggestLoading] = useState<Record<number, boolean>>({});
+  const fetchedFor = useRef<Set<string>>(new Set());
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    Promise.all([
-      loadBrandDnaRecord(),
-      api.get("/auth/me").catch(() => null),
-    ]).then(([dnaRes, meRes]) => {
-      if (dnaRes.kind === "ok") setRecord(dnaRes.record);
-      const tier = meRes?.data?.data?.tenant?.subscriptionTier ?? "free";
-      setCurrentTier(tier);
-      if (sectionParam) {
-        window.setTimeout(() => jumpToSection(sectionParam as SectionId), 300);
+    (async () => {
+      try {
+        const res = await api.get("/brand-dna/v2");
+        const existing = res.data?.data ?? res.data;
+        if (existing) {
+          setContract(existing);
+        } else {
+          setContract(emptyContract(user?.tenant?.id ?? "", user?.tenant?.businessName ?? ""));
+        }
+      } catch {
+        setContract(emptyContract(user?.tenant?.id ?? "", user?.tenant?.businessName ?? ""));
+      } finally {
+        setLoading(false);
       }
-    }).finally(() => setLoading(false));
-  }, [sectionParam]);
-
-  const sectionsByGroup = useMemo(() => {
-    const map: Record<GroupName, SectionDef[]> = {
-      Brand: [], Visual: [], Voice: [], Commercial: [], Compliance: [], Output: [],
-    };
-    for (const s of SECTIONS) map[s.group as GroupName].push(s);
-    return map;
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function handleSave(status: "draft" | "published") {
-    setError(null);
-    setSaving(status);
-    const next: BrandDnaRecord = { ...record, draft_status: status };
-    const res = await saveBrandDnaRecord(next, status);
-    setSaving(null);
-    if (res.kind === "ok") {
-      setRecord(next);
-      setSavedAt(new Date().toLocaleTimeString());
-      if (status === "published") setPublished(true);
-    } else if (res.kind === "anon") {
-      setError("Please sign in to save your Brand DNA.");
-    } else {
-      setError(res.message);
+  const update = useCallback((patch: (c: BrandDnaV2Contract) => BrandDnaV2Contract) => {
+    setContract((prev) => (prev ? patch(prev) : prev));
+  }, []);
+
+  // Debounced autosave — per-step, resumable.
+  useEffect(() => {
+    if (!contract || loading) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      setSaving(true);
+      try {
+        await api.put("/brand-dna/v2", contract);
+      } catch {
+        // Silent — autosave retries on next change; explicit "Save & finish" on step 7 surfaces errors.
+      } finally {
+        setSaving(false);
+      }
+    }, 900);
+    return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
+  }, [contract, loading]);
+
+  const fetchIdentitySuggestion = useCallback(async () => {
+    if (!contract || fetchedFor.current.has("identity")) return;
+    fetchedFor.current.add("identity");
+    setSuggestLoading((s) => ({ ...s, 2: true }));
+    try {
+      const res = await api.post("/brand-dna/suggest/identity", {
+        serviceCategory: contract.offering.serviceCategory, services: contract.offering.services,
+      });
+      setIdentitySuggestion(res.data?.data ?? res.data);
+    } catch {
+      // Flag off or offline — fall back to static MOOD_META order, already the default render.
+    } finally {
+      setSuggestLoading((s) => ({ ...s, 2: false }));
     }
+  }, [contract]);
+
+  const fetchEssenceSuggestion = useCallback(async (mood: string) => {
+    const key = `essence:${mood}`;
+    if (fetchedFor.current.has(key)) return;
+    fetchedFor.current.add(key);
+    try {
+      const res = await api.post("/brand-dna/suggest/essence", { mood, services: contract?.offering.services ?? [] });
+      const suggestion = res.data?.data ?? res.data;
+      if (suggestion?.essence?.length) {
+        update((c) => (c.identity.essence.length === 0 ? { ...c, identity: { ...c.identity, essence: suggestion.essence.slice(0, 3) } } : c));
+      }
+    } catch { /* keep whatever is selected */ }
+  }, [contract, update]);
+
+  const fetchAudienceSuggestion = useCallback(async () => {
+    if (!contract || fetchedFor.current.has("audience")) return;
+    fetchedFor.current.add("audience");
+    try {
+      const res = await api.post("/brand-dna/suggest/audience", {
+        serviceCategory: contract.offering.serviceCategory, services: contract.offering.services,
+      });
+      const s = res.data?.data ?? res.data;
+      if (s) update((c) => ({ ...c, audience: { ...c.audience, ageMin: s.ageMin ?? c.audience.ageMin, ageMax: s.ageMax ?? c.audience.ageMax, genderFocus: s.genderFocus ?? c.audience.genderFocus, clientTypes: c.audience.clientTypes.length === 0 ? (s.clientTypes ?? []) : c.audience.clientTypes } }));
+    } catch { /* keep defaults */ }
+  }, [contract, update]);
+
+  const fetchStrategySuggestion = useCallback(async () => {
+    if (!contract || fetchedFor.current.has("strategy")) return;
+    fetchedFor.current.add("strategy");
+    try {
+      const res = await api.post("/brand-dna/suggest/strategy", { services: contract.offering.services });
+      const s = res.data?.data ?? res.data;
+      if (s) update((c) => ({ ...c, strategy: { objective: s.objective ?? c.strategy.objective, postsPerWeek: s.postsPerWeek ?? c.strategy.postsPerWeek, bookingTargetPerMonth: s.bookingTargetPerMonth ?? c.strategy.bookingTargetPerMonth } }));
+    } catch { /* keep defaults */ }
+  }, [contract, update]);
+
+  useEffect(() => {
+    if (loading || !contract) return;
+    if (step === 2) fetchIdentitySuggestion();
+    if (step === 3) fetchAudienceSuggestion();
+    if (step === 4) fetchStrategySuggestion();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, loading]);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLogoUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await api.post("/brand-dna/upload-logo", formData, { headers: { "Content-Type": "multipart/form-data" } });
+      const url = res.data?.data?.url ?? res.data?.url;
+      if (url) update((c) => ({ ...c, identity: { ...c.identity, logoAssetId: url } }));
+      toast.success("Logo uploaded.");
+    } catch {
+      toast.error("Logo upload failed. Please try again.");
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  const finish = async () => {
+    if (!contract) return;
+    setSaving(true);
+    try {
+      await api.put("/brand-dna/v2", { ...contract, meta: { ...contract.meta, completedAt: new Date().toISOString() } });
+      toast.success("Brand DNA saved.");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Couldn't save — please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading || !contract) {
+    return <div className="max-w-5xl mx-auto px-6 py-16 text-taupe text-sm">Loading your Brand DNA…</div>;
   }
 
-  if (published) {
-    return (
-      <div className="mt-6 lg:mt-10">
-        <p className="eyebrow mb-5">Brand DNA · Published</p>
-        <h1 className="page-title">
-          Saved to your <span className="italic">Brand DNA</span>.
-        </h1>
-        <p className="mt-6 text-base text-taupe leading-relaxed">
-          Generation will now read from this version. You can keep refining at any time.
-        </p>
-        <div className="artifact p-6 sm:p-10 max-w-2xl mt-8 flex flex-wrap items-center gap-4">
-          <Link to="/brand" className="bg-foreground text-offwhite px-6 py-3 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors">
-            View your Brand DNA
-          </Link>
-          <button onClick={() => setPublished(false)} className="text-[11px] uppercase tracking-[0.2em] text-taupe hover:text-foreground">
-            Edit again
+  const palette = paletteForMood(contract);
+
+  return (
+    <div className="max-w-[1180px] mx-auto px-6 py-8 pb-16">
+      <div className="flex items-baseline justify-between gap-4 mb-7 flex-wrap">
+        <h1 className="page-title">Brand DNA <em className="italic text-taupe font-normal">— Guided Setup</em></h1>
+        <div className="flex items-center gap-3.5">
+          <span className="text-xs text-taupe border border-border rounded-full px-3 py-1 tabular-nums">
+            {saving ? "Saving…" : `Step ${step} of 7`}
+          </span>
+          <Link to="/brand" className="text-sm text-taupe hover:text-foreground border-b border-transparent hover:border-taupe">Save &amp; exit</Link>
+        </div>
+      </div>
+
+      <div className="grid gap-7 items-start" style={{ gridTemplateColumns: "232px minmax(0,1fr) 320px" }}>
+        {/* RAIL */}
+        <nav className="flex flex-col gap-0.5 sticky top-6">
+          {STEPS.map((s) => (
+            <button
+              key={s.n}
+              onClick={() => setStep(s.n)}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-left ${
+                s.n === step ? "bg-card border border-border shadow-elevated" : "hover:bg-muted/60"
+              }`}
+            >
+              <span className={`w-6 h-6 rounded-full border flex items-center justify-center text-[11px] tabular-nums flex-shrink-0 ${
+                s.n === step ? "bg-brass border-brass text-white" : s.n < step ? "bg-sage border-sage text-white" : "border-border text-taupe"
+              }`}>
+                {s.n < step ? <Check className="size-3" /> : s.n}
+              </span>
+              <span className="text-[13.5px] leading-tight">
+                {s.label}
+                <span className="block text-[11px] text-taupe mt-0.5">{s.sub}</span>
+              </span>
+            </button>
+          ))}
+        </nav>
+
+        {/* PANEL */}
+        <div>
+          <div className="bg-card border border-border rounded-2xl shadow-elevated p-8 min-h-[480px]">
+
+            {step === 1 && (
+              <Step1Autofill contract={contract} update={update} onLogoUpload={handleLogoUpload} logoUploading={logoUploading} />
+            )}
+            {step === 2 && (
+              <Step2Identity contract={contract} update={update} suggestion={identitySuggestion} suggestLoading={!!suggestLoading[2]} onMoodChange={(mood) => fetchEssenceSuggestion(mood)} />
+            )}
+            {step === 3 && <Step3Audience contract={contract} update={update} />}
+            {step === 4 && <Step4Strategy contract={contract} update={update} />}
+            {step === 5 && <Step5Config contract={contract} update={update} />}
+            {step === 6 && <Step6Words contract={contract} update={update} />}
+            {step === 7 && <Step7Confirm contract={contract} palette={palette} />}
+
+            <div className="flex justify-between items-center mt-8 pt-5 border-t border-border/60">
+              <span className="text-xs text-taupe tabular-nums">Step {step} of 7</span>
+              <div className="flex gap-2.5">
+                {step > 1 && (
+                  <button onClick={() => setStep(step - 1)} className="rounded-full border border-border px-5 py-2.5 text-[13.5px] hover:bg-muted/60">Back</button>
+                )}
+                {step < 7 ? (
+                  <button onClick={() => setStep(step + 1)} className="rounded-full bg-charcoal text-offwhite px-5 py-2.5 text-[13.5px]">Continue</button>
+                ) : (
+                  <button onClick={finish} className="rounded-full bg-brass text-white px-5 py-2.5 text-[13.5px]">Save &amp; finish</button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 border border-dashed border-border rounded-xl px-4 py-3.5 text-xs text-taupe leading-relaxed">
+            <b className="text-foreground">Why this step, this way:</b> {ANNOTATIONS[step]}
+          </div>
+        </div>
+
+        {/* BRAND CARD */}
+        <div className="sticky top-6">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-taupe mb-2.5 pl-0.5">Live preview</div>
+          <BrandCard contract={contract} palette={palette} step={step} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Step 1 ───────────────────────────────────────────────────────────────────
+
+function Step1Autofill({ contract, update, onLogoUpload, logoUploading }: {
+  contract: BrandDnaV2Contract; update: (fn: (c: BrandDnaV2Contract) => BrandDnaV2Contract) => void;
+  onLogoUpload: (e: React.ChangeEvent<HTMLInputElement>) => void; logoUploading: boolean;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  return (
+    <div>
+      <div className="mb-6">
+        <h2 className="text-[1.7rem] mb-1.5">Let's start with what we already know</h2>
+        <p className="text-sm text-taupe max-w-[46ch] leading-relaxed">Confirm each one — nothing here needs typing from scratch, except your logo.</p>
+      </div>
+
+      <div className="mb-7">
+        <FieldLabel>Logo</FieldLabel>
+        <div className="flex items-center gap-4 border border-border rounded-xl p-4 bg-background">
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="w-[68px] h-[68px] rounded-xl border-[1.5px] border-dashed border-border bg-muted/60 flex items-center justify-center flex-shrink-0 overflow-hidden hover:border-taupe"
+          >
+            {logoUploading ? <span className="text-xs text-taupe">…</span> : contract.identity.logoAssetId ? (
+              <img src={contract.identity.logoAssetId} className="w-full h-full object-cover" />
+            ) : <Upload className="size-5 text-taupe" />}
+          </button>
+          <div>
+            <div className="text-[13.5px] mb-0.5">Upload your logo</div>
+            <div className="text-xs text-taupe max-w-[38ch] leading-relaxed">PNG or SVG with a transparent background works best.</div>
+            <button type="button" onClick={() => fileRef.current?.click()} className="mt-2 rounded-full border border-border px-4 py-1.5 text-xs hover:bg-muted/60">Choose file</button>
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onLogoUpload} />
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-7">
+        <FieldLabel>Brand name</FieldLabel>
+        <input
+          type="text"
+          value={contract.identity.brandName}
+          onChange={(e) => update((c) => ({ ...c, identity: { ...c.identity, brandName: e.target.value } }))}
+          className="w-full border border-border rounded-xl px-4 py-3 text-[15px] bg-background outline-none focus:border-brass focus:ring-2 focus:ring-brass/15"
+        />
+      </div>
+
+      <div>
+        <FieldLabel>Service category</FieldLabel>
+        <div className="flex flex-wrap gap-2">
+          {SERVICE_CATEGORIES.map((cat) => (
+            <Chip
+              key={cat.id}
+              selected={contract.offering.serviceCategory === cat.id}
+              onClick={() => update((c) => ({ ...c, offering: { ...c.offering, serviceCategory: cat.id, services: c.offering.services.includes(cat.id) ? c.offering.services : [...c.offering.services, cat.id] } }))}
+            >
+              {cat.label}
+            </Chip>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Step 2 ───────────────────────────────────────────────────────────────────
+
+function Step2Identity({ contract, update, suggestion, suggestLoading, onMoodChange }: {
+  contract: BrandDnaV2Contract; update: (fn: (c: BrandDnaV2Contract) => BrandDnaV2Contract) => void;
+  suggestion: IdentitySuggestion | null; suggestLoading: boolean; onMoodChange: (mood: string) => void;
+}) {
+  const moodOrder = suggestion?.moods?.length ? suggestion.moods.map((m) => m.id) : BRAND_MOODS;
+  const hintsById: Record<string, string> = {};
+  suggestion?.moods?.forEach((m) => { if (m.essenceHints?.[0]) hintsById[m.id] = m.essenceHints[0]; });
+
+  const selectMood = (mood: BrandMoodV2) => {
+    update((c) => {
+      const preset = mood !== "CUSTOM" ? (suggestion?.moods.find((m) => m.id === mood)?.palette ?? MOOD_META[mood as (typeof BRAND_MOODS)[number]].palette) : c.identity.palette;
+      return { ...c, identity: { ...c.identity, mood, palette: mood === "CUSTOM" ? (c.identity.palette.length === 5 ? c.identity.palette : ["#D9C9B8", "#8A7355", "#FFF8F0", "#5C4A34", "#2A2118"]) : preset } };
+    });
+    if (mood !== "CUSTOM") onMoodChange(mood);
+  };
+
+  return (
+    <div>
+      <div className="mb-6">
+        <h2 className="text-[1.7rem] mb-1.5">Pick the mood that feels like you</h2>
+        <p className="text-sm text-taupe max-w-[46ch] leading-relaxed">Each one comes with a starter palette. Swap anything — this is a first guess, not a final answer.{suggestLoading && " Personalising to your category…"}</p>
+      </div>
+
+      <div className="mb-6">
+        <FieldLabel>Mood</FieldLabel>
+        <div className="grid grid-cols-3 gap-3">
+          {moodOrder.map((id) => {
+            const meta = MOOD_META[id as (typeof BRAND_MOODS)[number]];
+            const pal = suggestion?.moods.find((m) => m.id === id)?.palette ?? meta.palette;
+            const selected = contract.identity.mood === id;
+            return (
+              <button
+                key={id}
+                onClick={() => selectMood(id as BrandMoodV2)}
+                className={`text-left rounded-2xl border-2 p-3.5 relative ${selected ? "border-brass shadow-elevated" : "border-border hover:border-taupe/40"}`}
+              >
+                {selected && <span className="absolute top-2.5 right-2.5 w-5 h-5 rounded-full bg-brass text-white flex items-center justify-center"><Check className="size-3" /></span>}
+                <div className="flex h-[30px] rounded-lg overflow-hidden mb-2.5">
+                  {pal.map((c, i) => <span key={i} className="flex-1" style={{ background: c }} />)}
+                </div>
+                <div className="font-serif text-[15px] mb-0.5">{meta.label}</div>
+                <div className="text-[11.5px] text-taupe leading-snug">{hintsById[id] || meta.hint}</div>
+              </button>
+            );
+          })}
+          <button
+            onClick={() => selectMood("CUSTOM")}
+            className={`text-left rounded-2xl border-2 border-dashed p-3.5 flex flex-col ${contract.identity.mood === "CUSTOM" ? "border-brass" : "border-border hover:border-taupe/40"}`}
+          >
+            <span className={`w-[30px] h-[30px] rounded-full border flex items-center justify-center text-base mb-2.5 ${contract.identity.mood === "CUSTOM" ? "border-brass text-brass" : "border-border text-taupe"}`}>+</span>
+            <div className="font-serif text-[15px] mb-0.5">Custom</div>
+            <div className="text-[11.5px] text-taupe leading-snug">Not feeling any of these? Name your own and pick 5 colours.</div>
           </button>
         </div>
       </div>
-    );
-  }
 
-  const activeSections = sectionsByGroup[activeGroup];
-
-  return (
-    <div className="mt-6 lg:mt-10">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-2 mb-6">
-        <Link to="/brand" className="text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors">Brand DNA</Link>
-        <span className="text-taupe/40 text-[10px]">/</span>
-        <span className="text-[10px] uppercase tracking-widest text-foreground font-medium">Full Brand DNA</span>
-      </div>
-
-      {/* Heading */}
-      <div className="flex flex-wrap items-center gap-3 mb-5">
-        <p className="eyebrow">Brand DNA</p>
-      </div>
-      <h1 className="page-title mb-5">
-        Your <span className="italic">brand bible</span>, built for AI.
-      </h1>
-      <p className="text-sm text-taupe leading-relaxed max-w-[60ch] mb-2">
-        Complete your Brand DNA so Elle.Be.O can create content that looks, sounds and feels like your brand. Save a draft any time — nothing is lost between sessions.
-      </p>
-      <p className="text-xs text-taupe/60 mb-5">
-        {loading ? "Loading your saved Brand DNA…" : "Live — changes save to your account."}
-      </p>
-
-      {/* Progress strip */}
-      <div className="flex items-center gap-4 sm:gap-5 py-3.5 mb-8 border-t border-b border-border/60">
-        <p className="text-[10px] uppercase tracking-[0.22em] text-taupe/70 whitespace-nowrap shrink-0">Brand DNA strength</p>
-        <div className="flex-1 h-px bg-border relative">
-          <div
-            className="absolute left-0 top-[-0.5px] h-[2px] bg-foreground transition-all duration-500"
-            style={{ width: `${Math.max(2, completion.percent)}%` }}
+      {contract.identity.mood === "CUSTOM" && (
+        <div className="mb-6">
+          <FieldLabel>Name your mood</FieldLabel>
+          <input
+            type="text"
+            placeholder="e.g. Coastal Editorial"
+            value={contract.identity.customMoodLabel ?? ""}
+            onChange={(e) => update((c) => ({ ...c, identity: { ...c.identity, customMoodLabel: e.target.value } }))}
+            className="w-full border border-border rounded-xl px-4 py-3 text-sm bg-background outline-none focus:border-brass focus:ring-2 focus:ring-brass/15"
           />
         </div>
-        <p className="font-serif text-lg leading-none shrink-0 tabular-nums">
-          {completion.percent}<span className="text-sm text-taupe">%</span>
-        </p>
-        <p className="text-[11px] text-taupe hidden sm:block whitespace-nowrap shrink-0">{completion.tier.label}</p>
+      )}
+
+      <div className="mb-6">
+        <FieldLabel hint={contract.identity.mood === "CUSTOM" ? "— pick your own" : "— from your chosen mood"}>Palette</FieldLabel>
+        <div className="flex gap-2.5 items-center">
+          {contract.identity.mood === "CUSTOM" ? (
+            paletteForMood(contract).map((c, i) => (
+              <input
+                key={i}
+                type="color"
+                value={c}
+                onChange={(e) => update((prev) => {
+                  const next = [...prev.identity.palette];
+                  next[i] = e.target.value;
+                  return { ...prev, identity: { ...prev.identity, palette: next } };
+                })}
+                className="w-10 h-10 rounded-lg border border-border cursor-pointer p-0"
+              />
+            ))
+          ) : (
+            paletteForMood(contract).map((c, i) => <div key={i} className="w-10 h-10 rounded-lg border border-border" style={{ background: c }} />)
+          )}
+        </div>
       </div>
 
-      {/* Group tabs — underline style with per-section status dots */}
-      <div role="tablist" className="flex gap-0 border-b border-border mb-8 overflow-x-auto">
-        {GROUPS.map((g) => {
-          const tabSections = sectionsByGroup[g].filter((s) => s.id !== "completion");
-          const active = g === activeGroup;
-          return (
-            <button
-              key={g}
-              role="tab"
-              aria-selected={active}
-              onClick={() => {
-                setActiveGroup(g);
-                const first = sectionsByGroup[g][0];
-                if (first) setOpenSection(first.id);
-              }}
-              className={
-                "flex flex-col items-start gap-1 px-4 sm:px-5 py-3 pb-[11px] border-b-2 -mb-px transition-colors whitespace-nowrap " +
-                (active ? "border-foreground" : "border-transparent hover:border-border/60")
-              }
-            >
-              <div className="flex items-center gap-2">
-                <span className={"text-[11px] uppercase tracking-[0.2em] transition-colors " + (active ? "text-foreground font-medium" : "text-taupe")}>
-                  {g}
-                </span>
-                <div className="flex gap-[3px] items-center">
-                  {tabSections.map((s) => {
-                    const lk = !!(SECTION_TIER_GATE[s.id] && tierRank(currentTier) < SECTION_TIER_GATE[s.id]!.minTier);
-                    return <StatusDot key={s.id} status={sectionDotStatus(s.id, record, lk)} size="sm" />;
-                  })}
-                </div>
-              </div>
-              <span className="text-[9px] text-taupe/50 tracking-[0.05em]">
-                {tabSections.length} {tabSections.length === 1 ? "section" : "sections"}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Two-column layout */}
-      <div className="grid grid-cols-12 gap-8 lg:gap-10">
-
-        {/* Accordion sections */}
-        <div className="col-span-12 lg:col-span-8 space-y-3">
-          {activeSections.map((s) => {
-            const gate = SECTION_TIER_GATE[s.id];
-            const softNote = SECTION_TIER_NOTE[s.id];
-            const locked = gate ? tierRank(currentTier) < gate.minTier : false;
-            const hasNote = !locked && softNote ? tierRank(currentTier) < softNote.minTier : false;
-            const open = !locked && openSection === s.id;
-            const dotSt = sectionDotStatus(s.id, record, locked);
-            const fill = !locked && !open ? sectionFill(s.id, record) : null;
-
+      <div className="mb-6">
+        <FieldLabel>Type pairing</FieldLabel>
+        <div className="grid grid-cols-2 gap-2.5">
+          {TYPE_PAIRINGS.map((id) => {
+            const meta = TYPE_META[id];
+            const selected = contract.identity.typography.heading === id;
             return (
-              <section key={s.id} id={`section-${s.id}`} className={"artifact scroll-mt-24 " + (locked ? "opacity-60" : "")}>
-                <button
-                  type="button"
-                  aria-expanded={open}
-                  onClick={() => !locked && setOpenSection(open ? "" : s.id)}
-                  className={"w-full text-left flex items-center gap-3.5 px-5 sm:px-6 py-4 transition-colors " + (locked ? "cursor-default" : "hover:bg-nude/10")}
-                >
-                  {/* Status dot */}
-                  <StatusDot status={dotSt} size="md" />
-
-                  {/* Title + badge + help */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h2 className="font-serif text-xl leading-snug">{s.title}</h2>
-                      {locked && (
-                        <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.15em] border border-border bg-muted text-taupe px-2 py-0.5 rounded-full">
-                          <Lock className="size-2.5" /> {gate?.label}
-                        </span>
-                      )}
-                      {hasNote && (
-                        <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.15em] border border-amber-200 bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">
-                          <Lock className="size-2.5" /> {softNote?.label}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-taupe mt-0.5 leading-relaxed">{s.help}</p>
-                    {hasNote && (
-                      <p className="text-[10px] text-amber-600/80 mt-1 leading-relaxed">{softNote?.note}</p>
-                    )}
-                  </div>
-
-                  {/* Fill chip — collapsed unlocked only */}
-                  {fill && (
-                    <span className={"text-[11px] whitespace-nowrap flex-shrink-0 tabular-nums " + (fill.filled > 0 ? "text-sage" : "text-taupe/40")}>
-                      {fill.filled} / {fill.total}
-                    </span>
-                  )}
-
-                  {/* Chevron or lock */}
-                  {!locked && (
-                    <span
-                      className={"text-base flex-shrink-0 leading-none transition-transform duration-200 " + (open ? "rotate-180 text-taupe" : "text-taupe/30")}
-                      aria-hidden
-                    >
-                      ▾
-                    </span>
-                  )}
-                  {locked && <Lock className="size-4 text-taupe/40 flex-shrink-0" aria-hidden />}
-                </button>
-
-                {locked && (
-                  <div className="border-t hairline px-5 sm:px-6 py-8 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                    <div className="size-10 rounded-xl bg-muted flex items-center justify-center shrink-0">
-                      <Lock className="size-4 text-taupe" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium mb-0.5">Upgrade to unlock this section</p>
-                      <p className="text-xs text-taupe leading-relaxed">
-                        This section is available on <span className="font-semibold text-foreground">{gate?.label}</span> and above.
-                      </p>
-                    </div>
-                    <Link
-                      to="/plans"
-                      className="shrink-0 bg-foreground text-offwhite px-5 py-2.5 text-[10px] uppercase tracking-[0.2em] hover:bg-taupe transition-colors inline-flex items-center gap-1.5"
-                    >
-                      View plans
-                    </Link>
-                  </div>
-                )}
-
-                {open && (
-                  <div className="border-t hairline px-5 sm:px-6 py-6">
-                    <SectionBody id={s.id} record={record} patch={patch} onJump={jumpToSection} />
-                  </div>
-                )}
-              </section>
+              <button
+                key={id}
+                onClick={() => update((c) => ({ ...c, identity: { ...c.identity, typography: { heading: id, body: id } } }))}
+                className={`text-left rounded-xl border-2 px-4 py-3.5 ${selected ? "border-brass bg-muted/40" : "border-border hover:border-taupe/40"}`}
+              >
+                <div className={`text-[26px] leading-none mb-1 ${meta.headClass}`}>Aa</div>
+                <div className="text-[11px] uppercase tracking-wide text-taupe">{meta.name}</div>
+              </button>
             );
           })}
         </div>
+      </div>
 
-        {/* Sticky sidebar */}
-        <aside className="col-span-12 lg:col-span-4 space-y-4">
-          {/* Strength score */}
-          <button
-            type="button"
-            onClick={() => jumpToSection("completion")}
-            className="artifact p-5 sm:p-6 w-full text-left hover:bg-nude/20 transition-colors"
-          >
-            <div className="flex items-center justify-between gap-3 mb-3">
-              <p className="eyebrow">Brand DNA strength</p>
-              <p className="text-[10px] uppercase tracking-widest text-taupe">View detail →</p>
-            </div>
-            <div className="flex items-end justify-between gap-3">
-              <p className="font-serif text-3xl leading-none tracking-tight">
-                {completion.percent}<span className="text-taupe text-xl">%</span>
-              </p>
-              <p className="text-xs text-foreground text-right max-w-[18ch] leading-snug">{completion.tier.label}</p>
-            </div>
-            <div className="mt-3 h-px bg-border relative" aria-hidden>
-              <div className="absolute left-0 bg-foreground" style={{ width: `${Math.max(2, completion.percent)}%`, height: "2px", top: "-0.5px" }} />
-            </div>
-            <p className="mt-3 text-xs text-taupe leading-relaxed">
-              {completion.nextSteps[0] || "Your Brand DNA is in great shape."}
-            </p>
-          </button>
-
-          {/* Save */}
-          <div className="artifact p-5 sm:p-6">
-            <p className="eyebrow mb-3">Save</p>
-            <p className="text-sm text-taupe leading-relaxed mb-5">
-              Save a draft any time, or publish to make this version the source of truth for generated content.
-            </p>
-            <div className="flex flex-col gap-3">
-              <button
-                onClick={() => handleSave("draft")}
-                disabled={saving !== null}
-                className="border hairline px-5 py-3 text-[11px] uppercase tracking-[0.22em] hover:bg-nude/30 transition-colors disabled:opacity-40 text-left"
+      <div>
+        <FieldLabel hint="— pick up to 3">Essence</FieldLabel>
+        <div className="flex flex-wrap gap-2">
+          {ESSENCE_WORDS.map((w) => {
+            const selected = contract.identity.essence.includes(w);
+            const atCap = contract.identity.essence.length >= 3 && !selected;
+            return (
+              <Chip
+                key={w}
+                selected={selected}
+                disabled={atCap}
+                onClick={() => update((c) => ({
+                  ...c,
+                  identity: {
+                    ...c.identity,
+                    essence: selected ? c.identity.essence.filter((e) => e !== w) : c.identity.essence.length < 3 ? [...c.identity.essence, w] : c.identity.essence,
+                  },
+                }))}
               >
-                {saving === "draft" ? "Saving draft…" : "Save as draft"}
-              </button>
-              <button
-                onClick={() => handleSave("published")}
-                disabled={saving !== null}
-                className="bg-foreground text-offwhite px-5 py-3 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors disabled:opacity-50 text-left"
-              >
-                {saving === "published" ? "Publishing…" : "Publish Brand DNA"}
-              </button>
-            </div>
-            {savedAt && !error && <p className="mt-4 text-xs text-sage">Saved at {savedAt}.</p>}
-            {error && (
-              <div className="mt-4 border hairline border-foreground/20 bg-nude/30 p-3 text-xs text-foreground">{error}</div>
-            )}
-          </div>
+                {w}
+              </Chip>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
 
-          {/* What this powers */}
-          <div className="artifact p-5 sm:p-6">
-            <p className="eyebrow mb-3">What this powers</p>
-            <p className="text-sm text-taupe leading-relaxed">
-              Elle.Be.O will use these details to shape your content style, captions and visual direction.
-            </p>
+// ── Step 3 ───────────────────────────────────────────────────────────────────
+
+function Step3Audience({ contract, update }: { contract: BrandDnaV2Contract; update: (fn: (c: BrandDnaV2Contract) => BrandDnaV2Contract) => void }) {
+  const [newType, setNewType] = useState("");
+  return (
+    <div>
+      <div className="mb-6">
+        <h2 className="text-[1.7rem] mb-1.5">Who are you speaking to?</h2>
+        <p className="text-sm text-taupe max-w-[46ch] leading-relaxed">A starting point for how the AI frames your captions and picks example imagery.</p>
+      </div>
+
+      <div className="mb-6">
+        <FieldLabel>Age range</FieldLabel>
+        <div className="flex items-center gap-3.5">
+          <span className="text-sm text-taupe w-8 text-right tabular-nums">{contract.audience.ageMin}</span>
+          <input type="range" min={13} max={80} value={contract.audience.ageMin} onChange={(e) => update((c) => ({ ...c, audience: { ...c.audience, ageMin: Number(e.target.value) } }))} className="flex-1 accent-brass" />
+          <input type="range" min={13} max={80} value={contract.audience.ageMax} onChange={(e) => update((c) => ({ ...c, audience: { ...c.audience, ageMax: Number(e.target.value) } }))} className="flex-1 accent-brass" />
+          <span className="text-sm text-taupe w-8 tabular-nums">{contract.audience.ageMax}</span>
+        </div>
+      </div>
+
+      <div className="mb-6">
+        <FieldLabel>Gender focus</FieldLabel>
+        <div className="flex gap-2">
+          {GENDER_FOCUS_OPTIONS.map((g) => (
+            <Chip key={g} selected={contract.audience.genderFocus === g} onClick={() => update((c) => ({ ...c, audience: { ...c.audience, genderFocus: g } }))}>
+              {g === "ALL" ? "Everyone" : g === "WOMEN" ? "Women" : "Men"}
+            </Chip>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <FieldLabel hint="— optional, add a few">Client types</FieldLabel>
+        <div className="flex flex-wrap gap-2 mb-2.5">
+          {contract.audience.clientTypes.map((t) => (
+            <Chip key={t} selected onClick={() => update((c) => ({ ...c, audience: { ...c.audience, clientTypes: c.audience.clientTypes.filter((x) => x !== t) } }))}>{t} ×</Chip>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input
+            value={newType}
+            onChange={(e) => setNewType(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && newType.trim()) {
+                update((c) => ({ ...c, audience: { ...c.audience, clientTypes: [...c.audience.clientTypes, newType.trim()] } }));
+                setNewType("");
+              }
+            }}
+            placeholder="e.g. Bridal parties"
+            className="flex-1 border border-border rounded-full px-4 py-2 text-sm bg-background outline-none focus:border-brass"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Step 4 ───────────────────────────────────────────────────────────────────
+
+function Step4Strategy({ contract, update }: { contract: BrandDnaV2Contract; update: (fn: (c: BrandDnaV2Contract) => BrandDnaV2Contract) => void }) {
+  return (
+    <div>
+      <div className="mb-6">
+        <h2 className="text-[1.7rem] mb-1.5">What's this content actually for?</h2>
+        <p className="text-sm text-taupe max-w-[46ch] leading-relaxed">Sets the tone and cadence — you can change this anytime from settings.</p>
+      </div>
+
+      <div className="mb-6">
+        <FieldLabel>Objective</FieldLabel>
+        <div className="flex flex-col gap-2">
+          {BRAND_OBJECTIVES.map((id) => {
+            const meta = OBJECTIVE_META[id];
+            const selected = contract.strategy.objective === id;
+            return (
+              <button
+                key={id}
+                onClick={() => update((c) => ({ ...c, strategy: { ...c.strategy, objective: id } }))}
+                className={`flex items-center gap-3.5 rounded-xl border-2 px-4 py-3.5 text-left ${selected ? "border-brass bg-muted/40" : "border-border hover:border-taupe/40"}`}
+              >
+                <span className={`w-[18px] h-[18px] rounded-full border-[1.5px] flex-shrink-0 ${selected ? "bg-brass border-brass" : "border-border"}`} />
+                <span>
+                  <span className="block text-sm">{meta.name}</span>
+                  <span className="block text-xs text-taupe">{meta.desc}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="mb-6">
+        <FieldLabel>Posts per week</FieldLabel>
+        <Stepper value={contract.strategy.postsPerWeek} onChange={(v) => update((c) => ({ ...c, strategy: { ...c.strategy, postsPerWeek: Math.max(0, v) } }))} />
+      </div>
+      <div>
+        <FieldLabel>Booking target per month</FieldLabel>
+        <Stepper value={contract.strategy.bookingTargetPerMonth} step={5} onChange={(v) => update((c) => ({ ...c, strategy: { ...c.strategy, bookingTargetPerMonth: Math.max(0, v) } }))} />
+      </div>
+    </div>
+  );
+}
+
+// ── Step 5 ───────────────────────────────────────────────────────────────────
+
+function Step5Config({ contract, update }: { contract: BrandDnaV2Contract; update: (fn: (c: BrandDnaV2Contract) => BrandDnaV2Contract) => void }) {
+  return (
+    <div>
+      <div className="mb-6">
+        <h2 className="text-[1.7rem] mb-1.5">A few settings</h2>
+        <p className="text-sm text-taupe max-w-[46ch] leading-relaxed">Smart defaults based on your profile — flip anything that's not right.</p>
+      </div>
+
+      <div className="mb-6">
+        <FieldLabel>Spelling &amp; language</FieldLabel>
+        <div className="flex gap-2">
+          {LANGUAGE_VARIANTS.map((l) => (
+            <Chip key={l} selected={contract.config.languageVariant === l} onClick={() => update((c) => ({ ...c, config: { ...c.config, languageVariant: l } }))}>
+              {l === "AU" ? "Australian (AU)" : l === "UK" ? "British (UK)" : "American (US)"}
+            </Chip>
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-6">
+        <FieldLabel>Platforms</FieldLabel>
+        <ToggleRow name="Instagram" on={contract.config.platforms.instagram} onToggle={() => update((c) => ({ ...c, config: { ...c.config, platforms: { ...c.config.platforms, instagram: !c.config.platforms.instagram } } }))} />
+        <ToggleRow name="Facebook" on={contract.config.platforms.facebook} onToggle={() => update((c) => ({ ...c, config: { ...c.config, platforms: { ...c.config.platforms, facebook: !c.config.platforms.facebook } } }))} />
+        <ToggleRow name="TikTok" on={contract.config.platforms.tiktok} onToggle={() => update((c) => ({ ...c, config: { ...c.config, platforms: { ...c.config.platforms, tiktok: !c.config.platforms.tiktok } } }))} />
+      </div>
+
+      <div>
+        <FieldLabel>Medical-aesthetics compliance</FieldLabel>
+        <ToggleRow
+          name="I'm a regulated practitioner (injectables, laser, etc.)"
+          desc="Turns on AHPRA-aware guardrails — no before/after claims, no outcome language."
+          on={contract.config.medicalAestheticsCompliance}
+          onToggle={() => update((c) => ({ ...c, config: { ...c.config, medicalAestheticsCompliance: !c.config.medicalAestheticsCompliance } }))}
+        />
+        {contract.config.medicalAestheticsCompliance && (
+          <div className="text-[11.5px] text-brass-ink bg-muted/50 rounded-lg px-3 py-2 mt-2 leading-relaxed">
+            AHPRA guardrails active: before/after claims and outcome language will be blocked in every generation, in code.
           </div>
-        </aside>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Step 6 ───────────────────────────────────────────────────────────────────
+
+function Step6Words({ contract, update }: { contract: BrandDnaV2Contract; update: (fn: (c: BrandDnaV2Contract) => BrandDnaV2Contract) => void }) {
+  const [drafting, setDrafting] = useState(false);
+  const draftForMe = async () => {
+    setDrafting(true);
+    try {
+      const res = await api.post("/brand-dna/draft-story", {
+        brandName: contract.identity.brandName, mood: contract.identity.mood, essence: contract.identity.essence,
+        serviceCategory: contract.offering.serviceCategory, objective: contract.strategy.objective,
+      });
+      const s = res.data?.data ?? res.data;
+      if (s?.aiDrafted) update((c) => ({ ...c, story: { ...c.story, aiDrafted: s.aiDrafted } }));
+    } catch {
+      toast.error("Couldn't draft one right now — try again in a moment.");
+    } finally {
+      setDrafting(false);
+    }
+  };
+  return (
+    <div>
+      <div className="mb-6">
+        <h2 className="text-[1.7rem] mb-1.5">Your words</h2>
+        <p className="text-sm text-taupe max-w-[46ch] leading-relaxed">One optional line, in your own voice. Skip it and we'll draft one from everything you've chosen so far.</p>
+      </div>
+      <FieldLabel hint="— optional">What makes your work special?</FieldLabel>
+      <textarea
+        value={contract.story.userWritten ?? ""}
+        onChange={(e) => update((c) => ({ ...c, story: { ...c.story, userWritten: e.target.value } }))}
+        placeholder="e.g. I map every set to your natural eye shape, not a template."
+        className="w-full min-h-[96px] border border-border rounded-xl px-3.5 py-3 text-sm bg-background outline-none focus:border-brass focus:ring-2 focus:ring-brass/15 resize-y"
+      />
+      <div className="flex gap-2.5 mt-2.5">
+        <button onClick={draftForMe} disabled={drafting} className="rounded-full border border-border px-4 py-2 text-[13.5px] hover:bg-muted/60 disabled:opacity-50">
+          {drafting ? "Drafting…" : "Skip — draft it for me"}
+        </button>
+      </div>
+      {contract.story.aiDrafted && !contract.story.userWritten && (
+        <div className="text-xs text-taupe mt-3 border border-dashed border-border rounded-lg p-3 leading-relaxed">
+          <b className="text-foreground">AI draft:</b> {contract.story.aiDrafted}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Step 7 ───────────────────────────────────────────────────────────────────
+
+function Step7Confirm({ contract, palette }: { contract: BrandDnaV2Contract; palette: string[] }) {
+  return (
+    <div>
+      <div className="mb-6">
+        <h2 className="text-[1.7rem] mb-1.5">This is your Brand DNA</h2>
+        <p className="text-sm text-taupe max-w-[46ch] leading-relaxed">Everything here feeds directly into your content — nothing else to fill in.</p>
+      </div>
+      <div className="text-xs text-taupe mb-3.5">Your full brand card is on the right. Here's how a real post would look with it applied →</div>
+      <div className="max-w-[280px]">
+        <SamplePost contract={contract} palette={palette} />
+      </div>
+    </div>
+  );
+}
+
+// ── Brand card + sample post ─────────────────────────────────────────────────
+
+function SamplePost({ contract, palette }: { contract: BrandDnaV2Contract; palette: string[] }) {
+  const caption = `${contract.identity.brandName} — ${moodLabel(contract).toLowerCase()} sets, crafted around you. ${contract.identity.essence.join(" · ").toLowerCase() || "crafted for you"}.`;
+  return (
+    <div className="border border-border rounded-xl overflow-hidden">
+      <div className="aspect-square flex items-center justify-center text-center px-4 font-serif italic text-[13px] text-white" style={{ background: `linear-gradient(155deg, ${palette[3]}, ${palette[0]})` }}>
+        "{caption.slice(0, 70)}…"
+      </div>
+      <div className="px-3 py-2.5 text-[11.5px] text-taupe leading-relaxed">
+        <b className="text-foreground font-medium">{contract.identity.brandName}</b> — {caption.replace(contract.identity.brandName + " — ", "")}
+      </div>
+    </div>
+  );
+}
+
+function BrandCard({ contract, palette, step }: { contract: BrandDnaV2Contract; palette: string[]; step: number }) {
+  return (
+    <div className="rounded-[18px] overflow-hidden border border-border shadow-elevated bg-card">
+      <div className="px-5.5 pt-6.5 pb-5 relative" style={{ background: `linear-gradient(155deg, ${palette[3]}, ${palette[1]})` }}>
+        <div className="w-10 h-10 rounded-lg bg-white/85 flex items-center justify-center font-serif text-[17px] mb-3.5 overflow-hidden">
+          {contract.identity.logoAssetId ? <img src={contract.identity.logoAssetId} className="w-full h-full object-cover" /> : contract.identity.brandName.charAt(0) || "?"}
+        </div>
+        <div className="font-serif text-2xl text-white mb-0.5">{contract.identity.brandName || "Your brand"}</div>
+        <div className="text-[11px] uppercase tracking-wide text-white/75">{moodLabel(contract)}</div>
+      </div>
+      <div className="flex h-2.5">
+        {palette.map((c, i) => <span key={i} className="flex-1" style={{ background: c }} />)}
+      </div>
+      <div className="px-5.5 py-5">
+        <div className="mb-4">
+          <div className="text-[10px] uppercase tracking-wide text-taupe mb-1.5">Essence</div>
+          <div className="flex flex-wrap gap-1.5">
+            {contract.identity.essence.length
+              ? contract.identity.essence.map((w) => <span key={w} className="text-[11px] border border-border rounded-full px-2.5 py-0.5">{w}</span>)
+              : <span className="text-[11px] border border-border rounded-full px-2.5 py-0.5 opacity-50">Not chosen yet</span>}
+          </div>
+        </div>
+        <div className="mb-4">
+          <div className="text-[10px] uppercase tracking-wide text-taupe mb-1.5">Sample post</div>
+          <SamplePost contract={contract} palette={palette} />
+        </div>
+        <div className="flex justify-between text-[11.5px] text-taupe mb-3.5">
+          <span>Objective</span>
+          <span>{OBJECTIVE_META[contract.strategy.objective]?.name ?? contract.strategy.objective}</span>
+        </div>
+        <div className="h-[5px] rounded-full bg-muted overflow-hidden">
+          <div className="h-full bg-brass rounded-full transition-[width]" style={{ width: `${Math.round((step / 7) * 100)}%` }} />
+        </div>
+        <div className="flex justify-between text-[11px] text-taupe mt-1.5">
+          <span>Step {step} of 7</span>
+          <span>{Math.round((step / 7) * 100)}%</span>
+        </div>
       </div>
     </div>
   );

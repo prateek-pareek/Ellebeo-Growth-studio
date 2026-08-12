@@ -1,10 +1,13 @@
-import { Controller, Post, Body, UseGuards, ServiceUnavailableException } from '@nestjs/common';
+import { Controller, Get, Put, Post, Body, Req, UseGuards, ServiceUnavailableException, BadRequestException } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { TenantStatusGuard } from '../../common/guards/tenant-status.guard';
 import { getRedisClient } from '../../config/redis.client';
+import { PrismaService } from '../../prisma/prisma.service';
 import { BrandDnaSuggestionChain } from './brand-dna-suggestion.chain';
 import { BrandDnaSuggestionCache } from './brand-dna-suggestion.cache';
+import { mapProfileToContract, mapContractToProfileData } from './brand-dna-v2.mapper';
+import { BrandDnaV2Contract } from './brand-dna-v2.types';
 import {
   SuggestIdentityDto, SuggestEssenceDto, SuggestAudienceDto, SuggestStrategyDto, DraftStoryDto,
 } from './dto/brand-dna-suggest.dto';
@@ -24,6 +27,46 @@ function assertGuidedV2Enabled(): void {
 export class BrandDnaV2Controller {
   private readonly chain = new BrandDnaSuggestionChain();
   private readonly cache = new BrandDnaSuggestionCache(getRedisClient());
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  @Get('v2')
+  async getProfile(@Req() req: any) {
+    assertGuidedV2Enabled();
+    const profile = await this.prisma.brandDnaProfile.findUnique({
+      where: { unique_current_brand_dna_profile: { tenantId: req.user.tenantId, isCurrent: true } },
+    });
+    return profile ? mapProfileToContract(profile) : null;
+  }
+
+  @Put('v2')
+  async saveProfile(@Req() req: any, @Body() contract: BrandDnaV2Contract) {
+    assertGuidedV2Enabled();
+    if (!contract?.identity?.brandName || !contract?.identity?.mood) {
+      throw new BadRequestException('identity.brandName and identity.mood are required');
+    }
+    if (contract.identity.mood === 'CUSTOM' && !contract.identity.customMoodLabel) {
+      throw new BadRequestException('identity.customMoodLabel is required when mood is CUSTOM');
+    }
+
+    const tenantId = req.user.tenantId;
+    const data = mapContractToProfileData(contract, tenantId);
+
+    try {
+      const existing = await this.prisma.brandDnaProfile.findUnique({
+        where: { unique_current_brand_dna_profile: { tenantId, isCurrent: true } },
+      });
+      const saved = existing
+        ? await this.prisma.brandDnaProfile.update({ where: { id: existing.id }, data })
+        : await this.prisma.brandDnaProfile.create({ data });
+      return mapProfileToContract(saved);
+    } catch (err: any) {
+      if (err?.code === 'P2000' || err?.name === 'PrismaClientValidationError') {
+        throw new BadRequestException('Invalid Brand DNA payload: ' + err.message);
+      }
+      throw err;
+    }
+  }
 
   @Post('suggest/identity')
   @Throttle({ default: { limit: 20, ttl: 60_000 } })

@@ -25,6 +25,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AppointmentsRouteImport } from './routes/appointments'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ConsentIdRouteImport } from './routes/consent.$id'
+import { Route as BrandOnboardingLegacyRouteImport } from './routes/brand.onboarding-legacy'
 import { Route as BrandOnboardingRouteImport } from './routes/brand.onboarding'
 
 const TemplatesRoute = TemplatesRouteImport.update({
@@ -107,6 +108,11 @@ const ConsentIdRoute = ConsentIdRouteImport.update({
   path: '/consent/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BrandOnboardingLegacyRoute = BrandOnboardingLegacyRouteImport.update({
+  id: '/onboarding-legacy',
+  path: '/onboarding-legacy',
+  getParentRoute: () => BrandRoute,
+} as any)
 const BrandOnboardingRoute = BrandOnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
@@ -130,6 +136,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/templates': typeof TemplatesRoute
   '/brand/onboarding': typeof BrandOnboardingRoute
+  '/brand/onboarding-legacy': typeof BrandOnboardingLegacyRoute
   '/consent/$id': typeof ConsentIdRoute
 }
 export interface FileRoutesByTo {
@@ -149,6 +156,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/templates': typeof TemplatesRoute
   '/brand/onboarding': typeof BrandOnboardingRoute
+  '/brand/onboarding-legacy': typeof BrandOnboardingLegacyRoute
   '/consent/$id': typeof ConsentIdRoute
 }
 export interface FileRoutesById {
@@ -169,6 +177,7 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/templates': typeof TemplatesRoute
   '/brand/onboarding': typeof BrandOnboardingRoute
+  '/brand/onboarding-legacy': typeof BrandOnboardingLegacyRoute
   '/consent/$id': typeof ConsentIdRoute
 }
 export interface FileRouteTypes {
@@ -190,6 +199,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/templates'
     | '/brand/onboarding'
+    | '/brand/onboarding-legacy'
     | '/consent/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -209,6 +219,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/templates'
     | '/brand/onboarding'
+    | '/brand/onboarding-legacy'
     | '/consent/$id'
   id:
     | '__root__'
@@ -228,6 +239,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/templates'
     | '/brand/onboarding'
+    | '/brand/onboarding-legacy'
     | '/consent/$id'
   fileRoutesById: FileRoutesById
 }
@@ -364,6 +376,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConsentIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/brand/onboarding-legacy': {
+      id: '/brand/onboarding-legacy'
+      path: '/onboarding-legacy'
+      fullPath: '/brand/onboarding-legacy'
+      preLoaderRoute: typeof BrandOnboardingLegacyRouteImport
+      parentRoute: typeof BrandRoute
+    }
     '/brand/onboarding': {
       id: '/brand/onboarding'
       path: '/onboarding'
@@ -376,10 +395,12 @@ declare module '@tanstack/react-router' {
 
 interface BrandRouteChildren {
   BrandOnboardingRoute: typeof BrandOnboardingRoute
+  BrandOnboardingLegacyRoute: typeof BrandOnboardingLegacyRoute
 }
 
 const BrandRouteChildren: BrandRouteChildren = {
   BrandOnboardingRoute: BrandOnboardingRoute,
+  BrandOnboardingLegacyRoute: BrandOnboardingLegacyRoute,
 }
 
 const BrandRouteWithChildren = BrandRoute._addFileChildren(BrandRouteChildren)

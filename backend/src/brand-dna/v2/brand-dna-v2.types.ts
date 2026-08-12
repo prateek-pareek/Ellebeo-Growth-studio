@@ -4,7 +4,10 @@
 
 import { BRAND_MOODS, BRAND_OBJECTIVES, GENDER_FOCUS_OPTIONS, LANGUAGE_VARIANTS } from './brand-dna-v2.constants';
 
-export type BrandMoodV2 = (typeof BRAND_MOODS)[number];
+// 'CUSTOM' is a user-selected escape hatch, never returned by the AI
+// suggestion endpoints (those only ever rank from BRAND_MOODS) — see
+// identity.customMoodLabel below for the free label that goes with it.
+export type BrandMoodV2 = (typeof BRAND_MOODS)[number] | 'CUSTOM';
 export type BrandObjectiveV2 = (typeof BRAND_OBJECTIVES)[number];
 export type GenderFocusV2 = (typeof GENDER_FOCUS_OPTIONS)[number];
 export type LanguageVariantV2 = (typeof LANGUAGE_VARIANTS)[number];
@@ -17,6 +20,7 @@ export interface BrandDnaV2Contract {
     logoAssetId: string | null;
     palette: string[];
     mood: BrandMoodV2;
+    customMoodLabel: string | null;
     typography: { heading: string | null; body: string | null };
     essence: string[];
   };

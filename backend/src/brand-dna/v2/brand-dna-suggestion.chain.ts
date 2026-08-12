@@ -81,11 +81,12 @@ Moods (in this exact set, use these ids only): ${BRAND_MOODS.join(', ')}
 JSON schema: { "rankedMoodIds": ["<mood id>", ...all 6, best fit first], "essenceHints": {"<mood id>": "one short phrase", ...}, "typePairing": "<one of ${TYPE_PAIRINGS.join(', ')}>" }`;
     const user = `Service category: ${cleanFreeText(input.serviceCategory, 100)}\nServices: ${(input.services ?? []).map((s) => cleanFreeText(s, 60)).join(', ')}`;
 
+    type PresetMood = (typeof BRAND_MOODS)[number];
     const raw = await this.callJson(system, user);
     const rankedIds = Array.isArray(raw.rankedMoodIds)
-      ? raw.rankedMoodIds.filter((id: unknown): id is BrandMoodV2 => BRAND_MOODS.includes(id as any))
+      ? raw.rankedMoodIds.filter((id: unknown): id is PresetMood => BRAND_MOODS.includes(id as any))
       : [];
-    const orderedIds = [...new Set([...rankedIds, ...BRAND_MOODS])] as BrandMoodV2[];
+    const orderedIds = [...new Set([...rankedIds, ...BRAND_MOODS])] as PresetMood[];
 
     const hints = typeof raw.essenceHints === 'object' && raw.essenceHints ? raw.essenceHints : {};
     const moods = orderedIds.map((id) => ({

@@ -33,7 +33,9 @@ export const TYPE_PAIRINGS = [
   "CLASSIC_SERIF", "MODERN_SANS", "EDITORIAL_MIX", "WARM_ROUNDED", "BOLD_DISPLAY", "SOFT_SCRIPT",
 ] as const;
 
-export type BrandMoodV2 = (typeof BRAND_MOODS)[number];
+// 'CUSTOM' is a user-selected escape hatch, never returned by the AI
+// suggestion endpoints — see identity.customMoodLabel below.
+export type BrandMoodV2 = (typeof BRAND_MOODS)[number] | "CUSTOM";
 export type BrandObjectiveV2 = (typeof BRAND_OBJECTIVES)[number];
 export type GenderFocusV2 = (typeof GENDER_FOCUS_OPTIONS)[number];
 export type LanguageVariantV2 = (typeof LANGUAGE_VARIANTS)[number];
@@ -46,6 +48,7 @@ export type BrandDnaV2Contract = {
     logoAssetId: string | null;
     palette: string[];
     mood: BrandMoodV2;
+    customMoodLabel: string | null;
     typography: { heading: string | null; body: string | null };
     essence: string[];
   };

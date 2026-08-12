@@ -429,6 +429,10 @@ enum BrandMood {
   NATURAL_ORGANIC
   BOLD_LUXE
   PLAYFUL_FRESH
+  // Escape hatch — technician names their own mood + picks their own 5
+  // colours instead of one of the 6 AI-suggested presets above. Never
+  // returned by the AI suggestion endpoints; user-selected only.
+  CUSTOM
 
   @@schema("platform")
 }
@@ -475,6 +479,7 @@ model BrandDnaProfile {
   logoAssetId       String?   @map("logo_asset_id") @db.VarChar(500)
   palette           String[]  @map("palette")
   mood              BrandMood @map("mood")
+  customMoodLabel   String?   @map("custom_mood_label") @db.VarChar(100)
   typographyHeading String?   @map("typography_heading") @db.VarChar(100)
   typographyBody    String?   @map("typography_body") @db.VarChar(100)
   essence           String[]  @map("essence")

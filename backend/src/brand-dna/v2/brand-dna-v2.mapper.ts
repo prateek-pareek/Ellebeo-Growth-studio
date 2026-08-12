@@ -1,5 +1,6 @@
-import { BrandDnaProfile } from '@prisma/client';
+import { BrandDnaProfile, Prisma } from '@prisma/client';
 import { BrandDNARecord } from '../../ai/types/job-payload.types';
+import { BrandDnaV2Contract } from './brand-dna-v2.types';
 
 // Adapts a BrandDnaProfile row (schemaVersion 2, BRAND_DNA_GUIDED_V2 —
 // /brand_dna_implementation_plan.md) into the legacy BrandDNARecord shape the
@@ -111,5 +112,104 @@ export function mapBrandDnaProfileToLegacyRecord(profile: BrandDnaProfile): Bran
     brandNeverLooksLike: null,
     lastUpdatedAt: profile.updatedAt,
     autoPopulated: profile.needsReview,
+  };
+}
+
+// Maps a stored BrandDnaProfile row to the nested wire contract the frontend
+// reads/writes (§4 of the plan) — the DB storage shape is flat/normalised,
+// this is the boundary where it becomes the grouped identity/offering/
+// audience/strategy/config/story object.
+export function mapProfileToContract(profile: BrandDnaProfile): BrandDnaV2Contract {
+  return {
+    schemaVersion: 2,
+    technicianId: profile.tenantId,
+    identity: {
+      brandName: profile.brandName,
+      logoAssetId: profile.logoAssetId,
+      palette: profile.palette,
+      mood: profile.mood as BrandDnaV2Contract['identity']['mood'],
+      customMoodLabel: profile.customMoodLabel,
+      typography: { heading: profile.typographyHeading, body: profile.typographyBody },
+      essence: profile.essence,
+    },
+    offering: {
+      serviceCategory: profile.serviceCategory,
+      services: profile.services,
+      signatureHandle: profile.signatureHandle,
+      serviceAreas: profile.serviceAreas,
+    },
+    audience: {
+      ageMin: profile.ageMin,
+      ageMax: profile.ageMax,
+      genderFocus: profile.genderFocus as BrandDnaV2Contract['audience']['genderFocus'],
+      clientTypes: profile.clientTypes,
+    },
+    strategy: {
+      objective: profile.objective as BrandDnaV2Contract['strategy']['objective'],
+      postsPerWeek: profile.postsPerWeek,
+      bookingTargetPerMonth: profile.bookingTargetPerMonth,
+    },
+    config: {
+      languageVariant: profile.languageVariant as BrandDnaV2Contract['config']['languageVariant'],
+      platforms: {
+        instagram: profile.platformInstagram,
+        facebook: profile.platformFacebook,
+        tiktok: profile.platformTiktok,
+      },
+      medicalAestheticsCompliance: profile.medicalAestheticsCompliance,
+      useAssetLibrary: profile.useAssetLibrary,
+    },
+    story: {
+      userWritten: profile.userWrittenStory,
+      aiDrafted: profile.aiDraftedStory,
+    },
+    meta: {
+      completedAt: profile.completedAt ? profile.completedAt.toISOString() : null,
+      source: 'guided_v2',
+    },
+  };
+}
+
+// Inverse of mapProfileToContract — the shape the PUT /brand-dna/v2 body maps
+// to for a Prisma create/update. needsReview is always false here: this path
+// is only reached by explicit technician confirmation, never a heuristic
+// migration guess (compare scripts/migrate-brand-dna-v2.ts, which sets it true).
+export function mapContractToProfileData(
+  contract: BrandDnaV2Contract,
+  tenantId: string,
+): Prisma.BrandDnaProfileUncheckedCreateInput {
+  return {
+    tenantId,
+    schemaVersion: 2,
+    isCurrent: true,
+    needsReview: false,
+    brandName: contract.identity.brandName,
+    logoAssetId: contract.identity.logoAssetId,
+    palette: contract.identity.palette,
+    mood: contract.identity.mood as any,
+    customMoodLabel: contract.identity.mood === 'CUSTOM' ? contract.identity.customMoodLabel : null,
+    typographyHeading: contract.identity.typography.heading,
+    typographyBody: contract.identity.typography.body,
+    essence: contract.identity.essence,
+    serviceCategory: contract.offering.serviceCategory,
+    services: contract.offering.services,
+    signatureHandle: contract.offering.signatureHandle,
+    serviceAreas: contract.offering.serviceAreas,
+    ageMin: contract.audience.ageMin,
+    ageMax: contract.audience.ageMax,
+    genderFocus: contract.audience.genderFocus as any,
+    clientTypes: contract.audience.clientTypes,
+    objective: contract.strategy.objective as any,
+    postsPerWeek: contract.strategy.postsPerWeek,
+    bookingTargetPerMonth: contract.strategy.bookingTargetPerMonth,
+    languageVariant: contract.config.languageVariant as any,
+    platformInstagram: contract.config.platforms.instagram,
+    platformFacebook: contract.config.platforms.facebook,
+    platformTiktok: contract.config.platforms.tiktok,
+    medicalAestheticsCompliance: contract.config.medicalAestheticsCompliance,
+    useAssetLibrary: contract.config.useAssetLibrary,
+    userWrittenStory: contract.story.userWritten,
+    aiDraftedStory: contract.story.aiDrafted,
+    completedAt: contract.meta.completedAt ? new Date(contract.meta.completedAt) : new Date(),
   };
 }
