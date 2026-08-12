@@ -8,16 +8,20 @@
 // flow (schedule.controller.ts) picks it up unchanged, same reuse as Phase 2.
 // ============================================================================
 
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { parseVideoPlan, VideoPlan } from './video-plan.schema';
 import { videoRenderQueue } from '../queues/queue.definitions';
 import { AI_CONFIG } from '../../config/ai.config';
 import type { UpdateVideoPlanDto } from './dto/video-plan.dto';
+import { FeatureFlagService, GROWTH_STUDIO_VIDEO_FLAG } from '../../feature-flags/feature-flag.service';
 
 @Injectable()
 export class VideoPlanService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly featureFlagService: FeatureFlagService,
+  ) {}
 
   async listVideoPlans(tenantId: string, status?: string) {
     return this.prisma.videoPlan.findMany({
@@ -54,6 +58,11 @@ export class VideoPlanService {
   }
 
   async approveVideoPlan(tenantId: string, id: string) {
+    const flagEnabled = await this.featureFlagService.isEnabled(GROWTH_STUDIO_VIDEO_FLAG, tenantId);
+    if (!flagEnabled) {
+      throw new ForbiddenException('Video pipeline is not enabled for this account');
+    }
+
     const row = await this.getVideoPlan(tenantId, id);
     if (row.status === 'rendering' || row.status === 'rendered') {
       throw new BadRequestException(`Video plan is already ${row.status}`);

@@ -4,7 +4,7 @@ jest.mock('../queues/queue.definitions', () => ({
 
 import { VideoPlanService } from './video-plan.service';
 import { videoRenderQueue } from '../queues/queue.definitions';
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { parseVideoPlan } from './video-plan.schema';
 
 function makePlan(overrides: Record<string, any> = {}) {
@@ -33,6 +33,10 @@ function makeRow(overrides: Record<string, any> = {}) {
   return { id: 'plan-1', tenantId: 'tenant-1', status: 'in_review', plan: makePlan(), ...overrides };
 }
 
+function makeFeatureFlagService(enabled = true) {
+  return { isEnabled: jest.fn().mockResolvedValue(enabled) } as any;
+}
+
 function makeMockPrisma(row: ReturnType<typeof makeRow>) {
   let current = row;
   return {
@@ -56,13 +60,13 @@ describe('VideoPlanService', () => {
     it('throws NotFoundException when the plan belongs to a different tenant', async () => {
       const row = makeRow({ tenantId: 'other-tenant' });
       const prisma = makeMockPrisma(row);
-      const service = new VideoPlanService(prisma as any);
+      const service = new VideoPlanService(prisma as any, makeFeatureFlagService());
       await expect(service.getVideoPlan('tenant-1', 'plan-1')).rejects.toThrow(NotFoundException);
     });
 
     it('throws NotFoundException when the plan does not exist', async () => {
       const prisma = { videoPlan: { findUnique: jest.fn().mockResolvedValue(null) } };
-      const service = new VideoPlanService(prisma as any);
+      const service = new VideoPlanService(prisma as any, makeFeatureFlagService());
       await expect(service.getVideoPlan('tenant-1', 'missing')).rejects.toThrow(NotFoundException);
     });
   });
@@ -70,7 +74,7 @@ describe('VideoPlanService', () => {
   describe('updateVideoPlan', () => {
     it('edits a scene headline/caption/assetUrl by index', async () => {
       const prisma = makeMockPrisma(makeRow());
-      const service = new VideoPlanService(prisma as any);
+      const service = new VideoPlanService(prisma as any, makeFeatureFlagService());
 
       const updated: any = await service.updateVideoPlan('tenant-1', 'plan-1', {
         scenes: [{ index: 0, headline: 'New Headline', assetUrl: 'https://cdn.example.com/new.jpg' }],
@@ -84,7 +88,7 @@ describe('VideoPlanService', () => {
 
     it('reorders scenes given the old indices in new order', async () => {
       const prisma = makeMockPrisma(makeRow());
-      const service = new VideoPlanService(prisma as any);
+      const service = new VideoPlanService(prisma as any, makeFeatureFlagService());
 
       const updated: any = await service.updateVideoPlan('tenant-1', 'plan-1', { sceneOrder: [1, 0] });
 
@@ -96,13 +100,13 @@ describe('VideoPlanService', () => {
 
     it('throws when sceneOrder does not contain every scene exactly once', async () => {
       const prisma = makeMockPrisma(makeRow());
-      const service = new VideoPlanService(prisma as any);
+      const service = new VideoPlanService(prisma as any, makeFeatureFlagService());
       await expect(service.updateVideoPlan('tenant-1', 'plan-1', { sceneOrder: [0, 0] })).rejects.toThrow(BadRequestException);
     });
 
     it('throws when editing a scene index that does not exist', async () => {
       const prisma = makeMockPrisma(makeRow());
-      const service = new VideoPlanService(prisma as any);
+      const service = new VideoPlanService(prisma as any, makeFeatureFlagService());
       await expect(
         service.updateVideoPlan('tenant-1', 'plan-1', { scenes: [{ index: 99, headline: 'x' }] }),
       ).rejects.toThrow(BadRequestException);
@@ -110,7 +114,7 @@ describe('VideoPlanService', () => {
 
     it('toggles voiceoverEnabled and sets music mood', async () => {
       const prisma = makeMockPrisma(makeRow());
-      const service = new VideoPlanService(prisma as any);
+      const service = new VideoPlanService(prisma as any, makeFeatureFlagService());
 
       const updated: any = await service.updateVideoPlan('tenant-1', 'plan-1', { voiceoverEnabled: true, musicMood: 'upbeat' });
 
@@ -120,7 +124,7 @@ describe('VideoPlanService', () => {
 
     it('refuses to edit a plan that is already rendering/rendered/published', async () => {
       const prisma = makeMockPrisma(makeRow({ status: 'rendered' }));
-      const service = new VideoPlanService(prisma as any);
+      const service = new VideoPlanService(prisma as any, makeFeatureFlagService());
       await expect(
         service.updateVideoPlan('tenant-1', 'plan-1', { scenes: [{ index: 0, headline: 'x' }] }),
       ).rejects.toThrow(BadRequestException);
@@ -130,7 +134,7 @@ describe('VideoPlanService', () => {
   describe('approveVideoPlan', () => {
     it('sets status to edited and enqueues a video-render job', async () => {
       const prisma = makeMockPrisma(makeRow());
-      const service = new VideoPlanService(prisma as any);
+      const service = new VideoPlanService(prisma as any, makeFeatureFlagService());
 
       await service.approveVideoPlan('tenant-1', 'plan-1');
 
@@ -143,8 +147,18 @@ describe('VideoPlanService', () => {
 
     it('refuses to approve a plan that is already rendering', async () => {
       const prisma = makeMockPrisma(makeRow({ status: 'rendering' }));
-      const service = new VideoPlanService(prisma as any);
+      const service = new VideoPlanService(prisma as any, makeFeatureFlagService());
       await expect(service.approveVideoPlan('tenant-1', 'plan-1')).rejects.toThrow(BadRequestException);
+      expect(videoRenderQueue.add).not.toHaveBeenCalled();
+    });
+
+    it('refuses to approve when GROWTH_STUDIO_VIDEO is disabled for this tenant', async () => {
+      const prisma = makeMockPrisma(makeRow());
+      const featureFlagService = makeFeatureFlagService(false);
+      const service = new VideoPlanService(prisma as any, featureFlagService);
+
+      await expect(service.approveVideoPlan('tenant-1', 'plan-1')).rejects.toThrow(ForbiddenException);
+      expect(featureFlagService.isEnabled).toHaveBeenCalledWith('GROWTH_STUDIO_VIDEO', 'tenant-1');
       expect(videoRenderQueue.add).not.toHaveBeenCalled();
     });
   });

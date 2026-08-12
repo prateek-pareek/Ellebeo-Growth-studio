@@ -140,16 +140,23 @@ narrative log.
 - `npx vite build` surfaced (and regenerated) `frontend/src/routeTree.gen.ts` — TanStack Router's auto-generated route registry — to pick up the new `/video` route. Pre-existing unrelated build failures (`firebase/auth`, `socket.io-client` missing packages, same category as the backend's missing-module gaps) block a full production bundle in this environment; not caused by this phase's changes.
 
 ## Phase 9 — Flag, observability, rollout
-- [ ] `GROWTH_STUDIO_VIDEO` — needs backend-persisted flag system (current frontend stub has no backend table)
-- [ ] Trace every agent call (inputs/output/tools/tokens/latency/cost) tied to videoJobId
-- [ ] Events: video_started, plan_drafted, assets_ready, critic_scored, revision_requested, render_submitted, render_completed, render_failed, published
-- [ ] Staged rollout notes
-- [ ] Self-test: full run reconstructable from persisted traces
-- [ ] GATE (final)
+- [x] `GROWTH_STUDIO_VIDEO` — backend-persisted flag system: `FeatureFlag` Prisma model (`key`, `enabled`, `rolloutPercentage`), `FeatureFlagService.isEnabled(key, tenantId)` with deterministic per-tenant bucketing so a tenant doesn't flip in/out as the percentage ratchets up, `GET /feature-flags/:key` endpoint, frontend `feature-flags.ts` extended to fetch it (fails closed on error/signed-out), gates `VideoPlanService.approveVideoPlan` and `video-director.worker.ts`, and hides the `/video` nav link when off
+- [x] Trace every agent call (inputs/output/tools/tokens/latency/cost) tied to videoJobId — `VideoPipelineEvent` model + `VideoTraceService`, `agent_call` events on every Script/Critic/Compliance call with `tokensUsed`; **`latencyMs`/`costUsd` columns exist but aren't populated yet** — `runToolAgent` doesn't currently measure wall-clock time or compute a dollar cost per call, only cumulative `tokensUsed`. Flagging honestly: full cost/latency tracking is a real gap, not just an unused column.
+- [x] Events: video_started, plan_drafted, assets_ready, critic_scored, revision_requested, render_submitted, render_completed, render_failed — all wired into `DirectorService` and `VideoRenderService`. **`published` is not wired** — it would need a hook into the schedule module's publish flow, which is unrelated existing code this phase didn't touch; the event type exists in the enum for when that integration happens.
+- [x] Staged rollout notes — see below
+- [x] Self-test: full run reconstructable from persisted traces — `director.service.spec.ts`'s "observability (Phase 9)" test: a run with one critic revision produces an 11-event ordered trace (`video_started` → ... → `compliance_reviewed` → `assets_ready`), every event tied to the same `videoPlanId`/`tenantId`, and the critic-score sequence (0.4 → 0.85) plus the `revision_requested` payload's `weakSceneIndices` let the narrative — why the revision happened — be reconstructed from the trace alone
+- [x] GATE (final) — presented below
 
-## Known blocking gaps (from Phase 0)
-1. No Anthropic tool-use wrapper — must build from scratch (Phase 3)
-2. No webhook receivers for external providers — Shotstack currently polls (Phase 2)
-3. No Runway integration (Phase 7)
-4. No TikTok publisher — only Instagram/Facebook exist (Phase 8, may need separate follow-up)
-5. Feature-flag system is a frontend-only stub, no backend persistence (Phase 9)
+**Design notes:**
+- One table (`VideoPipelineEvent`), not two, for both "trace every agent call" and "emit lifecycle events" — a single `createdAt`-ordered stream is what "reconstructable" actually needs; splitting them would only make reconstruction harder. `eventType: 'agent_call'` rows carry `agentName`/`tokensUsed`; the named lifecycle events carry a `payload` Json blob with context (score, weak indices, output url, etc).
+- Tracing is deliberately best-effort: `VideoTraceService.record()` swallows every error (`console.error` only) so a trace-write failure can never fail the pipeline step it's observing — same posture as the existing worker `.on('failed')` handlers. Verified by test (`video-trace.service.spec.ts`): a rejected `prisma.videoPipelineEvent.create()` resolves cleanly rather than throwing.
+- Feature flag rollout uses a deterministic hash bucket (`sha256(tenantId) % 100`), not random sampling — the same tenant always lands in the same 0-99 bucket, so raising `rolloutPercentage` from say 10 to 25 only *adds* tenants to the enabled set, never removes one that was already in. Verified by test.
+- **Staged rollout notes** (process, not code — nothing to build here): seed the `feature_flags` table with `GROWTH_STUDIO_VIDEO: { enabled: false, rolloutPercentage: 0 }` (closed by default) in every environment. Turn on for staging first (`enabled: true, rolloutPercentage: 100` in the staging DB only). In production, flip `enabled: true` at `rolloutPercentage: 0` (no-op, confirms the flag plumbing itself works), then ratchet the percentage up in small steps while watching the metrics the spec names: render success rate (`render_completed` vs `render_failed` ratio), time-to-render (`render_submitted` → `render_completed`/`render_failed` gap), critic pass rate (`critic_scored` payload `passed`), revisions/video (`VideoPlan.criticRevisions`), cost/video (blocked on the latency/cost gap above — `tokensUsed` alone isn't a dollar figure). No dashboard or alerting was built this phase; the event stream is queryable via `VideoTraceService.getRunHistory()` and the `VideoPlan` denormalized columns, which is enough to compute these by hand or wire into existing tooling later.
+- Two known gaps carried forward openly rather than silently: no per-call cost/latency instrumentation (noted above), and `published` has no code path yet (would touch the schedule module, out of scope this phase).
+
+## Known blocking gaps (from Phase 0) — final status
+1. No Anthropic tool-use wrapper — **closed**, built from scratch in Phase 3 (`runToolAgent`)
+2. No webhook receivers for external providers — **closed** for Shotstack in Phase 2; Runway (Phase 7) still polls, a follow-up
+3. No Runway integration — **closed** in Phase 7 (`RunwayVideoClipProvider`)
+4. No TikTok publisher — **still open**, only Instagram/Facebook exist; out of scope for the video pipeline itself, a separate follow-up
+5. Feature-flag system was a frontend-only stub — **closed** in Phase 9 (`FeatureFlag` table + `FeatureFlagService`)

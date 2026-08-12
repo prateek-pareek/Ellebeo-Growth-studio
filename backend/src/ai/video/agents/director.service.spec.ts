@@ -42,6 +42,9 @@ function makeMockPrisma() {
         return Promise.resolve(created);
       }),
     },
+    videoPipelineEvent: {
+      create: jest.fn().mockResolvedValue({}),
+    },
   };
 }
 
@@ -376,5 +379,66 @@ describe('DirectorService — compliance hard gate (medicalAesthetics: true)', (
     expect(runScriptAgent).toHaveBeenCalledTimes(2);
     expect(result.plan.scenes[0]!.text.headline).toBe('Book your consultation');
     expect(result.plan.critic.notes.some((n) => n.includes('Compliance agent'))).toBe(true);
+  });
+});
+
+// Phase 9 required self-test: "a full run is reconstructable from persisted
+// traces." Proves the Director actually writes a coherent, ordered event
+// stream — not just that render/critic/compliance logic works in isolation.
+describe('DirectorService — observability (Phase 9)', () => {
+  beforeEach(() => {
+    (runScriptAgent as jest.Mock).mockReset();
+    (runCriticAgent as jest.Mock).mockReset();
+    (runComplianceAgent as jest.Mock).mockReset().mockResolvedValue(CLEAN_COMPLIANCE_REVIEW);
+  });
+
+  it('a run with one critic revision produces a coherent, ordered trace a full narrative can be reconstructed from', async () => {
+    (runScriptAgent as jest.Mock)
+      .mockResolvedValueOnce({
+        output: { scenes: [{ index: 0, headline: 'Generic Sale', caption: null }, { index: 1, headline: 'Book Today', caption: null }] },
+        toolCallCount: 0, tokensUsed: 100, repaired: false,
+      })
+      .mockResolvedValueOnce({
+        output: { scenes: [{ index: 0, headline: 'Your Glow Starts Here', caption: null }] },
+        toolCallCount: 0, tokensUsed: 40, repaired: false,
+      });
+    (runCriticAgent as jest.Mock)
+      .mockResolvedValueOnce({ score: 0.4, passed: false, weakSceneIndices: [0], notes: ['Scene 0 hook is generic'], tokensUsed: 55 })
+      .mockResolvedValueOnce({ score: 0.85, passed: true, weakSceneIndices: [], notes: ['Much stronger now'], tokensUsed: 55 });
+
+    const prisma = makeMockPrisma();
+    const director = new DirectorService(prisma as any);
+
+    await director.draftSlideshowPlan(baseParams);
+
+    const events = (prisma.videoPipelineEvent.create as jest.Mock).mock.calls.map((call) => call[0].data);
+
+    // Every event is tied to the same plan and tenant — a run is filterable by videoPlanId alone.
+    for (const e of events) {
+      expect(e.videoPlanId).toBe('plan-1');
+      expect(e.tenantId).toBe(baseParams.tenantId);
+    }
+
+    const eventTypes = events.map((e) => e.eventType);
+    expect(eventTypes).toEqual([
+      'video_started',
+      'agent_call', // script (initial draft)
+      'plan_drafted',
+      'agent_call', // critic (initial)
+      'critic_scored',
+      'revision_requested',
+      'agent_call', // script (targeted revision)
+      'agent_call', // critic (re-critique)
+      'critic_scored',
+      'compliance_reviewed',
+      'assets_ready',
+    ]);
+
+    // The narrative is reconstructable: the revision was requested because the
+    // first critique failed, and the second critique reflects the fix.
+    const scores = events.filter((e) => e.eventType === 'critic_scored').map((e) => e.payload.score);
+    expect(scores).toEqual([0.4, 0.85]);
+    const revisionEvent = events.find((e) => e.eventType === 'revision_requested');
+    expect(revisionEvent.payload.weakSceneIndices).toEqual([0]);
   });
 });

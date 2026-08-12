@@ -10,6 +10,7 @@ import { PrismaClient } from '@prisma/client';
 import { AI_CONFIG } from '../../config/ai.config';
 import { DirectorService } from './agents/director.service';
 import { isMedicalAestheticsBrand } from '../config/medical-compliance';
+import { FeatureFlagService, GROWTH_STUDIO_VIDEO_FLAG } from '../../feature-flags/feature-flag.service';
 import type { VideoDirectorJobPayload } from '../queues/queue.definitions';
 import type { VideoPlan } from './video-plan.schema';
 
@@ -22,11 +23,17 @@ const bullMQConnection = {
 
 export function startVideoDirectorWorker(prisma: PrismaClient): Worker<VideoDirectorJobPayload> {
   const director = new DirectorService(prisma);
+  const featureFlagService = new FeatureFlagService(prisma as any);
 
   const worker = new Worker<VideoDirectorJobPayload>(
     AI_CONFIG.queues.videoDirector.name,
     async (job: Job<VideoDirectorJobPayload>) => {
       const { tenantId, appointmentId, clientId, technicianId, brandDnaId, imageUrls, objective, videoType } = job.data;
+
+      const flagEnabled = await featureFlagService.isEnabled(GROWTH_STUDIO_VIDEO_FLAG, tenantId);
+      if (!flagEnabled) {
+        throw new Error(`GROWTH_STUDIO_VIDEO is not enabled for tenant ${tenantId}`);
+      }
 
       const brandDna = await prisma.brandDNA.findUnique({ where: { id: brandDnaId } });
       if (!brandDna || brandDna.tenantId !== tenantId) {

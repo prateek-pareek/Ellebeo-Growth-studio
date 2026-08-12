@@ -4,8 +4,10 @@ import { VideoWebhookController } from './video-webhook.controller';
 import { VideoPlanController } from './video-plan.controller';
 import { VideoRenderService } from './video-render.service';
 import { VideoPlanService } from './video-plan.service';
+import { FeatureFlagModule } from '../../feature-flags/feature-flag.module';
 
 @Module({
+  imports: [FeatureFlagModule],
   controllers: [VideoWebhookController, VideoPlanController],
   providers: [
     {

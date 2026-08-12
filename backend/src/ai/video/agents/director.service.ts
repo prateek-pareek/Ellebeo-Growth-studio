@@ -26,6 +26,7 @@ import { AiClipsAssetProvider } from '../assets/ai-clips-asset-provider';
 import type { AssetProvider, SceneCopy } from '../assets/asset-provider';
 import { filterClientPhotos } from '../compliance/client-photo-gate';
 import { filterSceneCopyForCompliance } from '../compliance/copy-compliance-gate';
+import { VideoTraceService } from '../tracing/video-trace.service';
 
 export class DirectorError extends Error {
   constructor(message: string) {
@@ -98,7 +99,11 @@ export interface DraftAiClipsPlanParams {
 }
 
 export class DirectorService {
-  constructor(private readonly prisma: PrismaClient) {}
+  private readonly trace: VideoTraceService;
+
+  constructor(private readonly prisma: PrismaClient) {
+    this.trace = new VideoTraceService(prisma);
+  }
 
   async draftSlideshowPlan(params: DraftSlideshowPlanParams): Promise<DraftSlideshowPlanResult> {
     if (params.imageUrls.length === 0) {
@@ -145,6 +150,7 @@ export class DirectorService {
         plan: placeholderPlan,
       },
     });
+    await this.trace.record({ videoPlanId: row.id, tenantId: params.tenantId, eventType: 'video_started', payload: { videoType: 'slideshow' } });
 
     // Step 2: Script agent drafts, Critic agent reviews, targeted revisions
     // loop bounded to MAX_CRITIC_REVISIONS.
@@ -158,13 +164,17 @@ export class DirectorService {
         medicalAesthetics: params.medicalAesthetics ?? false,
         client: params.anthropicClient,
       });
+      await this.trace.record({ videoPlanId: row.id, tenantId: params.tenantId, eventType: 'agent_call', agentName: 'script', tokensUsed: initialScript.tokensUsed });
       const initialSceneCopy: SceneCopy[] = initialScript.output.scenes.map((s) => ({
         index: s.index,
         headline: s.headline,
         caption: s.caption,
       }));
+      await this.trace.record({ videoPlanId: row.id, tenantId: params.tenantId, eventType: 'plan_drafted' });
 
       const criticOutcome = await this.runCriticLoop({
+        videoPlanId: row.id,
+        tenantId: params.tenantId,
         sceneCopy: initialSceneCopy,
         objective: params.objective,
         brandVoice: params.brandVoice,
@@ -173,6 +183,8 @@ export class DirectorService {
       });
 
       ({ sceneCopy, critic } = await this.runComplianceReview({
+        videoPlanId: row.id,
+        tenantId: params.tenantId,
         sceneCopy: criticOutcome.sceneCopy,
         critic: criticOutcome.critic,
         objective: params.objective,
@@ -180,6 +192,7 @@ export class DirectorService {
         medicalAesthetics: params.medicalAesthetics ?? false,
         anthropicClient: params.anthropicClient,
       }));
+      await this.trace.record({ videoPlanId: row.id, tenantId: params.tenantId, eventType: 'assets_ready', payload: { source: 'slideshow-direct' } });
     } catch (err) {
       await this.prisma.videoPlan.update({
         where: { id: row.id },
@@ -242,6 +255,7 @@ export class DirectorService {
         plan: placeholderPlan,
       },
     });
+    await this.trace.record({ videoPlanId: row.id, tenantId: params.tenantId, eventType: 'video_started', payload: { videoType: 'reels' } });
 
     try {
       const initialScript = await runScriptAgent({
@@ -251,13 +265,17 @@ export class DirectorService {
         medicalAesthetics: params.medicalAesthetics ?? false,
         client: params.anthropicClient,
       });
+      await this.trace.record({ videoPlanId: row.id, tenantId: params.tenantId, eventType: 'agent_call', agentName: 'script', tokensUsed: initialScript.tokensUsed });
       const initialSceneCopy: SceneCopy[] = initialScript.output.scenes.map((s) => ({
         index: s.index,
         headline: s.headline,
         caption: s.caption,
       }));
+      await this.trace.record({ videoPlanId: row.id, tenantId: params.tenantId, eventType: 'plan_drafted' });
 
       const criticOutcome = await this.runCriticLoop({
+        videoPlanId: row.id,
+        tenantId: params.tenantId,
         sceneCopy: initialSceneCopy,
         objective: params.objective,
         brandVoice: params.brandVoice,
@@ -266,6 +284,8 @@ export class DirectorService {
       });
 
       const { sceneCopy, critic } = await this.runComplianceReview({
+        videoPlanId: row.id,
+        tenantId: params.tenantId,
         sceneCopy: criticOutcome.sceneCopy,
         critic: criticOutcome.critic,
         objective: params.objective,
@@ -285,6 +305,7 @@ export class DirectorService {
         medicalAesthetics: params.medicalAesthetics ?? false,
         voiceoverEnabled: params.voiceoverEnabled,
       });
+      await this.trace.record({ videoPlanId: row.id, tenantId: params.tenantId, eventType: 'assets_ready', payload: { hasVoiceover: !!assetResult.voiceover } });
 
       const finalPlan = buildReelsPlan({
         technicianId: params.technicianId,
@@ -355,6 +376,7 @@ export class DirectorService {
         plan: placeholderPlan,
       },
     });
+    await this.trace.record({ videoPlanId: row.id, tenantId: params.tenantId, eventType: 'video_started', payload: { videoType: 'ai_clips' } });
 
     try {
       const initialScript = await runScriptAgent({
@@ -364,13 +386,17 @@ export class DirectorService {
         medicalAesthetics: params.medicalAesthetics ?? false,
         client: params.anthropicClient,
       });
+      await this.trace.record({ videoPlanId: row.id, tenantId: params.tenantId, eventType: 'agent_call', agentName: 'script', tokensUsed: initialScript.tokensUsed });
       const initialSceneCopy: SceneCopy[] = initialScript.output.scenes.map((s) => ({
         index: s.index,
         headline: s.headline,
         caption: s.caption,
       }));
+      await this.trace.record({ videoPlanId: row.id, tenantId: params.tenantId, eventType: 'plan_drafted' });
 
       const criticOutcome = await this.runCriticLoop({
+        videoPlanId: row.id,
+        tenantId: params.tenantId,
         sceneCopy: initialSceneCopy,
         objective: params.objective,
         brandVoice: params.brandVoice,
@@ -379,6 +405,8 @@ export class DirectorService {
       });
 
       const { sceneCopy, critic } = await this.runComplianceReview({
+        videoPlanId: row.id,
+        tenantId: params.tenantId,
         sceneCopy: criticOutcome.sceneCopy,
         critic: criticOutcome.critic,
         objective: params.objective,
@@ -397,6 +425,7 @@ export class DirectorService {
         medicalAesthetics: params.medicalAesthetics ?? false,
         voiceoverEnabled: false,
       });
+      await this.trace.record({ videoPlanId: row.id, tenantId: params.tenantId, eventType: 'assets_ready', payload: { source: 'ai_clips' } });
 
       const finalPlan = buildAiClipsPlan({
         technicianId: params.technicianId,
@@ -443,12 +472,15 @@ export class DirectorService {
   // --------------------------------------------------------------------------
 
   private async runCriticLoop(params: {
+    videoPlanId: string;
+    tenantId: string;
     sceneCopy: SceneCopy[];
     objective: string;
     brandVoice: ScriptAgentBrandVoice;
     medicalAesthetics: boolean;
     anthropicClient?: Anthropic;
   }): Promise<{ sceneCopy: SceneCopy[]; critic: DirectorCriticOutcome }> {
+    const { videoPlanId, tenantId } = params;
     let sceneCopy = params.sceneCopy;
     let revisions = 0;
     let critique = await runCriticAgent({
@@ -458,9 +490,12 @@ export class DirectorService {
       medicalAesthetics: params.medicalAesthetics,
       client: params.anthropicClient,
     });
+    await this.trace.record({ videoPlanId, tenantId, eventType: 'agent_call', agentName: 'critic', tokensUsed: critique.tokensUsed });
+    await this.trace.record({ videoPlanId, tenantId, eventType: 'critic_scored', payload: { score: critique.score, passed: critique.passed, revisions } });
 
     while (!critique.passed && critique.weakSceneIndices.length > 0 && revisions < MAX_CRITIC_REVISIONS) {
       revisions++;
+      await this.trace.record({ videoPlanId, tenantId, eventType: 'revision_requested', payload: { source: 'critic', revisions, weakSceneIndices: critique.weakSceneIndices } });
 
       const revisionResult = await runScriptAgent({
         sceneCount: critique.weakSceneIndices.length,
@@ -474,6 +509,7 @@ export class DirectorService {
           previousScenes: sceneCopy,
         },
       });
+      await this.trace.record({ videoPlanId, tenantId, eventType: 'agent_call', agentName: 'script_revision', tokensUsed: revisionResult.tokensUsed });
 
       sceneCopy = mergeSceneCopy(sceneCopy, revisionResult.output.scenes);
 
@@ -484,6 +520,8 @@ export class DirectorService {
         medicalAesthetics: params.medicalAesthetics,
         client: params.anthropicClient,
       });
+      await this.trace.record({ videoPlanId, tenantId, eventType: 'agent_call', agentName: 'critic', tokensUsed: critique.tokensUsed });
+      await this.trace.record({ videoPlanId, tenantId, eventType: 'critic_scored', payload: { score: critique.score, passed: critique.passed, revisions } });
     }
 
     return { sceneCopy, critic: { ...critique, revisions } };
@@ -500,6 +538,8 @@ export class DirectorService {
   // --------------------------------------------------------------------------
 
   private async runComplianceReview(params: {
+    videoPlanId: string;
+    tenantId: string;
     sceneCopy: SceneCopy[];
     critic: DirectorCriticOutcome;
     objective: string;
@@ -507,6 +547,7 @@ export class DirectorService {
     medicalAesthetics: boolean;
     anthropicClient?: Anthropic;
   }): Promise<{ sceneCopy: SceneCopy[]; critic: DirectorCriticOutcome }> {
+    const { videoPlanId, tenantId } = params;
     let sceneCopy = params.sceneCopy;
     const complianceNotes: string[] = [];
 
@@ -516,8 +557,11 @@ export class DirectorService {
         brandVoice: params.brandVoice,
         client: params.anthropicClient,
       });
+      await this.trace.record({ videoPlanId, tenantId, eventType: 'agent_call', agentName: 'compliance', tokensUsed: review.tokensUsed });
 
       if (review.output.flaggedSceneIndices.length > 0) {
+        await this.trace.record({ videoPlanId, tenantId, eventType: 'revision_requested', payload: { source: 'compliance', flaggedSceneIndices: review.output.flaggedSceneIndices } });
+
         const revisionResult = await runScriptAgent({
           sceneCount: review.output.flaggedSceneIndices.length,
           objective: params.objective,
@@ -530,6 +574,7 @@ export class DirectorService {
             previousScenes: sceneCopy,
           },
         });
+        await this.trace.record({ videoPlanId, tenantId, eventType: 'agent_call', agentName: 'script_revision', tokensUsed: revisionResult.tokensUsed });
         sceneCopy = mergeSceneCopy(sceneCopy, revisionResult.output.scenes);
         complianceNotes.push(...review.output.reasons.map((r) => `Compliance agent: ${r}`));
       }
@@ -541,6 +586,7 @@ export class DirectorService {
     complianceNotes.push(
       ...gateResult.violations.map((v) => `Compliance hard gate: scene ${v.index} ${v.field} removed (${v.reasons.join('; ')})`),
     );
+    await this.trace.record({ videoPlanId, tenantId, eventType: 'compliance_reviewed', payload: { violations: gateResult.violations.length } });
 
     return {
       sceneCopy,

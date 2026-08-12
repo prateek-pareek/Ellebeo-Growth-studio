@@ -1,6 +1,7 @@
 import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/providers/auth-provider";
+import { useFeatureFlag } from "@/lib/feature-flags";
 import { InitialsAvatar } from "@/components/InitialsAvatar";
 import { NotificationBell } from "@/components/NotificationPanel";
 import { api } from "@/lib/api";
@@ -62,6 +63,8 @@ export function AppShell() {
   const { pathname } = useLocation();
   const { user, loading } = useAuth();
   const navigate = useNavigate();
+  const videoEnabled = useFeatureFlag("GROWTH_STUDIO_VIDEO");
+  const desktopNav = DESKTOP_NAV.filter((item) => item.to !== "/video" || videoEnabled);
   const oauthHandled = useRef(false);
   // Computed synchronously so the processing screen is up from the very first
   // render — this (not `oauthParams`, which is memoized once and never goes
@@ -230,7 +233,7 @@ export function AppShell() {
           </Link>
 
           <div className="hidden lg:flex items-center gap-1">
-            {DESKTOP_NAV.map((item) => {
+            {desktopNav.map((item) => {
               const active = pathname === item.to;
               return (
                 <Link

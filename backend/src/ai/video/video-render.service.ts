@@ -12,6 +12,7 @@ import { PixabayMusicService } from '../services/pixabay-music.service';
 import { buildShotstackEditFromPlan } from './video-plan-render.mapper';
 import { parseVideoPlan, VideoPlan } from './video-plan.schema';
 import type { BrandMoodTag } from '../types/job-payload.types';
+import { VideoTraceService } from './tracing/video-trace.service';
 
 export class VideoRenderError extends Error {
   constructor(message: string) {
@@ -34,11 +35,15 @@ export interface ShotstackCallbackPayload {
 }
 
 export class VideoRenderService {
+  private readonly trace: VideoTraceService;
+
   constructor(
     private readonly prisma: PrismaClient,
     private readonly shotstackService: ShotstackService = new ShotstackService(),
     private readonly pixabayMusicService: PixabayMusicService | null = null,
-  ) {}
+  ) {
+    this.trace = new VideoTraceService(prisma);
+  }
 
   // --------------------------------------------------------------------------
   // Submit: Video Plan → Shotstack. Sets status=rendering, stores renderId.
@@ -67,6 +72,7 @@ export class VideoRenderService {
         errorMessage: null,
       },
     });
+    await this.trace.record({ videoPlanId, tenantId: row.tenantId, eventType: 'render_submitted', payload: { renderId, provider: 'shotstack' } });
 
     return { renderId };
   }
@@ -100,6 +106,7 @@ export class VideoRenderService {
         where: { id: videoPlanId },
         data: { status: 'rendered', outputUrl: payload.url, completedAt: new Date() },
       });
+      await this.trace.record({ videoPlanId, tenantId: row.tenantId, eventType: 'render_completed', payload: { outputUrl: payload.url } });
       if (row.contentItemId) {
         await this.prisma.contentItem.update({
           where: { id: row.contentItemId },
@@ -113,6 +120,7 @@ export class VideoRenderService {
       where: { id: videoPlanId },
       data: { status: 'failed', errorMessage: payload.error ?? 'Shotstack render failed', completedAt: new Date() },
     });
+    await this.trace.record({ videoPlanId, tenantId: row.tenantId, eventType: 'render_failed', payload: { error: payload.error ?? null } });
     if (row.contentItemId) {
       await this.prisma.contentItem.update({
         where: { id: row.contentItemId },
