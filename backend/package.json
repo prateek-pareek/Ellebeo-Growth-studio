@@ -12,6 +12,7 @@
     "worker:image": "ts-node-dev --respawn --transpile-only src/ai/workers/image-processing.worker.ts",
     "worker:video": "ts-node-dev --respawn --transpile-only src/ai/workers/video-assembly.worker.ts",
     "worker:video-render": "ts-node-dev --respawn --transpile-only src/ai/video/video-render.worker.ts",
+    "worker:video-director": "ts-node-dev --respawn --transpile-only src/ai/video/video-director.worker.ts",
     "lint": "eslint src --ext .ts",
     "test": "jest",
     "test:load": "artillery run tests/load/generation.yml",

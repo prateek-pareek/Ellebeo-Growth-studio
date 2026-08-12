@@ -16,6 +16,7 @@ export interface BuildSlideshowPlanParams {
   imageUrls: string[];
   objective: VideoPlan['objective'];
   headlines?: (string | null)[];
+  captions?: (string | null)[];
   brandFont?: string | null;
   brandPalette?: string[];
   totalDurationSeconds?: number;
@@ -30,7 +31,7 @@ export class SlideshowPlanBuilderError extends Error {
 }
 
 export function buildSlideshowPlan(params: BuildSlideshowPlanParams): VideoPlan {
-  const { imageUrls, headlines = [] } = params;
+  const { imageUrls, headlines = [], captions = [] } = params;
 
   if (imageUrls.length === 0) {
     throw new SlideshowPlanBuilderError('At least one image is required to build a slideshow plan');
@@ -47,7 +48,7 @@ export function buildSlideshowPlan(params: BuildSlideshowPlanParams): VideoPlan 
     durationSeconds: perScene,
     asset: { kind: 'image' as const, url },
     motion: 'ken_burns' as const,
-    text: { headline: headlines[index] ?? null, position: 'bottom' as const },
+    text: { headline: headlines[index] ?? null, caption: captions[index] ?? null, position: 'bottom' as const },
     transitionOut: index === imageUrls.length - 1 ? ('fade' as const) : ('fade' as const),
   }));
 

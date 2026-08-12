@@ -54,12 +54,20 @@ narrative log.
 - `VideoPlan` added to `PrismaService.tenantScopedModels` so the existing tenant-isolation guard covers it.
 
 ## Phase 3 — Agent runtime + Director + Script agent
-- [ ] Build Anthropic tool-use wrapper (net new — no existing pattern)
-- [ ] Director agent (orchestrator, resumable BullMQ job)
-- [ ] Script agent (scenes/hooks/captions JSON)
-- [ ] Bounds: max tool calls/agent, per-video token/cost ceiling
-- [ ] Self-test: valid plan produced + renders; forced-malformed-output repair test
-- [ ] GATE
+- [x] Build Anthropic tool-use wrapper (net new — no existing pattern) — `backend/src/ai/agents/tool-agent-runtime.ts`, forces structured output via a mandatory "output tool" call instead of parsing prose
+- [x] Director agent (orchestrator, resumable BullMQ job) — `backend/src/ai/video/agents/director.service.ts` + `video-director.worker.ts` (`video-director` queue)
+- [x] Script agent (scenes/hooks/captions JSON) — `backend/src/ai/video/agents/script-agent.ts`
+- [x] Bounds: max tool calls/agent, per-video token/cost ceiling — `maxToolCalls`/`tokenBudget` params on `runToolAgent`, enforced (throws `AgentBoundsExceededError`)
+- [x] Self-test: valid plan produced + renders; forced-malformed-output repair test — 41/41 tests passing across 5 new spec files, including `director-render-compat.spec.ts` (Director output feeds straight into the Phase 2 `buildShotstackEditFromPlan` mapper with zero changes) and a dedicated malformed-then-corrected repair test in `tool-agent-runtime.spec.ts`
+- [x] GATE — presented below, awaiting sign-off before Phase 4
+
+**Design notes:**
+- SDK version pinned in this repo (`@anthropic-ai/sdk@0.20.0`) predates tool-use graduating out of beta — the runtime calls `client.beta.tools.messages.create(...)`. Same wire contract as the current non-beta tool-use API; upgrading the SDK later is a drop-in, not a rewrite of this runtime.
+- Structured output is enforced by giving the model exactly one "output tool" (e.g. `submit_scenes`) it must call to answer — not by asking it to emit JSON in prose and hoping to parse it. This directly replaces the "plain JSON-in-prompt + manual parsing" pattern every existing LangChain chain uses (Phase 0 finding) for the video pipeline's own agents; existing chains are untouched.
+- JSON-repair: exactly one retry. On invalid tool input or a plain-text (non-tool-use) response, the runtime sends the validation errors back as a `tool_result` (or a text nudge) and asks the model to call the output tool again. A second failure throws `AgentOutputValidationError` — no infinite retry loops, no silently-accepted malformed output.
+- Script agent is intentionally the only agent this phase builds. It has zero worker tools (`maxToolCalls: 0`) — its only job is producing validated copy, so tool-use here is purely a structured-output mechanism, not agentic tool delegation. Worker-tool delegation (image search, moderation calls, etc.) is exercised for real starting with the Asset agent in Phase 4.
+- Director's "loop" this phase is deliberately a single step (draft plan → Script agent → final plan). It persists a placeholder `VideoPlan` row in `draft` status *before* calling the LLM, so a crash mid-call leaves an observable row instead of nothing — but it does not yet resume a stuck row on retry (BullMQ just retries the whole job, which is idempotent enough for a single LLM call). The richer multi-step resumable loop is Phase 5's critic loop, which will extend this same `DirectorService`, not replace it.
+- Director never auto-enqueues a render job — the resulting plan lands in `status: in_review`, matching the pipeline's "AI drafts, technician approves before render/publish" principle from the spec. Render is triggered separately (Phase 2's `video-render` queue), by a technician action once the UI exists (Phase 8).
 
 ## Phase 4 — Asset agent + strategies (reels)
 - [ ] AssetProvider strategy interface

@@ -115,6 +115,17 @@ export const AI_CONFIG = {
         removeOnFail: false,
       },
     },
+    videoDirector: {
+      name: 'video-director',
+      concurrency: 3,
+      rateLimit: { max: 10, duration: 60_000 },
+      defaultJobOptions: {
+        attempts: 2,
+        backoff: { type: 'exponential' as const, delay: 5_000 },
+        removeOnComplete: { count: 100 },
+        removeOnFail: false,
+      },
+    },
     deadLetter: {
       name: 'dead-letter-queue',
       concurrency: 0,   // no workers — manual review only

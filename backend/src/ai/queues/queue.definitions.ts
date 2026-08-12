@@ -119,6 +119,32 @@ export const videoRenderQueue = new Queue<VideoRenderJobPayload>(
 );
 
 // ---------------------------------------------------------------------------
+// Queue: video-director
+// Runs the Director agent's drafting loop (Script agent → Video Plan).
+// Concurrency: 3 (LLM-bound, keep modest) | Rate limit: 10/min | Retry: 2x
+// ---------------------------------------------------------------------------
+
+export interface VideoDirectorJobPayload {
+  tenantId: string;
+  appointmentId: string;
+  clientId: string;
+  technicianId: string;
+  brandDnaId: string;
+  imageUrls: string[];
+  objective: string;
+}
+
+export const videoDirectorQueue = new Queue<VideoDirectorJobPayload>(
+  AI_CONFIG.queues.videoDirector.name,
+  {
+    connection: bullMQConnection,
+    defaultJobOptions: {
+      ...AI_CONFIG.queues.videoDirector.defaultJobOptions,
+    },
+  }
+);
+
+// ---------------------------------------------------------------------------
 // Queue: publish-scheduled
 // Delayed jobs — each job fires exactly at the post's scheduledFor time.
 // jobId = scheduledPostId so we can remove/replace without storing a separate ref.
@@ -202,6 +228,7 @@ export async function closeAllQueues(): Promise<void> {
     imageProcessingQueue.close(),
     videoAssemblyQueue.close(),
     videoRenderQueue.close(),
+    videoDirectorQueue.close(),
     publishScheduledQueue.close(),
     deadLetterQueue.close(),
     contentGenerationQueueEvents.close(),
