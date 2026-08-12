@@ -2051,9 +2051,15 @@ CRITICAL IMAGE REQUIREMENTS:
       ) || (isLightFooter ? validDepthColor : '#FFFFFF');
 
       let posterTextColor = '#FFFFFF';
+      let photoBandIsDark = true;
+      let photoBandSurfaceHex = '#1A1A1A';
       try {
         // Prefer luminance under the actual text band (local contrast), not whole-image mean
-        const band = (optimizedDsl as any)?._compositionMeta?.actualTextRegion
+        const headingBox = (optimizedDsl?.layers || []).find(
+          (l: any) => l.type === 'text' && l.role === 'heading' && l.allocatedBox,
+        )?.allocatedBox;
+        const band = headingBox
+          || (optimizedDsl as any)?._compositionMeta?.actualTextRegion
           || (optimizedDsl as any)?.canvasRegions?.textRegion;
         let statsSource = imageBuffer;
         if (band && band.width > 40 && band.height > 40) {
@@ -2073,24 +2079,40 @@ CRITICAL IMAGE REQUIREMENTS:
         const stats = await sharp(statsSource).stats();
         if (stats.channels && stats.channels.length >= 3) {
           const meanLuminance = (stats.channels[0].mean + stats.channels[1].mean + stats.channels[2].mean) / 3;
-          const surfaceHex = meanLuminance > 127 ? '#E8E4DE' : '#1A1A1A';
-          posterTextColor = this.colorCompositionEngine.resolveTextInk(
-            surfaceHex,
+          photoBandIsDark = meanLuminance <= 127;
+          photoBandSurfaceHex = photoBandIsDark ? '#1A1A1A' : '#E8E4DE';
+          // Brand-aware but MUST stay readable on this photo band (no black-on-black)
+          posterTextColor = this.colorCompositionEngine.ensureReadableInk(
+            photoBandIsDark ? '#FFFFFF' : validDepthColor,
+            photoBandSurfaceHex,
             colorPalette,
-            'primary',
           );
-          if (meanLuminance > 127 && getLuminance(validDepthColor) < 120) {
-            posterTextColor = validDepthColor;
-          } else if (meanLuminance <= 127) {
-            posterTextColor = '#FFFFFF';
-          }
         }
       } catch (contrastErr) {
         // Non-fatal: text-only slides or corrupted buffers fall back to white text
       }
 
-      if (isFullBleed && !layoutType.includes('text_only') && photoDataUri) {
+      // Apply photo-band ink for ANY slide that overlays type on a photo
+      // (circle / padded / full_bleed) — not only classic full_bleed bases.
+      const imageMask = String(
+        ((optimizedDsl?.layers || []).find((l: any) => l.type === 'image') as any)?.mask || '',
+      );
+      const overlaysPhotoInk = !!photoDataUri
+        && !layoutType.includes('text_only')
+        && (
+          isFullBleed
+          || imageMask === 'full_bleed'
+          || imageMask === 'circle'
+          || imageMask === 'arch'
+          || imageMask === 'polaroid'
+          || imageMask === 'before_after_split'
+          || imageMask === 'rectangle'
+          || imageMask === ''
+        );
+      if (overlaysPhotoInk) {
         dynamicTextColor = posterTextColor;
+        (optimizedDsl as any)._photoBandIsDark = photoBandIsDark;
+        (optimizedDsl as any)._photoBandSurfaceHex = photoBandSurfaceHex;
       }
 
       // Soft-accepted / weak compositions: do NOT force solid_card here —

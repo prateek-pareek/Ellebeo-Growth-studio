@@ -573,16 +573,21 @@ export class TypographyEngine {
     }
     let containerSvg = '';
     if (layer.component === 'pill_label' || layer.component === 'solid_card' || layer.component === 'inset_card') {
-      const padX = layer.component === 'pill_label' ? 24 : 28;
-      const padY = layer.component === 'pill_label' ? 12 : 20;
-      const radius = layer.component === 'pill_label' ? (textHeight + padY * 2) / 2 : (layer.component === 'inset_card' ? 8 : 12);
+      // Breathing room like good slides 2/4 — never a cramped stamp on the chest
+      const lineCount = Math.max(1, escapedLines.length);
+      const padX = layer.component === 'pill_label' ? 28 : Math.max(36, Math.round(style.fontSize * 0.45));
+      const padY = layer.component === 'pill_label'
+        ? 14
+        : Math.max(22, Math.round(style.fontSize * (lineCount >= 3 ? 0.38 : 0.32)));
+      const radius = layer.component === 'pill_label'
+        ? (textHeight + padY * 2) / 2
+        : (layer.component === 'inset_card' ? 10 : 14);
 
       let bgFill = '#FFFFFF';
       if (ctx.colorHierarchy) {
         bgFill = layer.role === 'heading' ? ctx.colorHierarchy.cardSurface : ctx.colorHierarchy.accent;
       }
       // Absolute card contrast lock — never ship white-on-white / dark-on-dark cards
-      // (Slide 1/3/4 regression: "FLAWLESS…" / "OBSESSED…" / "MAINTAIN…" invisible).
       const cardLum = this.hexLuminance(bgFill);
       if (cardLum > 0.45) {
         style.fill = (layer as any)._forceCardInk && this.hexLuminance((layer as any)._forceCardInk) < 0.45
@@ -593,20 +598,25 @@ export class TypographyEngine {
         style.fill = '#FFFFFF';
       }
 
-      // Fit card to measured line width, not the full allocated column
+      // Card width hugs measured lines — short copy shouldn't float in a huge empty panel
       const trackingEmCard = this.parseTrackingEm(style.letterSpacing);
       const casingCard = (layer as any).capitalizationRule || ctx.typographyTokens?.casing || 'natural';
       const isUpperCard = casingCard === 'force_uppercase' || casingCard === 'uppercase';
       const approxLineW = Math.ceil(
         longestLineChars * style.fontSize * ((isUpperCard ? 0.82 : 0.65) + Math.max(0, trackingEmCard)),
       );
-      const contentW = Math.max(80, Math.min(effectiveMaxW, Math.max(approxLineW, Math.round(effectiveMaxW * 0.55)) || effectiveMaxW));
+      const balance = String((layer as any)._copyBalance || '');
+      // Short: hug tight. Long/medium: keep a little air but still track the longest line.
+      const hug = balance === 'short' ? 1.12 : balance === 'long' ? 1.08 : 1.1;
+      const contentW = Math.max(
+        100,
+        Math.min(effectiveMaxW, Math.round(approxLineW * hug) || Math.round(style.fontSize * 5)),
+      );
       let cardX = anchor === 'middle'
         ? x - contentW / 2
         : anchor === 'end'
           ? x - contentW
           : boxX;
-      // Keep card fully on-canvas with the text
       if (cardX - padX < minX) cardX = minX + padX;
       if (cardX + contentW + padX > maxX) cardX = Math.max(minX + padX, maxX - padX - contentW);
       containerSvg = `
@@ -970,6 +980,10 @@ export class TypographyEngine {
     if (hasSlotFit) {
       fontSize = Math.round(slotFittedSize);
     }
+    // Circle free-band: force light ink on dark blur
+    if (layerObj._forceOverlayInk && !onCard) {
+      fill = layerObj._forceOverlayInk;
+    }
 
     // NEW ARCHITECTURE: Configuration-Driven Design Recipe
     const tokens = ctx.typographyTokens || {
@@ -1167,18 +1181,21 @@ export class TypographyEngine {
     // Final contrast lock for overlay type: never ship dark ink on dark photo / light on light.
     // Cards already pick ink vs cardSurface — skip them.
     if (!onCard && fill) {
-      const inkLum = this.hexLuminance(fill);
-      const photoHint = ctx.dynamicTextColor ? this.hexLuminance(ctx.dynamicTextColor) : null;
-      // dynamicTextColor white ⇒ photo is dark; depth ⇒ photo is light
-      if (photoHint != null) {
-        const photoIsDark = photoHint > 0.55; // white ink chosen ⇒ dark surface
-        const photoIsLight = photoHint < 0.35; // dark ink chosen ⇒ light surface
-        if (photoIsDark && inkLum < 0.45) fill = '#FFFFFF';
-        if (photoIsLight && inkLum > 0.65) fill = '#1A1A1A';
+      // Explicit circle/band override wins
+      if (layerObj._forceOverlayInk) {
+        fill = layerObj._forceOverlayInk;
+      } else if (ctx.dynamicTextColor) {
+        // Trust photo-band ink when hierarchy fill would clash (black-on-black / white-on-white)
+        const fillLum = this.hexLuminance(fill);
+        const dynLum = this.hexLuminance(ctx.dynamicTextColor);
+        if (Math.abs(fillLum - dynLum) > 0.3) {
+          fill = ctx.dynamicTextColor;
+        }
       }
       // Never use canvas background as ink
       if (fill.toUpperCase() === (ctx.validBackgroundColor || '').toUpperCase()) {
-        fill = photoHint != null && photoHint > 0.55 ? '#FFFFFF' : '#1A1A1A';
+        const dyn = ctx.dynamicTextColor ? this.hexLuminance(ctx.dynamicTextColor) : 1;
+        fill = dyn > 0.55 ? '#FFFFFF' : '#1A1A1A';
       }
     }
 

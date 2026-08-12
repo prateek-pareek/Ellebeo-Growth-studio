@@ -266,19 +266,46 @@ export class CompositionOptimizer {
             };
           if (optimized.canvasRegions) optimized.canvasRegions.textRegion = regions.textRegion;
         } else if (isInsetMask) {
-          // Circle / arch / polaroid: text belongs in the band BELOW the mask —
-          // never the tall left/right carve (that recreates "FLAWLESS" on the disk).
-          obstacles.push(imageOccupied);
+          // Inset photos: reserve a BOTTOM band for type (same pattern as good slides 2/4).
+          // Never leave textRegion as a side carve or full-canvas center (puts type on the face).
           const footerClear = Math.max(constraints.margins.bottom, 88);
-          const gap = 20;
-          const belowY = imageOccupied.y + imageOccupied.height + gap;
-          const belowH = Math.max(64, canvasHeight - footerClear - belowY);
-          const belowBand: BoundingBox = {
-            x: constraints.safeX,
-            y: Math.min(belowY, canvasHeight - footerClear - 64),
-            width: canvasW - constraints.safeX * 2,
-            height: Math.min(belowH, Math.max(64, canvasHeight - footerClear - belowY)),
-          };
+          const gap = 16;
+          const isCircleLike = mask === 'circle' || mask === 'arch' || mask === 'polaroid';
+          let belowBand: BoundingBox;
+          if (isCircleLike) {
+            obstacles.push(imageOccupied);
+            const belowY = imageOccupied.y + imageOccupied.height + gap;
+            const belowH = Math.max(72, canvasHeight - footerClear - belowY);
+            belowBand = {
+              x: constraints.safeX,
+              y: Math.min(belowY, canvasHeight - footerClear - 72),
+              width: canvasW - constraints.safeX * 2,
+              height: Math.min(belowH, Math.max(72, canvasHeight - footerClear - belowY)),
+            };
+          } else {
+            // Padded/rounded rectangle: protect UPPER photo (face), keep LOWER band free for type
+            const upperProtect: BoundingBox = {
+              x: imageOccupied.x,
+              y: imageOccupied.y,
+              width: imageOccupied.width,
+              height: Math.round(imageOccupied.height * 0.58),
+            };
+            obstacles.push(upperProtect);
+            const bandH = Math.max(96, Math.round(imageOccupied.height * 0.22));
+            const bandY = Math.min(
+              imageOccupied.y + imageOccupied.height - bandH - gap,
+              canvasHeight - footerClear - bandH,
+            );
+            belowBand = {
+              x: Math.max(constraints.safeX, imageOccupied.x + Math.round(imageOccupied.width * 0.08)),
+              y: Math.max(imageOccupied.y + Math.round(imageOccupied.height * 0.55), bandY),
+              width: Math.min(
+                canvasW - constraints.safeX * 2,
+                Math.round(imageOccupied.width * 0.84),
+              ),
+              height: bandH,
+            };
+          }
           regions.textRegion = belowBand;
           if (optimized.canvasRegions) optimized.canvasRegions.textRegion = belowBand;
           if (optimized.canonicalGeometry) optimized.canonicalGeometry.textRegion = belowBand;
@@ -703,28 +730,60 @@ export class CompositionOptimizer {
         });
       }
 
-      // Circle / inset: ALWAYS park headings in the band below the photo — never on the disk
+      // Inset photos: ALWAYS bottom-center type (match good slides 2/4) — never mid-face / left-on-disk
       const imgMask = String(
         (optimized.layers?.find((l: any) => l.type === 'image') as any)?.mask || '',
       );
-      if (imageOccupied && (imgMask === 'circle' || imgMask === 'arch' || imgMask === 'polaroid')) {
-        const gap = 20;
+      const imgPad = Number(
+        (optimized.layers?.find((l: any) => l.type === 'image') as any)?.paddingPercent || 0,
+      );
+      const isCircleLike = imgMask === 'circle' || imgMask === 'arch' || imgMask === 'polaroid';
+      const isPaddedRect = imgMask === 'rectangle' && imgPad > 2;
+      if (imageOccupied && (isCircleLike || isPaddedRect) && (layer.role === 'heading' || layer.role === 'tagline')) {
         const footerClear = Math.max(constraints.margins.bottom, 88);
-        const belowY = imageOccupied.y + imageOccupied.height + gap;
-        const availBelow = canvasHeight - footerClear - belowY;
-        const useH = Math.min(boxH, Math.max(48, availBelow - 4));
-        box.width = Math.min(width, Math.round(canvasW * 0.86));
-        box.x = Math.max(constraints.safeX, Math.round((canvasW - box.width) / 2));
-        if (availBelow >= 48) {
-          box.y = belowY;
-          box.height = useH;
+        const gap = 16;
+        if (isCircleLike) {
+          const belowY = imageOccupied.y + imageOccupied.height + gap;
+          const availBelow = canvasHeight - footerClear - belowY;
+          const useH = Math.min(boxH, Math.max(56, availBelow - 4));
+          box.width = Math.min(width, Math.round(canvasW * 0.86));
+          box.x = Math.max(constraints.safeX, Math.round((canvasW - box.width) / 2));
+          if (availBelow >= 56) {
+            box.y = belowY;
+            box.height = useH;
+          } else {
+            // Tight under disk: sit in the lower free arc above footer, still centered
+            box.y = Math.max(
+              imageOccupied.y + Math.round(imageOccupied.height * 0.72),
+              canvasHeight - footerClear - useH,
+            );
+            box.height = useH;
+          }
         } else {
-          // Still force below disk even if tight — never overlap the portrait
-          box.y = Math.min(belowY, canvasHeight - footerClear - useH);
-          box.height = useH;
+          // Padded photo: bottom band ON the image (slide 2/4), not mid-chest
+          const bandH = Math.max(boxH, Math.round(imageOccupied.height * 0.2));
+          box.width = Math.min(width, Math.round(imageOccupied.width * 0.82));
+          box.height = Math.min(bandH, Math.round(canvasHeight * 0.2));
+          box.x = Math.max(
+            constraints.safeX,
+            Math.round(imageOccupied.x + (imageOccupied.width - box.width) / 2),
+          );
+          box.y = Math.min(
+            imageOccupied.y + imageOccupied.height - box.height - gap,
+            canvasHeight - footerClear - box.height,
+          );
+          // Prefer solid_card so type stays readable on the photo (like slide 2/4)
+          if (layer.role === 'heading' && !(layer as any).component) {
+            (layer as any).component = 'solid_card';
+            (layer as any)._forceCardInk = '#1A1A1A';
+          }
         }
         (layer as any).alignment = 'center';
         (layer as any).anchor = 'bottom_center';
+        // Dark blur behind circle → prefer light ink (no mid-disk card)
+        if (isCircleLike && layer.role === 'heading') {
+          (layer as any)._forceOverlayInk = '#F7F4EF';
+        }
       } else if (!imageOccupied && sBox && layer.role === 'heading' && regions.spatial.splitAxis === 'overlay') {
         // Full-bleed face: park headline in bottom safe band above footer (not top-left on hair)
         const footerClear = Math.max(constraints.margins.bottom, 88);
@@ -741,14 +800,17 @@ export class CompositionOptimizer {
         }
         (layer as any).alignment = 'center';
         (layer as any).anchor = 'bottom_center';
+        if (!(layer as any).component) {
+          (layer as any).component = 'solid_card';
+          (layer as any)._forceCardInk = '#1A1A1A';
+        }
       } else if (
         !imageOccupied
         && !sBox
         && layer.role === 'heading'
         && (priority === 'typography_hero' || priority === 'cta_hero')
       ) {
-        // Text-only / CTA slides: keep headline centered in a wide safe column — never
-        // a left-edge pocket that clips the first glyph ("D" of DIMENSION).
+        // Text-only / CTA slides: keep headline centered in a wide safe column
         box.width = Math.min(width, Math.round(canvasW * 0.78));
         box.x = Math.max(constraints.safeX, Math.round((canvasW - box.width) / 2));
         box.y = Math.max(
@@ -759,11 +821,9 @@ export class CompositionOptimizer {
         (layer as any).anchor = 'center';
       }
 
-      const isInsetPhoto =
-        imgMask === 'circle' || imgMask === 'arch' || imgMask === 'polaroid';
+      const isInsetPhoto = isCircleLike || isPaddedRect;
       box = this.clampBoxToSafe(box, constraints, canvasW, canvasHeight);
-      // Inset photos already own a dedicated below-band textRegion — clamp there.
-      // Overlay full-bleed uses fullSafe so we never get sucked into a side pocket.
+      // Inset: clamp to the dedicated bottom band; overlay full-bleed uses fullSafe
       box = this.clampBoxToRegion(
         box,
         isInsetPhoto
@@ -771,13 +831,16 @@ export class CompositionOptimizer {
           : (regions.spatial.splitAxis === 'overlay' ? fullSafe : regions.textRegion),
       );
 
-      // Hard reject: if heading still intersects circle/face, shove fully below
-      // (and re-center — never fall back to a left carve beside the disk).
+      // Hard reject: never leave heading on face / circle disk
       const hardObstacles: BoundingBox[] = [];
-      if (imageOccupied) hardObstacles.push(imageOccupied);
-      if (sBox) hardObstacles.push(sBox);
+      if (isCircleLike && imageOccupied) hardObstacles.push(imageOccupied);
+      if (sBox && (isCircleLike || !isPaddedRect)) hardObstacles.push(sBox);
       for (const obs of hardObstacles) {
         if (!overlapsBox(box, obs)) continue;
+        // For padded rect we ALLOW overlap with lower photo band — skip chest-only via y check
+        if (isPaddedRect && imageOccupied && box.y >= imageOccupied.y + imageOccupied.height * 0.55) {
+          continue;
+        }
         const footerClear = Math.max(constraints.margins.bottom, 88);
         box.width = Math.min(box.width, Math.round(canvasW * 0.86));
         box.y = Math.min(
