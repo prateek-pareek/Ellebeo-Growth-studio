@@ -59,3 +59,13 @@ export const DEFAULT_MUSIC_VOLUME = 0.6;
 // column default, the agent runtime, and any UI copy agree on the ceiling.
 export const MAX_CRITIC_REVISIONS = 2;
 export const CRITIC_PASS_THRESHOLD = 0.7;
+
+export type VideoTypeValue = (typeof VIDEO_TYPES)[number];
+export type SceneAssetKindValue = (typeof SCENE_ASSET_KINDS)[number];
+export type MotionValue = (typeof MOTIONS)[number];
+export type TransitionValue = (typeof TRANSITIONS)[number];
+export type TextPositionValue = (typeof TEXT_POSITIONS)[number];
+export type CaptionStyleValue = (typeof CAPTION_STYLES)[number];
+export type VideoStatusValue = (typeof VIDEO_STATUSES)[number];
+export type CriticStatusValue = (typeof CRITIC_STATUSES)[number];
+export type VideoObjectiveValue = (typeof VIDEO_OBJECTIVES)[number];

@@ -38,13 +38,20 @@ narrative log.
 - `text.position` (`top|center|bottom`) is validated in the zod schema only, not a Prisma enum — it's nested inside the JSON blob, not a queryable column, so no DB enum was needed for it (spec's list of six enums to add didn't include it either).
 
 ## Phase 2 — Deterministic core (slideshow, no agents)
-- [ ] Confirm reuse plan for existing ShotstackService/ReelAssemblerService vs. new Video Plan → Shotstack mapper
-- [ ] Render job: Video Plan → Shotstack edit JSON → submit → store renderId → RENDERING
-- [ ] Webhook: new endpoint + callback queue → RENDERED/outputUrl or FAILED (replaces/augments polling)
-- [ ] Publish job: reuse existing Instagram publish flow
-- [ ] Self-test: integration test with Shotstack mocked (submit → simulated webhook → RENDERED)
-- [ ] Staging: one real end-to-end render produces playable MP4
-- [ ] GATE: slideshow renders with zero agents
+- [x] Confirm reuse plan for existing ShotstackService/ReelAssemblerService vs. new Video Plan → Shotstack mapper — decided: new generic mapper (`video-plan-render.mapper.ts`), `ShotstackService.submitRender()` reused as-is (just added optional `callback`)
+- [x] Render job: Video Plan → Shotstack edit JSON → submit → store renderId → RENDERING (`video-render.service.ts` + `video-render.worker.ts` + `video-render` BullMQ queue)
+- [x] Webhook: new endpoint + callback queue → RENDERED/outputUrl or FAILED (`video-webhook.controller.ts`, `POST /video/webhooks/shotstack/:videoPlanId?token=`) — replaces polling, never polls
+- [x] Publish job: reuse existing Instagram publish flow — done by syncing `outputUrl` → `ContentItem.finalVideoUrl` + `reelStatus` on the webhook callback when `contentItemId` is set, so the existing `publishToInstagram()` path (which already reads `finalVideoUrl`) picks it up unchanged; no new publish code
+- [x] Self-test: integration test with Shotstack mocked (submit → simulated webhook → RENDERED) — `video-render.service.spec.ts`, 7/7 passing
+- [ ] Staging: one real end-to-end render produces playable MP4 — **not run**, needs real `SHOTSTACK_API_KEY` + a reachable `BACKEND_PUBLIC_URL` for the callback; out of scope for this environment
+- [x] GATE: slideshow renders with zero agents (trivial `slideshow-plan-builder.ts`, no LLM calls anywhere in this phase) — presented below, awaiting sign-off before Phase 3
+
+**Design notes:**
+- Music: the plan contract only carries `mood`/`trackId` (no URL, per the fixed contract) — `VideoRenderService` resolves an actual CDN url via the existing `PixabayMusicService.selectTrack(tenantId, mood)` at render-submission time. `trackId` in the plan is currently informational; this gets tightened up when the Asset agent (Phase 4) owns audio selection.
+- Auth: Shotstack has no HMAC request signing, so the webhook is authenticated by a shared-secret token embedded in the callback URL (`VIDEO_WEBHOOK_SECRET`), not signature verification — documented on the controller.
+- Discovered but NOT fixed (out of scope): `ReelAssemblerService.persistReelResult()` and `video-assembly.worker.ts` execute raw SQL against `content_item_id`/`reel_storage_path`/`reel_cdn_url`/etc. — none of those columns exist in `schema.prisma`'s `ContentItem` model (the real PK column is `id`, and the reel fields are named `voiceoverUrl`/`musicUrl`/`finalVideoUrl`/`reelThumbnailUrl`/`reelStatus`). This looks like dead/broken code predating this branch. The new Phase 2 core avoids it entirely — it goes through Prisma's typed client, not raw SQL, and writes to `finalVideoUrl`/`reelStatus` (the fields that actually exist). Flagging for the team; not part of this phase's scope to fix.
+- New BullMQ queue `video-render` added alongside (not replacing) the existing `video-assembly` queue, since the job payload shape differs (`videoPlanId` vs. the reel-specific before/after image fields). Worth merging later once the legacy reel flow is retired.
+- `VideoPlan` added to `PrismaService.tenantScopedModels` so the existing tenant-isolation guard covers it.
 
 ## Phase 3 — Agent runtime + Director + Script agent
 - [ ] Build Anthropic tool-use wrapper (net new — no existing pattern)

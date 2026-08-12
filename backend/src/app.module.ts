@@ -21,6 +21,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { BillingModule } from './billing/billing.module';
 import { PublicConsentModule } from './public-consent/public-consent.module';
 import { TemplateModule } from './template/template.module';
+import { VideoModule } from './ai/video/video.module';
 import { HealthController } from './health/health.controller';
 import { CacheModule } from '@nestjs/cache-manager';
 import { TenantContextMiddleware } from './common/middleware/tenant-context.middleware';
@@ -64,6 +65,7 @@ import { validateEnv } from './config/env.validation';
     BillingModule,
     PublicConsentModule,
     TemplateModule,
+    VideoModule,
     // AiModule,
   ],
   controllers: [HealthController],

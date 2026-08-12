@@ -124,6 +124,18 @@ export const VideoPlanSchema = z.object({
   meta: VideoPlanMetaSchema,
 });
 
+export type {
+  VideoTypeValue as VideoType,
+  SceneAssetKindValue as SceneAssetKind,
+  MotionValue as Motion,
+  TransitionValue as Transition,
+  TextPositionValue as TextPosition,
+  CaptionStyleValue as CaptionStyle,
+  VideoStatusValue as VideoStatusEnum,
+  CriticStatusValue as CriticStatusEnum,
+  VideoObjectiveValue as VideoObjective,
+} from './video-plan.constants';
+
 export type SceneAsset = z.infer<typeof SceneAssetSchema>;
 export type SceneText = z.infer<typeof SceneTextSchema>;
 export type Scene = z.infer<typeof SceneSchema>;

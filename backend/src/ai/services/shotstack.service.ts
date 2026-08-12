@@ -8,6 +8,8 @@ import { AI_CONFIG } from '../../config/ai.config';
 interface ShotstackRenderJson {
   timeline: unknown;
   output: unknown;
+  /** When set, Shotstack POSTs the render status here instead of relying on polling. */
+  callback?: string;
 }
 
 interface ShotstackSubmitResponse {

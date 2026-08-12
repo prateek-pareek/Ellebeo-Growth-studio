@@ -7,6 +7,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     'BrandDNA', 'Client', 'ConsentRecord', 'Appointment',
     'ImageAsset', 'ContentItem', 'GenerationJob', 'ScheduledPost',
     'Campaign', 'SocialAccount', 'BusinessGoal', 'GoldenExample',
+    'VideoPlan',
   ]);
 
   private readonly softDeleteModels = new Set([
