@@ -26,11 +26,41 @@ export function startVideoDirectorWorker(prisma: PrismaClient): Worker<VideoDire
   const worker = new Worker<VideoDirectorJobPayload>(
     AI_CONFIG.queues.videoDirector.name,
     async (job: Job<VideoDirectorJobPayload>) => {
-      const { tenantId, appointmentId, clientId, technicianId, brandDnaId, imageUrls, objective } = job.data;
+      const { tenantId, appointmentId, clientId, technicianId, brandDnaId, imageUrls, objective, videoType } = job.data;
 
       const brandDna = await prisma.brandDNA.findUnique({ where: { id: brandDnaId } });
       if (!brandDna || brandDna.tenantId !== tenantId) {
         throw new Error(`BrandDNA ${brandDnaId} not found for tenant ${tenantId}`);
+      }
+
+      const brandVoice = {
+        businessName: brandDna.businessName,
+        primaryTone: brandDna.primaryTone,
+        vocabularyBlacklist: brandDna.vocabularyBlacklist,
+        doNotSay: brandDna.doNotSay,
+      };
+      const brandFont = brandDna.brandFont;
+      const brandPalette = [brandDna.primaryBrandColor, brandDna.secondaryBrandColor].filter((c): c is string => !!c);
+      const medicalAesthetics = isMedicalAestheticsBrand(brandDna);
+
+      if (videoType === 'reels') {
+        return director.draftReelsPlan({
+          tenantId,
+          appointmentId,
+          clientId,
+          technicianId,
+          brandDnaId,
+          imageUrls,
+          sceneCount: job.data.sceneCount ?? imageUrls.length,
+          objective: objective as VideoPlan['objective'],
+          brandVoice,
+          brandTone: brandDna.primaryTone,
+          brandMoodTag: brandDna.moodTag,
+          brandFont,
+          brandPalette,
+          medicalAesthetics,
+          voiceoverEnabled: job.data.voiceoverEnabled ?? true,
+        });
       }
 
       return director.draftSlideshowPlan({
@@ -41,15 +71,10 @@ export function startVideoDirectorWorker(prisma: PrismaClient): Worker<VideoDire
         brandDnaId,
         imageUrls,
         objective: objective as VideoPlan['objective'],
-        brandVoice: {
-          businessName: brandDna.businessName,
-          primaryTone: brandDna.primaryTone,
-          vocabularyBlacklist: brandDna.vocabularyBlacklist,
-          doNotSay: brandDna.doNotSay,
-        },
-        brandFont: brandDna.brandFont,
-        brandPalette: [brandDna.primaryBrandColor, brandDna.secondaryBrandColor].filter((c): c is string => !!c),
-        medicalAesthetics: isMedicalAestheticsBrand(brandDna),
+        brandVoice,
+        brandFont,
+        brandPalette,
+        medicalAesthetics,
       });
     },
     {

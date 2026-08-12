@@ -87,3 +87,82 @@ describe('DirectorService.draftSlideshowPlan', () => {
     expect(prisma.videoPlan.create).not.toHaveBeenCalled();
   });
 });
+
+describe('DirectorService.draftReelsPlan', () => {
+  beforeEach(() => {
+    (runScriptAgent as jest.Mock).mockReset();
+  });
+
+  const reelsParams = {
+    ...baseParams,
+    sceneCount: 2,
+    brandTone: 'warm_and_friendly',
+    brandMoodTag: 'elegant',
+    voiceoverEnabled: true,
+  };
+
+  it('persists a draft row, resolves assets via the given AssetProvider, and finalizes to in_review', async () => {
+    (runScriptAgent as jest.Mock).mockResolvedValue({
+      output: {
+        scenes: [
+          { index: 0, headline: 'Glow Up', caption: null },
+          { index: 1, headline: 'Book Today', caption: 'Spots filling fast' },
+        ],
+      },
+      toolCallCount: 0,
+      tokensUsed: 100,
+      repaired: false,
+    });
+
+    const assetProvider = {
+      resolveSceneAssets: jest.fn().mockResolvedValue({
+        scenes: [
+          { index: 0, kind: 'image', url: 'https://cdn.example.com/1.jpg', durationSeconds: 4 },
+          { index: 1, kind: 'image', url: 'https://cdn.example.com/2.jpg', durationSeconds: 6 },
+        ],
+        voiceover: { script: 'Glow Up. Spots filling fast.', voiceId: 'voice-1', assetUrl: 'https://cdn.example.com/vo.mp3', durationSeconds: 10 },
+      }),
+    };
+
+    const prisma = makeMockPrisma();
+    const director = new DirectorService(prisma as any);
+
+    const result = await director.draftReelsPlan({ ...reelsParams, assetProvider: assetProvider as any });
+
+    expect(prisma.videoPlan.create.mock.calls[0][0].data.status).toBe('draft');
+    expect(prisma.videoPlan.create.mock.calls[0][0].data.videoType).toBe('reels');
+    expect(assetProvider.resolveSceneAssets).toHaveBeenCalledTimes(1);
+    expect(prisma.videoPlan.update.mock.calls[0][0].data.status).toBe('in_review');
+
+    expect(safeParseVideoPlan(result.plan).success).toBe(true);
+    expect(result.plan.videoType).toBe('reels');
+    expect(result.plan.audio.voiceover.enabled).toBe(true);
+    expect(result.plan.captions.burnedIn).toBe(true);
+  });
+
+  it('marks the plan failed and rethrows if asset resolution throws', async () => {
+    (runScriptAgent as jest.Mock).mockResolvedValue({
+      output: { scenes: [{ index: 0, headline: 'A', caption: null }, { index: 1, headline: 'B', caption: null }] },
+      toolCallCount: 0,
+      tokensUsed: 50,
+      repaired: false,
+    });
+    const assetProvider = { resolveSceneAssets: jest.fn().mockRejectedValue(new Error('stock search failed')) };
+    const prisma = makeMockPrisma();
+    const director = new DirectorService(prisma as any);
+
+    await expect(director.draftReelsPlan({ ...reelsParams, assetProvider: assetProvider as any })).rejects.toThrow('stock search failed');
+    expect(prisma.videoPlan.update).toHaveBeenLastCalledWith({
+      where: { id: 'plan-1' },
+      data: { status: 'failed', errorMessage: 'stock search failed' },
+    });
+  });
+
+  it('throws DirectorError before touching the database when sceneCount is zero', async () => {
+    const prisma = makeMockPrisma();
+    const director = new DirectorService(prisma as any);
+
+    await expect(director.draftReelsPlan({ ...reelsParams, sceneCount: 0 })).rejects.toThrow(DirectorError);
+    expect(prisma.videoPlan.create).not.toHaveBeenCalled();
+  });
+});

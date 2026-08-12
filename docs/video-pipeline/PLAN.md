@@ -70,11 +70,18 @@ narrative log.
 - Director never auto-enqueues a render job — the resulting plan lands in `status: in_review`, matching the pipeline's "AI drafts, technician approves before render/publish" principle from the spec. Render is triggered separately (Phase 2's `video-render` queue), by a technician action once the UI exists (Phase 8).
 
 ## Phase 4 — Asset agent + strategies (reels)
-- [ ] AssetProvider strategy interface
-- [ ] Slideshow strategy (tech images + Pixabay)
-- [ ] Reels strategy (images/clips + ElevenLabs VO + auto-timed captions)
-- [ ] Self-test: reels renders end-to-end, captions aligned to VO
-- [ ] GATE
+- [x] AssetProvider strategy interface — `backend/src/ai/video/assets/asset-provider.ts`
+- [x] Slideshow strategy (tech images + Pixabay) — `slideshow-asset-provider.ts` (1:1 technician images, gaps filled by the new Asset agent + `PixabayStockImageService`)
+- [x] Reels strategy (images/clips + ElevenLabs VO + auto-timed captions) — `reels-asset-provider.ts` (composes the slideshow provider for images, adds VO + `computeCaptionTimings`)
+- [x] Self-test: reels renders end-to-end, captions aligned to VO — `reels-render-compat.spec.ts` (Director → Asset agent/provider → Phase 2 render core, asserts scene durations track word-count-weighted VO duration and the mapped Shotstack edit uses the VO as its soundtrack)
+- [x] GATE — presented below, awaiting sign-off before Phase 5
+
+**Design notes:**
+- First real worker-tool delegation in the pipeline: the Asset agent (`asset-agent.ts`) calls a genuine side-effecting tool (`search_stock_image` → `PixabayStockImageService.search`) and judges the result, rather than tool-use being pure structured-output enforcement (Script agent, Phase 3). Only invoked when a scene has no technician-supplied image — cost discipline over agentic purity, matching the spec's "agentic where it adds value, deterministic where it must be reliable."
+- "Auto-timed captions" here means word-count-proportional timing (`computeCaptionTimings`), not true ASR forced alignment — no speech-to-text/alignment tool exists in this codebase. It reuses the same 2.5-words/second assumption `ElevenLabsService` itself already uses to estimate voiceover duration, so the two stay consistent with each other rather than introducing a second, different pacing model.
+- Voiceover script is currently the scene's own on-screen caption/headline text concatenated in scene order — there's no separate VO-only script yet (the Phase 1 architecture doc flagged this as a "(later)" addition to the Script agent). Reusing on-screen copy as spoken narration is an intentional Phase 4 simplification; a dedicated VO-script field on the Script agent's output is a clean follow-up whenever on-screen and spoken copy need to diverge.
+- `SlideshowAssetProvider` exists and is real (used inside `ReelsAssetProvider` for image resolution) but `DirectorService.draftSlideshowPlan` was **not** refactored to route through it this phase — its current calling pattern always sizes scene count 1:1 from the given images, so there's no gap case to exercise, and rewiring tested Phase 3 code for zero behavior change wasn't worth the regression risk. Wiring it in is a trivial follow-up once slideshow scene count becomes independent of image count.
+- New Pixabay integration: `PixabayStockImageService` (images), sibling to the existing `PixabayMusicService` (music) — same provider, same timeout config reused, no Redis caching added yet (deferred; each stock search hits the network directly for now).
 
 ## Phase 5 — QA/critic loop
 - [ ] Critic agent + rubric (brand fit, objective match, hook strength, pacing, compliance)
