@@ -8,6 +8,7 @@ import {
   BRAND_MOODS, BRAND_OBJECTIVES, GENDER_FOCUS_OPTIONS, LANGUAGE_VARIANTS, ESSENCE_WORDS, TYPE_PAIRINGS,
   type BrandDnaV2Contract, type BrandMoodV2,
 } from "@/lib/brand-dna/v2-schema";
+import { MOOD_META, TYPE_META, OBJECTIVE_META } from "@/lib/brand-dna/v2-presentation";
 
 export const Route = createFileRoute("/brand/onboarding")({
   head: () => ({
@@ -18,35 +19,6 @@ export const Route = createFileRoute("/brand/onboarding")({
   }),
   component: BrandDnaOnboardingV2,
 });
-
-// ── Static, non-AI presentation metadata (real AI suggestions override this
-// per-technician; this is the zero-network fallback / initial render state) ──
-
-const MOOD_META: Record<(typeof BRAND_MOODS)[number], { label: string; hint: string; palette: string[] }> = {
-  SOFT_GLAM: { label: "Soft Glam", hint: "Romantic, polished, feminine warmth.", palette: ["#F5D6D0", "#C98A8A", "#FFF7F3", "#8A5A5A", "#3D2A2A"] },
-  CLEAN_CLINICAL: { label: "Clean Clinical", hint: "Precise, sterile, trust-first.", palette: ["#EAF2F2", "#3A7C7C", "#FFFFFF", "#1F3D3D", "#0F1F1F"] },
-  EDITORIAL_MINIMAL: { label: "Editorial Minimal", hint: "Sleek, refined, quietly confident.", palette: ["#EDEDED", "#1A1A1A", "#FFFFFF", "#5C5C5C", "#000000"] },
-  NATURAL_ORGANIC: { label: "Natural Organic", hint: "Earthy, gentle, hands-on craft.", palette: ["#F4EFE6", "#8A7355", "#FAF8F4", "#4E4335", "#2A241C"] },
-  BOLD_LUXE: { label: "Bold Luxe", hint: "High-end, dramatic, statement-making.", palette: ["#D4AF37", "#1A1A2E", "#FFFFFF", "#8A7968", "#000000"] },
-  PLAYFUL_FRESH: { label: "Playful Fresh", hint: "Vibrant, energetic, fun-first.", palette: ["#FFE5B4", "#FF6F61", "#FFFFFF", "#4ECDC4", "#2D2D2D"] },
-};
-
-const TYPE_META: Record<(typeof TYPE_PAIRINGS)[number], { name: string; headClass: string }> = {
-  CLASSIC_SERIF: { name: "Classic Serif", headClass: "font-serif font-normal" },
-  MODERN_SANS: { name: "Modern Sans", headClass: "font-sans font-bold tracking-tight" },
-  EDITORIAL_MIX: { name: "Editorial Mix", headClass: "font-serif italic font-normal" },
-  WARM_ROUNDED: { name: "Warm Rounded", headClass: "font-serif font-normal" },
-  BOLD_DISPLAY: { name: "Bold Display", headClass: "font-sans font-extrabold uppercase tracking-wide text-[0.85em]" },
-  SOFT_SCRIPT: { name: "Soft Script", headClass: "font-serif italic font-normal text-[1.15em]" },
-};
-
-const OBJECTIVE_META: Record<(typeof BRAND_OBJECTIVES)[number], { name: string; desc: string }> = {
-  PREMIUM_CLIENTS: { name: "Attract premium clients", desc: "Position for higher-value bookings and fewer discount-seekers." },
-  FILL_QUIET_DAYS: { name: "Fill quiet days", desc: "Drive last-minute and off-peak bookings." },
-  EDUCATE_TRUST: { name: "Educate & build trust", desc: "Establish authority before someone books at all." },
-  PROMOTE_BRIDAL: { name: "Promote bridal & events", desc: "Lead with occasion-based, higher-ticket packages." },
-  LAUNCH_PRODUCT: { name: "Launch a new service", desc: "Introduce something new to your existing audience." },
-};
 
 // Real categorisation used elsewhere in the app (service-guardrails.ts ServiceCategory) — not invented for this flow.
 const SERVICE_CATEGORIES: { id: string; label: string }[] = [
@@ -729,8 +701,6 @@ function Step5Config({ contract, update }: { contract: BrandDnaV2Contract; updat
       <div className="mb-6">
         <FieldLabel>Platforms</FieldLabel>
         <ToggleRow name="Instagram" on={contract.config.platforms.instagram} onToggle={() => update((c) => ({ ...c, config: { ...c.config, platforms: { ...c.config.platforms, instagram: !c.config.platforms.instagram } } }))} />
-        <ToggleRow name="Facebook" on={contract.config.platforms.facebook} onToggle={() => update((c) => ({ ...c, config: { ...c.config, platforms: { ...c.config.platforms, facebook: !c.config.platforms.facebook } } }))} />
-        <ToggleRow name="TikTok" on={contract.config.platforms.tiktok} onToggle={() => update((c) => ({ ...c, config: { ...c.config, platforms: { ...c.config.platforms, tiktok: !c.config.platforms.tiktok } } }))} />
       </div>
 
       <div>
