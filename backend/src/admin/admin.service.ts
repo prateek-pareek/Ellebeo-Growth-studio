@@ -23,6 +23,64 @@ export class AdminService {
     return tenant;
   }
 
+  // Phase 6 (BRAND_DNA_GUIDED_V2 — /brand_dna_implementation_plan.md §10):
+  // cross-tenant funnel for the guided onboarding. Per-tenant events alone
+  // don't answer "is the new flow working" — this does: started vs completed
+  // counts, per-step drop-off, and how often AI suggestions get kept vs changed.
+  async getBrandDnaOnboardingFunnel() {
+    const events = await this.prisma.brandDnaOnboardingEvent.findMany({
+      select: { tenantId: true, event: true, step: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const startedTenants = new Set(events.filter((e) => e.event === 'started').map((e) => e.tenantId));
+    const completedTenants = new Set(events.filter((e) => e.event === 'completed').map((e) => e.tenantId));
+
+    const stepCompletionCounts: Record<number, number> = {};
+    const suggestionAccepted: Record<string, number> = {};
+    const suggestionModified: Record<string, number> = {};
+    let storySkipped = 0;
+
+    for (const e of events) {
+      if (e.event === 'step_completed' && e.step != null) {
+        stepCompletionCounts[e.step] = (stepCompletionCounts[e.step] ?? 0) + 1;
+      }
+      if (e.event === 'suggestion_accepted') {
+        const key = String(e.step ?? 'unknown');
+        suggestionAccepted[key] = (suggestionAccepted[key] ?? 0) + 1;
+      }
+      if (e.event === 'suggestion_modified') {
+        const key = String(e.step ?? 'unknown');
+        suggestionModified[key] = (suggestionModified[key] ?? 0) + 1;
+      }
+      if (e.event === 'story_skipped') storySkipped += 1;
+    }
+
+    // Median completion time, started -> completed, per tenant that has both.
+    const completionTimesMs: number[] = [];
+    for (const tenantId of completedTenants) {
+      const tenantEvents = events.filter((e) => e.tenantId === tenantId);
+      const started = tenantEvents.find((e) => e.event === 'started');
+      const completed = [...tenantEvents].reverse().find((e) => e.event === 'completed');
+      if (started && completed) completionTimesMs.push(completed.createdAt.getTime() - started.createdAt.getTime());
+    }
+    completionTimesMs.sort((a, b) => a - b);
+    const medianCompletionMinutes = completionTimesMs.length
+      ? Math.round(completionTimesMs[Math.floor(completionTimesMs.length / 2)] / 60_000)
+      : null;
+
+    return {
+      startedCount: startedTenants.size,
+      completedCount: completedTenants.size,
+      completionRate: startedTenants.size ? Math.round((completedTenants.size / startedTenants.size) * 100) : null,
+      medianCompletionMinutes,
+      stepCompletionCounts,
+      suggestionAccepted,
+      suggestionModified,
+      storySkipped,
+    };
+  }
+
   async updateTenantStatus(id: string, dto: UpdateTenantStatusDto) {
     return this.prisma.tenant.update({
       where: { id },

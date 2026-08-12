@@ -204,28 +204,29 @@ model Tenant {
 
   user User @relation(fields: [userId], references: [id])
 
-  brandHistory           BrandDNA[]
-  brandDnaProfiles       BrandDnaProfile[]
-  brandPillars           BrandPillar[]
-  brandGoals             BrandGoal[]
-  clients                Client[]
-  consentRecords         ConsentRecord[]
-  appointments           Appointment[]
-  imageAssets            ImageAsset[]
-  goldenExamples         GoldenExample[]
-  businessGoals          BusinessGoal[]
-  generationJobs         GenerationJob[]
-  contentItems           ContentItem[]
-  socialAccounts         SocialAccount[]
-  scheduledPosts         ScheduledPost[]
-  campaigns              Campaign[]
-  generationAuditLogs    GenerationAuditLog[]
-  generationFingerprints GenerationFingerprint[]
-  failedJobs             FailedJob[]
-  crmIntegrationConfig   CrmIntegrationConfig?
-  notifications          Notification[]
-  feedbacks              ContentFeedback[]
-  performances           PostPerformance[]
+  brandHistory             BrandDNA[]
+  brandDnaProfiles         BrandDnaProfile[]
+  brandDnaOnboardingEvents BrandDnaOnboardingEvent[]
+  brandPillars             BrandPillar[]
+  brandGoals               BrandGoal[]
+  clients                  Client[]
+  consentRecords           ConsentRecord[]
+  appointments             Appointment[]
+  imageAssets              ImageAsset[]
+  goldenExamples           GoldenExample[]
+  businessGoals            BusinessGoal[]
+  generationJobs           GenerationJob[]
+  contentItems             ContentItem[]
+  socialAccounts           SocialAccount[]
+  scheduledPosts           ScheduledPost[]
+  campaigns                Campaign[]
+  generationAuditLogs      GenerationAuditLog[]
+  generationFingerprints   GenerationFingerprint[]
+  failedJobs               FailedJob[]
+  crmIntegrationConfig     CrmIntegrationConfig?
+  notifications            Notification[]
+  feedbacks                ContentFeedback[]
+  performances             PostPerformance[]
 
   @@index([userId])
   @@index([status])
@@ -465,6 +466,27 @@ enum LanguageVariant {
 
 // Brand DNA Guided v2 (BRAND_DNA_GUIDED_V2) — see /brand_dna_implementation_plan.md.
 // Added alongside BrandDNA (v1), non-destructive. Pipeline dual-reads this first, falls back to BrandDNA.
+// Phase 6 (BRAND_DNA_GUIDED_V2 — /brand_dna_implementation_plan.md §10):
+// per-step funnel analytics for the guided onboarding. event is one of
+// 'started' | 'step_completed' | 'suggestion_accepted' | 'suggestion_modified'
+// | 'story_skipped' | 'completed' — kept as a plain string rather than an enum
+// since this is an append-only event log, not a validated domain model.
+model BrandDnaOnboardingEvent {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  event     String   @db.VarChar(50)
+  step      Int?
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([event])
+  @@map("brand_dna_onboarding_events")
+  @@schema("platform")
+}
+
 model BrandDnaProfile {
   id            String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId      String  @map("tenant_id") @db.Uuid

@@ -9,6 +9,7 @@ import {
   type BrandDnaV2Contract, type BrandMoodV2,
 } from "@/lib/brand-dna/v2-schema";
 import { MOOD_META, TYPE_META, OBJECTIVE_META } from "@/lib/brand-dna/v2-presentation";
+import { trackBrandDnaEvent, trackSuggestionOutcome } from "@/lib/brand-dna/v2-analytics";
 
 export const Route = createFileRoute("/brand/onboarding")({
   head: () => ({
@@ -149,6 +150,11 @@ function BrandDnaOnboardingV2() {
   const [suggestLoading, setSuggestLoading] = useState<Record<number, boolean>>({});
   const fetchedFor = useRef<Set<string>>(new Set());
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startedTracked = useRef(false);
+  const identitySuggestedMood = useRef<string | undefined>(undefined);
+  const essenceSuggested = useRef<string[] | undefined>(undefined);
+  const audienceSuggested = useRef<{ ageMin: number; ageMax: number; clientTypes: string[] } | undefined>(undefined);
+  const strategySuggested = useRef<{ objective: string } | undefined>(undefined);
 
   useEffect(() => {
     (async () => {
@@ -164,6 +170,10 @@ function BrandDnaOnboardingV2() {
         setContract(emptyContract(user?.tenant?.id ?? "", user?.tenant?.businessName ?? ""));
       } finally {
         setLoading(false);
+        if (!startedTracked.current) {
+          startedTracked.current = true;
+          trackBrandDnaEvent("started");
+        }
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -198,7 +208,9 @@ function BrandDnaOnboardingV2() {
       const res = await api.post("/brand-dna/suggest/identity", {
         serviceCategory: contract.offering.serviceCategory, services: contract.offering.services,
       });
-      setIdentitySuggestion(res.data?.data ?? res.data);
+      const suggestion = res.data?.data ?? res.data;
+      setIdentitySuggestion(suggestion);
+      identitySuggestedMood.current = suggestion?.moods?.[0]?.id;
     } catch {
       // Flag off or offline — fall back to static MOOD_META order, already the default render.
     } finally {
@@ -214,6 +226,7 @@ function BrandDnaOnboardingV2() {
       const res = await api.post("/brand-dna/suggest/essence", { mood, services: contract?.offering.services ?? [] });
       const suggestion = res.data?.data ?? res.data;
       if (suggestion?.essence?.length) {
+        essenceSuggested.current = suggestion.essence.slice(0, 3);
         update((c) => (c.identity.essence.length === 0 ? { ...c, identity: { ...c.identity, essence: suggestion.essence.slice(0, 3) } } : c));
       }
     } catch { /* keep whatever is selected */ }
@@ -227,7 +240,10 @@ function BrandDnaOnboardingV2() {
         serviceCategory: contract.offering.serviceCategory, services: contract.offering.services,
       });
       const s = res.data?.data ?? res.data;
-      if (s) update((c) => ({ ...c, audience: { ...c.audience, ageMin: s.ageMin ?? c.audience.ageMin, ageMax: s.ageMax ?? c.audience.ageMax, genderFocus: s.genderFocus ?? c.audience.genderFocus, clientTypes: c.audience.clientTypes.length === 0 ? (s.clientTypes ?? []) : c.audience.clientTypes } }));
+      if (s) {
+        audienceSuggested.current = { ageMin: s.ageMin, ageMax: s.ageMax, clientTypes: s.clientTypes ?? [] };
+        update((c) => ({ ...c, audience: { ...c.audience, ageMin: s.ageMin ?? c.audience.ageMin, ageMax: s.ageMax ?? c.audience.ageMax, genderFocus: s.genderFocus ?? c.audience.genderFocus, clientTypes: c.audience.clientTypes.length === 0 ? (s.clientTypes ?? []) : c.audience.clientTypes } }));
+      }
     } catch { /* keep defaults */ }
   }, [contract, update]);
 
@@ -237,7 +253,10 @@ function BrandDnaOnboardingV2() {
     try {
       const res = await api.post("/brand-dna/suggest/strategy", { services: contract.offering.services });
       const s = res.data?.data ?? res.data;
-      if (s) update((c) => ({ ...c, strategy: { objective: s.objective ?? c.strategy.objective, postsPerWeek: s.postsPerWeek ?? c.strategy.postsPerWeek, bookingTargetPerMonth: s.bookingTargetPerMonth ?? c.strategy.bookingTargetPerMonth } }));
+      if (s) {
+        strategySuggested.current = { objective: s.objective };
+        update((c) => ({ ...c, strategy: { objective: s.objective ?? c.strategy.objective, postsPerWeek: s.postsPerWeek ?? c.strategy.postsPerWeek, bookingTargetPerMonth: s.bookingTargetPerMonth ?? c.strategy.bookingTargetPerMonth } }));
+      }
     } catch { /* keep defaults */ }
   }, [contract, update]);
 
@@ -267,11 +286,31 @@ function BrandDnaOnboardingV2() {
     }
   };
 
+  const goNext = () => {
+    if (!contract) return;
+    trackBrandDnaEvent("step_completed", step);
+    if (step === 2) {
+      trackSuggestionOutcome(2, "mood", identitySuggestedMood.current, contract.identity.mood);
+      trackSuggestionOutcome(2, "essence", essenceSuggested.current, contract.identity.essence);
+    }
+    if (step === 3 && audienceSuggested.current) {
+      trackSuggestionOutcome(3, "clientTypes", audienceSuggested.current.clientTypes, contract.audience.clientTypes);
+    }
+    if (step === 4 && strategySuggested.current) {
+      trackSuggestionOutcome(4, "objective", strategySuggested.current.objective, contract.strategy.objective);
+    }
+    if (step === 6 && !contract.story.userWritten) {
+      trackBrandDnaEvent("story_skipped", 6);
+    }
+    setStep(step + 1);
+  };
+
   const finish = async () => {
     if (!contract) return;
     setSaving(true);
     try {
       await api.put("/brand-dna/v2", { ...contract, meta: { ...contract.meta, completedAt: new Date().toISOString() } });
+      trackBrandDnaEvent("completed");
       toast.success("Brand DNA saved.");
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Couldn't save — please try again.");
@@ -345,7 +384,7 @@ function BrandDnaOnboardingV2() {
                   <button onClick={() => setStep(step - 1)} className="rounded-full border border-border px-5 py-2.5 text-[13.5px] hover:bg-muted/60">Back</button>
                 )}
                 {step < 7 ? (
-                  <button onClick={() => setStep(step + 1)} className="rounded-full bg-charcoal text-offwhite px-5 py-2.5 text-[13.5px]">Continue</button>
+                  <button onClick={goNext} className="rounded-full bg-charcoal text-offwhite px-5 py-2.5 text-[13.5px]">Continue</button>
                 ) : (
                   <button onClick={finish} className="rounded-full bg-brass text-white px-5 py-2.5 text-[13.5px]">Save &amp; finish</button>
                 )}

@@ -19,6 +19,11 @@ export class AdminController {
     return this.adminService.getTenant(id);
   }
 
+  @Get('brand-dna-v2/funnel')
+  getBrandDnaOnboardingFunnel() {
+    return this.adminService.getBrandDnaOnboardingFunnel();
+  }
+
   @Patch('tenants/:id/status')
   updateTenantStatus(@Param('id') id: string, @Body() dto: UpdateTenantStatusDto) {
     return this.adminService.updateTenantStatus(id, dto);

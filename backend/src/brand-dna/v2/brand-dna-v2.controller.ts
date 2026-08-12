@@ -11,6 +11,7 @@ import { BrandDnaV2Contract } from './brand-dna-v2.types';
 import {
   SuggestIdentityDto, SuggestEssenceDto, SuggestAudienceDto, SuggestStrategyDto, DraftStoryDto,
 } from './dto/brand-dna-suggest.dto';
+import { TrackBrandDnaEventDto } from './dto/brand-dna-event.dto';
 
 function assertGuidedV2Enabled(): void {
   if (process.env.BRAND_DNA_GUIDED_V2?.trim() !== 'true') {
@@ -30,9 +31,13 @@ export class BrandDnaV2Controller {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  // Phase 6: getProfile/saveProfile are NOT flag-gated — /brand/onboarding
+  // now unconditionally renders the guided flow for every technician (the
+  // route swap already shipped), so these two are load-bearing, not an
+  // opt-in experiment. Only the AI suggestion endpoints below stay gated;
+  // the frontend already degrades gracefully if those are off.
   @Get('v2')
   async getProfile(@Req() req: any) {
-    assertGuidedV2Enabled();
     const profile = await this.prisma.brandDnaProfile.findUnique({
       where: { unique_current_brand_dna_profile: { tenantId: req.user.tenantId, isCurrent: true } },
     });
@@ -41,7 +46,6 @@ export class BrandDnaV2Controller {
 
   @Put('v2')
   async saveProfile(@Req() req: any, @Body() contract: BrandDnaV2Contract) {
-    assertGuidedV2Enabled();
     if (!contract?.identity?.brandName || !contract?.identity?.mood) {
       throw new BadRequestException('identity.brandName and identity.mood are required');
     }
@@ -66,6 +70,31 @@ export class BrandDnaV2Controller {
       }
       throw err;
     }
+  }
+
+  // Phase 6 analytics — never flag-gated, never throttled tightly enough to
+  // drop real events, and failures here must never surface to the caller
+  // (the frontend fires these fire-and-forget; a 4xx would just be noise).
+  @Post('v2/events')
+  async trackEvent(@Req() req: any, @Body() dto: TrackBrandDnaEventDto) {
+    try {
+      await this.prisma.brandDnaOnboardingEvent.create({
+        data: { tenantId: req.user.tenantId, event: dto.event, step: dto.step, metadata: dto.metadata as any },
+      });
+    } catch {
+      // Swallow — analytics must never break the onboarding flow it's measuring.
+    }
+    return { ok: true };
+  }
+
+  @Get('v2/events/summary')
+  async eventsSummary(@Req() req: any) {
+    const grouped = await this.prisma.brandDnaOnboardingEvent.groupBy({
+      by: ['event', 'step'],
+      where: { tenantId: req.user.tenantId },
+      _count: { _all: true },
+    });
+    return grouped.map((g) => ({ event: g.event, step: g.step, count: g._count._all }));
   }
 
   @Post('suggest/identity')
