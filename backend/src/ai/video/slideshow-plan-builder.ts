@@ -21,6 +21,7 @@ export interface BuildSlideshowPlanParams {
   brandPalette?: string[];
   totalDurationSeconds?: number;
   medicalAesthetics?: boolean;
+  critic?: { score: number | null; status: string; passed: boolean; revisions: number; notes: string[] };
 }
 
 export class SlideshowPlanBuilderError extends Error {
@@ -63,7 +64,7 @@ export function buildSlideshowPlan(params: BuildSlideshowPlanParams): VideoPlan 
     captions: { enabled: true, style: 'minimal', burnedIn: true },
     branding: { palette: params.brandPalette ?? [], font: params.brandFont ?? null },
     compliance: { medicalAesthetics: params.medicalAesthetics ?? false },
-    critic: {},
+    critic: params.critic ?? {},
     render: {},
     meta: { createdAt: new Date().toISOString() },
   };

@@ -41,4 +41,26 @@ describe('runScriptAgent', () => {
       }),
     ).rejects.toThrow();
   });
+
+  it('in revision mode, prompts the model to rewrite only the flagged scenes and passes the critic notes through', async () => {
+    const client = makeClient({ scenes: [{ index: 1, headline: 'Book Now', caption: null }] });
+
+    await runScriptAgent({
+      sceneCount: 2,
+      objective: 'fill_quiet_days',
+      brandVoice: { businessName: 'Glow Studio', primaryTone: 'warm', vocabularyBlacklist: [], doNotSay: [] },
+      medicalAesthetics: false,
+      client,
+      revision: {
+        indices: [1],
+        notes: ['Scene 1 hook is generic'],
+        previousScenes: [{ index: 0, headline: 'Glow Up', caption: null }, { index: 1, headline: 'Old headline', caption: null }],
+      },
+    });
+
+    const userPrompt = client.beta.tools.messages.create.mock.calls[0][0].messages[0].content;
+    expect(userPrompt).toContain('Scenes to rewrite: 1');
+    expect(userPrompt).toContain('Scene 1 hook is generic');
+    expect(userPrompt).not.toContain('Number of scenes: 2');
+  });
 });

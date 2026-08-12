@@ -22,6 +22,7 @@ export interface BuildReelsPlanParams {
   brandPalette?: string[];
   medicalAesthetics?: boolean;
   fallbackDurationSeconds?: number;
+  critic?: { score: number | null; status: string; passed: boolean; revisions: number; notes: string[] };
 }
 
 export class ReelsPlanBuilderError extends Error {
@@ -76,7 +77,7 @@ export function buildReelsPlan(params: BuildReelsPlanParams): VideoPlan {
     captions: { enabled: true, style: 'bold', burnedIn: true },
     branding: { palette: params.brandPalette ?? [], font: params.brandFont ?? null },
     compliance: { medicalAesthetics: params.medicalAesthetics ?? false },
-    critic: {},
+    critic: params.critic ?? {},
     render: {},
     meta: { createdAt: new Date().toISOString() },
   };

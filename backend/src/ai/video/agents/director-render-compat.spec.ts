@@ -18,6 +18,11 @@ jest.mock('./script-agent', () => ({
     repaired: false,
   }),
 }));
+jest.mock('./critic-agent', () => ({
+  runCriticAgent: jest.fn().mockResolvedValue({
+    score: 0.9, passed: true, weakSceneIndices: [], notes: ['Good.'], tokensUsed: 50,
+  }),
+}));
 
 function makeMockPrisma() {
   let created: any = null;

@@ -49,12 +49,22 @@ export interface ScriptAgentBrandVoice {
   doNotSay: string[];
 }
 
+export interface ScriptRevisionContext {
+  /** Only these scene indices need new copy — everything else in the plan stays untouched. */
+  indices: number[];
+  /** Critic agent's targeted notes on what was wrong. */
+  notes: string[];
+  previousScenes: Array<{ index: number; headline: string | null; caption: string | null }>;
+}
+
 export interface ScriptAgentParams {
   sceneCount: number;
   objective: string;
   brandVoice: ScriptAgentBrandVoice;
   medicalAesthetics: boolean;
   client?: Anthropic;
+  /** Set by the Director's critic loop (Phase 5) to re-write only the weak scenes. */
+  revision?: ScriptRevisionContext;
 }
 
 function buildSystemPrompt(): string {
@@ -67,7 +77,31 @@ function buildSystemPrompt(): string {
 }
 
 function buildUserPrompt(params: ScriptAgentParams): string {
-  const { sceneCount, objective, brandVoice, medicalAesthetics } = params;
+  const { sceneCount, objective, brandVoice, medicalAesthetics, revision } = params;
+
+  if (revision) {
+    const previousBlock = revision.previousScenes
+      .map((s) => `Scene ${s.index}: headline="${s.headline ?? ''}" caption="${s.caption ?? ''}"`)
+      .join('\n');
+    const lines = [
+      `Business: ${brandVoice.businessName}`,
+      `Brand tone: ${brandVoice.primaryTone ?? 'warm and approachable'}`,
+      `Video objective: ${objective}`,
+      'A critic reviewed this draft and flagged specific scenes as weak. Rewrite ONLY those scenes — do not touch the others.',
+      'Full current draft for context:',
+      previousBlock,
+      `Scenes to rewrite: ${revision.indices.join(', ')}`,
+      `Critic notes: ${revision.notes.join(' | ')}`,
+      brandVoice.vocabularyBlacklist.length > 0 ? `Never use these words/phrases: ${brandVoice.vocabularyBlacklist.join(', ')}` : null,
+      brandVoice.doNotSay.length > 0 ? `Never say: ${brandVoice.doNotSay.join(', ')}` : null,
+      medicalAesthetics
+        ? 'This is a medical aesthetics brand — do not reference treatment outcomes, results, or before/after in any copy.'
+        : null,
+      `Return scenes only for indices ${revision.indices.join(', ')} — nothing else.`,
+    ].filter(Boolean);
+    return lines.join('\n');
+  }
+
   const lines = [
     `Business: ${brandVoice.businessName}`,
     `Brand tone: ${brandVoice.primaryTone ?? 'warm and approachable'}`,

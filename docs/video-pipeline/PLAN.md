@@ -84,10 +84,17 @@ narrative log.
 - New Pixabay integration: `PixabayStockImageService` (images), sibling to the existing `PixabayMusicService` (music) — same provider, same timeout config reused, no Redis caching added yet (deferred; each stock search hits the network directly for now).
 
 ## Phase 5 — QA/critic loop
-- [ ] Critic agent + rubric (brand fit, objective match, hook strength, pacing, compliance)
-- [ ] Bounded revise loop (default N=2), targeted re-runs of weak parts
-- [ ] Self-test: weak seeded draft triggers revision + score improves; loop never exceeds N
-- [ ] GATE
+- [x] Critic agent + rubric (brand fit, objective match, hook strength, pacing, compliance) — `backend/src/ai/video/agents/critic-agent.ts`
+- [x] Bounded revise loop (default N=2), targeted re-runs of weak parts — `DirectorService.runCriticLoop`, `MAX_CRITIC_REVISIONS` from `video-plan.constants.ts`
+- [x] Self-test: weak seeded draft triggers revision + score improves; loop never exceeds N — two dedicated tests in `director.service.spec.ts` ("critic revision loop" describe block)
+- [x] GATE — presented below, awaiting sign-off before Phase 6
+
+**Design notes:**
+- Pass/fail is decided in code (`score >= CRITIC_PASS_THRESHOLD`), not trusted from the model's own opinion — same "agent reasons, code decides" split as the compliance hard gate (Phase 6, coming next) and the render/webhook core (Phase 2). The model only supplies a score, weak scene indices, and notes.
+- Revisions are targeted, not full re-drafts: `runScriptAgent` gained an optional `revision` param (indices + critic notes + full previous draft for context) — the model is asked to rewrite only the flagged scenes, and `mergeSceneCopy` splices the result back into the untouched draft by index.
+- The critic loop runs on scene copy (text) only, *before* asset/voiceover resolution for reels — not per-iteration. This means each revision cycle costs one Script-agent call + one Critic-agent call, never a repeat ElevenLabs/stock-image call, keeping the bounded loop's cost predictable.
+- The loop always terminates with the last critique's score/notes recorded on `plan.critic`, whether it ultimately passed or not — a plan that never clears the bar in `MAX_CRITIC_REVISIONS` attempts still reaches the technician for review with the critic's notes visible, it's just not marked `passed`. Nothing blocks technician review; only render/publish should gate on `critic.passed` (a UI/Phase-8 concern, not enforced in code yet — flagging for Phase 8).
+- `plan.critic` and the denormalized `VideoPlan.criticStatus`/`criticScore`/`criticRevisions` columns are both written from the same `DirectorCriticOutcome` value, so the JSON blob and the queryable columns can't drift apart.
 
 ## Phase 6 — Compliance agent + hard gate
 - [ ] Compliance agent (reasoning layer)

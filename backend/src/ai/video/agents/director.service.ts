@@ -1,19 +1,24 @@
 // ============================================================================
 // director.service.ts — the Director agent: owns the Video Plan and runs the
-// drafting loop. Phase 3 scope is single-step (draft via Script agent only —
-// Asset/Compliance/Critic steps land in Phases 4-6 and will extend this same
-// loop, not replace it). Persists a placeholder row before calling any LLM so
-// a crash mid-draft is observable rather than silently lost — the multi-step
-// resumable state machine deepens once the critic loop (Phase 5) exists.
+// draft-then-critique loop. Since Phase 5, drafting is no longer "call Script
+// agent once and done": after the Script agent writes scene copy, the Critic
+// agent scores it, and if it's below CRITIC_PASS_THRESHOLD the Director
+// re-runs the Script agent for ONLY the flagged weak scenes (targeted
+// revision, not a full re-draft), bounded to MAX_CRITIC_REVISIONS. This is
+// the agentic payoff described in the spec: money (render) is only spent on
+// a plan that already passed review. Persists a placeholder row before
+// calling any LLM so a crash mid-draft is observable rather than silently
+// lost.
 // ============================================================================
 
 import type { PrismaClient } from '@prisma/client';
 import type Anthropic from '@anthropic-ai/sdk';
 import { runScriptAgent, ScriptAgentBrandVoice } from './script-agent';
+import { runCriticAgent, CriticResult } from './critic-agent';
 import { buildSlideshowPlan } from '../slideshow-plan-builder';
 import { buildReelsPlan } from '../reels-plan-builder';
 import { VideoPlan, parseVideoPlan } from '../video-plan.schema';
-import { DEFAULT_DURATION_SECONDS } from '../video-plan.constants';
+import { DEFAULT_DURATION_SECONDS, MAX_CRITIC_REVISIONS } from '../video-plan.constants';
 import { SlideshowAssetProvider } from '../assets/slideshow-asset-provider';
 import { ReelsAssetProvider } from '../assets/reels-asset-provider';
 import type { AssetProvider, SceneCopy } from '../assets/asset-provider';
@@ -103,16 +108,31 @@ export class DirectorService {
       },
     });
 
-    // Step 2: Script agent writes the per-scene copy.
-    let scriptResult;
+    // Step 2: Script agent drafts, Critic agent reviews, targeted revisions
+    // loop bounded to MAX_CRITIC_REVISIONS.
+    let sceneCopy: SceneCopy[];
+    let critic: DirectorCriticOutcome;
     try {
-      scriptResult = await runScriptAgent({
+      const initialScript = await runScriptAgent({
         sceneCount: params.imageUrls.length,
         objective: params.objective,
         brandVoice: params.brandVoice,
         medicalAesthetics: params.medicalAesthetics ?? false,
         client: params.anthropicClient,
       });
+      const initialSceneCopy: SceneCopy[] = initialScript.output.scenes.map((s) => ({
+        index: s.index,
+        headline: s.headline,
+        caption: s.caption,
+      }));
+
+      ({ sceneCopy, critic } = await this.runCriticLoop({
+        sceneCopy: initialSceneCopy,
+        objective: params.objective,
+        brandVoice: params.brandVoice,
+        medicalAesthetics: params.medicalAesthetics ?? false,
+        anthropicClient: params.anthropicClient,
+      }));
     } catch (err) {
       await this.prisma.videoPlan.update({
         where: { id: row.id },
@@ -123,7 +143,7 @@ export class DirectorService {
 
     const headlines: (string | null)[] = [];
     const captions: (string | null)[] = [];
-    for (const scene of scriptResult.output.scenes) {
+    for (const scene of sceneCopy) {
       headlines[scene.index] = scene.headline;
       captions[scene.index] = scene.caption;
     }
@@ -139,11 +159,12 @@ export class DirectorService {
       brandPalette: params.brandPalette,
       totalDurationSeconds: params.totalDurationSeconds,
       medicalAesthetics: params.medicalAesthetics,
+      critic: toCriticPlanField(critic),
     });
 
     await this.prisma.videoPlan.update({
       where: { id: row.id },
-      data: { status: 'in_review', plan: finalPlan },
+      data: { status: 'in_review', plan: finalPlan, criticStatus: critic.passed ? 'passed' : 'failed', criticScore: critic.score, criticRevisions: critic.revisions ?? 0 },
     });
 
     return { videoPlanId: row.id, plan: finalPlan };
@@ -176,19 +197,26 @@ export class DirectorService {
     });
 
     try {
-      const scriptResult = await runScriptAgent({
+      const initialScript = await runScriptAgent({
         sceneCount: params.sceneCount,
         objective: params.objective,
         brandVoice: params.brandVoice,
         medicalAesthetics: params.medicalAesthetics ?? false,
         client: params.anthropicClient,
       });
-
-      const sceneCopy: SceneCopy[] = scriptResult.output.scenes.map((s) => ({
+      const initialSceneCopy: SceneCopy[] = initialScript.output.scenes.map((s) => ({
         index: s.index,
         headline: s.headline,
         caption: s.caption,
       }));
+
+      const { sceneCopy, critic } = await this.runCriticLoop({
+        sceneCopy: initialSceneCopy,
+        objective: params.objective,
+        brandVoice: params.brandVoice,
+        medicalAesthetics: params.medicalAesthetics ?? false,
+        anthropicClient: params.anthropicClient,
+      });
 
       const assetProvider = params.assetProvider ?? new ReelsAssetProvider(new SlideshowAssetProvider());
       const assetResult = await assetProvider.resolveSceneAssets({
@@ -211,11 +239,19 @@ export class DirectorService {
         brandFont: params.brandFont,
         brandPalette: params.brandPalette,
         medicalAesthetics: params.medicalAesthetics,
+        critic: toCriticPlanField(critic),
       });
 
       await this.prisma.videoPlan.update({
         where: { id: row.id },
-        data: { status: 'in_review', plan: finalPlan, durationSeconds: finalPlan.durationSeconds },
+        data: {
+          status: 'in_review',
+          plan: finalPlan,
+          durationSeconds: finalPlan.durationSeconds,
+          criticStatus: critic.passed ? 'passed' : 'failed',
+          criticScore: critic.score,
+          criticRevisions: critic.revisions,
+        },
       });
 
       return { videoPlanId: row.id, plan: finalPlan };
@@ -227,6 +263,84 @@ export class DirectorService {
       throw err;
     }
   }
+
+  // --------------------------------------------------------------------------
+  // The critic loop (Phase 5): score the draft, and if it's below threshold,
+  // ask the Script agent to rewrite ONLY the flagged weak scenes — not a full
+  // re-draft. Bounded to MAX_CRITIC_REVISIONS; the loop always terminates
+  // with the last critique's score/notes recorded, whether it passed or not
+  // (a plan that never passes still reaches the technician for review, with
+  // the critic's notes visible — it just isn't marked passed).
+  // --------------------------------------------------------------------------
+
+  private async runCriticLoop(params: {
+    sceneCopy: SceneCopy[];
+    objective: string;
+    brandVoice: ScriptAgentBrandVoice;
+    medicalAesthetics: boolean;
+    anthropicClient?: Anthropic;
+  }): Promise<{ sceneCopy: SceneCopy[]; critic: DirectorCriticOutcome }> {
+    let sceneCopy = params.sceneCopy;
+    let revisions = 0;
+    let critique = await runCriticAgent({
+      scenes: sceneCopy,
+      objective: params.objective,
+      brandVoice: params.brandVoice,
+      medicalAesthetics: params.medicalAesthetics,
+      client: params.anthropicClient,
+    });
+
+    while (!critique.passed && critique.weakSceneIndices.length > 0 && revisions < MAX_CRITIC_REVISIONS) {
+      revisions++;
+
+      const revisionResult = await runScriptAgent({
+        sceneCount: critique.weakSceneIndices.length,
+        objective: params.objective,
+        brandVoice: params.brandVoice,
+        medicalAesthetics: params.medicalAesthetics,
+        client: params.anthropicClient,
+        revision: {
+          indices: critique.weakSceneIndices,
+          notes: critique.notes,
+          previousScenes: sceneCopy,
+        },
+      });
+
+      sceneCopy = mergeSceneCopy(sceneCopy, revisionResult.output.scenes);
+
+      critique = await runCriticAgent({
+        scenes: sceneCopy,
+        objective: params.objective,
+        brandVoice: params.brandVoice,
+        medicalAesthetics: params.medicalAesthetics,
+        client: params.anthropicClient,
+      });
+    }
+
+    return { sceneCopy, critic: { ...critique, revisions } };
+  }
+}
+
+interface DirectorCriticOutcome extends CriticResult {
+  revisions: number;
+}
+
+function mergeSceneCopy(original: SceneCopy[], revised: Array<{ index: number; headline: string | null; caption: string | null }>): SceneCopy[] {
+  const byIndex = new Map(original.map((s) => [s.index, s]));
+  for (const scene of revised) {
+    byIndex.set(scene.index, scene);
+  }
+  return Array.from(byIndex.values()).sort((a, b) => a.index - b.index);
+}
+
+function toCriticPlanField(critic: DirectorCriticOutcome) {
+  return {
+    score: critic.score,
+    status: critic.passed ? ('passed' as const) : ('failed' as const),
+    passed: critic.passed,
+    revisions: critic.revisions,
+    notes: critic.notes,
+  };
 }
 
 function buildPlaceholderReelsPlan(params: DraftReelsPlanParams): VideoPlan {
