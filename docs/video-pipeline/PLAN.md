@@ -97,10 +97,17 @@ narrative log.
 - `plan.critic` and the denormalized `VideoPlan.criticStatus`/`criticScore`/`criticRevisions` columns are both written from the same `DirectorCriticOutcome` value, so the JSON blob and the queryable columns can't drift apart.
 
 ## Phase 6 — Compliance agent + hard gate
-- [ ] Compliance agent (reasoning layer)
-- [ ] Code-enforced hard gate reusing `isMedicalAestheticsBrand()` — block client face/before-after imagery, forbid treatment-outcome claims
-- [ ] Self-test: flag-on rejection across slideshow/reels/AI-clips
-- [ ] GATE
+- [x] Compliance agent (reasoning layer) — `backend/src/ai/video/agents/compliance-agent.ts`
+- [x] Code-enforced hard gate — `compliance/client-photo-gate.ts` (imagery) + `compliance/copy-compliance-gate.ts` (copy, wraps the existing `OutputValidator` — reused, not reinvented)
+- [x] Self-test: flag-on rejection across slideshow/reels/AI-clips — Director-level tests in `director.service.spec.ts`'s "compliance hard gate" block (slideshow + reels); ai_clips coverage via `client-photo-gate.spec.ts`'s video-type-agnostic test (the provider itself doesn't exist until Phase 7, but the shared primitive it will call is proven type-agnostic now)
+- [x] GATE — presented below, awaiting sign-off before Phase 7
+
+**Design notes:**
+- Two layers exactly as specified: the Compliance agent reasons about subtle edge cases (implied outcomes, indirect before/after framing) and gets **one** targeted Script-agent revision pass when it flags something — not a loop, since it's a review pass, not a quality bar to converge on. The code-enforced hard gates are unconditional and run regardless of what the agent decided.
+- Copy hard gate reuses `OutputValidator` (`backend/src/ai/guards/output-validator.ts`) — the platform's existing AHPRA-aware moderation, already applied to every caption in the main content pipeline (`generation-orchestrator.ts`). Did not invent a second, parallel blocklist for video. Runs **unconditionally** on every video's scene copy regardless of `medicalAesthetics` (mirrors how `OutputValidator` is already used for all brands, not just medical-aesthetics ones — guaranteed-results language is risky copy generally).
+- Imagery hard gate (`filterClientPhotos`) is scoped to `medicalAesthetics: true` only, per the spec's exact wording. It's a plain boolean check on a new `clientPhotoFlags` param (parallel array to `imageUrls`) — no LLM in the path, can't be bypassed by anything upstream.
+- `draftSlideshowPlan` does **not** yet have a stock-photo fallback when an image is blocked (it isn't routed through `SlideshowAssetProvider` — a Phase 4 decision that still stands). A blocked image is dropped, reducing scene count, rather than substituted. `draftReelsPlan` (via `SlideshowAssetProvider`/`ReelsAssetProvider`) *does* fall back to stock search through the Asset agent. Flagging the slideshow gap as a known follow-up, same as noted in Phase 4.
+- Found the same reels-plan-builder / placeholder-plan scene-duration-clamping bug in two places while writing single-scene compliance tests (`Math.round(20 / sceneCount)` could exceed `MAX_SCENE_DURATION_SECONDS` for `sceneCount: 1`) — fixed both to clamp like `slideshow-plan-builder.ts` already did. Caught by the new tests, not a regression from this phase's own code, but fixed here since it blocked writing them.
 
 ## Phase 7 — AI video clips (opt-in)
 - [ ] VideoClipProvider adapter interface

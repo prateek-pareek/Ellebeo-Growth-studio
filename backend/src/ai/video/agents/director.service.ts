@@ -15,13 +15,16 @@ import type { PrismaClient } from '@prisma/client';
 import type Anthropic from '@anthropic-ai/sdk';
 import { runScriptAgent, ScriptAgentBrandVoice } from './script-agent';
 import { runCriticAgent, CriticResult } from './critic-agent';
+import { runComplianceAgent } from './compliance-agent';
 import { buildSlideshowPlan } from '../slideshow-plan-builder';
 import { buildReelsPlan } from '../reels-plan-builder';
 import { VideoPlan, parseVideoPlan } from '../video-plan.schema';
-import { DEFAULT_DURATION_SECONDS, MAX_CRITIC_REVISIONS } from '../video-plan.constants';
+import { DEFAULT_DURATION_SECONDS, MAX_CRITIC_REVISIONS, MAX_SCENE_DURATION_SECONDS, MIN_SCENE_DURATION_SECONDS } from '../video-plan.constants';
 import { SlideshowAssetProvider } from '../assets/slideshow-asset-provider';
 import { ReelsAssetProvider } from '../assets/reels-asset-provider';
 import type { AssetProvider, SceneCopy } from '../assets/asset-provider';
+import { filterClientPhotos } from '../compliance/client-photo-gate';
+import { filterSceneCopyForCompliance } from '../compliance/copy-compliance-gate';
 
 export class DirectorError extends Error {
   constructor(message: string) {
@@ -37,6 +40,8 @@ export interface DraftSlideshowPlanParams {
   technicianId: string;
   brandDnaId: string;
   imageUrls: string[];
+  /** Parallel to imageUrls — true means "this is a real client photo." Blocked when medicalAesthetics is true. */
+  clientPhotoFlags?: boolean[];
   objective: VideoPlan['objective'];
   brandVoice: ScriptAgentBrandVoice;
   brandFont?: string | null;
@@ -59,6 +64,8 @@ export interface DraftReelsPlanParams {
   brandDnaId: string;
   /** Technician-supplied images, in scene order. May be fewer than sceneCount — gaps are filled by the Asset agent. */
   imageUrls: string[];
+  /** Parallel to imageUrls — true means "this is a real client photo." Blocked when medicalAesthetics is true. */
+  clientPhotoFlags?: boolean[];
   sceneCount: number;
   objective: VideoPlan['objective'];
   brandVoice: ScriptAgentBrandVoice;
@@ -80,12 +87,25 @@ export class DirectorService {
       throw new DirectorError('At least one image is required to draft a slideshow plan');
     }
 
+    // Compliance hard gate on imagery: unconditional, code-level, applied
+    // before anything downstream ever sees a blocked url. This rule-based
+    // builder has no stock fallback (unlike the AssetProvider path reels
+    // uses) — a blocked image is dropped, which reduces scene count rather
+    // than being substituted. Documented Phase 6 scope: adding a stock
+    // fallback here is a trivial follow-up once draftSlideshowPlan is wired
+    // through SlideshowAssetProvider (see Phase 4's notes on that).
+    const safeImageUrls = filterClientPhotos(params.imageUrls, params.clientPhotoFlags, params.medicalAesthetics ?? false)
+      .filter((url): url is string => !!url);
+    if (safeImageUrls.length === 0) {
+      throw new DirectorError('All supplied images were blocked by the medical-aesthetics compliance gate — no compliant images remain');
+    }
+
     // Step 1: a bare, image-only plan (no copy yet) — persisted immediately
     // so the row exists even if the Script agent call below fails.
     const placeholderPlan = buildSlideshowPlan({
       technicianId: params.technicianId,
       brandDnaRef: params.brandDnaId,
-      imageUrls: params.imageUrls,
+      imageUrls: safeImageUrls,
       objective: params.objective,
       brandFont: params.brandFont,
       brandPalette: params.brandPalette,
@@ -114,7 +134,7 @@ export class DirectorService {
     let critic: DirectorCriticOutcome;
     try {
       const initialScript = await runScriptAgent({
-        sceneCount: params.imageUrls.length,
+        sceneCount: safeImageUrls.length,
         objective: params.objective,
         brandVoice: params.brandVoice,
         medicalAesthetics: params.medicalAesthetics ?? false,
@@ -126,8 +146,17 @@ export class DirectorService {
         caption: s.caption,
       }));
 
-      ({ sceneCopy, critic } = await this.runCriticLoop({
+      const criticOutcome = await this.runCriticLoop({
         sceneCopy: initialSceneCopy,
+        objective: params.objective,
+        brandVoice: params.brandVoice,
+        medicalAesthetics: params.medicalAesthetics ?? false,
+        anthropicClient: params.anthropicClient,
+      });
+
+      ({ sceneCopy, critic } = await this.runComplianceReview({
+        sceneCopy: criticOutcome.sceneCopy,
+        critic: criticOutcome.critic,
         objective: params.objective,
         brandVoice: params.brandVoice,
         medicalAesthetics: params.medicalAesthetics ?? false,
@@ -151,7 +180,7 @@ export class DirectorService {
     const finalPlan = buildSlideshowPlan({
       technicianId: params.technicianId,
       brandDnaRef: params.brandDnaId,
-      imageUrls: params.imageUrls,
+      imageUrls: safeImageUrls,
       objective: params.objective,
       headlines,
       captions,
@@ -210,8 +239,17 @@ export class DirectorService {
         caption: s.caption,
       }));
 
-      const { sceneCopy, critic } = await this.runCriticLoop({
+      const criticOutcome = await this.runCriticLoop({
         sceneCopy: initialSceneCopy,
+        objective: params.objective,
+        brandVoice: params.brandVoice,
+        medicalAesthetics: params.medicalAesthetics ?? false,
+        anthropicClient: params.anthropicClient,
+      });
+
+      const { sceneCopy, critic } = await this.runComplianceReview({
+        sceneCopy: criticOutcome.sceneCopy,
+        critic: criticOutcome.critic,
         objective: params.objective,
         brandVoice: params.brandVoice,
         medicalAesthetics: params.medicalAesthetics ?? false,
@@ -223,6 +261,7 @@ export class DirectorService {
         tenantId: params.tenantId,
         sceneCopy,
         technicianImageUrls: params.imageUrls,
+        clientPhotoFlags: params.clientPhotoFlags,
         brandMoodTag: params.brandMoodTag,
         brandTone: params.brandTone,
         medicalAesthetics: params.medicalAesthetics ?? false,
@@ -319,6 +358,65 @@ export class DirectorService {
 
     return { sceneCopy, critic: { ...critique, revisions } };
   }
+
+  // --------------------------------------------------------------------------
+  // Compliance (Phase 6): two layers. The Compliance agent (reasoning, only
+  // for medical-aesthetics brands) gets exactly one targeted revision pass
+  // for anything it flags — not a loop, since it's a review pass, not a
+  // quality bar to converge on. The copy hard gate then runs UNCONDITIONALLY
+  // for every video regardless of medicalAesthetics (same as how
+  // OutputValidator is already applied to every caption in the main content
+  // pipeline) — it is the certain backstop, the agent is the smart layer.
+  // --------------------------------------------------------------------------
+
+  private async runComplianceReview(params: {
+    sceneCopy: SceneCopy[];
+    critic: DirectorCriticOutcome;
+    objective: string;
+    brandVoice: ScriptAgentBrandVoice;
+    medicalAesthetics: boolean;
+    anthropicClient?: Anthropic;
+  }): Promise<{ sceneCopy: SceneCopy[]; critic: DirectorCriticOutcome }> {
+    let sceneCopy = params.sceneCopy;
+    const complianceNotes: string[] = [];
+
+    if (params.medicalAesthetics) {
+      const review = await runComplianceAgent({
+        scenes: sceneCopy,
+        brandVoice: params.brandVoice,
+        client: params.anthropicClient,
+      });
+
+      if (review.output.flaggedSceneIndices.length > 0) {
+        const revisionResult = await runScriptAgent({
+          sceneCount: review.output.flaggedSceneIndices.length,
+          objective: params.objective,
+          brandVoice: params.brandVoice,
+          medicalAesthetics: true,
+          client: params.anthropicClient,
+          revision: {
+            indices: review.output.flaggedSceneIndices,
+            notes: review.output.reasons,
+            previousScenes: sceneCopy,
+          },
+        });
+        sceneCopy = mergeSceneCopy(sceneCopy, revisionResult.output.scenes);
+        complianceNotes.push(...review.output.reasons.map((r) => `Compliance agent: ${r}`));
+      }
+    }
+
+    // The hard gate — unconditional, code-level, no LLM in this step.
+    const gateResult = await filterSceneCopyForCompliance(sceneCopy);
+    sceneCopy = gateResult.sceneCopy;
+    complianceNotes.push(
+      ...gateResult.violations.map((v) => `Compliance hard gate: scene ${v.index} ${v.field} removed (${v.reasons.join('; ')})`),
+    );
+
+    return {
+      sceneCopy,
+      critic: complianceNotes.length > 0 ? { ...params.critic, notes: [...params.critic.notes, ...complianceNotes] } : params.critic,
+    };
+  }
 }
 
 interface DirectorCriticOutcome extends CriticResult {
@@ -344,9 +442,13 @@ function toCriticPlanField(critic: DirectorCriticOutcome) {
 }
 
 function buildPlaceholderReelsPlan(params: DraftReelsPlanParams): VideoPlan {
+  const perScene = Math.min(
+    MAX_SCENE_DURATION_SECONDS,
+    Math.max(MIN_SCENE_DURATION_SECONDS, Math.round(DEFAULT_DURATION_SECONDS / params.sceneCount)),
+  );
   const scenes = Array.from({ length: params.sceneCount }, (_, index) => ({
     index,
-    durationSeconds: Math.max(2, Math.round(DEFAULT_DURATION_SECONDS / params.sceneCount)),
+    durationSeconds: perScene,
     asset: { kind: 'image', url: params.imageUrls[index] ?? null },
     motion: 'none',
     text: { headline: null, caption: null, position: 'bottom' },

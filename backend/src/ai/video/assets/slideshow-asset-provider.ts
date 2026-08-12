@@ -7,14 +7,19 @@
 
 import type { AssetProvider, AssetProviderContext, AssetResolutionResult, ResolvedSceneAsset, SceneCopy } from './asset-provider';
 import { runAssetAgent } from '../agents/asset-agent';
+import { filterClientPhotos } from '../compliance/client-photo-gate';
 
 export class SlideshowAssetProvider implements AssetProvider {
   async resolveSceneAssets(ctx: AssetProviderContext): Promise<AssetResolutionResult> {
     const scenes: ResolvedSceneAsset[] = [];
     const gaps: SceneCopy[] = [];
 
+    // Compliance hard gate: strip any client-photo-flagged image before it
+    // can ever become a scene asset — unconditional, not a suggestion.
+    const safeImageUrls = filterClientPhotos(ctx.technicianImageUrls, ctx.clientPhotoFlags, ctx.medicalAesthetics);
+
     for (const scene of ctx.sceneCopy) {
-      const url = ctx.technicianImageUrls[scene.index];
+      const url = safeImageUrls[scene.index];
       if (url) {
         scenes.push({ index: scene.index, kind: 'image', url });
       } else {

@@ -38,6 +38,8 @@ export interface AssetProviderContext {
   sceneCopy: SceneCopy[];
   /** Technician-supplied images, in scene order. May be shorter than sceneCopy — gaps are filled by stock search. */
   technicianImageUrls: string[];
+  /** Parallel to technicianImageUrls — true means "this is a real client photo." Compliance hard gate input, see client-photo-gate.ts. */
+  clientPhotoFlags?: boolean[];
   brandMoodTag: string | null;
   brandTone: string | null;
   medicalAesthetics: boolean;

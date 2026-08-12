@@ -10,6 +10,7 @@
 
 import { VideoPlan, parseVideoPlan } from './video-plan.schema';
 import type { ResolvedSceneAsset, ResolvedVoiceover, SceneCopy } from './assets/asset-provider';
+import { DEFAULT_DURATION_SECONDS, MAX_SCENE_DURATION_SECONDS, MIN_SCENE_DURATION_SECONDS } from './video-plan.constants';
 
 export interface BuildReelsPlanParams {
   technicianId: string;
@@ -39,7 +40,10 @@ export function buildReelsPlan(params: BuildReelsPlanParams): VideoPlan {
   }
 
   const assetsByIndex = new Map(resolvedAssets.map((a) => [a.index, a]));
-  const fallbackDuration = params.fallbackDurationSeconds ?? Math.max(2, Math.round(20 / sceneCopy.length));
+  const fallbackDuration = params.fallbackDurationSeconds ?? Math.min(
+    MAX_SCENE_DURATION_SECONDS,
+    Math.max(MIN_SCENE_DURATION_SECONDS, Math.round(DEFAULT_DURATION_SECONDS / sceneCopy.length)),
+  );
 
   const scenes = sceneCopy
     .slice()
