@@ -153,6 +153,50 @@ export class LayoutEngine {
     return { x, y, width: w, height: h };
   }
 
+  /**
+   * Cover-crop window in source pixels (matches processPortraitFit face-aware cover).
+   * Keeps face focus near the crop center when possible.
+   */
+  public static coverCropWindow(
+    sourceW: number,
+    sourceH: number,
+    targetW: number,
+    targetH: number,
+    focusXPercent = 50,
+    focusYPercent = 40,
+  ): { left: number; top: number; width: number; height: number; scale: number } {
+    const scale = Math.max(targetW / Math.max(1, sourceW), targetH / Math.max(1, sourceH));
+    const width = Math.min(sourceW, Math.max(1, Math.round(targetW / scale)));
+    const height = Math.min(sourceH, Math.max(1, Math.round(targetH / scale)));
+    const cx = (Math.min(100, Math.max(0, focusXPercent)) / 100) * sourceW;
+    const cy = (Math.min(100, Math.max(0, focusYPercent)) / 100) * sourceH;
+    const left = Math.max(0, Math.min(sourceW - width, Math.round(cx - width / 2)));
+    const top = Math.max(0, Math.min(sourceH - height, Math.round(cy - height / 2)));
+    return { left, top, width, height, scale };
+  }
+
+  /** Map a source % point onto canvas after face-aware cover crop. */
+  public static mapSourcePercentThroughCover(
+    sourceXPercent: number,
+    sourceYPercent: number,
+    sourceW: number,
+    sourceH: number,
+    targetW: number,
+    targetH: number,
+    focusXPercent = 50,
+    focusYPercent = 40,
+  ): { x: number; y: number } {
+    const crop = LayoutEngine.coverCropWindow(
+      sourceW, sourceH, targetW, targetH, focusXPercent, focusYPercent,
+    );
+    const sx = (sourceXPercent / 100) * sourceW;
+    const sy = (sourceYPercent / 100) * sourceH;
+    return {
+      x: Math.round((sx - crop.left) * crop.scale),
+      y: Math.round((sy - crop.top) * crop.scale),
+    };
+  }
+
   public getSubjectBox(): BoundingBox | undefined {
     return this.subjectBox;
   }

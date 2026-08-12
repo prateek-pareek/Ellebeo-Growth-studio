@@ -71,6 +71,14 @@ export class CompositionOptimizer {
     const flow = (readingFlow
       || (dsl.id.includes('z_pattern') ? 'z_pattern' : 'center_down')) as ReadingFlow;
 
+    // Copy-length discipline: keep headline/tagline inside template band capacity
+    const trimmedContent: ContentBundle = {
+      headline: this.clampCopyWords(content?.headline, priority === 'typography_hero' ? 12 : 10),
+      subheadline: this.clampCopyWords(content?.subheadline, priority === 'image_hero' ? 14 : 18),
+      cta: this.clampCopyWords(content?.cta, 5),
+    };
+    content = trimmedContent;
+
     for (const layer of optimized.layers) {
       if (layer.allowedAnchors && layer.allowedAnchors.length > 0) {
         const preferred = this.preferredAnchorsForFlow(flow, priority, layer.allowedAnchors);
@@ -78,13 +86,16 @@ export class CompositionOptimizer {
         (layer as any).anchor = pool[0];
       }
 
-      if (priority === 'image_hero' && layer.type === 'text') {
+      // Honor template maxWidthPercent — do NOT crush recipe measure (58% broke
+      // circle/split width accuracy). Soft-clamp only extreme outliers.
+      if (layer.type === 'text') {
         const textLayer = layer as IDSLTextLayer;
-        if (textLayer.maxWidthPercent > 58) textLayer.maxWidthPercent = 58;
-      } else if (priority === 'typography_hero' && layer.type === 'text') {
-        const textLayer = layer as IDSLTextLayer;
-        // Own the panel — wide measure so hero size does not need crush-to-fit
-        textLayer.maxWidthPercent = Math.max(textLayer.maxWidthPercent || 0, 82);
+        const recipeW = Number(textLayer.maxWidthPercent) || 80;
+        if (priority === 'typography_hero') {
+          textLayer.maxWidthPercent = Math.min(92, Math.max(recipeW, 78));
+        } else {
+          textLayer.maxWidthPercent = Math.min(92, Math.max(32, recipeW));
+        }
       }
     }
 
@@ -124,8 +135,17 @@ export class CompositionOptimizer {
             : (content?.subheadline || content?.headline || 'Body'),
     }));
 
-    // Estimate at FULL intended hero size (scale=1) so space expands first
-    const estimated = this.qc.estimateGroupHeight(roleTexts, typographyMetrics, canvasHeight, priority);
+    // Estimate using recipe measure width so early heights match real slots
+    const recipeMeasureW = Math.round(
+      canvasW * (Math.max(32, Math.min(92, Number(groupedTextLayers[0]?.maxWidthPercent) || 80)) / 100),
+    );
+    const estimated = this.qc.estimateGroupHeight(
+      roleTexts,
+      typographyMetrics,
+      canvasHeight,
+      priority,
+      recipeMeasureW,
+    );
     let estimatedHeights: Record<string, number> = {};
     const estimatedFontSizes: Record<string, number> = {};
     groupedTextLayers.forEach((l, i) => {
@@ -189,13 +209,21 @@ export class CompositionOptimizer {
 
     const protectedSubjects = layoutEngine.getProtectedSubjects();
     const sBox = layoutEngine.getSubjectBox() || layoutEngine.getFaceBox();
-    const subjectHaloRatio = 0.035;
+    const subjectHaloRatio = 0.04;
     const subjectHalo = Math.round(Math.min(canvasW, canvasHeight) * subjectHaloRatio);
 
     const isDedicatedPanel = regions.spatial.splitAxis !== 'overlay'
       && (regions.imageRegion.width < canvasW - 2 || regions.imageRegion.height < canvasHeight - 2);
 
     const obstacles: BoundingBox[] = logoBox ? [logoBox] : [];
+    // Reserve bottom footer bar so headlines never collide with brand tracker
+    obstacles.push({
+      x: 0,
+      y: canvasHeight - 80,
+      width: canvasW,
+      height: 80,
+      role: 'obstacle',
+    } as any);
 
     // Inset / circle / arch photos occupy real pixels — treat as obstacles so
     // headline anchors cannot sit on top of the mask (FLAWLESS-over-circle bug).
@@ -204,14 +232,99 @@ export class CompositionOptimizer {
       canvasW,
       canvasHeight,
     );
-    if (imageOccupied && regions.spatial.splitAxis === 'overlay') {
-      obstacles.push(imageOccupied);
-      // Prefer text in the largest free band (often left/right of circle, or below inset)
-      const carved = this.carveBoxAroundObstacle(regions.textRegion, imageOccupied);
-      if (carved && carved.width >= 120 && carved.height >= 80) {
-        regions.textRegion = carved;
-        if (optimized.canvasRegions) optimized.canvasRegions.textRegion = carved;
-        if (optimized.canonicalGeometry) optimized.canonicalGeometry.textRegion = carved;
+    // For before/after stitches: keep heading in the top/before band only — never over the after face
+    if (imageOccupied) {
+      const mask = String(
+        (optimized.layers?.find((l: any) => l.type === 'image') as any)?.mask || '',
+      );
+      const isInsetMask = mask === 'circle' || mask === 'arch' || mask === 'polaroid'
+        || (mask === 'rectangle' && Number((optimized.layers?.find((l: any) => l.type === 'image') as any)?.paddingPercent || 0) > 2);
+      const isBA = mask === 'before_after_split';
+      // Only treat inset photos as obstacles — full-bleed overlays may intentionally sit near type
+      if (isInsetMask || regions.spatial.splitAxis === 'overlay' || isBA) {
+        if (isBA) {
+          // Protect the after panel so type cannot cover the reveal face (Slide 3 bug)
+          const orientation = String(
+            (optimized.layers?.find((l: any) => l.type === 'image') as any)?.orientation || 'vertical',
+          );
+          const afterZone: BoundingBox = orientation === 'horizontal'
+            ? { x: 0, y: Math.round(canvasHeight * 0.48), width: canvasW, height: Math.round(canvasHeight * 0.52) }
+            : { x: Math.round(canvasW * 0.48), y: 0, width: Math.round(canvasW * 0.52), height: canvasHeight };
+          obstacles.push(afterZone);
+          regions.textRegion = orientation === 'horizontal'
+            ? {
+              x: constraints.safeX,
+              y: constraints.safeY,
+              width: canvasW - constraints.safeX * 2,
+              height: Math.max(120, Math.round(canvasHeight * 0.42) - constraints.safeY),
+            }
+            : {
+              x: constraints.safeX,
+              y: constraints.safeY,
+              width: Math.max(140, Math.round(canvasW * 0.42) - constraints.safeX),
+              height: canvasHeight - constraints.safeY - 90,
+            };
+          if (optimized.canvasRegions) optimized.canvasRegions.textRegion = regions.textRegion;
+        } else if (isInsetMask) {
+          // Circle / arch / polaroid: text belongs in the band BELOW the mask —
+          // never the tall left/right carve (that recreates "FLAWLESS" on the disk).
+          obstacles.push(imageOccupied);
+          const footerClear = Math.max(constraints.margins.bottom, 88);
+          const gap = 20;
+          const belowY = imageOccupied.y + imageOccupied.height + gap;
+          const belowH = Math.max(64, canvasHeight - footerClear - belowY);
+          const belowBand: BoundingBox = {
+            x: constraints.safeX,
+            y: Math.min(belowY, canvasHeight - footerClear - 64),
+            width: canvasW - constraints.safeX * 2,
+            height: Math.min(belowH, Math.max(64, canvasHeight - footerClear - belowY)),
+          };
+          regions.textRegion = belowBand;
+          if (optimized.canvasRegions) optimized.canvasRegions.textRegion = belowBand;
+          if (optimized.canonicalGeometry) optimized.canonicalGeometry.textRegion = belowBand;
+        } else if (regions.spatial.splitAxis === 'overlay') {
+          obstacles.push(imageOccupied);
+          const carved = this.carveBoxAroundObstacle(
+            {
+              x: constraints.safeX,
+              y: constraints.safeY,
+              width: canvasW - constraints.safeX * 2,
+              height: canvasHeight - constraints.safeY - constraints.margins.bottom,
+            },
+            imageOccupied,
+          );
+          if (carved && carved.width >= 120 && carved.height >= 80) {
+            regions.textRegion = carved;
+            if (optimized.canvasRegions) optimized.canvasRegions.textRegion = carved;
+            if (optimized.canonicalGeometry) optimized.canonicalGeometry.textRegion = carved;
+          }
+        }
+      }
+    }
+
+    // Face / subject mass is a HARD obstacle — never place type on the client face
+    if (!isDedicatedPanel && sBox) {
+      const faceObstacle: BoundingBox = {
+        x: Math.max(0, sBox.x - subjectHalo),
+        y: Math.max(0, sBox.y - subjectHalo),
+        width: Math.min(canvasW, sBox.width + subjectHalo * 2),
+        height: Math.min(canvasHeight, sBox.height + subjectHalo * 2),
+      };
+      obstacles.push(faceObstacle);
+      const carvedFace = this.carveBoxAroundObstacle(regions.textRegion, faceObstacle);
+      if (carvedFace && carvedFace.width >= 100 && carvedFace.height >= 60) {
+        regions.textRegion = carvedFace;
+        if (optimized.canvasRegions) optimized.canvasRegions.textRegion = carvedFace;
+      }
+    }
+    for (const sub of protectedSubjects) {
+      if (!isDedicatedPanel) {
+        obstacles.push({
+          x: Math.max(0, sub.x - subjectHalo),
+          y: Math.max(0, sub.y - subjectHalo),
+          width: sub.width + subjectHalo * 2,
+          height: sub.height + subjectHalo * 2,
+        });
       }
     }
 
@@ -354,13 +467,182 @@ export class CompositionOptimizer {
     };
 
     const recipeTextWidth = (layer: IDSLTextLayer) => {
-      const pct = Math.max(28, Math.min(95, Number(layer.maxWidthPercent) || 80));
+      // Template slot width = recipe maxWidthPercent of canvas, then clamp to safe band
+      const pct = Math.max(28, Math.min(92, Number(layer.maxWidthPercent) || 80));
       let w = Math.round(canvasW * (pct / 100));
-      w = Math.min(w, regions.textRegion.width, fullSafe.width);
-      if (wrapWidthFactor < 1) {
-        w = Math.max(Math.round(w * 0.7), Math.round(w * wrapWidthFactor));
+      const bandW = Math.max(
+        Math.round(canvasW * 0.28),
+        Math.min(regions.textRegion.width, fullSafe.width),
+      );
+      w = Math.min(w, bandW);
+      // Slight gutter so glyphs never kiss the slot edge
+      w = Math.max(Math.round(canvasW * 0.28), w - Math.round(canvasW * 0.02));
+      return w;
+    };
+
+    /**
+     * Bidirectional balance inside the template slot:
+     * - LONG copy: widen band + more lines first, shrink font last (avoid ugly crushed boxes)
+     * - SHORT copy: grow type + hug width so text doesn't look lost in a huge empty pocket
+     */
+    const adaptLayerToSlot = (layer: IDSLTextLayer, box: BoundingBox) => {
+      const text =
+        layer.role === 'heading' ? (content?.headline || '')
+          : layer.role === 'tagline' ? (content?.subheadline || '')
+            : (content?.subheadline || content?.headline || '');
+      if (!text.trim()) {
+        (layer as any)._estimatedFontSize = estimatedFontSizes[layer.id] * groupScale;
+        return box;
       }
-      return Math.max(Math.round(canvasW * 0.28), w);
+
+      const isHeading = layer.role === 'heading';
+      const lh = isHeading ? 1.16 : 1.28;
+      const maxLines = isHeading ? 5 : 3;
+      const charRatio = 0.80;
+      const words = text.trim().split(/\s+/).filter(Boolean);
+      const chars = text.replace(/\s+/g, '').length;
+      const longest = words.reduce((a, b) => (a.length >= b.length ? a : b), '');
+      const isLong = chars > 22 || words.length > 5 || longest.length > 10;
+      const isShort = chars <= 14 && words.length <= 3;
+
+      // Max width we may grow into (recipe band / full safe — never invent a new layout)
+      const recipeW = recipeTextWidth(layer);
+      const maxW = Math.min(
+        fullSafe.width,
+        Math.max(box.width, recipeW, Math.round(canvasW * (isLong ? 0.88 : 0.72))),
+      );
+      const minW = Math.round(canvasW * (isHeading ? 0.32 : 0.28));
+
+      // Height budget: prefer expanding into free band over crushing type
+      const footerClear = Math.max(constraints.margins.bottom, 88);
+      const bandBottom = Math.min(
+        fullSafe.y + fullSafe.height,
+        canvasHeight - footerClear,
+        regions.textRegion.y + regions.textRegion.height,
+      );
+      const maxH = Math.max(
+        box.height,
+        Math.min(
+          Math.round(canvasHeight * (isHeading ? 0.32 : 0.16)),
+          Math.max(48, bandBottom - box.y),
+        ),
+      );
+
+      let width = Math.min(Math.max(box.width, recipeW), maxW);
+      // Length-ladder size is authoritative (short↑ / long↓) — then slot clamps only
+      const pickSize = (w: number) => this.qc.adaptFontSizeToContent(
+        (estimatedFontSizes[layer.id] || canvasHeight * 0.055) * groupScale,
+        text,
+        layer.role || 'body',
+        canvasHeight,
+        w,
+        priority,
+      );
+      let fontPx = pickSize(width);
+
+      const measure = (size: number, w: number) => {
+        const cpl = Math.max(4, Math.floor((w * 0.96) / Math.max(1, size * charRatio)));
+        let lines = Math.max(1, Math.ceil(words.reduce((n, word) => n + word.length + 1, 0) / cpl));
+        if (longest.length > cpl) lines = Math.max(lines, words.length);
+        lines = Math.min(maxLines, Math.max(1, lines));
+        if (isLong && isHeading && lines === 1 && words.length >= 3) {
+          lines = Math.min(maxLines, 2);
+        }
+        if (isShort && isHeading && words.length <= 2 && text.length <= cpl) {
+          lines = 1;
+        }
+        const needH = Math.round(size * lh * lines);
+        const needW = Math.ceil(Math.min(Math.max(longest.length, Math.ceil(chars / Math.max(1, lines))), cpl) * size * charRatio);
+        return { lines, needH, needW, cpl };
+      };
+
+      // --- LONG: widen first, re-pick size for new width, shrink only if height overflows ---
+      if (isLong) {
+        width = maxW;
+        fontPx = pickSize(width);
+        const anchor = String(layer.anchor || '');
+        if (anchor.includes('center') || (layer as any).alignment === 'center') {
+          box = {
+            ...box,
+            width,
+            x: Math.max(constraints.safeX, Math.round((canvasW - width) / 2)),
+          };
+        } else {
+          box = { ...box, width };
+        }
+
+        let m = measure(fontPx, width);
+        let guard = 0;
+        const floorPx = canvasHeight * (isHeading ? 0.036 : 0.02);
+        while (m.needH > maxH && fontPx > floorPx && guard < 12) {
+          fontPx = Math.floor(fontPx * 0.94);
+          m = measure(fontPx, width);
+          guard++;
+        }
+        const height = Math.min(maxH, Math.max(box.height, m.needH + Math.round(fontPx * 0.15)));
+        (layer as any)._estimatedFontSize = Math.round(fontPx);
+        (layer as any)._fittedLineCount = m.lines;
+        (layer as any)._copyBalance = 'long';
+        (layer as any)._preserveHeroSize = false;
+        return { ...box, width, height };
+      }
+
+      // --- SHORT: ladder already grew type — hug width so the pocket matches the size ---
+      if (isShort && isHeading) {
+        fontPx = pickSize(width);
+        let m = measure(fontPx, width);
+        // Soft grow only if ladder left us under-filling and height allows
+        const maxShort = canvasHeight * (priority === 'typography_hero' ? 0.115 : 0.10);
+        let growGuard = 0;
+        while (fontPx < maxShort && m.needH <= maxH * 0.92 && m.lines <= 2 && growGuard < 6) {
+          const next = Math.floor(fontPx * 1.06);
+          const trial = measure(next, width);
+          if (trial.needH > maxH) break;
+          fontPx = next;
+          m = trial;
+          growGuard++;
+        }
+        const huggedW = Math.min(
+          maxW,
+          Math.max(minW, Math.round(m.needW * 1.15 + fontPx * 0.35)),
+        );
+        const height = Math.min(maxH, Math.max(m.needH + Math.round(fontPx * 0.2), Math.round(fontPx * lh * m.lines)));
+        const x = Math.max(constraints.safeX, Math.round((canvasW - huggedW) / 2));
+        (layer as any)._estimatedFontSize = Math.round(fontPx);
+        (layer as any)._fittedLineCount = m.lines;
+        (layer as any)._copyBalance = 'short';
+        (layer as any)._preserveHeroSize = false;
+        (layer as any).alignment = 'center';
+        return { x, y: box.y, width: huggedW, height };
+      }
+
+      // --- MEDIUM: ladder size + modest height fit ---
+      fontPx = pickSize(width);
+      let m = measure(fontPx, width);
+      let guard = 0;
+      const floorPx = canvasHeight * (isHeading ? 0.036 : 0.02);
+      while (m.needH > maxH && fontPx > floorPx && guard < 10) {
+        fontPx = Math.floor(fontPx * 0.94);
+        m = measure(fontPx, width);
+        guard++;
+      }
+      const height = Math.min(maxH, Math.max(box.height, m.needH + Math.round(fontPx * 0.15)));
+      const anchor = String(layer.anchor || '');
+      if (anchor.includes('center') || (layer as any).alignment === 'center') {
+        box = {
+          ...box,
+          width,
+          x: Math.max(constraints.safeX, Math.round((canvasW - width) / 2)),
+          height,
+        };
+      } else {
+        box = { ...box, width, height };
+      }
+      (layer as any)._estimatedFontSize = Math.round(fontPx);
+      (layer as any)._fittedLineCount = m.lines;
+      (layer as any)._copyBalance = 'medium';
+      (layer as any)._preserveHeroSize = false;
+      return box;
     };
 
     const placeLayerBox = (
@@ -374,26 +656,139 @@ export class CompositionOptimizer {
       let pos = layoutEngine.resolveAnchor(anchor, width, boxH, constraints, placeRegion);
       let box: BoundingBox = { x: pos.x, y: pos.y, width, height: boxH };
 
-      if (imageOccupied && regions.spatial.splitAxis === 'overlay') {
-        const overlaps =
-          box.x < imageOccupied.x + imageOccupied.width
-          && box.x + box.width > imageOccupied.x
-          && box.y < imageOccupied.y + imageOccupied.height
-          && box.y + box.height > imageOccupied.y;
-        if (overlaps) {
-          const free = this.carveBoxAroundObstacle(fullSafe, imageOccupied);
-          if (free && free.width >= 100 && free.height >= 60) {
-            pos = layoutEngine.resolveAnchor(anchor, Math.min(width, free.width), boxH, constraints, free);
-            box = { x: pos.x, y: pos.y, width: Math.min(width, free.width), height: boxH };
-          }
+      const overlapsBox = (a: BoundingBox, b: BoundingBox) =>
+        a.x < b.x + b.width
+        && a.x + a.width > b.x
+        && a.y < b.y + b.height
+        && a.y + a.height > b.y;
+
+      const dodge = (obstacle: BoundingBox | null | undefined) => {
+        if (!obstacle) return;
+        if (!overlapsBox(box, obstacle)) return;
+        const free = this.carveBoxAroundObstacle(fullSafe, obstacle);
+        if (free && free.width >= 100 && free.height >= Math.min(60, boxH)) {
+          pos = layoutEngine.resolveAnchor(
+            anchor,
+            Math.min(width, free.width),
+            Math.min(boxH, free.height),
+            constraints,
+            free,
+          );
+          box = {
+            x: pos.x,
+            y: pos.y,
+            width: Math.min(width, free.width),
+            height: Math.min(boxH, Math.max(boxH, Math.round(free.height * 0.5))),
+          };
+          // Prefer keeping original height when free band is tall enough
+          if (free.height >= boxH) box.height = boxH;
         }
+      };
+
+      dodge(imageOccupied);
+      if (sBox) {
+        dodge({
+          x: Math.max(0, sBox.x - subjectHalo),
+          y: Math.max(0, sBox.y - subjectHalo),
+          width: sBox.width + subjectHalo * 2,
+          height: sBox.height + subjectHalo * 2,
+        });
+      }
+      for (const sub of protectedSubjects) {
+        dodge({
+          x: Math.max(0, sub.x - subjectHalo),
+          y: Math.max(0, sub.y - subjectHalo),
+          width: sub.width + subjectHalo * 2,
+          height: sub.height + subjectHalo * 2,
+        });
       }
 
+      // Circle / inset: ALWAYS park headings in the band below the photo — never on the disk
+      const imgMask = String(
+        (optimized.layers?.find((l: any) => l.type === 'image') as any)?.mask || '',
+      );
+      if (imageOccupied && (imgMask === 'circle' || imgMask === 'arch' || imgMask === 'polaroid')) {
+        const gap = 20;
+        const footerClear = Math.max(constraints.margins.bottom, 88);
+        const belowY = imageOccupied.y + imageOccupied.height + gap;
+        const availBelow = canvasHeight - footerClear - belowY;
+        const useH = Math.min(boxH, Math.max(48, availBelow - 4));
+        box.width = Math.min(width, Math.round(canvasW * 0.86));
+        box.x = Math.max(constraints.safeX, Math.round((canvasW - box.width) / 2));
+        if (availBelow >= 48) {
+          box.y = belowY;
+          box.height = useH;
+        } else {
+          // Still force below disk even if tight — never overlap the portrait
+          box.y = Math.min(belowY, canvasHeight - footerClear - useH);
+          box.height = useH;
+        }
+        (layer as any).alignment = 'center';
+        (layer as any).anchor = 'bottom_center';
+      } else if (!imageOccupied && sBox && layer.role === 'heading' && regions.spatial.splitAxis === 'overlay') {
+        // Full-bleed face: park headline in bottom safe band above footer (not top-left on hair)
+        const footerClear = Math.max(constraints.margins.bottom, 88);
+        const bandH = Math.max(boxH, Math.round(canvasHeight * 0.12));
+        box.width = Math.min(width, Math.round(canvasW * 0.82));
+        box.height = bandH;
+        box.x = Math.max(constraints.safeX, Math.round((canvasW - box.width) / 2));
+        box.y = Math.max(
+          sBox.y + sBox.height + subjectHalo,
+          canvasHeight - footerClear - bandH,
+        );
+        if (box.y + box.height > canvasHeight - footerClear) {
+          box.y = canvasHeight - footerClear - bandH;
+        }
+        (layer as any).alignment = 'center';
+        (layer as any).anchor = 'bottom_center';
+      } else if (
+        !imageOccupied
+        && !sBox
+        && layer.role === 'heading'
+        && (priority === 'typography_hero' || priority === 'cta_hero')
+      ) {
+        // Text-only / CTA slides: keep headline centered in a wide safe column — never
+        // a left-edge pocket that clips the first glyph ("D" of DIMENSION).
+        box.width = Math.min(width, Math.round(canvasW * 0.78));
+        box.x = Math.max(constraints.safeX, Math.round((canvasW - box.width) / 2));
+        box.y = Math.max(
+          constraints.safeY,
+          Math.round((canvasHeight - constraints.margins.bottom - boxH) / 2),
+        );
+        (layer as any).alignment = 'center';
+        (layer as any).anchor = 'center';
+      }
+
+      const isInsetPhoto =
+        imgMask === 'circle' || imgMask === 'arch' || imgMask === 'polaroid';
       box = this.clampBoxToSafe(box, constraints, canvasW, canvasHeight);
+      // Inset photos already own a dedicated below-band textRegion — clamp there.
+      // Overlay full-bleed uses fullSafe so we never get sucked into a side pocket.
       box = this.clampBoxToRegion(
         box,
-        regions.spatial.splitAxis === 'overlay' ? fullSafe : regions.textRegion,
+        isInsetPhoto
+          ? regions.textRegion
+          : (regions.spatial.splitAxis === 'overlay' ? fullSafe : regions.textRegion),
       );
+
+      // Hard reject: if heading still intersects circle/face, shove fully below
+      // (and re-center — never fall back to a left carve beside the disk).
+      const hardObstacles: BoundingBox[] = [];
+      if (imageOccupied) hardObstacles.push(imageOccupied);
+      if (sBox) hardObstacles.push(sBox);
+      for (const obs of hardObstacles) {
+        if (!overlapsBox(box, obs)) continue;
+        const footerClear = Math.max(constraints.margins.bottom, 88);
+        box.width = Math.min(box.width, Math.round(canvasW * 0.86));
+        box.y = Math.min(
+          canvasHeight - footerClear - box.height,
+          obs.y + obs.height + 16,
+        );
+        box.x = Math.max(constraints.safeX, Math.round((canvasW - box.width) / 2));
+        (layer as any).alignment = 'center';
+        (layer as any).anchor = 'bottom_center';
+        box = this.clampBoxToSafe(box, constraints, canvasW, canvasHeight);
+      }
       return box;
     };
 
@@ -421,11 +816,20 @@ export class CompositionOptimizer {
           );
           boxH = Math.min(boxH, Math.round(canvasHeight * (isDedicatedPanel ? 0.45 : 0.28)));
         }
-        const box = placeLayerBox(layer, width, boxH, 'center');
+        let box = placeLayerBox(layer, width, boxH, 'center');
+        box = adaptLayerToSlot(layer, box);
+        // Re-clamp after height growth so we stay in the safe/recipe band
+        box = this.clampBoxToSafe(box, constraints, canvasW, canvasHeight);
+        const isInset = ['circle', 'arch', 'polaroid'].includes(
+          String((optimized.layers?.find((l: any) => l.type === 'image') as any)?.mask || ''),
+        );
+        box = this.clampBoxToRegion(
+          box,
+          isInset ? regions.textRegion
+            : (regions.spatial.splitAxis === 'overlay' ? fullSafe : regions.textRegion),
+        );
         layer.allocatedBox = box;
         (layer as any)._groupScale = groupScale;
-        (layer as any)._estimatedFontSize = estimatedFontSizes[layer.id] * groupScale;
-        (layer as any)._preserveHeroSize = priority === 'typography_hero' && groupScale >= 0.88;
         (layer as any)._textRegion = isDedicatedPanel ? regions.textRegion : fullSafe;
         (layer as any)._templateAnchor = layer.anchor;
         currentY = box.y + box.height + clusterGap;
@@ -452,13 +856,19 @@ export class CompositionOptimizer {
         let box: BoundingBox = { x: pos.x, y: currentY, width, height: boxH };
         box = this.clampBoxToSafe(box, constraints, canvasW, canvasHeight);
         box = this.clampBoxToRegion(box, regions.textRegion);
+        box = adaptLayerToSlot(layer, box);
+        box = this.clampBoxToSafe(box, constraints, canvasW, canvasHeight);
+        box = this.clampBoxToRegion(box, regions.textRegion);
         layer.allocatedBox = box;
         (layer as any)._groupScale = groupScale;
-        (layer as any)._estimatedFontSize = estimatedFontSizes[layer.id] * groupScale;
-        (layer as any)._preserveHeroSize = priority === 'typography_hero' && groupScale >= 0.88;
         (layer as any)._textRegion = regions.textRegion;
         if (priority === 'cta_hero' && layer.role === 'heading') {
-          (layer as any).component = (layer as any).component || 'solid_card';
+          // Prefer readable ink on the panel — skip solid_card when it becomes a
+          // mis-sized floating badge (common on text-only magazine/CTA slides).
+          const hasPhoto = !!(optimized.layers || []).some((l: any) => l.type === 'image');
+          if (hasPhoto) {
+            (layer as any).component = (layer as any).component || 'solid_card';
+          }
         }
         currentY = box.y + box.height + clusterGap;
       }
@@ -547,6 +957,13 @@ export class CompositionOptimizer {
         }
       : undefined;
 
+    const qualitySubjects: BoundingBox[] = isDedicatedPanel
+      ? []
+      : [
+          ...protectedSubjects,
+          ...(sBox ? [sBox] : []),
+          ...(imageOccupied ? [imageOccupied] : []),
+        ];
     const quality = this.qc.evaluateVisualQuality({
       boxes: allTextLayers.map(l => ({
         role: l.role,
@@ -559,10 +976,34 @@ export class CompositionOptimizer {
       constraints,
       canvasW,
       canvasH: canvasHeight,
-      subjectBoxes: isDedicatedPanel ? [] : protectedSubjects,
+      subjectBoxes: qualitySubjects,
       intent: { visualPriority: priority, readingFlow: flow },
       groupScale,
     });
+
+    // Post-QC hard repair: relocate off face / circle — prefer BELOW band, never left carve
+    if ((quality.critical || []).includes('subject_collision') && (sBox || imageOccupied)) {
+      const obs = imageOccupied || sBox!;
+      for (const layer of allTextLayers) {
+        if (!(layer as any).allocatedBox || (layer as any)._omitForComposition) continue;
+        if ((layer as any).role !== 'heading') continue;
+        const box = (layer as any).allocatedBox as BoundingBox;
+        const hits = box.x < obs.x + obs.width && box.x + box.width > obs.x
+          && box.y < obs.y + obs.height && box.y + box.height > obs.y;
+        if (!hits) continue;
+        const footerClear = Math.max(constraints.margins.bottom, 88);
+        const w = Math.min(box.width, Math.round(canvasW * 0.86));
+        const h = Math.min(box.height, Math.max(48, canvasHeight - footerClear - (obs.y + obs.height + 16)));
+        (layer as any).allocatedBox = {
+          x: Math.max(constraints.safeX, Math.round((canvasW - w) / 2)),
+          y: Math.min(canvasHeight - footerClear - h, obs.y + obs.height + 16),
+          width: w,
+          height: h,
+        };
+        (layer as any).alignment = 'center';
+        (layer as any).anchor = 'bottom_center';
+      }
+    }
 
     // Content integrity: measure against the REAL allocated box (not a fake ch-pocket).
     // If full hero size doesn't pack, try controlled font shrink within allowed range BEFORE rejecting.
@@ -578,7 +1019,26 @@ export class CompositionOptimizer {
       canvasHeight,
     );
 
-    // Apply typography repair scale if integrity found a fit at reduced size
+    // Prefer omit secondary over crushing hero / overcrowding the band
+    const secondaryOmitActions: string[] = [];
+    for (const layer of groupedTextLayers) {
+      if (layer.role === 'heading') continue;
+      const box = layer.allocatedBox;
+      if (!box) continue;
+      const text = layer.role === 'tagline'
+        ? (content?.subheadline || '')
+        : (content?.subheadline || content?.headline || '');
+      const words = text.trim().split(/\s+/).filter(Boolean);
+      const fontPx = (layer as any)._estimatedFontSize || canvasHeight * 0.028;
+      const charsPerLine = Math.max(4, Math.floor(box.width / Math.max(1, fontPx * 0.55)));
+      const maxLines = layer.role === 'tagline' ? 2 : 3;
+      const capacity = charsPerLine * maxLines;
+      const need = words.reduce((n, w) => n + w.length + 1, 0);
+      if (words.length > 14 || need > capacity * 1.15 || box.height < fontPx * 1.1) {
+        (layer as any)._omitForComposition = true;
+        secondaryOmitActions.push(`omit_secondary:${layer.id}`);
+      }
+    }
     if (contentIntegrity.ok && contentIntegrity.suggestedFontScale != null && contentIntegrity.suggestedFontScale < 0.999) {
       const s = contentIntegrity.suggestedFontScale;
       if (headingLayer) {
@@ -599,7 +1059,7 @@ export class CompositionOptimizer {
       || !!quality.needsSpatialEscalation
       || needsTypographyRepair;
 
-    const allFitActions = [...fitActions];
+    const allFitActions = [...fitActions, ...secondaryOmitActions];
     allFitActions.push(
       `gate:pass=${quality.pass} score=${quality.score.toFixed(1)} ` +
       `threshold=${quality.passThreshold ?? 7.5} ` +
@@ -751,6 +1211,7 @@ export class CompositionOptimizer {
     const anchor = String(imageLayer.anchor || 'center');
 
     if (mask === 'circle') {
+      // Match renderer: 60% centered disk (photo framing unchanged; text avoids this box)
       const size = Math.floor(Math.min(canvasW, canvasH) * 0.6);
       const paddingPx = Math.floor(canvasW * (pad || 15) / 100);
       let cx = canvasW / 2;
@@ -763,8 +1224,8 @@ export class CompositionOptimizer {
       return {
         x: Math.max(0, Math.floor(cx - size / 2) - halo),
         y: Math.max(0, Math.floor(cy - size / 2) - halo),
-        width: size + halo * 2,
-        height: size + halo * 2,
+        width: Math.min(canvasW, size + halo * 2),
+        height: Math.min(canvasH, size + halo * 2),
       };
     }
 
@@ -797,6 +1258,20 @@ export class CompositionOptimizer {
   private carveBoxAroundObstacle(region: BoundingBox, obstacle: BoundingBox): BoundingBox | null {
     const gap = 16;
     const candidates: BoundingBox[] = [
+      // below obstacle (prefer for centered portraits — avoids text-on-disk)
+      {
+        x: region.x,
+        y: Math.max(region.y, obstacle.y + obstacle.height + gap),
+        width: region.width,
+        height: 0,
+      },
+      // above obstacle
+      {
+        x: region.x,
+        y: region.y,
+        width: region.width,
+        height: Math.min(region.height, obstacle.y - gap - region.y),
+      },
       // left of obstacle
       {
         x: region.x,
@@ -811,23 +1286,9 @@ export class CompositionOptimizer {
         width: 0,
         height: region.height,
       },
-      // above obstacle
-      {
-        x: region.x,
-        y: region.y,
-        width: region.width,
-        height: Math.min(region.height, obstacle.y - gap - region.y),
-      },
-      // below obstacle
-      {
-        x: region.x,
-        y: Math.max(region.y, obstacle.y + obstacle.height + gap),
-        width: region.width,
-        height: 0,
-      },
     ];
-    candidates[1].width = region.x + region.width - candidates[1].x;
-    candidates[3].height = region.y + region.height - candidates[3].y;
+    candidates[0].height = region.y + region.height - candidates[0].y;
+    candidates[3].width = region.x + region.width - candidates[3].x;
 
     const valid = candidates
       .map(c => ({
@@ -837,7 +1298,14 @@ export class CompositionOptimizer {
       }))
       .filter(c => c.width >= 120 && c.height >= 80);
     if (!valid.length) return null;
-    valid.sort((a, b) => b.width * b.height - a.width * a.height);
+    // Prefer full-width bands (below/above) over side strips when areas are close —
+    // side pockets cause left-aligned type overlapping centered circle photos.
+    valid.sort((a, b) => {
+      const aFull = a.width >= region.width * 0.85 ? 1 : 0;
+      const bFull = b.width >= region.width * 0.85 ? 1 : 0;
+      if (aFull !== bFull) return bFull - aFull;
+      return b.width * b.height - a.width * a.height;
+    });
     return valid[0];
   }
 
@@ -973,6 +1441,13 @@ export class CompositionOptimizer {
       estimableWords: pack.fitted,
       repairable: true,
     };
+  }
+
+  private clampCopyWords(text: string | undefined, maxWords: number): string | undefined {
+    if (!text) return text;
+    const words = text.trim().split(/\s+/).filter(Boolean);
+    if (words.length <= maxWords) return text.trim();
+    return words.slice(0, maxWords).join(' ');
   }
 
   private preferredAnchorsForFlow(

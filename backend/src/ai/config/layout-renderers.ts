@@ -13,6 +13,7 @@ import layoutTemplatesConfig from './layout-templates.config.json';
 import templateLibraryData from './template-library.json';
 import compiledLayouts from './compiled-layouts.v2.json';
 import { processPortraitFit } from '../services/ai-image-generation.service';
+import type { FaceFocus } from '../services/ai-image-generation.service';
 import { ICompiledLayoutDSL, IDSLSceneLayer, IDSLImageLayer, IDSLDecorationLayer, IDSLTextLayer, ISemanticDesignSpec } from '../services/template-engine/interfaces';
 import { IDesignLanguage } from '../services/template-engine/engines/art-direction-engine';
 import { LayoutEngine, LayoutFamily, NegativeSpace, BoundingBox, LayoutConstraints } from '../services/template-engine/engines/layout-engine';
@@ -128,7 +129,13 @@ export type BaseCtx = {
   downloadImageAsBuffer: (url: string) => Promise<Buffer>;
   designSpec?: ISemanticDesignSpec;
   designLanguage?: IDesignLanguage;
-  faceCoordinates?: { eyesYPercent: number; mouthYPercent: number; };
+  faceCoordinates?: {
+    eyesYPercent: number;
+    mouthYPercent: number;
+    faceCenterXPercent?: number;
+    faceWidthPercent?: number;
+  };
+  faceFocus?: FaceFocus;
   faceBox?: any;
   subjectBox?: any;
   additionalSubjects?: any[];
@@ -143,18 +150,17 @@ export type BaseResult = {
   compositeRight: number;
 };
 
-// Uses processPortraitFit: contain + blurred background — never crops faces on tall photos
+// Uses processPortraitFit: cover + optional face focus — fills allocated box
 const borderedDefault = async (ctx: BaseCtx): Promise<BaseResult> => ({
-  baseImage: sharp(await processPortraitFit(ctx.imageBuffer, ctx.innerW, ctx.innerH, ctx.validBackgroundColor)),
+  baseImage: sharp(await processPortraitFit(ctx.imageBuffer, ctx.innerW, ctx.innerH, ctx.validBackgroundColor, 'cover', ctx.faceFocus)),
   compositeTop: ctx.paddingTop,
   compositeBottom: ctx.paddingBottom,
   compositeLeft: ctx.paddingX,
   compositeRight: ctx.paddingX,
 });
 
-// Full-bleed: resize to canvas dimensions so SVG overlay coordinates match
 const fullBleedBase = async (ctx: BaseCtx): Promise<BaseResult> => ({
-  baseImage: sharp(await processPortraitFit(ctx.imageBuffer, ctx.w, ctx.h, ctx.validBackgroundColor)),
+  baseImage: sharp(await processPortraitFit(ctx.imageBuffer, ctx.w, ctx.h, ctx.validBackgroundColor, 'cover', ctx.faceFocus)),
   compositeTop: 0,
   compositeBottom: 0,
   compositeLeft: 0,
@@ -170,7 +176,7 @@ const fullBleedBase = async (ctx: BaseCtx): Promise<BaseResult> => ({
 const stitchBeforeAfterImages = async (ctx: BaseCtx, orientation: 'vertical' | 'horizontal'): Promise<BaseResult> => {
   // No before-photo: still fill the frame. Never fall back to tiny borderedDefault —
   // that was producing postage-stamp photos on colour-transformation carousels.
-  if (!ctx.beforePhotoUrl) {
+    if (!ctx.beforePhotoUrl) {
     return fullBleedBase(ctx);
   }
   try {
@@ -179,19 +185,32 @@ const stitchBeforeAfterImages = async (ctx: BaseCtx, orientation: 'vertical' | '
     // Stitch on the FULL canvas (w/h), not innerW/innerH — text anchors are canvas-absolute.
     const stitchW = ctx.w;
     const stitchH = ctx.h;
+    const dividerColor = '#FFFFFF';
     if (orientation === 'horizontal') {
-      const topHalf = await processPortraitFit(beforeBuffer, stitchW, Math.round(stitchH / 2), ctx.validBackgroundColor);
-      const bottomHalf = await processPortraitFit(ctx.imageBuffer, stitchW, Math.round(stitchH / 2), ctx.validBackgroundColor);
+      const halfH = Math.round(stitchH / 2);
+      const topHalf = await processPortraitFit(beforeBuffer, stitchW, halfH, ctx.validBackgroundColor, 'cover');
+      const bottomHalf = await processPortraitFit(ctx.imageBuffer, stitchW, halfH, ctx.validBackgroundColor, 'cover');
+      const divider = Buffer.from(
+        `<svg width="${stitchW}" height="2" xmlns="http://www.w3.org/2000/svg">` +
+        `<rect width="${stitchW}" height="2" fill="${dividerColor}" fill-opacity="0.85"/></svg>`,
+      );
       composites = [
         { input: topHalf, top: 0, left: 0 },
-        { input: bottomHalf, top: Math.round(stitchH / 2), left: 0 },
+        { input: bottomHalf, top: halfH, left: 0 },
+        { input: divider, top: halfH - 1, left: 0 },
       ];
     } else {
-      const leftHalf = await processPortraitFit(beforeBuffer, Math.round(stitchW / 2), stitchH, ctx.validBackgroundColor);
-      const rightHalf = await processPortraitFit(ctx.imageBuffer, Math.round(stitchW / 2), stitchH, ctx.validBackgroundColor);
+      const halfW = Math.round(stitchW / 2);
+      const leftHalf = await processPortraitFit(beforeBuffer, halfW, stitchH, ctx.validBackgroundColor, 'cover');
+      const rightHalf = await processPortraitFit(ctx.imageBuffer, halfW, stitchH, ctx.validBackgroundColor, 'cover');
+      const divider = Buffer.from(
+        `<svg width="2" height="${stitchH}" xmlns="http://www.w3.org/2000/svg">` +
+        `<rect width="2" height="${stitchH}" fill="${dividerColor}" fill-opacity="0.85"/></svg>`,
+      );
       composites = [
         { input: leftHalf, top: 0, left: 0 },
-        { input: rightHalf, top: 0, left: Math.round(stitchW / 2) },
+        { input: rightHalf, top: 0, left: halfW },
+        { input: divider, top: 0, left: halfW - 1 },
       ];
     }
     const baseImageBuffer = await sharp({
@@ -244,7 +263,7 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
     const compositeTop = Math.floor(ctx.h * 0.05);
     const compositeLeft = Math.floor(ctx.w * 0.05);
     return {
-      baseImage: sharp(await processPortraitFit(ctx.imageBuffer, monoW, monoH, ctx.validBackgroundColor)),
+      baseImage: sharp(await processPortraitFit(ctx.imageBuffer, monoW, monoH, ctx.validBackgroundColor, 'cover', ctx.faceFocus)),
       compositeTop,
       compositeLeft,
       compositeBottom: ctx.h - monoH - compositeTop,
@@ -260,7 +279,7 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
         <svg width="${ctx.innerW}" height="${ctx.innerH}" xmlns="http://www.w3.org/2000/svg">
           <path d="M 0 ${ctx.innerH} L 0 ${Math.round(ctx.innerH * 0.42)} A ${Math.round(ctx.innerW / 2)} ${Math.round(ctx.innerH * 0.42)} 0 0 1 ${ctx.innerW} ${Math.round(ctx.innerH * 0.42)} L ${ctx.innerW} ${ctx.innerH} Z" fill="#fff"/>
         </svg>`;
-      const fittedBuffer = await processPortraitFit(ctx.imageBuffer, ctx.innerW, ctx.innerH, ctx.validBackgroundColor);
+      const fittedBuffer = await processPortraitFit(ctx.imageBuffer, ctx.innerW, ctx.innerH, ctx.validBackgroundColor, 'cover', ctx.faceFocus);
       const archPhoto = await sharp(fittedBuffer)
         .composite([{ input: Buffer.from(archMaskSvg), blend: 'dest-in' }])
         .png()
@@ -298,7 +317,7 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
               <rect x="${startX + (panelW + gap) * 2}" y="${startY}" width="${panelW}" height="${panelH}" fill="#fff"/>
             </svg>`;
 
-          const fullPhoto = await processPortraitFit(ctx.imageBuffer, ctx.w, ctx.h, ctx.validBackgroundColor);
+          const fullPhoto = await processPortraitFit(ctx.imageBuffer, ctx.w, ctx.h, ctx.validBackgroundColor, 'cover', ctx.faceFocus);
           const maskedPhoto = await sharp(fullPhoto).composite([{ input: Buffer.from(triptychSvg), blend: 'dest-in' }]).png().toBuffer();
 
           const baseImageBuffer = await sharp({
@@ -341,6 +360,8 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
               Math.max(1, region.width),
               Math.max(1, region.height),
               ctx.validBackgroundColor,
+              'cover',
+              ctx.faceFocus,
             );
 
             const baseImageBuffer = await sharp({
@@ -358,8 +379,9 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
         }
 
         if (imageLayer.mask === 'circle') {
-          const size = Math.floor(Math.min(ctx.w, ctx.h) * 0.6); // 60% of canvas width
-          const paddingPx = Math.floor(ctx.w * (imageLayer.paddingPercent || 15) / 100);
+          // Recipe geometry: ~60% centered disk (do not shrink/nudge the client photo)
+          const size = Math.floor(Math.min(ctx.w, ctx.h) * 0.6);
+          const paddingPx = Math.floor(ctx.w * (Number(imageLayer.paddingPercent) || 15) / 100);
 
           let cx = ctx.w / 2;
           let cy = ctx.h / 2;
@@ -375,7 +397,7 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
           const topOffset = Math.floor(cy - (size / 2));
 
           const circleSvg = `<svg width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${size / 2}" fill="#fff"/></svg>`;
-          const splitPhoto = await processPortraitFit(ctx.imageBuffer, size, size, ctx.validBackgroundColor);
+          const splitPhoto = await processPortraitFit(ctx.imageBuffer, size, size, ctx.validBackgroundColor, 'cover');
           const roundedPhoto = await sharp(splitPhoto).composite([{ input: Buffer.from(circleSvg), blend: 'dest-in' }]).png().toBuffer();
 
           // Background: Blurry, toned version of the original client image
@@ -453,6 +475,7 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
           let left: number;
 
           // Device mockup screen viewport mapping
+          let insetPad = 0;
           if (imageLayer.component === 'desktop_monitor_mockup') {
             targetW = 460;
             targetH = 276;
@@ -468,6 +491,7 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
             // Recipe paddingPercent is authoritative (template accuracy).
             // Soft-cap only pathological values (>30%) so future recipes stay expressible.
             const rawPadding = Math.min(Math.max(0, Number(imageLayer.paddingPercent) || 0), 30);
+            insetPad = rawPadding;
             const marginX = Math.round(ctx.w * (rawPadding / 100));
             const marginY = Math.round(ctx.h * (rawPadding / 100));
 
@@ -510,7 +534,21 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
             }
           }
 
-          const scaledPhoto = await processPortraitFit(ctx.imageBuffer, targetW, targetH, ctx.validBackgroundColor);
+          const scaledPhoto = await processPortraitFit(ctx.imageBuffer, targetW, targetH, ctx.validBackgroundColor, 'cover', ctx.faceFocus);
+
+          // Consistent inset language: soft rounded corners on padded rectangle masks
+          let photoInput: Buffer = scaledPhoto;
+          if (insetPad > 0 && (imageLayer.mask === 'rectangle' || !imageLayer.mask)) {
+            const rx = Math.min(24, Math.round(Math.min(targetW, targetH) * 0.04));
+            const roundMask = Buffer.from(
+              `<svg width="${targetW}" height="${targetH}" xmlns="http://www.w3.org/2000/svg">` +
+              `<rect width="${targetW}" height="${targetH}" rx="${rx}" fill="#fff"/></svg>`,
+            );
+            photoInput = await sharp(scaledPhoto)
+              .composite([{ input: roundMask, blend: 'dest-in' }])
+              .png()
+              .toBuffer();
+          }
 
           // Background: Blurry, toned version of the original client image
           const bgImage = await sharp(ctx.imageBuffer)
@@ -522,7 +560,7 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
           const baseImageBuffer = await sharp(bgImage)
             .composite([
               { input: Buffer.from(`<svg><rect width="${ctx.w}" height="${ctx.h}" fill="${ctx.validBackgroundColor}" fill-opacity="0.8" /></svg>`), blend: 'over' },
-              { input: scaledPhoto, top, left }
+              { input: photoInput, top, left }
             ]).png().toBuffer();
           const baseImage = sharp(baseImageBuffer);
 
@@ -580,7 +618,7 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
 
   polaroid_stack: async (ctx) => {
     const minDim = Math.floor(Math.min(ctx.w, ctx.h) * 0.85);
-    const photo = await processPortraitFit(ctx.imageBuffer, minDim, minDim, ctx.validBackgroundColor);
+    const photo = await processPortraitFit(ctx.imageBuffer, minDim, minDim, ctx.validBackgroundColor, 'cover', ctx.faceFocus);
     const frameW = minDim + 60;
     const frameH = minDim + 160;
     const polaroidFrame = await sharp({ create: { width: frameW, height: frameH, channels: 3, background: '#ffffff' } }).png().toBuffer();
@@ -605,7 +643,7 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
 
   circle_crop: async (ctx) => {
     const minDim = Math.floor(Math.min(ctx.w, ctx.h) * 0.75);
-    const photo = await processPortraitFit(ctx.imageBuffer, minDim, minDim, ctx.validBackgroundColor);
+    const photo = await processPortraitFit(ctx.imageBuffer, minDim, minDim, ctx.validBackgroundColor, 'cover', ctx.faceFocus);
     const circleSvg = Buffer.from(`<svg width="${minDim}" height="${minDim}"><circle cx="${minDim / 2}" cy="${minDim / 2}" r="${minDim / 2}" fill="white"/></svg>`);
     const masked = await sharp(photo).composite([{ input: circleSvg, blend: 'dest-in' }]).png().toBuffer();
     
@@ -626,7 +664,7 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
 
 
   torn_paper_edge: async (ctx) => {
-    const photo = await processPortraitFit(ctx.imageBuffer, ctx.w, ctx.h, ctx.validBackgroundColor);
+    const photo = await processPortraitFit(ctx.imageBuffer, ctx.w, ctx.h, ctx.validBackgroundColor, 'cover', ctx.faceFocus);
     const tearSvg = Buffer.from(`
       <svg width="${ctx.w}" height="${ctx.h}" xmlns="http://www.w3.org/2000/svg">
         <path d="M 0 0 L ${ctx.w} 0 L ${ctx.w} ${ctx.h - 150} Q ${ctx.w * 0.75} ${ctx.h - 180} ${ctx.w / 2} ${ctx.h - 130} T 0 ${ctx.h - 160} Z" fill="white"/>
@@ -802,7 +840,7 @@ export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
       <text x="${ctx.w / 2}" y="${Math.round(ctx.h * 0.16)}" text-anchor="middle" font-family="'${ctx.brandFont}', system-ui, sans-serif" font-weight="bold" font-size="${posterFontSize}px" fill="${ctx.posterTextColor}" letter-spacing="1px">
         ${ctx.escapedLines.map((line, idx) => `<tspan x="${ctx.w / 2}" dy="${idx === 0 ? 0 : posterFontSize * 1.05}">${line}</tspan>`).join('')}
       </text>
-      <text x="${ctx.w - 30}" y="${ctx.h / 2}" text-anchor="middle" font-family="'${ctx.brandFont}', system-ui, sans-serif" font-weight="bold" font-size="22px" fill="${ctx.validBrandColor}" fill-opacity="0.85" letter-spacing="6px" transform="rotate(90 ${ctx.w - 30} ${ctx.h / 2})">${ctx.escapedSpacedName}</text>`;
+      <text x="${ctx.w - 30}" y="${ctx.h / 2}" text-anchor="middle" font-family="'${ctx.brandFont}', system-ui, sans-serif" font-weight="bold" font-size="22px" fill="${ctx.dynamicTextColor || ctx.posterTextColor || ctx.validBrandColor}" fill-opacity="0.9" letter-spacing="6px" transform="rotate(90 ${ctx.w - 30} ${ctx.h / 2})">${ctx.escapedSpacedName}</text>`;
   },
 
   speech_bubble: (ctx) => {
@@ -839,7 +877,7 @@ export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
 
   side_panel_label: (ctx) => `
       <!-- Label + headline block sitting in the solid side panel -->
-      <text x="50" y="${Math.round(ctx.h * 0.42)}" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-size="13px" letter-spacing="3px" fill="${ctx.validBrandColor}" fill-opacity="0.8">${ctx.escapedSpacedName}</text>
+      <text x="50" y="${Math.round(ctx.h * 0.42)}" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-size="13px" letter-spacing="3px" fill="${ctx.dynamicTextColor || ctx.posterTextColor || ctx.validBrandColor}" fill-opacity="0.88">${ctx.escapedSpacedName}</text>
       <text x="50" y="${Math.round(ctx.h * 0.42) + 40}" class="overlay-text text-left" style="font-size: ${ctx.dynamicFontSize + 4}px; fill: ${ctx.dynamicTextColor};">
         ${tspans(ctx, '50')}
       </text>`,
@@ -866,9 +904,9 @@ export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
       <!-- Day: Large centered number -->
       <text x="${cx}" y="${cy + 22}" text-anchor="middle" font-family="'${ctx.brandFont}', Georgia, serif" font-weight="bold" font-size="92px" fill="${ctx.dynamicTextColor}">${day}</text>
       <!-- Year below the day -->
-      <text x="${cx}" y="${cy + 68}" text-anchor="middle" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-size="20px" letter-spacing="8px" fill="${ctx.validBrandColor}" fill-opacity="0.8">${year}</text>
+      <text x="${cx}" y="${cy + 68}" text-anchor="middle" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-size="20px" letter-spacing="8px" fill="${ctx.dynamicTextColor || ctx.posterTextColor || ctx.validBrandColor}" fill-opacity="0.88">${year}</text>
       <!-- Brand name at bottom of seal -->
-      <text x="${cx}" y="${cy + r - 28}" text-anchor="middle" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-size="11px" letter-spacing="5px" fill="${ctx.validBrandColor}" fill-opacity="0.6">${ctx.escapedSpacedName}</text>`;
+      <text x="${cx}" y="${cy + r - 28}" text-anchor="middle" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-size="11px" letter-spacing="5px" fill="${ctx.dynamicTextColor || ctx.posterTextColor || ctx.validBrandColor}" fill-opacity="0.75">${ctx.escapedSpacedName}</text>`;
   },
 
   // ── Premium Certificate Signature Card ──────────────────────────────────
@@ -906,7 +944,7 @@ export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
       <!-- Small flourish dot at the end -->
       <circle cx="${endX + 6}" cy="${endY}" r="3" fill="${ctx.validBrandColor}" />
       <!-- Footer: "Est. YEAR" -->
-      <text x="${cx}" y="${cardY + cardH - 28}" text-anchor="middle" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-size="12px" letter-spacing="4px" fill="${ctx.validBrandColor}" fill-opacity="0.6">EST. ${new Date().getFullYear()}</text>`;
+      <text x="${cx}" y="${cardY + cardH - 28}" text-anchor="middle" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-size="12px" letter-spacing="4px" fill="${ctx.dynamicTextColor || ctx.posterTextColor || ctx.validBrandColor}" fill-opacity="0.75">EST. ${new Date().getFullYear()}</text>`;
   },
 
   // ── Randomized Always-On Text Overlays ──────────────────────────────────
@@ -935,7 +973,7 @@ export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
       case 2: {
         // Vertical side text (right edge) + top left caption
         return `
-          <text x="${ctx.w - 40}" y="${ctx.h / 2}" text-anchor="middle" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-weight="bold" font-size="18px" fill="${ctx.validBrandColor}" fill-opacity="0.6" letter-spacing="4px" transform="rotate(90 ${ctx.w - 40} ${ctx.h / 2})">${ctx.escapedSpacedName}</text>
+          <text x="${ctx.w - 40}" y="${ctx.h / 2}" text-anchor="middle" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-weight="bold" font-size="18px" fill="${ctx.dynamicTextColor || ctx.posterTextColor || ctx.validBrandColor}" fill-opacity="0.75" letter-spacing="4px" transform="rotate(90 ${ctx.w - 40} ${ctx.h / 2})">${ctx.escapedSpacedName}</text>
           <text x="60" y="120" class="overlay-text text-left" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.dynamicTextColor}; fill-opacity: 0.9;">
             ${tspans(ctx, '60')}
           </text>`;
@@ -1022,6 +1060,7 @@ export type DecoCtx = {
   dyOffset: number;
   dynamicFontSize: number;
   dynamicTextColor: string;
+  posterTextColor?: string;
   overlayText: string;
   maxLength: number;
   visionResult?: any;
@@ -1230,6 +1269,32 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       );
     }
 
+    // Photo-overlaid type uses dynamicTextColor in TypographyEngine (non-card layers).
+    // Do NOT rewrite colorHierarchy.primaryText here — that ink is for cards/surfaces and
+    // forcing photo-white into it made solid_card headings invisible (white on cream).
+    const imageLayerMask = String(
+      ((dsl.layers || []).find((l: any) => l.type === 'image') as any)?.mask || '',
+    );
+    const overlaysPhoto = imageLayerMask === 'full_bleed'
+      || imageLayerMask === 'circle'
+      || imageLayerMask === 'arch'
+      || imageLayerMask === 'polaroid'
+      || imageLayerMask === 'before_after_split'
+      || imageLayerMask === ''
+      || (dsl as any)?._spatialPolicy?.splitAxis === 'overlay';
+    // Soft photo-aware nudge only when hierarchy ink would fail on a dark photo band
+    if (overlaysPhoto && ctx.dynamicTextColor) {
+      const photoInk = ctx.dynamicTextColor;
+      const hierarchyInk = colorHierarchy.primaryText || '#1A1A1A';
+      const photoIsDark = getLuminanceSafe(photoInk) > 150; // light ink ⇒ dark photo
+      const hierarchyIsDark = getLuminanceSafe(hierarchyInk) < 120;
+      if (photoIsDark && hierarchyIsDark) {
+        // Keep hierarchy for cards; typography already prefers dynamicTextColor off-card.
+        // Mark only — do not mutate primaryText.
+        (ctx as any)._photoNeedsLightInk = true;
+      }
+    }
+
     // Resolve typography recipe from family + BrandDNA visual ranking / casing
     const brandStyle = Array.isArray(ctx.visualRanking) && ctx.visualRanking[0]
       ? String(ctx.visualRanking[0])
@@ -1285,22 +1350,67 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     // (face/subject) even in its best/soft-accepted attempt — see `[SlideQC] soft-accepted`
     // logs in ai-image-generation.service.ts — force the readability scrim on regardless of
     // visualPriority. Shipping unprotected text over a face is worse than an extra scrim.
+    const isBeforeAfter = imageLayerMask === 'before_after_split';
+    const isCircleLike = imageLayerMask === 'circle' || imageLayerMask === 'arch' || imageLayerMask === 'polaroid';
+
+    // Scrim: NEVER on before/after (was painting a dark slab over the after-face — Slide 3).
+    // NEVER force huge cards on circle — place light type in free band instead.
     const qualityCritical: string[] = (dsl as any)?._compositionMeta?.qualityCritical || [];
-    const forceScrimForSafety = qualityCritical.includes('subject_collision') || qualityCritical.includes('text_collision');
-    if (textBand && spatialAxis === 'overlay'
-      && (forceScrimForSafety || priority === 'image_hero' || priority === 'cta_hero' || priority === 'composition_hero')) {
-      const pad = 12;
-      const scrimOpacity = forceScrimForSafety ? 0.55 : (priority === 'cta_hero' ? 0.48 : 0.36);
-      const scrimFill = (ctx.validDepthColor && getLuminanceSafe(ctx.validDepthColor) < 140)
-        ? ctx.validDepthColor
-        : '#0A0A0A';
-      // Cap scrim height so inflated allocatedBoxes can't paint a giant empty panel
-      const maxScrimH = Math.round(ctx.h * 0.34);
+    const forceScrimForSafety = !isBeforeAfter && !isCircleLike && (
+      qualityCritical.includes('subject_collision')
+      || qualityCritical.includes('text_collision')
+      || qualityCritical.includes('contrast')
+    );
+    if (textBand && spatialAxis === 'overlay' && !isBeforeAfter
+      && (forceScrimForSafety || (priority === 'image_hero' && !isCircleLike))) {
+      const pad = 10;
+      const inkIsLight = getLuminanceSafe(ctx.dynamicTextColor || '#FFF') > 150;
+      const scrimOpacity = forceScrimForSafety ? 0.36 : 0.18;
+      const scrimFill = inkIsLight
+        ? ((ctx.validDepthColor && getLuminanceSafe(ctx.validDepthColor) < 140) ? ctx.validDepthColor : '#0A0A0A')
+        : '#F7F4EF';
+      const maxScrimH = Math.round(ctx.h * 0.22);
       const scrimH = Math.min(textBand.height + pad * 2, maxScrimH);
-      const scrimW = Math.min(textBand.width + pad * 2, Math.round(ctx.w * 0.72));
-      const scrimX = Math.max(0, Math.min(textBand.x - pad, ctx.w - scrimW));
-      const scrimY = Math.max(0, Math.min(textBand.y - pad, ctx.h - scrimH));
-      svg += `<rect x="${scrimX}" y="${scrimY}" width="${scrimW}" height="${scrimH}" fill="${scrimFill}" fill-opacity="${scrimOpacity}" rx="12" />`;
+      const scrimW = Math.min(textBand.width + pad * 2, Math.round(ctx.w * 0.62));
+      // Keep scrim off the face/subject box if we know it
+      let scrimX = Math.max(0, Math.min(textBand.x - pad, ctx.w - scrimW));
+      let scrimY = Math.max(0, Math.min(textBand.y - pad, ctx.h - scrimH));
+      const face = (ctx.subjectBox || ctx.faceBox) as BoundingBox | undefined;
+      if (face) {
+        const overlapsFace = scrimX < face.x + face.width && scrimX + scrimW > face.x
+          && scrimY < face.y + face.height && scrimY + scrimH > face.y;
+        if (overlapsFace) {
+          // Prefer below face; skip scrim if nowhere safe
+          const below = face.y + face.height + 8;
+          if (below + scrimH < ctx.h - 80) scrimY = below;
+          else {
+            // skip drawing scrim over face
+            scrimY = -1;
+          }
+        }
+      }
+      if (scrimY >= 0) {
+        svg += `<rect x="${scrimX}" y="${scrimY}" width="${scrimW}" height="${scrimH}" fill="${scrimFill}" fill-opacity="${scrimOpacity}" rx="12" />`;
+      }
+    }
+
+    // Circle / before-after: never force solid_card (white-on-white + face cover).
+    // Only use cards on true overlay collisions for non-inset layouts, with locked dark ink.
+    if (!isCircleLike && !isBeforeAfter && qualityCritical.includes('subject_collision')) {
+      for (const layer of (dsl.layers || [])) {
+        if (layer.type === 'text' && (layer as any).role === 'heading' && !(layer as any).component) {
+          (layer as any).component = 'solid_card';
+          (layer as any)._forceCardInk = '#1A1A1A';
+        }
+      }
+    }
+    // Circle + before/after: strip accidental solid_card so type uses proper ink on free bands
+    if (isCircleLike || isBeforeAfter) {
+      for (const layer of (dsl.layers || [])) {
+        if (layer.type === 'text' && (layer as any).component === 'solid_card') {
+          delete (layer as any).component;
+        }
+      }
     }
 
     // Standalone decoration primitives (dividers, timelines, badges, stickers…) only ever get
@@ -1316,18 +1426,23 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     const placedTextBoxes: BoundingBox[] = (dsl.layers || [])
       .filter((l: any) => (l.type === 'text' || l.type === 'text_group') && l.allocatedBox)
       .map((l: any) => l.allocatedBox as BoundingBox);
-    const decorationPrimitiveCtx: PrimitiveContext = placedTextBoxes.length
-      ? {
-          ...primitiveCtx,
-          canonicalGeometry: {
-            ...(primitiveCtx.canonicalGeometry as any),
-            protectedZones: [
-              ...(((primitiveCtx.canonicalGeometry as any)?.protectedZones) || []),
-              ...placedTextBoxes,
-            ],
-          } as any,
-        }
-      : primitiveCtx;
+    const faceProtected: BoundingBox[] = [];
+    if (ctx.subjectBox) faceProtected.push(ctx.subjectBox as BoundingBox);
+    else if (ctx.faceBox) faceProtected.push(ctx.faceBox as BoundingBox);
+    if (Array.isArray(ctx.additionalSubjects)) {
+      faceProtected.push(...(ctx.additionalSubjects as BoundingBox[]));
+    }
+    const decorationPrimitiveCtx: PrimitiveContext = {
+      ...primitiveCtx,
+      canonicalGeometry: {
+        ...(primitiveCtx.canonicalGeometry as any),
+        protectedZones: [
+          ...(((primitiveCtx.canonicalGeometry as any)?.protectedZones) || []),
+          ...placedTextBoxes,
+          ...faceProtected,
+        ],
+      } as any,
+    };
 
     // Iteratively render each layer using the Primitive Engine
     for (const layer of overlayLayers) {

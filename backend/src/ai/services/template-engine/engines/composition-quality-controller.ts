@@ -89,6 +89,11 @@ export class CompositionQualityController {
     };
   }
 
+  /**
+   * Bidirectional font-size balance from copy length.
+   * Short headlines → larger display size; long headlines → smaller readable size.
+   * Width clamp is applied after the length target (never the other way around).
+   */
   public adaptFontSizeToContent(
     baseSize: number,
     text: string,
@@ -99,31 +104,74 @@ export class CompositionQualityController {
   ): number {
     const words = text.split(/\s+/).filter(Boolean);
     const chars = text.replace(/\s+/g, '').length;
-    let size = baseSize;
+    const longest = words.reduce((a, b) => (a.length >= b.length ? a : b), '');
+    const charRatio = 0.80;
 
     if (role === 'heading') {
-      if (chars > 18) size *= Math.max(0.78, 1 - (chars - 18) * 0.009);
-      if (words.length > 5) size *= Math.max(0.82, 1 - (words.length - 5) * 0.03);
-    } else if (role === 'tagline' || role === 'body') {
-      if (chars > 40) size *= Math.max(0.85, 1 - (chars - 40) * 0.005);
+      // Target size as fraction of canvas height — length ladder (same idea as box balance)
+      let targetRatio: number;
+      if (chars <= 8 && words.length <= 2) {
+        targetRatio = 0.105; // "GLOW" / "DEPTH"
+      } else if (chars <= 14 && words.length <= 3) {
+        targetRatio = 0.088; // "MAINTAIN GLOW"
+      } else if (chars <= 22 && words.length <= 4) {
+        targetRatio = 0.072; // "SEAMLESS TONE RESTORED"
+      } else if (chars <= 30 && words.length <= 5) {
+        targetRatio = 0.058; // "FLAWLESS COLOR CORRECTION"
+      } else if (chars <= 40) {
+        targetRatio = 0.048; // longer educational lines
+      } else {
+        targetRatio = 0.040; // very long — stay readable, not micro
+      }
+
+      // Priority nudges (keep ladder shape)
+      if (visualPriority === 'typography_hero') targetRatio *= 1.12;
+      else if (visualPriority === 'image_hero') targetRatio *= 0.92;
+      else if (visualPriority === 'cta_hero') targetRatio *= 0.96;
+
+      // Blend with brand base so DNA still matters, but length owns the result
+      let size = Math.round(canvasH * targetRatio * 0.72 + baseSize * 0.28);
+
+      // Extra pull when a single word is very long (DIMENSION, CORRECTION…)
+      if (longest.length >= 10) size = Math.round(size * 0.92);
+      if (longest.length >= 12) size = Math.round(size * 0.92);
+
+      // Width clamp — must fit longest word + typical line on the slot
+      if (safeWidth > 0 && longest.length > 0) {
+        const maxForWord = (safeWidth * 0.96) / (longest.length * charRatio);
+        if (size > maxForWord) size = maxForWord;
+
+        const targetLines = chars <= 14 ? 1
+          : chars <= 28 ? 2
+            : chars <= 40 ? 3
+              : 4;
+        const avgChars = Math.ceil(chars / targetLines) + 1;
+        const maxForLine = (safeWidth * 0.96) / (avgChars * charRatio);
+        if (size > maxForLine) size = maxForLine;
+      }
+
+      const minRatio = CompositionQualityController.MIN_HEADING_RATIO;
+      const maxRatio = visualPriority === 'typography_hero' ? 0.12
+        : visualPriority === 'image_hero' ? 0.09
+          : 0.105;
+      return Math.max(canvasH * minRatio, Math.min(size, canvasH * maxRatio));
     }
 
-    const longest = words.reduce((a, b) => (a.length >= b.length ? a : b), '');
-    if (longest.length > 0 && safeWidth > 0) {
-      const charRatio = 0.64;
-      const maxForWord = safeWidth / (longest.length * charRatio);
+    // Secondary / body — same short↔long idea, quieter range
+    let size = baseSize;
+    if (chars <= 18) size *= 1.12;
+    else if (chars > 50) size *= Math.max(0.78, 1 - (chars - 50) * 0.004);
+    else if (chars > 32) size *= 0.92;
+
+    if (safeWidth > 0 && longest.length > 0) {
+      const maxForWord = (safeWidth * 0.96) / (longest.length * charRatio);
       if (size > maxForWord) size = maxForWord;
     }
 
-    // image_hero: place type in clear bands — do NOT crush to micro type
-    const minRatio = role === 'heading'
-      ? CompositionQualityController.MIN_HEADING_RATIO
-      : CompositionQualityController.MIN_SECONDARY_RATIO;
-    const maxRatio = role === 'heading'
-      ? (visualPriority === 'typography_hero' ? 0.11 : visualPriority === 'image_hero' ? 0.09 : 0.10)
-      : 0.045;
-
-    return Math.max(canvasH * minRatio, Math.min(size, canvasH * maxRatio));
+    return Math.max(
+      canvasH * CompositionQualityController.MIN_SECONDARY_RATIO,
+      Math.min(size, canvasH * 0.042),
+    );
   }
 
   public estimateGroupHeight(
@@ -160,13 +208,13 @@ export class CompositionQualityController {
       );
       fontSizes.push(adapted);
       const words = (item.text || '').split(/\s+/).filter(Boolean);
-      const avgCharW = adapted * 0.62;
+      const avgCharW = adapted * 0.78;
       const charsPerLine = Math.max(4, Math.floor(measureWidth / Math.max(1, avgCharW)));
       const lineEstimate = Math.max(
         1,
         Math.ceil(words.reduce((acc, w) => acc + w.length + 1, 0) / charsPerLine),
       );
-      const lineHeight = item.role === 'heading' ? 1.15 : 1.3;
+      const lineHeight = item.role === 'heading' ? 1.16 : 1.3;
       heights.push(
         Math.round(adapted * lineHeight * Math.min(lineEstimate, item.role === 'heading' ? 4 : 3)),
       );

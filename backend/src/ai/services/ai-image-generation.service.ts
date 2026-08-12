@@ -41,6 +41,8 @@ export interface GeneratedSlide {
   url: string;
   label: string;
   title: string;
+  /** Soft-accepted composition — still shipped, but quality gate was weak */
+  compositionWeak?: boolean;
   variants?: {
     gemini?: string;
     dalle?: string;
@@ -84,6 +86,12 @@ export async function downloadImageAsBuffer(url: string): Promise<Buffer> {
   }
 }
 
+/** Optional face/subject focus — used ONLY for text avoidance mapping, never to re-crop photos. */
+export type FaceFocus = {
+  centerXPercent?: number;
+  centerYPercent?: number;
+};
+
 export async function processPortraitFit(
   imageBuffer: Buffer,
   targetW: number,
@@ -91,6 +99,8 @@ export async function processPortraitFit(
   backgroundColor: string = '#F7F4EF',
   /** cover fills the allocated box (correct size); contain letterboxes and looks undersized */
   fitMode: 'cover' | 'contain' = 'cover',
+  /** @deprecated Ignored — do not re-frame client photos via face crop */
+  _faceFocus?: FaceFocus,
 ): Promise<Buffer> {
   try {
     const metadata = await sharp(imageBuffer).metadata();
@@ -119,8 +129,9 @@ export async function processPortraitFit(
       .toBuffer();
 
     if (fitMode === 'cover') {
+      // Neutral cover — never face-extract / re-frame the client's photo
       return await sharp(enhancedBuffer)
-        .resize(targetW, targetH, { fit: 'cover', position: 'attention' })
+        .resize(targetW, targetH, { fit: 'cover', position: 'centre' })
         .png()
         .toBuffer();
     }
@@ -374,7 +385,7 @@ export class AiImageGenerationService {
     logoUrl?: string;
     logoPosition?: 'bottom_right' | 'bottom_left' | 'top_right' | 'top_left';
     designSpec?: import('./template-engine/interfaces').ISemanticDesignSpec;
-  }): Promise<{ url: string; variants?: { gemini?: string; dalle?: string }; compositionFailed?: boolean; failReason?: string }> {
+  }): Promise<{ url: string; variants?: { gemini?: string; dalle?: string }; compositionFailed?: boolean; compositionWeak?: boolean; failReason?: string }> {
     const {
       photoUrl, beforePhotoUrl, overlayText, headline, subheadline, cta, index, isFirst, isLast, isBeforePhoto,
       tenantId, businessName, brandColor,
@@ -434,7 +445,12 @@ export class AiImageGenerationService {
         logoPosition,
       });
       const url = await uploadBase64ToFirebase(overlayResult.base64, tenantId, `slide_${index}`);
-      return { url, compositionFailed: overlayResult.compositionFailed, failReason: overlayResult.failReason };
+      return {
+        url,
+        compositionFailed: overlayResult.compositionFailed,
+        compositionWeak: overlayResult.compositionWeak,
+        failReason: overlayResult.failReason,
+      };
     }
 
     let cleanPrompt = '';
@@ -475,7 +491,12 @@ export class AiImageGenerationService {
         logoPosition,
       });
       const url = await uploadBase64ToFirebase(overlayResult.base64, tenantId, `slide_${index}`);
-      return { url, compositionFailed: overlayResult.compositionFailed, failReason: overlayResult.failReason };
+      return {
+        url,
+        compositionFailed: overlayResult.compositionFailed,
+        compositionWeak: overlayResult.compositionWeak,
+        failReason: overlayResult.failReason,
+      };
     }
 
     // Bypass AI image generation entirely for procedural text-only families
@@ -515,6 +536,7 @@ export class AiImageGenerationService {
         url,
         variants: { gemini: url, dalle: url },
         compositionFailed: overlayResult.compositionFailed,
+        compositionWeak: overlayResult.compositionWeak,
         failReason: overlayResult.failReason,
       };
     }
@@ -733,6 +755,7 @@ CRITICAL IMAGE REQUIREMENTS:
       url: primaryUrl,
       variants,
       compositionFailed: overlayResult.compositionFailed,
+      compositionWeak: overlayResult.compositionWeak,
       failReason: overlayResult.failReason,
     };
   }
@@ -879,16 +902,25 @@ CRITICAL IMAGE REQUIREMENTS:
       concepts.map(async (concept, i) => {
         const isFirst = i === 0;
         const isLast = i === total - 1;
-        // Cover uses after photo (or before if available); slide 3 (reveal) uses after photo. Non-outcome slides generate lifestyle assets.
-        let photoUrl: string | undefined = undefined;
+        // Always keep a real client photo on every slide — last-slide undefined photo
+        // produced the grey placeholder square (Slide 4 regression).
+        let photoUrl: string | undefined = afterPhotoUrl;
         let usingBefore = false;
         if (isFirst) {
           photoUrl = afterPhotoUrl;
         } else if (i === 1 && beforePhotoUrl) {
           photoUrl = beforePhotoUrl;
           usingBefore = true;
-        } else if (i === 2 || i === total - 2) {
+        } else if (isBeforeAfterJob && beforePhotoUrl && (i === 2 || concept.slideType === 'before')) {
+          // Mid carousel can still show before for contrast storytelling
+          photoUrl = i % 2 === 1 ? beforePhotoUrl : afterPhotoUrl;
+          usingBefore = i % 2 === 1;
+        } else {
           photoUrl = afterPhotoUrl;
+        }
+        if (isLast) {
+          photoUrl = afterPhotoUrl;
+          usingBefore = false;
         }
 
         const brief = artDirectorBrief?.find(b => b.index === concept.index);
@@ -934,12 +966,19 @@ CRITICAL IMAGE REQUIREMENTS:
                 `(prev: ${result?.failReason || 'soft'}). Slide will not be excluded.`,
               );
             }
+            // Tight-copy on retries: shorter secondary text gives the template band room
+            const tightSub = attempt === 0
+              ? concept.subheadline
+              : (concept.subheadline || '').split(/\s+/).slice(0, Math.max(4, 12 - attempt * 3)).join(' ');
+            const tightHeadline = attempt === 0
+              ? concept.headline
+              : (concept.headline || '').split(/\s+/).slice(0, Math.max(3, 8 - attempt)).join(' ');
             result = await this.generateSlide({
               photoUrl: photoUrl || '',
               beforePhotoUrl,
               overlayText: concept.overlayText,
-              headline: concept.headline,
-              subheadline: concept.subheadline,
+              headline: tightHeadline,
+              subheadline: tightSub || undefined,
               cta: concept.cta || (isLast ? 'Book now' : undefined),
               title: concept.title,
               index: concept.index,
@@ -967,16 +1006,18 @@ CRITICAL IMAGE REQUIREMENTS:
               templateIntent,
               designSpec: agentDecisions[i].designSpec,
             });
-            if (!result.compositionFailed) break;
+            if (!result.compositionFailed && !result.compositionWeak) break;
+            if (!result.compositionFailed && attempt >= 1) break;
           }
           // NEVER exclude a requested carousel slide — keep best rendered URL
           if (!result?.url) {
             console.error(`[SlideQC] Slide ${concept.index} produced no URL — excluding only due to hard failure.`);
             return null;
           }
-          if (result.compositionFailed) {
+          if (result.compositionFailed || result.compositionWeak) {
             console.warn(
-              `[SlideQC] Slide ${concept.index} soft-accepted after retries (${result.failReason || 'composition'}). ` +
+              `[SlideQC] Slide ${concept.index} soft-accepted after retries ` +
+              `(${result.failReason || 'composition'}; weak=${!!result.compositionWeak}). ` +
               `Keeping in carousel to preserve slide count.`,
             );
           }
@@ -984,6 +1025,7 @@ CRITICAL IMAGE REQUIREMENTS:
             url: result.url,
             title: concept.title,
             label: `SLIDE ${String(concept.index).padStart(2, '0')}`,
+            compositionWeak: !!(result.compositionFailed || result.compositionWeak),
             variants: result.variants
           };
         } catch (err) {
@@ -1225,7 +1267,7 @@ CRITICAL IMAGE REQUIREMENTS:
     visionResult?: VisionAnalysisResult;
     templateIntent?: any;
     designSpec?: import('./template-engine/interfaces').ISemanticDesignSpec;
-  }): Promise<{ base64: string; compositionFailed: boolean; failReason?: string }> {
+  }): Promise<{ base64: string; compositionFailed: boolean; compositionWeak?: boolean; failReason?: string }> {
     const {
       base64Image,
       overlayText,
@@ -1490,73 +1532,67 @@ CRITICAL IMAGE REQUIREMENTS:
         template.base = computedLayoutType as any;
       }
 
-      // Step 2 (Plan): Face Coordinate Transformation
+      // Step 2: Face coords for TEXT avoidance only — never re-crop the client photo
       let faceBox: any = undefined;
       if (visionResult?.faceCoordinates && visionResult.faceCoordinates.eyesYPercent) {
         const sourceW = originalW;
         const sourceH = originalH;
-        // Image scaling and translation (letterbox offset) from fit: contain
-        const scale = Math.min(w / sourceW, h / sourceH);
-        const drawnW = Math.round(sourceW * scale);
-        const drawnH = Math.round(sourceH * scale);
-        const offsetY = Math.round((h - drawnH) / 2);
-        
-        // Map percentages to actual drawn image height on canvas
-        const eyesY = Math.round(offsetY + (visionResult.faceCoordinates.eyesYPercent / 100) * drawnH);
-        const mouthY = visionResult.faceCoordinates.mouthYPercent
-          ? Math.round(offsetY + (visionResult.faceCoordinates.mouthYPercent / 100) * drawnH)
-          : Math.round(eyesY + (drawnH * 0.15));
+        const coords = visionResult.faceCoordinates;
+        // Match processPortraitFit centre cover (50/50) so avoidance aligns with real pixels
+        const focusX = 50;
+        const focusY = 50;
 
-      // Final face-safe bounding box on canvas.
-      // Prefer vision X/width when present; otherwise protect a wide central band
-      // so side-anchored headlines cannot cover cheeks/hair on portraits.
-      const offsetX = Math.round((w - drawnW) / 2);
-      const faceTop = Math.max(0, eyesY - Math.round(h * 0.10));
-      const faceBottom = Math.min(h, mouthY + Math.round(h * 0.12));
-      const faceHeight = Math.max(120, faceBottom - faceTop);
+        const eyesMapped = LayoutEngine.mapSourcePercentThroughCover(
+          typeof coords.faceCenterXPercent === 'number' ? coords.faceCenterXPercent : 50,
+          coords.eyesYPercent,
+          sourceW, sourceH, w, h, focusX, focusY,
+        );
+        const mouthMapped = coords.mouthYPercent
+          ? LayoutEngine.mapSourcePercentThroughCover(
+            typeof coords.faceCenterXPercent === 'number' ? coords.faceCenterXPercent : 50,
+            coords.mouthYPercent,
+            sourceW, sourceH, w, h, focusX, focusY,
+          )
+          : { x: eyesMapped.x, y: Math.round(eyesMapped.y + h * 0.12) };
 
-      const coords = visionResult.faceCoordinates;
-      const hasX = typeof coords.faceCenterXPercent === 'number';
-      const hasW = typeof coords.faceWidthPercent === 'number' && coords.faceWidthPercent > 5;
-      const widthPct = hasW
-        ? Math.min(85, Math.max(22, coords.faceWidthPercent as number))
-        : 72;
-      const faceWidth = Math.round((hasX || hasW ? drawnW : w) * (widthPct / 100));
-      let faceX: number;
-      if (hasX) {
-        const centerX = offsetX + ((coords.faceCenterXPercent as number) / 100) * drawnW;
-        faceX = Math.round(centerX - faceWidth / 2);
-      } else {
-        faceX = Math.round((w - faceWidth) / 2);
+        const faceTop = Math.max(0, eyesMapped.y - Math.round(h * 0.10));
+        const faceBottom = Math.min(h, mouthMapped.y + Math.round(h * 0.12));
+        const faceHeight = Math.max(120, faceBottom - faceTop);
+
+        const hasW = typeof coords.faceWidthPercent === 'number' && coords.faceWidthPercent > 5;
+        const widthPct = hasW
+          ? Math.min(85, Math.max(22, coords.faceWidthPercent as number))
+          : 72;
+        const faceWidth = Math.round(w * (widthPct / 100));
+        let faceX = Math.round(eyesMapped.x - faceWidth / 2);
+        faceX = Math.max(0, Math.min(faceX, w - faceWidth));
+
+        faceBox = { x: faceX, y: faceTop, width: faceWidth, height: faceHeight };
+        console.log(`[FaceBox] Centre-cover zone x=${faceX} y=${faceTop}-${faceBottom} w=${faceWidth} (text avoidance only)`);
       }
-      faceX = Math.max(0, Math.min(faceX, w - faceWidth));
-
-      faceBox = { x: faceX, y: faceTop, width: faceWidth, height: faceHeight };
-      console.log(`[FaceBox] Protected zone x=${faceX} y=${faceTop}-${faceBottom} w=${faceWidth} (eyes=${eyesY}, mouth=${mouthY}, x%=${coords.faceCenterXPercent ?? 'n/a'})`);
-    }
-
-      // Map vision protected subjects (products, hands, treatment areas, …) onto canvas
-      const containScale = Math.min(w / originalW, h / originalH);
-      const subjectDrawnW = Math.round(originalW * containScale);
-      const subjectDrawnH = Math.round(originalH * containScale);
-      const subjectOffsetX = Math.round((w - subjectDrawnW) / 2);
-      const subjectOffsetY = Math.round((h - subjectDrawnH) / 2);
 
       const additionalSubjects: BoundingBox[] = [];
       if (Array.isArray(visionResult?.protectedSubjects)) {
         for (const sub of visionResult.protectedSubjects) {
-          if (sub.type === 'face' && faceBox) continue; // face already expanded via subjectBox
-          additionalSubjects.push(
-            LayoutEngine.mapPercentBoxToCanvas(
-              {
-                centerXPercent: sub.centerXPercent,
-                centerYPercent: sub.centerYPercent,
-                widthPercent: sub.widthPercent,
-                heightPercent: sub.heightPercent,
-              },
-              w, h, subjectDrawnW, subjectDrawnH, subjectOffsetX, subjectOffsetY,
-            ),
+          if (sub.type === 'face' && faceBox) continue;
+          const mapped = LayoutEngine.mapSourcePercentThroughCover(
+            sub.centerXPercent,
+            sub.centerYPercent,
+            originalW,
+            originalH,
+            w,
+            h,
+            50,
+            50,
           );
+          const sw = Math.round(w * (Math.min(90, Math.max(8, sub.widthPercent)) / 100));
+          const sh = Math.round(h * (Math.min(90, Math.max(8, sub.heightPercent)) / 100));
+          additionalSubjects.push({
+            x: Math.max(0, Math.min(w - sw, Math.round(mapped.x - sw / 2))),
+            y: Math.max(0, Math.min(h - sh, Math.round(mapped.y - sh / 2))),
+            width: sw,
+            height: sh,
+          });
         }
       }
 
@@ -1659,11 +1695,12 @@ CRITICAL IMAGE REQUIREMENTS:
         if (logoUrl) {
           const logoW = 150;
           const logoH = 150;
-          let lx = w - logoW - 30;
-          let ly = h - logoH - 30;
-          if (logoPosition === 'bottom_left') { lx = 30; }
-          else if (logoPosition === 'top_right') { ly = 30; }
-          else if (logoPosition === 'top_left') { lx = 30; ly = 30; }
+          const safe = 36;
+          let lx = w - logoW - safe;
+          let ly = h - logoH - safe;
+          if (logoPosition === 'bottom_left') { lx = safe; }
+          else if (logoPosition === 'top_right') { ly = safe; }
+          else if (logoPosition === 'top_left') { lx = safe; ly = safe; }
           logoBox = { x: lx, y: ly, width: logoW, height: logoH, role: 'obstacle' };
         }
 
@@ -1886,11 +1923,17 @@ CRITICAL IMAGE REQUIREMENTS:
             optResult = { ...bestAttempt, suggestLayoutChange: false };
             if ((optimizedDsl as any)._compositionMeta) {
               (optimizedDsl as any)._compositionMeta.softAccepted = true;
+              (optimizedDsl as any)._compositionMeta.compositionWeak = true;
+              (optimizedDsl as any)._compositionMeta.compositionWeakReason =
+                (optimizedDsl as any)._compositionMeta.failureCategory
+                || ((optimizedDsl as any)._compositionMeta.qualityCritical || []).join(',')
+                || 'gate_exhausted';
               (optimizedDsl as any)._compositionMeta.suggestLayoutChange = false;
             }
+            failReason = failReason || 'composition_weak_soft_accept';
             console.warn(
               `[CompositionQC] Soft-accepting best composition for '${computedLayoutType}' ` +
-              `(score=${bestScore.toFixed?.(1) ?? bestScore}, priority=${visualPriority}). ` +
+              `(score=${bestScore.toFixed?.(1) ?? bestScore}, priority=${visualPriority}, weak=true). ` +
               `Slide will remain in carousel.`,
             );
           }
@@ -2009,10 +2052,38 @@ CRITICAL IMAGE REQUIREMENTS:
 
       let posterTextColor = '#FFFFFF';
       try {
-        const stats = await sharp(imageBuffer).stats();
+        // Prefer luminance under the actual text band (local contrast), not whole-image mean
+        const band = (optimizedDsl as any)?._compositionMeta?.actualTextRegion
+          || (optimizedDsl as any)?.canvasRegions?.textRegion;
+        let statsSource = imageBuffer;
+        if (band && band.width > 40 && band.height > 40) {
+          const left = Math.max(0, Math.min(w - 2, Math.round(band.x)));
+          const top = Math.max(0, Math.min(h - 2, Math.round(band.y)));
+          const width = Math.max(2, Math.min(w - left, Math.round(band.width)));
+          const height = Math.max(2, Math.min(h - top, Math.round(band.height)));
+          try {
+            statsSource = await sharp(imageBuffer)
+              .resize(w, h, { fit: 'cover', position: 'centre' })
+              .extract({ left, top, width, height })
+              .toBuffer();
+          } catch {
+            statsSource = imageBuffer;
+          }
+        }
+        const stats = await sharp(statsSource).stats();
         if (stats.channels && stats.channels.length >= 3) {
           const meanLuminance = (stats.channels[0].mean + stats.channels[1].mean + stats.channels[2].mean) / 3;
-          posterTextColor = meanLuminance > 127 ? depthBrandColor : '#FFFFFF';
+          const surfaceHex = meanLuminance > 127 ? '#E8E4DE' : '#1A1A1A';
+          posterTextColor = this.colorCompositionEngine.resolveTextInk(
+            surfaceHex,
+            colorPalette,
+            'primary',
+          );
+          if (meanLuminance > 127 && getLuminance(validDepthColor) < 120) {
+            posterTextColor = validDepthColor;
+          } else if (meanLuminance <= 127) {
+            posterTextColor = '#FFFFFF';
+          }
         }
       } catch (contrastErr) {
         // Non-fatal: text-only slides or corrupted buffers fall back to white text
@@ -2021,6 +2092,9 @@ CRITICAL IMAGE REQUIREMENTS:
       if (isFullBleed && !layoutType.includes('text_only') && photoDataUri) {
         dynamicTextColor = posterTextColor;
       }
+
+      // Soft-accepted / weak compositions: do NOT force solid_card here —
+      // card + photo-white ink created white-on-cream regressions. Scrim/face dodge handle safety.
 
       // Instead of rigid character counting, we now defer to the Art Direction Engine's proportional weighting
       let dynamicFontSize = geometryOut.typography.heroSize;
@@ -2058,7 +2132,7 @@ CRITICAL IMAGE REQUIREMENTS:
       const decoCtx = {
         layoutType: computedLayoutType, w, h, paddingX, paddingTop, paddingBottom, innerW, innerH,
         validBrandColor, validSecondaryColor, validBackgroundColor, validAccentColor, validDepthColor, brandFont, rawName, photoDataUri,
-        escapedLines, dyOffset, dynamicFontSize, dynamicTextColor, overlayText: finalOverlayText, maxLength,
+        escapedLines, dyOffset, dynamicFontSize, dynamicTextColor, posterTextColor, overlayText: finalOverlayText, maxLength,
         structuredText: { headline: effectiveHeadline, subheadline: effectiveSubheadline, cta: effectiveCta },
         visionResult: visionResult,
         logoUrl,
@@ -2104,38 +2178,18 @@ CRITICAL IMAGE REQUIREMENTS:
           }`
         : '';
 
-      // Pre-compile conditional SVG components
-      const watermarkText = (layoutType !== 'full_bleed_clean' && layoutType !== 'poster_cover')
-        ? `<text x="${w / 2}" y="${h / 2.2}" fill="#ffffff" fill-opacity="0.10" font-family="'${brandFont}', system-ui, sans-serif" font-size="28px" font-weight="bold" transform="rotate(-30 ${w / 2} ${h / 2.2})" text-anchor="middle" letter-spacing="8px">
-            AUTHENTIC WORK â€¢ ${escapedSpacedName}
-          </text>`
-        : '';
-
-      // Footer is always pinned to the absolute canvas bottom so large
-      // negative-space margins never push the brand bar into headline territory.
+      // Footer always pinned to bottom bar — never top/side brand marks that collide with headlines
+      // (Slide 2: "LUMINOUS GLOW BEAUTY" over "SEAMLESS").
       const FOOTER_H = 72;
       const footerBrandLabel = footerBrandToggle ? escapedSpacedName : '';
       const footerSection = (layoutType !== 'poster_cover' && template.showFooter)
-        ? (() => {
-          const footerStyle = ((index ?? 0) + (totalSlides ?? 4)) % 5;
-          if (footerStyle === 0) {
-            return `<rect x="0" y="${h - FOOTER_H}" width="${w}" height="${FOOTER_H}" class="footer-bg" />
+        ? `<rect x="0" y="${h - FOOTER_H}" width="${w}" height="${FOOTER_H}" class="footer-bg" />
               ${footerBrandLabel ? `<text x="48" y="${h - 28}" class="footer-brand">${footerBrandLabel}</text>` : ''}
-              <text x="${w - 48}" y="${h - 28}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`;
-          } else if (footerStyle === 1) {
-            return `<text x="${paddingX + 50}" y="${paddingTop + 52}" font-family="'${bodyFont}', system-ui, sans-serif" font-size="13px" font-weight="600" letter-spacing="3px" fill="${validSecondaryColor}" fill-opacity="0.85">${footerBrandLabel || escapedSpacedName}</text>
-              <line x1="${paddingX + 50}" y1="${paddingTop + 62}" x2="${Math.min(paddingX + 280, w - paddingX - 50)}" y2="${paddingTop + 62}" stroke="${validSecondaryColor}" stroke-width="1" stroke-opacity="0.45" />
-              <text x="${w - 48}" y="${h - 28}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`;
-          } else if (footerStyle === 2) {
-            return `<text x="${w - 48}" y="${h - 28}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`;
-          } else if (footerStyle === 3) {
-            const sideLabel = (footerBrandLabel || escapedSpacedName).slice(0, 22);
-            return `<text x="${w - paddingX - 24}" y="${Math.round(h * 0.55)}" font-family="'${bodyFont}', system-ui, sans-serif" font-size="11px" font-weight="600" letter-spacing="4px" fill="${validBrandColor}" fill-opacity="0.65" transform="rotate(90 ${w - paddingX - 24} ${Math.round(h * 0.55)})">${sideLabel}</text>
-              <text x="${w - 48}" y="${h - 28}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`;
-          }
-          return `<text x="${w - 48}" y="${h - 28}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`;
-        })()
+              <text x="${w - 48}" y="${h - 28}" class="footer-tracker">${slideNumText} / ${totalSlidesText}</text>`
         : '';
+
+      // Disable diagonal AUTHENTIC watermark on face-led layouts — it muddies circle/BA slides
+      const watermarkText = '';
 
       const svgString = `
         <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
@@ -2166,16 +2220,8 @@ CRITICAL IMAGE REQUIREMENTS:
           ${visualAdditions}
           ${textPanelSvg}
           
-          <!-- Anti-theft transparent brand watermark across the image area (not shown on clean full bleed) -->
-          ${template.showWatermark && activeTheme === 'editorial_beauty' ? `
-            ${logoDataUri ? `
-              <!-- Logo Watermark -->
-              <image href="${logoDataUri}" x="${w / 2 - 300}" y="${h / 2 - 300}" width="600" height="600" opacity="0.02" preserveAspectRatio="xMidYMid meet" />
-            ` : ''}
-            <text x="${w / 2}" y="${logoDataUri ? (h / 2 + 350) : (h / 2.2)}" fill="#ffffff" fill-opacity="${logoDataUri ? '0.03' : '0.04'}" font-family="'${brandFont}', system-ui, sans-serif" font-size="28px" font-weight="bold" transform="rotate(-30 ${w / 2} ${logoDataUri ? (h / 2 + 350) : (h / 2.2)})" text-anchor="middle" letter-spacing="8px">
-              AUTHENTIC WORK • ${escapedSpacedName}
-            </text>
-          ` : ''}
+          <!-- Anti-theft watermark disabled on photographic carousels — was muddying circle/BA faces -->
+          ${''}
           
           ${footerSection}
         </svg>
@@ -2219,7 +2265,7 @@ CRITICAL IMAGE REQUIREMENTS:
           .toBuffer();
       }
 
-      // â”€â”€ Step 5: Finish Control (Overlay microscopic gray noise overlay for matte texture) â”€â”€
+      // â”€â”€ Step 5: Finish Control (grain + soft vignette for premium presence) â”€â”€
       try {
         const noiseSize = 256;
         const noisePixels = Buffer.alloc(noiseSize * noiseSize * 2); // 2 channels: Grayscale (Y) + Alpha (A)
@@ -2232,18 +2278,34 @@ CRITICAL IMAGE REQUIREMENTS:
           .png()
           .toBuffer();
 
+        const vignetteSvg = Buffer.from(
+          `<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">` +
+          `<defs><radialGradient id="v" cx="50%" cy="42%" r="78%">` +
+          `<stop offset="62%" stop-color="#000" stop-opacity="0"/>` +
+          `<stop offset="100%" stop-color="#000" stop-opacity="0.10"/>` +
+          `</radialGradient></defs>` +
+          `<rect width="${w}" height="${h}" fill="url(#v)"/></svg>`,
+        );
+
         compositeBuffer = await sharp(compositeBuffer)
-          .composite([{ input: noiseBuffer, blend: 'overlay' }])
+          .composite([
+            { input: noiseBuffer, blend: 'overlay' },
+            { input: vignetteSvg, blend: 'over' },
+          ])
           .png()
           .toBuffer();
       } catch (noiseErr) {
-        console.warn('[Sharp Finish Control Warning] Could not apply grain texture, falling back to clean image:', noiseErr);
+        console.warn('[Sharp Finish Control Warning] Could not apply grain/vignette, falling back to clean image:', noiseErr);
       }
+
+      const compositionWeak = !!(optimizedDsl as any)?._compositionMeta?.compositionWeak
+        || !!(optimizedDsl as any)?._compositionMeta?.softAccepted;
 
       return {
         base64: compositeBuffer.toString('base64'),
         compositionFailed,
-        failReason,
+        compositionWeak,
+        failReason: failReason || ((optimizedDsl as any)?._compositionMeta?.compositionWeakReason),
       };
     } catch (err) {
       console.error('Failed to apply Sharp text overlay. Returning raw model output:', err);

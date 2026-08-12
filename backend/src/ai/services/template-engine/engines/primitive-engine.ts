@@ -490,11 +490,32 @@ export class PrimitiveEngine {
 
     this.registry['glass_card'] = {
       category: 'layout',
-      render: (ctx) => `
-        <g transform="translate(60, ${ctx.h - 260})">
-          <rect x="0" y="0" width="${ctx.w - 120}" height="200" rx="24" fill="${ctx.validSecondaryColor}" fill-opacity="${ctx.resolveOpacity!(0.8)}" stroke="${ctx.validBrandColor}" stroke-width="${ctx.scaleStroke!(1.5)}" style="backdrop-filter: blur(10px);" filter="drop-shadow(0 20px 40px rgba(0,0,0,0.15))" />
+      render: (ctx) => {
+        const zones = ((ctx.canonicalGeometry as any)?.protectedZones || []) as Array<{
+          x: number; y: number; width: number; height: number;
+        }>;
+        const textish = zones
+          .filter(z => z.width > 80 && z.height > 40 && z.width < ctx.w * 0.92 && z.height < ctx.h * 0.55)
+          .sort((a, b) => (b.width * b.height) - (a.width * a.height));
+        const heading = textish[0];
+        const padX = 40;
+        const padY = 28;
+        const w = heading
+          ? Math.min(ctx.w - 120, Math.max(320, heading.width + padX * 2))
+          : Math.max(320, ctx.w - 120);
+        const h = heading ? Math.max(140, heading.height + padY * 2) : 200;
+        const x = heading
+          ? Math.max(60, Math.round(heading.x + heading.width / 2 - w / 2))
+          : 60;
+        const y = heading
+          ? Math.max(60, heading.y - padY)
+          : Math.max(60, ctx.h - 260);
+        return `
+        <g transform="translate(${x}, ${y})">
+          <rect x="0" y="0" width="${w}" height="${h}" rx="24" fill="${ctx.validSecondaryColor}" fill-opacity="${ctx.resolveOpacity!(0.8)}" stroke="${ctx.validBrandColor}" stroke-width="${ctx.scaleStroke!(1.5)}" filter="drop-shadow(0 20px 40px rgba(0,0,0,0.15))" />
         </g>
-      `
+      `;
+      }
     };
 
     this.registry['organic_blob'] = {
@@ -1049,15 +1070,34 @@ export class PrimitiveEngine {
 
     this.registry['glass_card'] = {
       category: 'geometry', render: (ctx, layer) => {
-        const w = 400;
-        const h = 250;
-        const x = ctx.constraints.safeX;
-        const y = ctx.h - ctx.constraints.safeY - h;
+        // Prefer the headline's allocated pocket (injected into protectedZones before
+        // decorations render) so the panel hugs the real type — not a fixed bottom-left box.
+        const zones = ((ctx.canonicalGeometry as any)?.protectedZones || []) as Array<{
+          x: number; y: number; width: number; height: number;
+        }>;
+        const textish = zones
+          .filter(z => z.width > 80 && z.height > 40 && z.width < ctx.w * 0.92 && z.height < ctx.h * 0.55)
+          .sort((a, b) => (b.width * b.height) - (a.width * a.height));
+        const heading = textish[0];
+        const padX = 36;
+        const padY = 28;
+        const w = heading
+          ? Math.min(ctx.w - ctx.constraints.safeX * 2, Math.max(280, heading.width + padX * 2))
+          : Math.min(520, ctx.w - ctx.constraints.safeX * 2);
+        const h = heading
+          ? Math.max(120, heading.height + padY * 2)
+          : 200;
+        const x = heading
+          ? Math.max(ctx.constraints.safeX, Math.round(heading.x + heading.width / 2 - w / 2))
+          : Math.round((ctx.w - w) / 2);
+        const y = heading
+          ? Math.max(ctx.constraints.safeY, heading.y - padY)
+          : Math.round(ctx.h * 0.32);
         return `
-      <!-- Glassmorphism Card -->
+      <!-- Glassmorphism Card (bound to headline pocket) -->
       <g transform="translate(${x}, ${y})">
-        <rect x="0" y="0" width="${w}" height="${h}" rx="16" fill="${ctx.validSecondaryColor}" opacity="${ctx.resolveOpacity!(0.6)}" filter="blur(8px)" />
-        <rect x="0" y="0" width="${w}" height="${h}" rx="16" fill="none" stroke="${ctx.validSecondaryColor}" stroke-width="${ctx.scaleStroke!(1.5)}" opacity="${ctx.resolveOpacity!(0.8)}" />
+        <rect x="0" y="0" width="${w}" height="${h}" rx="16" fill="${ctx.validSecondaryColor}" opacity="${ctx.resolveOpacity!(0.55)}" />
+        <rect x="0" y="0" width="${w}" height="${h}" rx="16" fill="none" stroke="${ctx.validSecondaryColor}" stroke-width="${ctx.scaleStroke!(1.5)}" opacity="${ctx.resolveOpacity!(0.7)}" />
       </g>`;
       }
     };
