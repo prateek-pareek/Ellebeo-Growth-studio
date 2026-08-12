@@ -465,14 +465,22 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
             top = Math.round(ctx.h * 0.25) + 14;
             left = Math.round(ctx.w / 2 - 190) + 14;
           } else {
-            // Outer margin calculation: paddingPercent represents outer margin (e.g. 5% to 12%)
-            const rawPadding = Math.min(imageLayer.paddingPercent || 0, 15); // Cap outer margin to max 15%
+            // Recipe paddingPercent is authoritative (template accuracy).
+            // Soft-cap only pathological values (>30%) so future recipes stay expressible.
+            const rawPadding = Math.min(Math.max(0, Number(imageLayer.paddingPercent) || 0), 30);
             const marginX = Math.round(ctx.w * (rawPadding / 100));
             const marginY = Math.round(ctx.h * (rawPadding / 100));
 
-            targetW = ctx.w - (marginX * 2);
-            targetH = ctx.h - (marginY * 2);
+            targetW = Math.max(1, ctx.w - (marginX * 2));
+            targetH = Math.max(1, ctx.h - (marginY * 2));
 
+            // When pad is 0, fill the canvas exactly (true full-bleed rectangle)
+            if (rawPadding <= 0) {
+              targetW = ctx.w;
+              targetH = ctx.h;
+              top = 0;
+              left = 0;
+            } else {
             // Anchor Positioning Math (All 9 Anchors + middle_* aliases)
             const anchor = String(imageLayer.anchor || 'center');
             if (anchor === 'top_left') {
@@ -498,6 +506,7 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
               // Exact center
               top = Math.round((ctx.h - targetH) / 2);
               left = Math.round((ctx.w - targetW) / 2);
+            }
             }
           }
 

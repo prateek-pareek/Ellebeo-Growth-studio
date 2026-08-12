@@ -3,39 +3,44 @@ import { IDesignLanguage } from './art-direction-engine';
 
 export class DesignCompiler {
   /**
-   * Translates the AI's Semantic DesignSpec or Art Direction Language into hard 
-   * mathematical execution rules for the Renderer by mutating the DSL layer properties.
+   * Applies Art Direction / DesignSpec to a recipe DSL.
+   *
+   * Geometry contract: recipe mask / padding / anchors / maxWidthPercent / alignment
+   * are AUTHORITATIVE. Same template ⇒ same placement. Spec may tune fonts, tracking,
+   * casing, decoration density — never rewrite composition geometry.
    */
   compile(dsl: ICompiledLayoutDSL, config: ISemanticDesignSpec | IDesignLanguage): ICompiledLayoutDSL {
-    // Deep clone the DSL so we don't mutate the global registry
     const compiledDsl: ICompiledLayoutDSL = JSON.parse(JSON.stringify(dsl));
 
     const imageLayer = compiledDsl.layers.find(l => l.type === 'image') as IDSLImageLayer | undefined;
     const textLayers = compiledDsl.layers.filter(l => l.type === 'text') as IDSLTextLayer[];
-    
-    // Check if we are using the new Art Direction Engine
+
+    const recipeImage = imageLayer
+      ? {
+          mask: imageLayer.mask,
+          paddingPercent: imageLayer.paddingPercent,
+          anchor: imageLayer.anchor,
+          orientation: (imageLayer as any).orientation,
+        }
+      : null;
+    const recipeText = textLayers.map(t => ({
+      id: t.id,
+      anchor: t.anchor,
+      alignment: t.alignment,
+      maxWidthPercent: t.maxWidthPercent,
+    }));
+
     if ('behavior' in config) {
       const lang = config as IDesignLanguage;
       const behavior = lang.behavior;
-      
-      // We pass the behavior profile globally to the DSL so engines can read it
       (compiledDsl as any).behavior = behavior;
-      
-      if (imageLayer) {
-        if (behavior.imageBleedExtent === 'full') {
-          imageLayer.paddingPercent = 0;
-        } else if (behavior.imageBleedExtent === 'contained_70') {
-          imageLayer.paddingPercent = 15; // approximate containment padding
-        } else if (behavior.imageBleedExtent === 'asymmetrical_65') {
-          imageLayer.paddingPercent = 0; // The layout engine will handle the crop
-        }
-      }
 
+      // Fonts / tracking / casing only — never rewrite image padding from bleed extent
       if (textLayers.length > 0) {
         const heading = textLayers.find(t => t.role === 'heading');
         const tagline = textLayers.find(t => t.role === 'tagline');
         const body = textLayers.find(t => t.role === 'body');
-        
+
         if (heading) {
           (heading as any).fontSize = behavior.heroBaseFontSize;
           (heading as any).tracking = behavior.trackingHero;
@@ -54,123 +59,35 @@ export class DesignCompiler {
           (body as any).opacity = behavior.secondaryTextOpacity;
         }
       }
+
+      this.restoreRecipeGeometry(imageLayer, textLayers, recipeImage, recipeText);
       return compiledDsl;
     }
-    
+
     const spec = config as ISemanticDesignSpec;
-    
-    // 1. Photo Strategy Compiler — gentle relative adjustments that respect template defaults
-    if (imageLayer && spec.photo) {
-      const currentPadding = imageLayer.paddingPercent || 8;
 
-      if (spec.photo.role === 'supporting') {
-        // Soft containment bump only — never steal the recipe's anchor (bottom_right
-        // overrides were producing floating corner photos that ignore template geometry).
-        imageLayer.paddingPercent = Math.min(14, currentPadding + 4);
-      } else if (spec.photo.role === 'hero') {
-        // Tension zoom-out logic removed to respect template defaults and variety
-        imageLayer.paddingPercent = currentPadding;
-      } else if (spec.photo.role === 'background' || spec.photo.role === 'texture') {
-        imageLayer.paddingPercent = 0; // Full bleed
-      }
-
-      if (spec.photo.treatment === 'floating' && imageLayer.mask !== 'full_bleed') {
-        imageLayer.paddingPercent = Math.min(12, (imageLayer.paddingPercent || 8) + 2);
-      }
-
-      if (spec.photo.imageExecution === 'triptych') {
-        imageLayer.layoutMode = 'triptych';
-      }
+    // Photo: style flags only (triptych). Padding/anchor stay on the recipe.
+    if (imageLayer && spec.photo?.imageExecution === 'triptych') {
+      imageLayer.layoutMode = 'triptych';
     }
 
-    // 2. Composition Strategy Compiler — graded whitespace adjustments across the full
-    // enum (previously only 'massive'/'large' had any effect; 'medium'/'minimal' silently
-    // no-op'd even though the LLM picks them just as often).
-    if (spec.composition) {
-      const negativeSpaceRules: Record<string, { paddingBump: number; maxWidthPercent: number }> = {
-        minimal: { paddingBump: 0, maxWidthPercent: 85 },
-        medium: { paddingBump: 1, maxWidthPercent: 75 },
-        large: { paddingBump: 2, maxWidthPercent: 65 },
-        massive: { paddingBump: 3, maxWidthPercent: 50 },
-      };
-      const rule = negativeSpaceRules[spec.composition.negativeSpace] || negativeSpaceRules.medium;
-      // Never inflate padding on full-bleed / zero-pad recipes — that shrinks the photo
-      // into a floating postage stamp (seen on colour-transformation fallbacks).
-      if (
-        imageLayer
-        && imageLayer.mask !== 'full_bleed'
-        && imageLayer.mask !== 'before_after_split'
-        && (imageLayer.paddingPercent ?? 0) > 0
-      ) {
-        imageLayer.paddingPercent = Math.min(14, (imageLayer.paddingPercent || 8) + rule.paddingBump);
-      }
-      textLayers.forEach(t => t.maxWidthPercent = rule.maxWidthPercent);
-    }
-
-    // 3. Typography Strategy Compiler (Behavioral Contrast & Dominance)
+    // Typography: soft tracking signal only — never rotate/re-anchor the recipe
     if (spec.typography && textLayers.length > 0) {
       const heading = textLayers.find(t => t.role === 'heading');
-      const tagline = textLayers.find(t => t.role === 'tagline');
-      const body = textLayers.find(t => t.role === 'body');
-
-      if (heading) {
-        // 'editorial' and 'technical' hierarchies both read as deliberate/structured
-        // and benefit from the same asymmetrical-aware left-alignment sync; 'bold' and
-        // 'minimal' hierarchies are left at the template's own default alignment since
-        // forcing them left has no clear typographic justification.
-        if (spec.typography.hierarchy === 'editorial' || spec.typography.hierarchy === 'technical') {
-          const isAsymmetrical = spec.composition?.balance === 'asymmetrical';
-          heading.alignment = isAsymmetrical ? 'left' : heading.alignment || 'center';
-
-          // TypographyEngine resolves box position/width from BOTH alignment
-          // and the layer's structural anchor. Setting alignment='left' above
-          // without also moving a center/right-type anchor (e.g. the
-          // 'bottom_center' many recipes use) left the two fields disagreeing
-          // — TypographyEngine's width-availability math then measured from
-          // the wrong reference point (anchor's x), producing a badly
-          // undersized/mispositioned box (seen as heading text truncated at
-          // the canvas edge on mined testimonial entries). Keep the anchor's
-          // vertical component but make it genuinely left so both fields
-          // agree on where the box actually is.
-          if (isAsymmetrical) {
-            const currentAnchor = String(heading.anchor || '');
-            if (currentAnchor.includes('top')) heading.anchor = 'top_left';
-            else if (currentAnchor.includes('bottom')) heading.anchor = 'bottom_left';
-            else heading.anchor = 'middle_left';
-          }
-        }
-
-        // Explicit alignment on the spec is a more direct signal than the
-        // hierarchy-inferred default above — it wins when present, on all
-        // three heading/tagline/body roles.
-        if (spec.typography.alignment) {
-          heading.alignment = spec.typography.alignment;
-          if (tagline) tagline.alignment = spec.typography.alignment;
-          if (body) body.alignment = spec.typography.alignment;
-        }
-
-        // headlineTreatment is independent of hierarchy — it previously only ever
-        // fired when hierarchy also happened to be 'editorial', silently dropping it
-        // for every other hierarchy value.
-        if (spec.typography.headlineTreatment === 'experimental') {
-          heading.rotation = -90; // Rotate vertically
-          heading.anchor = 'middle_left'; // Push to the side
-          heading.alignment = 'center';
-        }
+      if (heading && spec.typography.headlineTreatment === 'experimental' && !(heading as any).rotation) {
+        (heading as any).tracking = (heading as any).tracking || '0.04em';
       }
     }
 
-    // 4. Decoration Strategy — density tunes presence, must not erase family DNA
+    // Decorations: density tunes presence; recipe-defined structural layers stay
     if (spec.decorations) {
       let allowedCount = 5;
       let opacityMultiplier = 1.0;
 
       if (spec.decorations.density === 'none') {
-        // Truly none: keep only structural lines
         allowedCount = 0;
         opacityMultiplier = 0.55;
       } else if (spec.decorations.density === 'low') {
-        // Low = subtle, NOT invisible — keep 1–2 family primitives visible
         allowedCount = 2;
         opacityMultiplier = 0.55;
       } else if (spec.decorations.density === 'medium') {
@@ -193,19 +110,40 @@ export class DesignCompiler {
         return true;
       });
 
-      // Never drive opacity to 0 — resolveOpacity floor would still leave ~0.02 (invisible)
       compiledDsl.primitiveTokens = {
         opacityMultiplier: Math.max(0.45, opacityMultiplier),
         baseStrokeWeight: spec.style.mood === 'luxury' ? 1.0 : (spec.decorations.density === 'high' ? 2.0 : 1.5),
         shadowDepth: spec.style.mood === 'luxury' ? 'soft' : 'medium',
         moodAdjustments: {
           contrast: spec.style.mood === 'minimalist' ? 0.7 : 1.0,
-          saturation: spec.style.mood === 'organic' ? 1.1 : 1.0
-        }
+          saturation: spec.style.mood === 'organic' ? 1.1 : 1.0,
+        },
       };
     }
 
-
+    this.restoreRecipeGeometry(imageLayer, textLayers, recipeImage, recipeText);
     return compiledDsl;
+  }
+
+  /** Re-apply recipe mask/padding/anchors after any design-spec pass. */
+  private restoreRecipeGeometry(
+    imageLayer: IDSLImageLayer | undefined,
+    textLayers: IDSLTextLayer[],
+    recipeImage: { mask?: string; paddingPercent?: number; anchor?: string; orientation?: string } | null,
+    recipeText: Array<{ id: string; anchor?: string; alignment?: string; maxWidthPercent?: number }>,
+  ): void {
+    if (imageLayer && recipeImage) {
+      if (recipeImage.mask != null) imageLayer.mask = recipeImage.mask as any;
+      if (recipeImage.paddingPercent != null) imageLayer.paddingPercent = recipeImage.paddingPercent;
+      if (recipeImage.anchor != null) imageLayer.anchor = recipeImage.anchor as any;
+      if (recipeImage.orientation != null) (imageLayer as any).orientation = recipeImage.orientation;
+    }
+    for (const snap of recipeText) {
+      const layer = textLayers.find(t => t.id === snap.id);
+      if (!layer) continue;
+      if (snap.anchor != null) layer.anchor = snap.anchor as any;
+      if (snap.alignment != null) layer.alignment = snap.alignment as any;
+      if (snap.maxWidthPercent != null) layer.maxWidthPercent = snap.maxWidthPercent;
+    }
   }
 }

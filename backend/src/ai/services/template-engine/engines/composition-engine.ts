@@ -1694,8 +1694,9 @@ export class CompositionEngine {
     const filteredLayers = [...layers];
 
     // Dynamically inject family primitives (additive — skips components already present)
+    // Deterministic from layoutId so the same template places the same accents every run.
     const familyId = layoutId.split('_')[0];
-    this.injectFamilyPrimitives(familyId, filteredLayers);
+    this.injectFamilyPrimitives(familyId, filteredLayers, layoutId);
 
     return {
       schemaVersion: '1.0',
@@ -1705,9 +1706,31 @@ export class CompositionEngine {
     };
   }
 
-  private injectFamilyPrimitives(familyId: string, layers: IDSLSceneLayer[]) {
-    const anchors: Array<'top_left' | 'top_right' | 'bottom_left' | 'bottom_right' | 'center'> = ['top_left', 'top_right', 'bottom_left', 'bottom_right', 'center'];
-    const randomAnchor = () => anchors[Math.floor(Math.random() * anchors.length)];
+  private hashSeed(s: string): number {
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) {
+      h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+    }
+    return h >>> 0;
+  }
+
+  private mulberry32(seed: number): () => number {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  private injectFamilyPrimitives(familyId: string, layers: IDSLSceneLayer[], layoutId: string = familyId) {
+    const anchors: Array<'top_left' | 'top_right' | 'bottom_left' | 'bottom_right' | 'center'> = [
+      'top_left', 'top_right', 'bottom_left', 'bottom_right', 'center',
+    ];
+    const rand = this.mulberry32(this.hashSeed(`${layoutId}::${familyId}`));
+    const pickAnchor = () => anchors[Math.floor(rand() * anchors.length)];
 
     let primitivesToInject: string[] = [];
 
@@ -1746,27 +1769,29 @@ export class CompositionEngine {
     }
 
     if (primitivesToInject.length > 0) {
-      // Collect components already present in the recipe-defined layers
       const existingComponents = new Set(
         layers.filter((l: any) => l.type === 'decoration' && l.component)
               .map((l: any) => l.component)
       );
 
-      // Inject enough family DNA to be visible — not a single optional accent
       const candidates = primitivesToInject.filter(p => !existingComponents.has(p));
       if (candidates.length > 0) {
-        const minInject = Math.min(candidates.length, familyId === 'premium' || familyId === 'announcement' || familyId === 'countdown' ? 3 : 2);
-        const numToInject = Math.min(candidates.length, Math.max(minInject, Math.floor(Math.random() * 2) + minInject));
-        const shuffled = [...candidates].sort(() => Math.random() - 0.5);
+        const minInject = Math.min(
+          candidates.length,
+          familyId === 'premium' || familyId === 'announcement' || familyId === 'countdown' ? 3 : 2,
+        );
+        const numToInject = Math.min(candidates.length, Math.max(minInject, Math.floor(rand() * 2) + minInject));
+        // Stable order (no Math.random shuffle) — same template ⇒ same accents
+        const ordered = [...candidates];
         for (let i = 0; i < numToInject; i++) {
-          const primitive = shuffled[i];
+          const primitive = ordered[i];
           layers.push({
             id: `dyn_prim_${familyId}_${i}`,
             type: 'decoration',
             zIndex: 25 + i,
             component: primitive as any,
-            anchor: randomAnchor(),
-            offsetPercent: Math.floor(Math.random() * 10)
+            anchor: pickAnchor(),
+            offsetPercent: Math.floor(rand() * 10),
           } as IDSLDecorationLayer);
         }
       }
