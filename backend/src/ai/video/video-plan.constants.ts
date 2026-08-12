@@ -60,6 +60,16 @@ export const DEFAULT_MUSIC_VOLUME = 0.6;
 export const MAX_CRITIC_REVISIONS = 2;
 export const CRITIC_PASS_THRESHOLD = 0.7;
 
+// ai_clips (Phase 7) — premium, opt-in, and the only asset strategy with a
+// real per-scene dollar cost. Bounds here are the ceiling enforced in code,
+// not just a UI hint. RUNWAY_COST_PER_SECOND_USD is a placeholder — confirm
+// against Runway's current published pricing before enabling this in
+// production; it exists so the cost ceiling has something concrete to check
+// against rather than gating on scene count alone.
+export const MAX_AI_CLIP_SCENES_PER_VIDEO = 6;
+export const MAX_AI_CLIPS_COST_USD = 5.0;
+export const RUNWAY_COST_PER_SECOND_USD = 0.5;
+
 export type VideoTypeValue = (typeof VIDEO_TYPES)[number];
 export type SceneAssetKindValue = (typeof SCENE_ASSET_KINDS)[number];
 export type MotionValue = (typeof MOTIONS)[number];

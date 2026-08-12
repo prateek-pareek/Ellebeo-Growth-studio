@@ -43,6 +43,31 @@ export function startVideoDirectorWorker(prisma: PrismaClient): Worker<VideoDire
       const brandPalette = [brandDna.primaryBrandColor, brandDna.secondaryBrandColor].filter((c): c is string => !!c);
       const medicalAesthetics = isMedicalAestheticsBrand(brandDna);
 
+      if (videoType === 'ai_clips') {
+        // Premium/opt-in gate: fail closed if Runway isn't configured for
+        // this environment, rather than let the job fail deep inside asset
+        // resolution. Full tier/subscription gating belongs at the API layer
+        // (Phase 8/9 — feature flag + rollout work) once one exists; this is
+        // the floor, not the whole gate.
+        if (!process.env['RUNWAY_API_KEY']) {
+          throw new Error('ai_clips is not enabled in this environment (RUNWAY_API_KEY not configured)');
+        }
+        return director.draftAiClipsPlan({
+          tenantId,
+          appointmentId,
+          clientId,
+          technicianId,
+          brandDnaId,
+          sceneCount: job.data.sceneCount ?? 3,
+          objective: objective as VideoPlan['objective'],
+          brandVoice,
+          brandMoodTag: brandDna.moodTag,
+          brandFont,
+          brandPalette,
+          medicalAesthetics,
+        });
+      }
+
       if (videoType === 'reels') {
         return director.draftReelsPlan({
           tenantId,

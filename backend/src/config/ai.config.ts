@@ -293,6 +293,14 @@ export const AI_CONFIG = {
   },
 
   // --------------------------------------------------------------------------
+  // Runway Gen-3 (text-to-video, ai_clips — Phase 7, opt-in/premium)
+  // --------------------------------------------------------------------------
+  runway: {
+    pollIntervalMs: 5_000,
+    maxPollAttempts: 60,   // 60 x 5s = 5 minutes — clip generation is slower than Shotstack renders
+  },
+
+  // --------------------------------------------------------------------------
   // ElevenLabs Voice Mapping (brand tone → voice)
   // --------------------------------------------------------------------------
   elevenLabs: {

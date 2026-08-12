@@ -132,7 +132,7 @@ export interface VideoDirectorJobPayload {
   brandDnaId: string;
   imageUrls: string[];
   objective: string;
-  videoType: 'slideshow' | 'reels';
+  videoType: 'slideshow' | 'reels' | 'ai_clips';
   /** reels only — total scene count (may exceed imageUrls.length; gaps are filled by the Asset agent). */
   sceneCount?: number;
   /** reels only — whether to generate an ElevenLabs voiceover. */

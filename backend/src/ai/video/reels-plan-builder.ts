@@ -24,6 +24,8 @@ export interface BuildReelsPlanParams {
   medicalAesthetics?: boolean;
   fallbackDurationSeconds?: number;
   critic?: { score: number | null; status: string; passed: boolean; revisions: number; notes: string[] };
+  /** Internal — set by buildAiClipsPlan. Scenes/assets/voiceover shape is identical across reels and ai_clips. */
+  videoType?: 'reels' | 'ai_clips';
 }
 
 export class ReelsPlanBuilderError extends Error {
@@ -53,11 +55,12 @@ export function buildReelsPlan(params: BuildReelsPlanParams): VideoPlan {
       if (!asset) {
         throw new ReelsPlanBuilderError(`No resolved asset for scene ${copy.index}`);
       }
+      const isMotionAsset = asset.kind === 'video' || asset.kind === 'generated_clip';
       return {
         index: copy.index,
         durationSeconds: asset.durationSeconds ?? fallbackDuration,
         asset: { kind: asset.kind, url: asset.url },
-        motion: 'ken_burns' as const,
+        motion: isMotionAsset ? ('none' as const) : ('ken_burns' as const),
         text: { headline: copy.headline, caption: copy.caption, position: 'bottom' as const },
         transitionOut: 'fade' as const,
       };
@@ -68,7 +71,7 @@ export function buildReelsPlan(params: BuildReelsPlanParams): VideoPlan {
   const raw = {
     technicianId: params.technicianId,
     brandDnaRef: params.brandDnaRef,
-    videoType: 'reels',
+    videoType: params.videoType ?? 'reels',
     durationSeconds: totalDuration,
     objective: params.objective,
     scenes,
@@ -87,4 +90,14 @@ export function buildReelsPlan(params: BuildReelsPlanParams): VideoPlan {
   };
 
   return parseVideoPlan(raw);
+}
+
+/**
+ * ai_clips (Phase 7): identical scene/asset/voiceover shape to reels — same
+ * builder, just videoType overridden and typically no voiceover (ai_clips
+ * scenes are motion already; VO is an optional future addition, not scoped
+ * for this phase).
+ */
+export function buildAiClipsPlan(params: Omit<BuildReelsPlanParams, 'videoType'>): VideoPlan {
+  return buildReelsPlan({ ...params, videoType: 'ai_clips' });
 }

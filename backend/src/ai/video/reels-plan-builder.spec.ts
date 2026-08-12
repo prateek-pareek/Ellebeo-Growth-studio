@@ -1,4 +1,4 @@
-import { buildReelsPlan, ReelsPlanBuilderError } from './reels-plan-builder';
+import { buildReelsPlan, buildAiClipsPlan, ReelsPlanBuilderError } from './reels-plan-builder';
 import { safeParseVideoPlan } from './video-plan.schema';
 
 const baseParams = {
@@ -45,5 +45,41 @@ describe('buildReelsPlan', () => {
 
   it('throws on zero scenes', () => {
     expect(() => buildReelsPlan({ ...baseParams, sceneCopy: [], resolvedAssets: [] })).toThrow(ReelsPlanBuilderError);
+  });
+
+  it('sets motion to none for video/generated_clip assets, ken_burns for stills', () => {
+    const plan = buildReelsPlan({
+      ...baseParams,
+      resolvedAssets: [
+        { index: 0, kind: 'image' as const, url: 'https://cdn.example.com/1.jpg', durationSeconds: 4 },
+        { index: 1, kind: 'generated_clip' as const, url: 'https://runway.example.com/2.mp4', durationSeconds: 6 },
+      ],
+    });
+    expect(plan.scenes[0]!.motion).toBe('ken_burns');
+    expect(plan.scenes[1]!.motion).toBe('none');
+  });
+});
+
+describe('buildAiClipsPlan', () => {
+  const aiClipsParams = {
+    ...baseParams,
+    resolvedAssets: [
+      { index: 0, kind: 'generated_clip' as const, url: 'https://runway.example.com/1.mp4', durationSeconds: 5 },
+      { index: 1, kind: 'generated_clip' as const, url: 'https://runway.example.com/2.mp4', durationSeconds: 5 },
+    ],
+  };
+
+  it('produces a schema-valid plan with videoType ai_clips', () => {
+    const plan = buildAiClipsPlan(aiClipsParams);
+    expect(safeParseVideoPlan(plan).success).toBe(true);
+    expect(plan.videoType).toBe('ai_clips');
+  });
+
+  it('every scene asset kind is generated_clip and motion is none (no Ken Burns on video)', () => {
+    const plan = buildAiClipsPlan(aiClipsParams);
+    for (const scene of plan.scenes) {
+      expect(scene.asset.kind).toBe('generated_clip');
+      expect(scene.motion).toBe('none');
+    }
   });
 });

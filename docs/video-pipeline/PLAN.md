@@ -110,12 +110,20 @@ narrative log.
 - Found the same reels-plan-builder / placeholder-plan scene-duration-clamping bug in two places while writing single-scene compliance tests (`Math.round(20 / sceneCount)` could exceed `MAX_SCENE_DURATION_SECONDS` for `sceneCount: 1`) — fixed both to clamp like `slideshow-plan-builder.ts` already did. Caught by the new tests, not a regression from this phase's own code, but fixed here since it blocked writing them.
 
 ## Phase 7 — AI video clips (opt-in)
-- [ ] VideoClipProvider adapter interface
-- [ ] Runway Gen-3 implementation
-- [ ] AI-clips AssetProvider
-- [ ] Rate limits + per-video cost ceiling
-- [ ] Self-test: AI-clips renders, provider swappable, cost ceiling enforced
-- [ ] GATE
+- [x] VideoClipProvider adapter interface — `backend/src/ai/video/clips/video-clip-provider.ts`
+- [x] Runway Gen-3 implementation — `backend/src/ai/services/runway-video-clip.service.ts` (submit-then-poll, same convention as `ShotstackService`; no webhook infra for Runway yet — a reasonable follow-up, not required for the adapter to be correct)
+- [x] AI-clips AssetProvider — `backend/src/ai/video/assets/ai-clips-asset-provider.ts`
+- [x] Rate limits + per-video cost ceiling — `MAX_AI_CLIP_SCENES_PER_VIDEO` (scene-count cap, checked before any generation) + `MAX_AI_CLIPS_COST_USD` (running-total cost ceiling, checked per scene as it accrues)
+- [x] Self-test: AI-clips renders, provider swappable, cost ceiling enforced — `ai-clips-render-compat.spec.ts` (all three, end to end through the unmodified Phase 2 core) + `ai-clips-asset-provider.spec.ts` (unit-level for both bounds)
+- [x] GATE — presented below, awaiting sign-off before Phase 8
+
+**Design notes:**
+- This is the pipeline's one genuinely new external capability — Phase 0 confirmed no Runway/text-to-video integration existed anywhere in the codebase before this phase. Everything else in the video pipeline (Shotstack, ElevenLabs, Pixabay) reused an existing platform integration.
+- `RUNWAY_COST_PER_SECOND_USD` is a **placeholder** value — confirm against Runway's current published pricing before enabling this in production. The point of this phase is the adapter/ceiling/rate-limit *mechanism*, not a verified price; the ceiling check itself is real and enforced regardless of what the per-second rate turns out to be.
+- Reused the reels plan-assembly shape rather than writing a third parallel builder: `reels-plan-builder.ts`'s `buildReelsPlan` gained an internal `videoType` override, and `buildAiClipsPlan` is a thin wrapper over it (scenes/assets/voiceover are structurally identical between reels and ai_clips — only the asset kind and typical absence of voiceover differ). This is a deliberate exception to the "keep builders parallel, don't share" precedent from Phase 2/4 — that precedent was about *dissimilar* inputs (raw urls vs. resolved assets); reels and ai_clips have the *same* resolved-asset shape, so sharing costs nothing here.
+- Compliance: ai_clips assets are entirely synthetic, so `filterClientPhotos` (the imagery hard gate) doesn't apply — there is no real photo to block. The scene copy driving each clip's prompt has already passed through `DirectorService`'s compliance hard gate (`runComplianceReview`) before `AiClipsAssetProvider` ever sees it, so no separate check was added in the provider itself; documented explicitly in the provider's file header so this isn't mistaken for an oversight later.
+- Premium/opt-in gate: `video-director.worker.ts` fails closed if `RUNWAY_API_KEY` isn't configured. This is a floor, not the whole gate — real tier/subscription enforcement belongs at the API layer, which doesn't exist yet (ties into the Phase 0 finding that the feature-flag system is a frontend-only stub with no backend persistence — Phase 9's problem to solve properly).
+- `buildPlaceholderReelsPlan` (used by both `draftReelsPlan` and the new `draftAiClipsPlan`) gained an optional `videoType` param rather than a third placeholder builder, for the same reason as above.
 
 ## Phase 8 — Tweak UI + review/publish
 - [ ] Structured Video Plan editing (reorder scenes, edit text, swap asset, toggle VO/music) — extend `frontend/src/routes/content.tsx`
