@@ -6,6 +6,7 @@ import {
   ReadingFlow,
   VisualPriority,
 } from './composition-quality-controller';
+import * as families from '../config/design-families.recipe';
 
 type TypographyMetrics = {
   heroSize?: number;
@@ -90,7 +91,27 @@ export class CompositionOptimizer {
 
     const layoutEngine = new LayoutEngine(canvasW, canvasHeight, faceBox, subjectBox, additionalSubjects);
 
-    // --- SPATIAL ALLOCATION (before typography fitting) ---
+    // Infer family from layout ID robustly
+    let familyKey = 'editorial';
+    if (dsl.id.includes('premium')) familyKey = 'premium';
+    else if (dsl.id.includes('minimalist')) familyKey = 'minimalist';
+    else if (dsl.id.includes('clinical')) familyKey = 'clinical';
+    else if (dsl.id.includes('scrapbook')) familyKey = 'scrapbook';
+    else if (dsl.id.includes('split')) familyKey = 'split';
+    else if (dsl.id.includes('countdown')) familyKey = 'countdown';
+    else if (dsl.id.includes('product')) familyKey = 'product';
+    else if (dsl.id.startsWith('layout_v2_')) familyKey = dsl.id.split('_')[2];
+
+    const familyRecipe = (families as any)[`${familyKey}FamilyRecipe`] || families.editorialFamilyRecipe;
+    const imageRatio = familyRecipe?.dominance?.imageRatio || 0.6;
+    const prefTextShare = 1.0 - imageRatio;
+    
+    const templateBounds = {
+      preferredTextShare: prefTextShare,
+      minTextShare: Math.max(0.15, prefTextShare - 0.1),
+      maxTextShare: Math.min(0.85, prefTextShare + 0.15),
+    };
+
     const behaviorProfile = (optimized as any)?.behavior;
     let policy = spatialPolicy || LayoutEngine.deriveSpatialPolicy(priority, {
       negativeSpaceMultiplier: behaviorProfile?.negativeSpaceMultiplier ?? 1,
@@ -99,7 +120,7 @@ export class CompositionOptimizer {
       whitespace: behaviorProfile?.whitespace
         || (behaviorProfile?.negativeSpaceMultiplier >= 1.5 ? 'airy'
           : behaviorProfile?.negativeSpaceMultiplier <= 0.7 ? 'tight' : 'comfortable'),
-    });
+    }, templateBounds);
 
     const roleWeight: Record<string, number> = { heading: 4, tagline: 3, body: 2, footnote: 1, cta: 0 };
     const allTextLayers = optimized.layers.filter(l => l.type === 'text') as IDSLTextLayer[];
@@ -119,7 +140,7 @@ export class CompositionOptimizer {
     }));
 
     // Estimate at FULL intended hero size (scale=1) so space expands first
-    const estimated = this.qc.estimateGroupHeight(roleTexts, typographyMetrics, canvasHeight, priority);
+    const estimated = this.qc.estimateGroupHeight(roleTexts, typographyMetrics, canvasHeight, priority, constraints.contentMaxWidth, familyKey);
     let estimatedHeights: Record<string, number> = {};
     const estimatedFontSizes: Record<string, number> = {};
     groupedTextLayers.forEach((l, i) => {
@@ -145,13 +166,14 @@ export class CompositionOptimizer {
     const contentNeedPx = policy.splitAxis === 'horizontal'
       ? totalGroupHeight // still drive vertical need inside column via later fit
       : totalGroupHeight;
+    const neededW = Math.round((typographyMetrics?.heroSize || canvasHeight * 0.08) * 8);
+
     if (policy.splitAxis === 'overlay') {
       policy = LayoutEngine.fitTextShareToContent(policy, totalGroupHeight, canvasHeight);
     } else if (policy.splitAxis === 'vertical') {
       policy = LayoutEngine.fitTextShareToContent(policy, totalGroupHeight, primaryAxis);
     } else {
       // horizontal split: ensure column is wide enough for hero measure
-      const neededW = Math.round((typographyMetrics?.heroSize || canvasHeight * 0.08) * 8);
       policy = LayoutEngine.fitTextShareToContent(policy, neededW, canvasW);
     }
 
@@ -170,6 +192,7 @@ export class CompositionOptimizer {
       priority,
       subjectBox || faceBox,
       policy,
+      neededW,
     );
     optimized.canvasRegions = regions;
     optimized.canonicalGeometry = regions.canonicalGeometry;
@@ -435,12 +458,13 @@ export class CompositionOptimizer {
     // Integrity repairable failures → typography repair (NOT spatial escalation / template reject)
     const fitExhausted = fit.suggestLayoutChange && !fit.region;
     const needsTypographyRepair = !contentIntegrity.ok && !!contentIntegrity.repairable;
-    let suggestLayoutChange =
-      !quality.pass
-      || fitExhausted
-      || (!contentIntegrity.ok && !contentIntegrity.repairable)
-      || !!quality.needsSpatialEscalation
-      || needsTypographyRepair;
+    let suggestLayoutChange = false; // Disable template rejection during stabilization
+
+    // Strict Enforcement: A structurally impossible fit cannot be a pass
+    if (fitExhausted) {
+      quality.pass = false;
+      // Note: we let needsSpatialEscalation be whatever it is, but it's now a hard failure
+    }
 
     const allFitActions = [...fitActions];
     allFitActions.push(
@@ -457,6 +481,7 @@ export class CompositionOptimizer {
       for (const group of textGroupLayers) {
         (group as any)._suggestLayoutChange = true;
       }
+      suggestLayoutChange = true;
       console.warn(
         `[CompositionQC] Visual gate FAILED (score=${quality.score.toFixed(1)} ` +
         `threshold=${quality.passThreshold ?? 7.5} critical=${quality.critical.join('|') || 'none'} ` +

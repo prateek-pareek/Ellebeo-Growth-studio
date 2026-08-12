@@ -10,6 +10,9 @@ export interface PrimitiveContext {
   validSecondaryColor: string;
   validBackgroundColor: string;
   validAccentColor?: string;
+  fallbackFamily?: string;
+  x?: number;
+  y?: number;
   constraints: any; // Using any for brevity, typically LayoutConstraints
   behavior?: any; // Semantic Design Behavior Profile
   layoutState?: import('../interfaces').ILayoutState; // Shared geometric state
@@ -1318,6 +1321,26 @@ export class PrimitiveEngine {
       }
     };
 
+    // Pull quote mark — large decorative quotation mark
+    this.registry['pull_quote'] = {
+      category: 'typography', render: (ctx) => {
+        let x = ctx.x || Math.round(ctx.w * 0.1);
+        let y = ctx.y || Math.round(ctx.h * 0.1);
+        
+        // Use negotiated text geometry if available so decoration travels with the text
+        if (ctx.canonicalGeometry?.textRegion) {
+          x = ctx.canonicalGeometry.textRegion.x - 40; // slightly left of text box
+          y = ctx.canonicalGeometry.textRegion.y; // top aligned with text box
+        }
+        
+        return `
+      <!-- Pull Quote Decoration -->
+      <text x="${x}" y="${y + 120}" font-size="160" font-family="${ctx.fallbackFamily}" font-weight="bold" fill="${ctx.validBrandColor}" opacity="${ctx.resolveOpacity!(0.15)}">“</text>`;
+      }
+    };
+
+
+
     // Dashed/dotted perimeter border — scrapbook / editorial feel
     this.registry['dotted_border'] = {
       category: 'geometry', render: (ctx) => {
@@ -1845,7 +1868,7 @@ export class PrimitiveEngine {
     const resolvedName = ALIASES[name] || name;
     const primitive = this.registry[resolvedName];
     if (!primitive) {
-      console.warn(`[PrimitiveEngine] Warning: Primitive '${name}'${resolvedName !== name ? ` (alias→${resolvedName})` : ''} not found.`);
+      console.warn(`[PrimitiveEngine] DEGRADED: Primitive '${name}'${resolvedName !== name ? ` (alias→${resolvedName})` : ''} not found in registry. Required primitive was skipped.`);
       return '';
     }
     if (resolvedName !== name) {
@@ -1933,7 +1956,7 @@ export class PrimitiveEngine {
                console.warn(`[PrimitiveEngine] Collision detected for '${name}' - scaled to 80%`);
            } else {
                // 3. Disable
-               console.warn(`[PrimitiveEngine] Hard collision detected for '${name}' - Silently disabling primitive.`);
+               console.warn(`[PrimitiveEngine] DEGRADED: Hard collision detected for '${name}'. Required primitive was skipped.`);
                return ''; // Disable primitive completely
            }
        }

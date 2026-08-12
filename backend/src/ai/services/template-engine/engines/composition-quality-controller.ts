@@ -96,23 +96,49 @@ export class CompositionQualityController {
     canvasH: number,
     safeWidth: number,
     visualPriority?: VisualPriority,
+    family?: string,
   ): number {
     const words = text.split(/\s+/).filter(Boolean);
-    const chars = text.replace(/\s+/g, '').length;
-    let size = baseSize;
+    if (words.length === 0 || safeWidth <= 0) return baseSize;
 
-    if (role === 'heading') {
-      if (chars > 18) size *= Math.max(0.78, 1 - (chars - 18) * 0.009);
-      if (words.length > 5) size *= Math.max(0.82, 1 - (words.length - 5) * 0.03);
-    } else if (role === 'tagline' || role === 'body') {
-      if (chars > 40) size *= Math.max(0.85, 1 - (chars - 40) * 0.005);
+    // Font family heuristics
+    const isSerif = family === 'editorial' || family === 'premium' || family === 'testimonial';
+    const charWidthMultiplier = isSerif ? 0.65 : 0.7; // average char width relative to font size
+
+    const longestWord = words.reduce((a, b) => (a.length >= b.length ? a : b), '');
+    
+    // Hard constraint: The longest word must fit on a single line
+    let size = baseSize;
+    const maxWordWidth = longestWord.length * charWidthMultiplier * size;
+    if (maxWordWidth > safeWidth) {
+      size = safeWidth / (longestWord.length * charWidthMultiplier);
     }
 
-    const longest = words.reduce((a, b) => (a.length >= b.length ? a : b), '');
-    if (longest.length > 0 && safeWidth > 0) {
-      const charRatio = 0.64;
-      const maxForWord = safeWidth / (longest.length * charRatio);
-      if (size > maxForWord) size = maxForWord;
+    // Role-based line limits
+    const maxLines = role === 'heading' ? (visualPriority === 'typography_hero' ? 4 : 3) : 
+                     role === 'tagline' ? 3 : 5;
+
+    // Calculate lines at current size
+    const simulateLines = (testSize: number) => {
+      let lines = 1;
+      let currentLineWidth = 0;
+      const spaceWidth = charWidthMultiplier * testSize;
+
+      for (const word of words) {
+        const wordW = word.length * charWidthMultiplier * testSize;
+        if (currentLineWidth + wordW > safeWidth) {
+          lines++;
+          currentLineWidth = wordW + spaceWidth;
+        } else {
+          currentLineWidth += wordW + spaceWidth;
+        }
+      }
+      return lines;
+    };
+
+    // Iteratively shrink if exceeding max lines
+    while (size > canvasH * 0.02 && simulateLines(size) > maxLines) {
+      size *= 0.95;
     }
 
     // image_hero: place type in clear bands — do NOT crush to micro type
@@ -132,6 +158,7 @@ export class CompositionQualityController {
     canvasH: number,
     visualPriority?: VisualPriority,
     preferredWidth?: number,
+    family?: string,
   ): { heights: number[]; total: number; gap: number; fontSizes: number[] } {
     const gapRatio = visualPriority === 'image_hero' ? 0.02 : 0.014;
     const gap = Math.round(canvasH * gapRatio);
@@ -157,6 +184,7 @@ export class CompositionQualityController {
         canvasH,
         measureWidth,
         visualPriority,
+        family,
       );
       fontSizes.push(adapted);
       const words = (item.text || '').split(/\s+/).filter(Boolean);
@@ -511,7 +539,20 @@ export class CompositionQualityController {
 
     score = Math.max(0, Math.min(10, score));
     const passThreshold = CompositionQualityController.PASS_SCORE;
-    const pass = score >= passThreshold && critical.length === 0;
+
+    /** Soft spatial problems that require a different spatial contract, even if score passes */
+    const needsSpatialEscalation =
+      issues.includes('whitespace_tight_to_subject')
+      || issues.includes('subject_collision')
+      || issues.includes('reading_flow_band')
+      || critical.includes('subject_collision')
+      || critical.includes('text_clipping');
+    
+    // Strict Enforcement: If spatial escalation is needed, it cannot be a pass
+    let pass = score >= passThreshold && critical.length === 0;
+    if (needsSpatialEscalation) {
+      pass = false;
+    }
 
     let failureCategory: 'spatial_allocation' | 'collision' | 'readability' | 'renderer' | 'none' = 'none';
     if (!pass) {
@@ -530,14 +571,6 @@ export class CompositionQualityController {
       // Soft spatial issues: score may still "pass" but geometry must escalate
       failureCategory = 'spatial_allocation';
     }
-
-    /** Soft spatial problems that require a different spatial contract, even if score passes */
-    const needsSpatialEscalation =
-      issues.includes('whitespace_tight_to_subject')
-      || issues.includes('subject_collision')
-      || issues.includes('reading_flow_band')
-      || critical.includes('subject_collision')
-      || critical.includes('text_clipping');
 
     console.log(
       `[CompositionQC] gate predicate: pass=${pass} score=${score.toFixed(2)} ` +

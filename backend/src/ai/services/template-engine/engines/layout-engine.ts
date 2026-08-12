@@ -653,6 +653,11 @@ export class LayoutEngine {
       density?: string;
       whitespace?: string;
     },
+    templateBounds?: {
+      preferredTextShare: number;
+      minTextShare: number;
+      maxTextShare: number;
+    },
   ): SpatialAllocationPolicy {
     const neg = Math.max(0.5, Math.min(2.0, opts?.negativeSpaceMultiplier ?? 1.0));
     const flow = opts?.readingFlow || 'center_down';
@@ -670,47 +675,52 @@ export class LayoutEngine {
       const typeFillBoost =
         (density === 'high' ? 1.08 : density === 'low' ? 0.95 : 1.0)
         * (whitespace === 'tight' ? 1.06 : whitespace === 'airy' || whitespace === 'luxury' ? 1.04 : 1.0);
-      const textShare = Math.min(0.48, Math.max(0.36, 0.42 * (0.95 + 0.05 * Math.min(neg, 1.2)) * typeFillBoost));
+      
+      const textShare = templateBounds ? templateBounds.preferredTextShare : Math.min(0.48, Math.max(0.36, 0.42 * (0.95 + 0.05 * Math.min(neg, 1.2)) * typeFillBoost));
+      const minTextShare = templateBounds ? templateBounds.minTextShare : 0.34;
+      const maxTextShare = templateBounds ? templateBounds.maxTextShare : 0.50; // hard cap
+      
       const splitAxis: SpatialAllocationPolicy['splitAxis'] =
         flow === 'z_pattern' || flow === 'left_right' ? 'horizontal' : 'vertical';
       return {
         textShare,
-        minTextShare: 0.34,
-        maxTextShare: 0.50, // hard cap — never crush photo to a sliver
+        minTextShare,
+        maxTextShare,
         splitAxis,
         preferredTextBias: 'start',
       };
     }
 
     if (visualPriority === 'image_hero') {
-      // Overlay band should fill available negative space under tight/high rhythm —
-      // not leave a large unused lower third while type sits in a tiny top pocket.
-      const textShare = Math.min(0.42, Math.max(0.26, 0.30 * (0.95 + 0.05 * neg) * fillBoost));
+      const textShare = templateBounds ? templateBounds.preferredTextShare : Math.min(0.42, Math.max(0.26, 0.30 * (0.95 + 0.05 * neg) * fillBoost));
+      const minTextShare = templateBounds ? templateBounds.minTextShare : 0.24;
+      const maxTextShare = templateBounds ? templateBounds.maxTextShare : 0.44;
       return {
         textShare,
-        minTextShare: 0.24,
-        maxTextShare: 0.44,
+        minTextShare,
+        maxTextShare,
         splitAxis: 'overlay',
         preferredTextBias: 'start',
       };
     }
 
     if (visualPriority === 'cta_hero') {
-      // CTA still prefers panel when possible — overlay only as base; escalation upgrades
-      const textShare = Math.min(0.48, Math.max(0.32, 0.36 * (0.95 + 0.05 * neg) * fillBoost));
+      const textShare = templateBounds ? templateBounds.preferredTextShare : Math.min(0.48, Math.max(0.32, 0.36 * (0.95 + 0.05 * neg) * fillBoost));
+      const minTextShare = templateBounds ? templateBounds.minTextShare : 0.30;
+      const maxTextShare = templateBounds ? templateBounds.maxTextShare : 0.55;
       return {
         textShare,
-        minTextShare: 0.30,
-        maxTextShare: 0.55,
+        minTextShare,
+        maxTextShare,
         splitAxis: 'overlay',
         preferredTextBias: 'end',
       };
     }
 
     return {
-      textShare: Math.min(0.55, Math.max(0.40, 0.45 * (0.9 + 0.1 * neg) * fillBoost)),
-      minTextShare: 0.38,
-      maxTextShare: 0.58,
+      textShare: templateBounds ? templateBounds.preferredTextShare : Math.min(0.55, Math.max(0.40, 0.45 * (0.9 + 0.1 * neg) * fillBoost)),
+      minTextShare: templateBounds ? templateBounds.minTextShare : 0.38,
+      maxTextShare: templateBounds ? templateBounds.maxTextShare : 0.58,
       splitAxis: flow === 'center_down' ? 'vertical' : 'horizontal',
       preferredTextBias: 'start',
     };
@@ -837,6 +847,7 @@ export class LayoutEngine {
     visualPriority: string = 'image_hero',
     subjectHint?: BoundingBox,
     spatialPolicy?: SpatialAllocationPolicy,
+    requiredTextWidth?: number,
   ): { imageRegion: BoundingBox; textRegion: BoundingBox; spatial: SpatialAllocationPolicy; canonicalGeometry: CanonicalGeometry } {
     const policy = spatialPolicy || LayoutEngine.deriveSpatialPolicy(visualPriority, {
       readingFlow: behavior.readingJourney === 'z_pattern' ? 'z_pattern' : 'center_down',
@@ -894,7 +905,7 @@ export class LayoutEngine {
           width: imageW,
           height: this.canvasHeight,
         };
-        const carvedTextRegion = this.carveSubjectsFromRegion(textRegion, axis);
+        const carvedTextRegion = this.carveSubjectsFromRegion(textRegion, axis, requiredTextWidth);
         canonicalGeometry.imageRegion = imageRegion;
         canonicalGeometry.textRegion = carvedTextRegion;
         return {
@@ -911,7 +922,7 @@ export class LayoutEngine {
         height: this.canvasHeight - constraints.safeY - constraints.margins.bottom,
       };
       const imageRegion = { x: 0, y: 0, width: imageW, height: this.canvasHeight };
-      const carvedTextRegion = this.carveSubjectsFromRegion(textRegion, axis);
+      const carvedTextRegion = this.carveSubjectsFromRegion(textRegion, axis, requiredTextWidth);
       canonicalGeometry.imageRegion = imageRegion;
       canonicalGeometry.textRegion = carvedTextRegion;
       return {
@@ -931,7 +942,7 @@ export class LayoutEngine {
           x: constraints.safeX,
           y: constraints.safeY,
           width: constraints.contentMaxWidth,
-          height: Math.max(100, textH - constraints.safeY - gutter / 2),
+          height: Math.max(100, textH - Math.min(constraints.safeY, textH * 0.3) - gutter / 2),
         };
         const imageRegion = {
           x: 0,
@@ -939,7 +950,7 @@ export class LayoutEngine {
           width: this.canvasWidth,
           height: imageH,
         };
-        const carvedTextRegion = this.carveSubjectsFromRegion(textRegion, axis);
+        const carvedTextRegion = this.carveSubjectsFromRegion(textRegion, axis, requiredTextWidth);
         canonicalGeometry.imageRegion = imageRegion;
         canonicalGeometry.textRegion = carvedTextRegion;
         return {
@@ -953,10 +964,10 @@ export class LayoutEngine {
         x: constraints.safeX,
         y: imageH + gutter / 2,
         width: constraints.contentMaxWidth,
-        height: Math.max(100, this.canvasHeight - imageH - constraints.margins.bottom - gutter / 2),
+        height: Math.max(100, this.canvasHeight - imageH - Math.min(constraints.margins.bottom, (this.canvasHeight - imageH) * 0.3) - gutter / 2),
       };
       const imageRegion = { x: 0, y: 0, width: this.canvasWidth, height: imageH };
-      const carvedTextRegion = this.carveSubjectsFromRegion(textRegion, axis);
+      const carvedTextRegion = this.carveSubjectsFromRegion(textRegion, axis, requiredTextWidth);
       canonicalGeometry.imageRegion = imageRegion;
       canonicalGeometry.textRegion = carvedTextRegion;
       return {
@@ -991,7 +1002,7 @@ export class LayoutEngine {
       };
     }
 
-    const carvedTextRegion = this.carveSubjectsFromRegion(textRegion, 'overlay');
+    const carvedTextRegion = this.carveSubjectsFromRegion(textRegion, 'overlay', requiredTextWidth);
     canonicalGeometry.imageRegion = imageRegion;
     canonicalGeometry.textRegion = carvedTextRegion;
     return {
@@ -1021,7 +1032,7 @@ export class LayoutEngine {
    * After panel allocation, shrink text region away from protected subjects that still intersect.
    * Keeps composition valid before QC instead of relying on font crush.
    */
-  private carveSubjectsFromRegion(region: BoundingBox, axis: string = 'overlay'): BoundingBox {
+  private carveSubjectsFromRegion(region: BoundingBox, axis: string = 'overlay', requiredTextWidth?: number): BoundingBox {
     const subjects = this.protectedSubjects.length
       ? this.protectedSubjects
       : (this.subjectBox || this.faceBox ? [this.subjectBox || this.faceBox!] : []);
@@ -1064,6 +1075,14 @@ export class LayoutEngine {
     }
 
     result.width = Math.max(80, result.width);
+
+    // Dynamic Measurement: Abort carve if it leaves an area smaller than requiredTextWidth.
+    // This allows QC to detect a collision, returning NO VALID GEOMETRY and triggering a spatial repair.
+    if (requiredTextWidth && result.width < requiredTextWidth) {
+      console.warn(`[LayoutEngine] Aborting carve: remaining width ${result.width}px is less than required ${requiredTextWidth}px. Reverting to trigger collision/repair.`);
+      return region;
+    }
+
     result.height = Math.max(60, result.height);
     return result;
   }
