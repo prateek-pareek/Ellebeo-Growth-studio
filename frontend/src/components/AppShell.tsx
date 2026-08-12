@@ -27,6 +27,7 @@ const DESKTOP_NAV: Array<{ to: string; label: string }> = [
   { to: "/appointments", label: "Appointments" },
   { to: "/bookings", label: "Bookings" },
   { to: "/content", label: "Content" },
+  { to: "/video", label: "Video" },
   { to: "/calendar", label: "Calendar" },
   { to: "/templates", label: "Templates" },
   // { to: "/campaigns", label: "Campaigns" },

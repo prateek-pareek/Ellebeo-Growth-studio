@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as VideoRouteImport } from './routes/video'
 import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as ProfileRouteImport } from './routes/profile'
@@ -27,6 +28,11 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ConsentIdRouteImport } from './routes/consent.$id'
 import { Route as BrandOnboardingRouteImport } from './routes/brand.onboarding'
 
+const VideoRoute = VideoRouteImport.update({
+  id: '/video',
+  path: '/video',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TemplatesRoute = TemplatesRouteImport.update({
   id: '/templates',
   path: '/templates',
@@ -129,6 +135,7 @@ export interface FileRoutesByFullPath {
   '/profile': typeof ProfileRoute
   '/signup': typeof SignupRoute
   '/templates': typeof TemplatesRoute
+  '/video': typeof VideoRoute
   '/brand/onboarding': typeof BrandOnboardingRoute
   '/consent/$id': typeof ConsentIdRoute
 }
@@ -148,6 +155,7 @@ export interface FileRoutesByTo {
   '/profile': typeof ProfileRoute
   '/signup': typeof SignupRoute
   '/templates': typeof TemplatesRoute
+  '/video': typeof VideoRoute
   '/brand/onboarding': typeof BrandOnboardingRoute
   '/consent/$id': typeof ConsentIdRoute
 }
@@ -168,6 +176,7 @@ export interface FileRoutesById {
   '/profile': typeof ProfileRoute
   '/signup': typeof SignupRoute
   '/templates': typeof TemplatesRoute
+  '/video': typeof VideoRoute
   '/brand/onboarding': typeof BrandOnboardingRoute
   '/consent/$id': typeof ConsentIdRoute
 }
@@ -189,6 +198,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/signup'
     | '/templates'
+    | '/video'
     | '/brand/onboarding'
     | '/consent/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -208,6 +218,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/signup'
     | '/templates'
+    | '/video'
     | '/brand/onboarding'
     | '/consent/$id'
   id:
@@ -227,6 +238,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/signup'
     | '/templates'
+    | '/video'
     | '/brand/onboarding'
     | '/consent/$id'
   fileRoutesById: FileRoutesById
@@ -247,11 +259,19 @@ export interface RootRouteChildren {
   ProfileRoute: typeof ProfileRoute
   SignupRoute: typeof SignupRoute
   TemplatesRoute: typeof TemplatesRoute
+  VideoRoute: typeof VideoRoute
   ConsentIdRoute: typeof ConsentIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/video': {
+      id: '/video'
+      path: '/video'
+      fullPath: '/video'
+      preLoaderRoute: typeof VideoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/templates': {
       id: '/templates'
       path: '/templates'
@@ -400,6 +420,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProfileRoute: ProfileRoute,
   SignupRoute: SignupRoute,
   TemplatesRoute: TemplatesRoute,
+  VideoRoute: VideoRoute,
   ConsentIdRoute: ConsentIdRoute,
 }
 export const routeTree = rootRouteImport

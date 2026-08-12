@@ -126,11 +126,18 @@ narrative log.
 - `buildPlaceholderReelsPlan` (used by both `draftReelsPlan` and the new `draftAiClipsPlan`) gained an optional `videoType` param rather than a third placeholder builder, for the same reason as above.
 
 ## Phase 8 — Tweak UI + review/publish
-- [ ] Structured Video Plan editing (reorder scenes, edit text, swap asset, toggle VO/music) — extend `frontend/src/routes/content.tsx`
-- [ ] Preview + approve → publish via existing flow
-- [ ] Agent timeline UI
-- [ ] Self-test: draft → tweak → approve → publish E2E (slideshow + reels)
-- [ ] GATE
+- [x] Structured Video Plan editing (reorder scenes, edit text, swap asset, toggle VO/music) — new route `frontend/src/routes/video.tsx` (not an extension of `content.tsx` — video plans are a different resource with their own list/detail shape; adding a new route matched the existing one-resource-one-route convention better than overloading `content.tsx`)
+- [x] Preview + approve → publish via existing flow — `<video>` preview once `outputUrl` exists; "Approve & render" calls the new `POST /video-plans/:id/approve` endpoint, which enqueues the Phase 2 render job. Publish itself is **not** reimplemented — Phase 2's webhook already syncs `outputUrl` into `ContentItem.finalVideoUrl` when a `contentItemId` is linked, so the existing Instagram publish flow needs no new code, same reuse pattern as Phase 2.
+- [x] Agent timeline UI — renders `plan.critic.notes` + score/revisions/passed in the editor panel. This is a **stand-in**, not the fuller per-agent-call trace the spec's Phase 9 describes (inputs/output/tools/tokens/latency/cost) — no such granular trace is persisted yet. Documented explicitly so this isn't mistaken for Phase 9 being done early.
+- [x] Self-test: draft → tweak → approve → publish E2E (slideshow + reels) — backend covered by `video-plan.service.spec.ts` (10 tests: edit fields, reorder, toggle audio, approve → enqueue render); publish itself was already proven reachable in Phase 2 (webhook → `ContentItem.finalVideoUrl`). **Not covered**: a real browser E2E — no frontend test runner exists in this project (`frontend/package.json` has no test script), and no Playwright/browser automation was run against a live dev server in this session. Frontend correctness here rests on `tsc --noEmit` (clean) and matching existing UI conventions exactly (see design notes) — flagging this gap plainly rather than claiming an E2E that didn't happen.
+- [x] GATE — presented below, awaiting sign-off before Phase 9
+
+**Design notes:**
+- Backend API surface is new: `VideoPlanController`/`VideoPlanService` (`GET /video-plans`, `GET /video-plans/:id`, `PATCH /video-plans/:id`, `POST /video-plans/:id/approve`), mirroring `ContentController`'s exact shape (`JwtAuthGuard` + `TenantStatusGuard`, tenant-scoped via `req.user.tenantId`, `NotFoundException` on cross-tenant access) — same conventions, new resource.
+- `PATCH` accepts only structured fields (`sceneOrder`, per-scene `headline`/`caption`/`assetUrl`, `voiceoverEnabled`, `musicMood`) — never a raw plan replace. Every edit re-runs `parseVideoPlan()` before saving, so a malformed edit can't corrupt a plan. Editing is blocked once a plan is `rendering`/`rendered`/`published`.
+- Resolved the Phase 1 open question ("no shared TS package between backend/frontend") pragmatically: the frontend defines its own `VideoPlanContract` type in `video-provider.ts`, kept in sync by hand with the backend zod schema rather than by tooling. A real shared-types package is still the correct long-term fix; out of scope to set up a workspace/monorepo package boundary just for this.
+- Frontend UI matches `content.tsx`/`EditSidebar`'s existing conventions exactly: Tailwind design tokens (`bg-card`, `text-taupe`, `bg-brass`, `rounded-2xl`), the slide-over panel pattern (`fixed inset-0` scrim + `fixed top-0 right-0 max-w-lg` panel), `sonner` toasts, `api` axios client with JWT-in-localStorage auth. Nav link added to `AppShell.tsx`'s `DESKTOP_NAV` only (not the mobile `NAV` array, which is a fixed 5-icon bottom bar — adding a 6th would break that layout; mobile nav access is a follow-up, not a blocker).
+- `npx vite build` surfaced (and regenerated) `frontend/src/routeTree.gen.ts` — TanStack Router's auto-generated route registry — to pick up the new `/video` route. Pre-existing unrelated build failures (`firebase/auth`, `socket.io-client` missing packages, same category as the backend's missing-module gaps) block a full production bundle in this environment; not caused by this phase's changes.
 
 ## Phase 9 — Flag, observability, rollout
 - [ ] `GROWTH_STUDIO_VIDEO` — needs backend-persisted flag system (current frontend stub has no backend table)
