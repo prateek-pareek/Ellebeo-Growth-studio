@@ -81,6 +81,16 @@ function moodLabel(contract: BrandDnaV2Contract): string {
     : MOOD_META[contract.identity.mood]?.label ?? contract.identity.mood;
 }
 
+// The stored identity.palette only updates when a mood card is explicitly
+// clicked — a returning tenant whose mood was already set (e.g. from
+// migration) never clicks it again, so the stored palette can silently drift
+// out of sync with the mood shown everywhere else. Force it back in sync at
+// the one point that matters: right before anything is persisted.
+function normalizeContractForSave(contract: BrandDnaV2Contract): BrandDnaV2Contract {
+  if (contract.identity.mood === "CUSTOM") return contract;
+  return { ...contract, identity: { ...contract.identity, palette: paletteForMood(contract) } };
+}
+
 type IdentitySuggestion = { moods: { id: string; label: string; palette: string[]; essenceHints: string[] }[]; typePairing: string };
 
 // ── Small presentational pieces ─────────────────────────────────────────────
@@ -190,7 +200,7 @@ function BrandDnaOnboardingV2() {
     saveTimer.current = setTimeout(async () => {
       setSaving(true);
       try {
-        await api.put("/brand-dna/v2", contract);
+        await api.put("/brand-dna/v2", normalizeContractForSave(contract));
       } catch {
         // Silent — autosave retries on next change; explicit "Save & finish" on step 7 surfaces errors.
       } finally {
@@ -309,7 +319,8 @@ function BrandDnaOnboardingV2() {
     if (!contract) return;
     setSaving(true);
     try {
-      await api.put("/brand-dna/v2", { ...contract, meta: { ...contract.meta, completedAt: new Date().toISOString() } });
+      const finalContract = normalizeContractForSave(contract);
+      await api.put("/brand-dna/v2", { ...finalContract, meta: { ...finalContract.meta, completedAt: new Date().toISOString() } });
       trackBrandDnaEvent("completed");
       toast.success("Brand DNA saved.");
     } catch (err: any) {
