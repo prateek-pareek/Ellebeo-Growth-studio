@@ -4,6 +4,8 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { TenantStatusGuard } from '../../common/guards/tenant-status.guard';
 import { getRedisClient } from '../../config/redis.client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PromptCache } from '../../ai/orchestrator/prompt-cache';
+import { withTimeout } from '../../config/with-timeout.util';
 import { BrandDnaSuggestionChain } from './brand-dna-suggestion.chain';
 import { BrandDnaSuggestionCache } from './brand-dna-suggestion.cache';
 import { mapProfileToContract, mapContractToProfileData } from './brand-dna-v2.mapper';
@@ -28,6 +30,7 @@ function assertGuidedV2Enabled(): void {
 export class BrandDnaV2Controller {
   private readonly chain = new BrandDnaSuggestionChain();
   private readonly cache = new BrandDnaSuggestionCache(getRedisClient());
+  private readonly promptCache = new PromptCache(getRedisClient());
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -55,6 +58,17 @@ export class BrandDnaV2Controller {
 
     const tenantId = req.user.tenantId;
     const data = mapContractToProfileData(contract, tenantId);
+
+    // The prompt cache is keyed by (tenantId, version) — v2's version is the
+    // fixed schemaVersion (always 2), not an incrementing save counter like
+    // v1's, so it never naturally invalidates. Must invalidate explicitly on
+    // every save or generation keeps using stale Brand DNA for up to 24h.
+    // Time-boxed: saving Brand DNA must never hang because Redis is down.
+    try {
+      await withTimeout(this.promptCache.invalidateTenantCache(tenantId), 1_500, 'prompt cache invalidation');
+    } catch {
+      // Worst case the 24h TTL still expires the stale fragment eventually.
+    }
 
     try {
       const existing = await this.prisma.brandDnaProfile.findUnique({

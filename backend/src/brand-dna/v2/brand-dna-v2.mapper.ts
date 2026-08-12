@@ -2,6 +2,25 @@ import { BrandDnaProfile, Prisma } from '@prisma/client';
 import { BrandDNARecord } from '../../ai/types/job-payload.types';
 import { BrandDnaV2Contract } from './brand-dna-v2.types';
 
+// Free-text aesthetic direction per mood — read directly by
+// generation-orchestrator.ts for image generation whenever visualRanking is
+// empty (always true for v2 profiles, which have no style-ranking field).
+// Without this, every v2 tenant's images fell back to the same hardcoded
+// generic string regardless of which mood they picked.
+const MOOD_AESTHETIC_DIRECTION: Record<string, string> = {
+  SOFT_GLAM: 'soft romantic feminine glam, warm polished tones',
+  CLEAN_CLINICAL: 'clean clinical minimalist, precise cool tones, sterile trust-first look',
+  EDITORIAL_MINIMAL: 'editorial minimalist, sleek refined quiet confidence',
+  NATURAL_ORGANIC: 'natural organic earthy, gentle handcrafted feel',
+  BOLD_LUXE: 'bold luxe dramatic, high-end statement-making',
+  PLAYFUL_FRESH: 'playful fresh vibrant, energetic fun-first',
+};
+
+function aestheticDirectionForMood(profile: BrandDnaProfile): string {
+  if (profile.mood === 'CUSTOM') return profile.customMoodLabel || 'minimal editorial premium beauty';
+  return MOOD_AESTHETIC_DIRECTION[profile.mood] ?? 'minimal editorial premium beauty';
+}
+
 // Adapts a BrandDnaProfile row (schemaVersion 2, BRAND_DNA_GUIDED_V2 —
 // /brand_dna_implementation_plan.md) into the legacy BrandDNARecord shape the
 // generation pipeline already reads (prompt-builder.ts's brandDnaV2 branch,
@@ -18,7 +37,7 @@ export function mapBrandDnaProfileToLegacyRecord(profile: BrandDnaProfile): Bran
       professional_name: profile.brandName,
     },
     essence: {
-      image_energy: profile.mood,
+      image_energy: profile.mood === 'CUSTOM' ? (profile.customMoodLabel ?? profile.mood) : profile.mood,
     },
     visual_identity: {
       palette: {
@@ -62,7 +81,7 @@ export function mapBrandDnaProfileToLegacyRecord(profile: BrandDnaProfile): Bran
     workDifferentiation: null,
     brandEssenceSentence: null,
     brandWorldAnchor: null,
-    imageEnergy: profile.mood,
+    imageEnergy: profile.mood === 'CUSTOM' ? (profile.customMoodLabel ?? profile.mood) : profile.mood,
     oneLiner: profile.userWrittenStory ?? profile.aiDraftedStory ?? null,
     uniqueSellingProposition: null,
     signatureOutcome: null,
@@ -76,8 +95,8 @@ export function mapBrandDnaProfileToLegacyRecord(profile: BrandDnaProfile): Bran
     vocabularyPreferred: [],
     doNotSay: [],
     formattingStyle: null,
-    aestheticDirection: null,
-    moodTag: profile.mood,
+    aestheticDirection: aestheticDirectionForMood(profile),
+    moodTag: profile.mood === 'CUSTOM' ? (profile.customMoodLabel ?? profile.mood) : profile.mood,
     primaryBrandColor: profile.palette[0] ?? null,
     secondaryBrandColor: profile.palette[1] ?? null,
     backgroundBrandColor: profile.palette[2] ?? null,
@@ -90,7 +109,7 @@ export function mapBrandDnaProfileToLegacyRecord(profile: BrandDnaProfile): Bran
     emojiStyle: 'minimal',
     averageConfidenceScore: 0.5,
     preferredModelOverride: null,
-    logoUrl: null,
+    logoUrl: profile.logoAssetId,
     logoPosition: 'bottom_right',
     moodboardUrls: [],
     moodboardLabels: [],

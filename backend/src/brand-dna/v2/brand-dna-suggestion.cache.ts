@@ -1,24 +1,13 @@
 import type Redis from 'ioredis';
 import * as crypto from 'crypto';
+import { withTimeout } from '../../config/with-timeout.util';
 
 // Caches AI suggestion responses by a hash of (endpoint name + input), so the
 // same onboarding step for the same inputs doesn't re-hit the LLM. Suggestions
 // are input-derived and deterministic-enough per plan §5 that a short TTL is
 // safe — this is a cost/latency optimisation, not a correctness dependency.
 const TTL_SECONDS = 60 * 60 * 6; // 6 hours
-
-// The shared Redis client is configured with maxRetriesPerRequest: null
-// (required by BullMQ elsewhere) — commands queue indefinitely if Redis is
-// unreachable rather than rejecting. A cache must never be able to hang the
-// feature it's caching, so every call here is time-boxed and fails silently.
 const CALL_TIMEOUT_MS = 1_500;
-
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('cache timeout')), ms)),
-  ]);
-}
 
 export class BrandDnaSuggestionCache {
   constructor(private readonly redis: Redis) {}
