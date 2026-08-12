@@ -24,11 +24,18 @@ narrative log.
 - [x] **GATE: present findings to user** — DONE, awaiting sign-off before Phase 1
 
 ## Phase 1 — Video Plan contract
-- [ ] Prisma models/enums (VideoType, SceneAssetKind, Motion, Transition, VideoStatus, CriticStatus)
-- [ ] Shared TS type + validation schema (single source of truth)
-- [ ] Constants file (motions/transitions/caption styles)
-- [ ] Self-test: contract compiles, validation rejects off-enum values
-- [ ] GATE
+- [x] Prisma models/enums (VideoType, SceneAssetKind, Motion, Transition, VideoStatus, CriticStatus) + `VideoPlan` model
+- [x] Shared TS type + validation schema (single source of truth) — `backend/src/ai/video/video-plan.schema.ts` (zod)
+- [x] Constants file (motions/transitions/caption styles) — `backend/src/ai/video/video-plan.constants.ts`
+- [x] Self-test: contract compiles, validation rejects off-enum values — `video-plan.schema.spec.ts`, 8/8 passing
+- [x] GATE — presented below, awaiting sign-off before Phase 2
+
+**Design notes:**
+- Enum values use lowercase snake_case (`ken_burns`, not `KEN_BURNS`) to match this codebase's existing Prisma enum convention (`ContentStatus`, `JobState`, etc.), not the uppercase illustrative casing in the original spec.
+- `VideoPlan.plan` is stored as a single `Json` column (mirrors `GenerationJob.jobPayload`) rather than fully normalized scene tables — consistent with how this codebase already handles nested generation payloads. Denormalized columns (`status`, `videoType`, `criticScore`, `renderId`, `outputUrl`, etc.) exist alongside it purely for querying/indexing.
+- `objective` is a video-specific CTA concept (`VIDEO_OBJECTIVES` in constants), deliberately kept separate from the existing `BusinessGoalType` Prisma enum, which models the tenant's overall business goal, not a single video's.
+- No shared TS package exists between `backend/` and `frontend/` — the zod schema is authoritative in `backend/`. Phase 8 (tweak UI) will need to either duplicate the shape in `frontend/` or the backend will expose it via API responses the UI trusts as source of truth. Flagging now, decide at Phase 8.
+- `text.position` (`top|center|bottom`) is validated in the zod schema only, not a Prisma enum — it's nested inside the JSON blob, not a queryable column, so no DB enum was needed for it (spec's list of six enums to add didn't include it either).
 
 ## Phase 2 — Deterministic core (slideshow, no agents)
 - [ ] Confirm reuse plan for existing ShotstackService/ReelAssemblerService vs. new Video Plan → Shotstack mapper
