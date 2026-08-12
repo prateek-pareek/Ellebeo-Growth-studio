@@ -64,8 +64,9 @@ export class DesignCompiler {
       const currentPadding = imageLayer.paddingPercent || 8;
 
       if (spec.photo.role === 'supporting') {
-        imageLayer.paddingPercent = Math.min(18, currentPadding + 6); // Dramatic zoom-out for supporting elements
-        imageLayer.anchor = spec.composition?.balance === 'asymmetrical' ? 'bottom_right' : imageLayer.anchor || 'center';
+        // Soft containment bump only — never steal the recipe's anchor (bottom_right
+        // overrides were producing floating corner photos that ignore template geometry).
+        imageLayer.paddingPercent = Math.min(14, currentPadding + 4);
       } else if (spec.photo.role === 'hero') {
         // Tension zoom-out logic removed to respect template defaults and variety
         imageLayer.paddingPercent = currentPadding;
@@ -73,8 +74,8 @@ export class DesignCompiler {
         imageLayer.paddingPercent = 0; // Full bleed
       }
 
-      if (spec.photo.treatment === 'floating') {
-        imageLayer.paddingPercent = Math.min(14, (imageLayer.paddingPercent || 8) + 2);
+      if (spec.photo.treatment === 'floating' && imageLayer.mask !== 'full_bleed') {
+        imageLayer.paddingPercent = Math.min(12, (imageLayer.paddingPercent || 8) + 2);
       }
 
       if (spec.photo.imageExecution === 'triptych') {
@@ -93,7 +94,16 @@ export class DesignCompiler {
         massive: { paddingBump: 3, maxWidthPercent: 50 },
       };
       const rule = negativeSpaceRules[spec.composition.negativeSpace] || negativeSpaceRules.medium;
-      if (imageLayer) imageLayer.paddingPercent = Math.min(14, (imageLayer.paddingPercent || 8) + rule.paddingBump);
+      // Never inflate padding on full-bleed / zero-pad recipes — that shrinks the photo
+      // into a floating postage stamp (seen on colour-transformation fallbacks).
+      if (
+        imageLayer
+        && imageLayer.mask !== 'full_bleed'
+        && imageLayer.mask !== 'before_after_split'
+        && (imageLayer.paddingPercent ?? 0) > 0
+      ) {
+        imageLayer.paddingPercent = Math.min(14, (imageLayer.paddingPercent || 8) + rule.paddingBump);
+      }
       textLayers.forEach(t => t.maxWidthPercent = rule.maxWidthPercent);
     }
 

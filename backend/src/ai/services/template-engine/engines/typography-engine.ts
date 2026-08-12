@@ -537,9 +537,9 @@ export class TypographyEngine {
     }
     let containerSvg = '';
     if (layer.component === 'pill_label' || layer.component === 'solid_card' || layer.component === 'inset_card') {
-      const padX = layer.component === 'pill_label' ? 24 : 40;
-      const padY = layer.component === 'pill_label' ? 12 : 30;
-      const radius = layer.component === 'pill_label' ? (textHeight + padY * 2) / 2 : (layer.component === 'inset_card' ? 8 : 0);
+      const padX = layer.component === 'pill_label' ? 24 : 28;
+      const padY = layer.component === 'pill_label' ? 12 : 20;
+      const radius = layer.component === 'pill_label' ? (textHeight + padY * 2) / 2 : (layer.component === 'inset_card' ? 8 : 12);
 
       let bgFill = '#FFFFFF';
       if (ctx.colorHierarchy) {
@@ -548,9 +548,22 @@ export class TypographyEngine {
         style.fill = layer.role === 'heading' ? ctx.colorHierarchy.primaryText : ctx.colorHierarchy.primaryBackground;
       }
 
+      // Fit card to measured line width, not the full allocated column
+      const trackingEmCard = this.parseTrackingEm(style.letterSpacing);
+      const casingCard = (layer as any).capitalizationRule || ctx.typographyTokens?.casing || 'natural';
+      const isUpperCard = casingCard === 'force_uppercase' || casingCard === 'uppercase';
+      const approxLineW = Math.ceil(
+        longestLineChars * style.fontSize * ((isUpperCard ? 0.70 : 0.60) + Math.max(0, trackingEmCard)),
+      );
+      const contentW = Math.max(80, Math.min(effectiveMaxW, approxLineW || effectiveMaxW));
+      const cardX = anchor === 'middle'
+        ? x - contentW / 2
+        : anchor === 'end'
+          ? x - contentW
+          : boxX;
       containerSvg = `
           <!-- Structural Container: ${layer.component} -->
-          <rect x="${boxX - padX}" y="${y - padY}" width="${effectiveMaxW + padX * 2}" height="${textHeight + padY * 2}" rx="${radius}" fill="${bgFill}" filter="url(#premium_shadow)" />
+          <rect x="${cardX - padX}" y="${y - padY}" width="${contentW + padX * 2}" height="${textHeight + padY * 2}" rx="${radius}" fill="${bgFill}" filter="url(#premium_shadow)" />
         `;
     }
 

@@ -168,32 +168,46 @@ const fullBleedBase = async (ctx: BaseCtx): Promise<BaseResult> => ({
 // actual Sharp stitching logic. Falls back to a single-photo bordered
 // treatment when no before-photo is available for this appointment.
 const stitchBeforeAfterImages = async (ctx: BaseCtx, orientation: 'vertical' | 'horizontal'): Promise<BaseResult> => {
-  if (!ctx.beforePhotoUrl) return borderedDefault(ctx);
+  // No before-photo: still fill the frame. Never fall back to tiny borderedDefault —
+  // that was producing postage-stamp photos on colour-transformation carousels.
+  if (!ctx.beforePhotoUrl) {
+    return fullBleedBase(ctx);
+  }
   try {
     const beforeBuffer = await ctx.downloadImageAsBuffer(ctx.beforePhotoUrl);
     let composites: sharp.OverlayOptions[];
+    // Stitch on the FULL canvas (w/h), not innerW/innerH — text anchors are canvas-absolute.
+    const stitchW = ctx.w;
+    const stitchH = ctx.h;
     if (orientation === 'horizontal') {
-      const topHalf = await processPortraitFit(beforeBuffer, ctx.innerW, Math.round(ctx.innerH / 2), ctx.validBackgroundColor);
-      const bottomHalf = await processPortraitFit(ctx.imageBuffer, ctx.innerW, Math.round(ctx.innerH / 2), ctx.validBackgroundColor);
+      const topHalf = await processPortraitFit(beforeBuffer, stitchW, Math.round(stitchH / 2), ctx.validBackgroundColor);
+      const bottomHalf = await processPortraitFit(ctx.imageBuffer, stitchW, Math.round(stitchH / 2), ctx.validBackgroundColor);
       composites = [
         { input: topHalf, top: 0, left: 0 },
-        { input: bottomHalf, top: Math.round(ctx.innerH / 2), left: 0 },
+        { input: bottomHalf, top: Math.round(stitchH / 2), left: 0 },
       ];
     } else {
-      const leftHalf = await processPortraitFit(beforeBuffer, Math.round(ctx.innerW / 2), ctx.innerH, ctx.validBackgroundColor);
-      const rightHalf = await processPortraitFit(ctx.imageBuffer, Math.round(ctx.innerW / 2), ctx.innerH, ctx.validBackgroundColor);
+      const leftHalf = await processPortraitFit(beforeBuffer, Math.round(stitchW / 2), stitchH, ctx.validBackgroundColor);
+      const rightHalf = await processPortraitFit(ctx.imageBuffer, Math.round(stitchW / 2), stitchH, ctx.validBackgroundColor);
       composites = [
         { input: leftHalf, top: 0, left: 0 },
-        { input: rightHalf, top: 0, left: Math.round(ctx.innerW / 2) },
+        { input: rightHalf, top: 0, left: Math.round(stitchW / 2) },
       ];
     }
     const baseImageBuffer = await sharp({
-      create: { width: ctx.innerW, height: ctx.innerH, channels: 3, background: '#000000' },
+      create: { width: stitchW, height: stitchH, channels: 3, background: '#000000' },
     }).composite(composites).png().toBuffer();
-    return { baseImage: sharp(baseImageBuffer), compositeTop: ctx.paddingTop, compositeBottom: ctx.paddingBottom, compositeLeft: ctx.paddingX, compositeRight: ctx.paddingX };
+    // Text sits in the lower band over the stitch (before_after recipes use bottom_center)
+    return {
+      baseImage: sharp(baseImageBuffer),
+      compositeTop: Math.round(stitchH * 0.62),
+      compositeBottom: ctx.paddingBottom || Math.round(stitchH * 0.06),
+      compositeLeft: ctx.paddingX || Math.round(stitchW * 0.06),
+      compositeRight: ctx.paddingX || Math.round(stitchW * 0.06),
+    };
   } catch (err) {
-    console.error('[Before/After Stitch Error] Failed to stitch before/after images, falling back:', err);
-    return borderedDefault(ctx);
+    console.error('[Before/After Stitch Error] Failed to stitch before/after images, falling back to full bleed:', err);
+    return fullBleedBase(ctx);
   }
 };
 
@@ -300,13 +314,28 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
           };
         }
 
-        // AI ART DIRECTION UPGRADE: Region-Based Extraction
-        if (dsl.canvasRegions && (!imageLayer.mask || imageLayer.mask === 'rectangle' || imageLayer.mask === 'split')) {
+        // Genuine before/after stitch MUST run before panel extraction —
+        // seedPolicy treats before_after as a split axis, which would otherwise
+        // squash a single photo into imageRegion and skip the dual-photo stitch.
+        if (imageLayer.mask === 'before_after_split') {
+          return stitchBeforeAfterImages(ctx, imageLayer.orientation === 'horizontal' ? 'horizontal' : 'vertical');
+        }
+
+        // Region-based photo ONLY for true panel/split contracts.
+        // Full-bleed, padded rectangle, circle, etc. must use mask/padding/anchor math —
+        // never squeeze the photo into a typography textRegion leftover.
+        const spatialAxis = (dsl as any)?._spatialPolicy?.splitAxis as string | undefined;
+        const isTruePanelSplit =
+          imageLayer.mask === 'split'
+          || spatialAxis === 'vertical'
+          || spatialAxis === 'horizontal';
+
+        if (dsl.canvasRegions && isTruePanelSplit) {
           const region = dsl.canvasRegions.imageRegion;
           const textPanel = dsl.canvasRegions.textRegion;
 
           // Image surrenders width OR height (typography_hero panel splits)
-          if (region.width < ctx.w - 2 || region.height < ctx.h - 2) {
+          if (region && (region.width < ctx.w - 2 || region.height < ctx.h - 2)) {
             const splitPhoto = await processPortraitFit(
               ctx.imageBuffer,
               Math.max(1, region.width),
@@ -328,13 +357,7 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
           }
         }
 
-        if (imageLayer.mask === 'before_after_split') {
-          // Genuine two-photo compositing for the before_after DSL family —
-          // real before-photo + real after-photo stitched together, not a
-          // single-photo crop. Falls back to a single-photo treatment inside
-          // stitchBeforeAfterImages() when no before-photo is available.
-          return stitchBeforeAfterImages(ctx, imageLayer.orientation === 'horizontal' ? 'horizontal' : 'vertical');
-        } else if (imageLayer.mask === 'circle') {
+        if (imageLayer.mask === 'circle') {
           const size = Math.floor(Math.min(ctx.w, ctx.h) * 0.6); // 60% of canvas width
           const paddingPx = Math.floor(ctx.w * (imageLayer.paddingPercent || 15) / 100);
 
@@ -370,10 +393,59 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
 
           const isRight = imageLayer.anchor?.includes('right');
           const isLeft = imageLayer.anchor?.includes('left');
-          const compLeft = isRight ? ctx.paddingX : (isLeft ? leftOffset + size + ctx.paddingX : ctx.paddingX);
-          const compRight = isLeft ? ctx.paddingX : (isRight ? ctx.w - leftOffset + ctx.paddingX : ctx.paddingX);
+          const isTop = imageLayer.anchor?.includes('top');
+          const isBottom = imageLayer.anchor?.includes('bottom');
+          const gap = 28;
 
-          return { baseImage: sharp(baseImageBuffer), compositeTop: ctx.paddingTop, compositeBottom: ctx.paddingBottom, compositeLeft: compLeft, compositeRight: compRight };
+          // Reserve a real free text band — center circles used to return full-frame
+          // composite bounds, so headlines drew ON TOP of the disk and clipped the edge.
+          let compTop = ctx.paddingTop;
+          let compBottom = ctx.paddingBottom;
+          let compLeft = ctx.paddingX;
+          let compRight = ctx.paddingX;
+
+          if (isRight) {
+            compLeft = ctx.paddingX;
+            compRight = Math.max(ctx.paddingX, ctx.w - leftOffset + gap);
+          } else if (isLeft) {
+            compLeft = leftOffset + size + gap;
+            compRight = ctx.paddingX;
+          } else if (isTop) {
+            compTop = topOffset + size + gap;
+            compBottom = ctx.paddingBottom;
+          } else if (isBottom) {
+            compTop = ctx.paddingTop;
+            compBottom = Math.max(ctx.paddingBottom, ctx.h - topOffset + gap);
+          } else {
+            // Center circle: prefer the wider side pocket, else the taller band
+            const leftW = Math.max(0, leftOffset - gap - ctx.paddingX);
+            const rightW = Math.max(0, ctx.w - (leftOffset + size) - gap - ctx.paddingX);
+            const topH = Math.max(0, topOffset - gap - ctx.paddingTop);
+            const botH = Math.max(0, ctx.h - (topOffset + size) - gap - ctx.paddingBottom);
+            if (Math.max(leftW, rightW) >= Math.max(topH, botH) && Math.max(leftW, rightW) >= 140) {
+              if (leftW >= rightW) {
+                compLeft = ctx.paddingX;
+                compRight = Math.max(ctx.paddingX, ctx.w - leftOffset + gap);
+              } else {
+                compLeft = leftOffset + size + gap;
+                compRight = ctx.paddingX;
+              }
+            } else if (botH >= topH) {
+              compTop = topOffset + size + gap;
+              compBottom = ctx.paddingBottom;
+            } else {
+              compTop = ctx.paddingTop;
+              compBottom = Math.max(ctx.paddingBottom, ctx.h - topOffset + gap);
+            }
+          }
+
+          return {
+            baseImage: sharp(baseImageBuffer),
+            compositeTop: compTop,
+            compositeBottom: compBottom,
+            compositeLeft: compLeft,
+            compositeRight: compRight,
+          };
         } else {
           let targetW: number;
           let targetH: number;
@@ -401,8 +473,8 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
             targetW = ctx.w - (marginX * 2);
             targetH = ctx.h - (marginY * 2);
 
-            // Anchor Positioning Math (All 9 Anchors)
-            const anchor = imageLayer.anchor || 'center';
+            // Anchor Positioning Math (All 9 Anchors + middle_* aliases)
+            const anchor = String(imageLayer.anchor || 'center');
             if (anchor === 'top_left') {
               top = marginY; left = marginX;
             } else if (anchor === 'top_right') {
@@ -415,10 +487,13 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
               top = ctx.h - targetH - marginY; left = ctx.w - targetW - marginX;
             } else if (anchor === 'bottom_center') {
               top = ctx.h - targetH - marginY; left = Math.round((ctx.w - targetW) / 2);
-            } else if (anchor === 'center_left') {
+            } else if (anchor === 'center_left' || anchor === 'middle_left') {
               top = Math.round((ctx.h - targetH) / 2); left = marginX;
-            } else if (anchor === 'center_right') {
+            } else if (anchor === 'center_right' || anchor === 'middle_right') {
               top = Math.round((ctx.h - targetH) / 2); left = ctx.w - targetW - marginX;
+            } else if (anchor === 'middle_center' || anchor === 'middle') {
+              top = Math.round((ctx.h - targetH) / 2);
+              left = Math.round((ctx.w - targetW) / 2);
             } else {
               // Exact center
               top = Math.round((ctx.h - targetH) / 2);
@@ -1205,13 +1280,45 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     const forceScrimForSafety = qualityCritical.includes('subject_collision') || qualityCritical.includes('text_collision');
     if (textBand && spatialAxis === 'overlay'
       && (forceScrimForSafety || priority === 'image_hero' || priority === 'cta_hero' || priority === 'composition_hero')) {
-      const pad = 16;
-      const scrimOpacity = forceScrimForSafety ? 0.6 : (priority === 'cta_hero' ? 0.55 : 0.42);
+      const pad = 12;
+      const scrimOpacity = forceScrimForSafety ? 0.55 : (priority === 'cta_hero' ? 0.48 : 0.36);
       const scrimFill = (ctx.validDepthColor && getLuminanceSafe(ctx.validDepthColor) < 140)
         ? ctx.validDepthColor
         : '#0A0A0A';
-      svg += `<rect x="${Math.max(0, textBand.x - pad)}" y="${Math.max(0, textBand.y - pad)}" width="${textBand.width + pad * 2}" height="${textBand.height + pad * 2}" fill="${scrimFill}" fill-opacity="${scrimOpacity}" rx="12" />`;
+      // Cap scrim height so inflated allocatedBoxes can't paint a giant empty panel
+      const maxScrimH = Math.round(ctx.h * 0.34);
+      const scrimH = Math.min(textBand.height + pad * 2, maxScrimH);
+      const scrimW = Math.min(textBand.width + pad * 2, Math.round(ctx.w * 0.72));
+      const scrimX = Math.max(0, Math.min(textBand.x - pad, ctx.w - scrimW));
+      const scrimY = Math.max(0, Math.min(textBand.y - pad, ctx.h - scrimH));
+      svg += `<rect x="${scrimX}" y="${scrimY}" width="${scrimW}" height="${scrimH}" fill="${scrimFill}" fill-opacity="${scrimOpacity}" rx="12" />`;
     }
+
+    // Standalone decoration primitives (dividers, timelines, badges, stickers…) only ever get
+    // collision-checked against `canonicalGeometry.protectedZones`, which is built from detected
+    // faces/subjects — it never included where the text layers themselves actually landed. That's
+    // why things like the 'transformation' family's `timeline_track` line can be positioned (via a
+    // hardcoded offsetPercent) right across a headline: nothing ever told the collision engine the
+    // headline's box was there to avoid. Build a decoration-only ctx whose protectedZones also
+    // include every placed text layer's real allocatedBox, so `isSafePlacement` (already wired up
+    // in primitive-engine.ts to relocate/shrink/suppress on collision) treats text the same as a
+    // face. Scoped to decoration layers only — text layers' OWN background components (solid_card,
+    // pill_label, etc.) are supposed to hug their own text, so they keep using the unmodified ctx.
+    const placedTextBoxes: BoundingBox[] = (dsl.layers || [])
+      .filter((l: any) => (l.type === 'text' || l.type === 'text_group') && l.allocatedBox)
+      .map((l: any) => l.allocatedBox as BoundingBox);
+    const decorationPrimitiveCtx: PrimitiveContext = placedTextBoxes.length
+      ? {
+          ...primitiveCtx,
+          canonicalGeometry: {
+            ...(primitiveCtx.canonicalGeometry as any),
+            protectedZones: [
+              ...(((primitiveCtx.canonicalGeometry as any)?.protectedZones) || []),
+              ...placedTextBoxes,
+            ],
+          } as any,
+        }
+      : primitiveCtx;
 
     // Iteratively render each layer using the Primitive Engine
     for (const layer of overlayLayers) {
@@ -1219,7 +1326,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
         const componentName = (layer as IDSLDecorationLayer).component;
         if (!componentName) continue;
 
-        const renderedPrimitive = primitiveEngine.renderPrimitive(componentName, primitiveCtx, layer as IDSLDecorationLayer);
+        const renderedPrimitive = primitiveEngine.renderPrimitive(componentName, decorationPrimitiveCtx, layer as IDSLDecorationLayer);
         if (renderedPrimitive) {
           console.log(`[Renderer Sprint] SUCCESS: Applied primitive decoration '${componentName}' to layout.`);
           svg += renderedPrimitive;

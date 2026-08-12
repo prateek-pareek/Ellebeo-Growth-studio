@@ -84,7 +84,14 @@ export async function downloadImageAsBuffer(url: string): Promise<Buffer> {
   }
 }
 
-export async function processPortraitFit(imageBuffer: Buffer, targetW: number, targetH: number, backgroundColor: string = '#F7F4EF'): Promise<Buffer> {
+export async function processPortraitFit(
+  imageBuffer: Buffer,
+  targetW: number,
+  targetH: number,
+  backgroundColor: string = '#F7F4EF',
+  /** cover fills the allocated box (correct size); contain letterboxes and looks undersized */
+  fitMode: 'cover' | 'contain' = 'cover',
+): Promise<Buffer> {
   try {
     const metadata = await sharp(imageBuffer).metadata();
     const inputW = metadata.width || targetW;
@@ -111,6 +118,13 @@ export async function processPortraitFit(imageBuffer: Buffer, targetW: number, t
       .gamma(1.1)
       .toBuffer();
 
+    if (fitMode === 'cover') {
+      return await sharp(enhancedBuffer)
+        .resize(targetW, targetH, { fit: 'cover', position: 'attention' })
+        .png()
+        .toBuffer();
+    }
+
     const containedImg = await sharp(enhancedBuffer)
       .resize(targetW, targetH, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .toBuffer();
@@ -122,10 +136,10 @@ export async function processPortraitFit(imageBuffer: Buffer, targetW: number, t
       .png()
       .toBuffer();
   } catch (err) {
-    console.error('[Sharp Portrait Fit Error] Falling back to raw contain:', err);
+    console.error('[Sharp Portrait Fit Error] Falling back to raw cover:', err);
     try {
       return await sharp(imageBuffer)
-        .resize(targetW, targetH, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .resize(targetW, targetH, { fit: fitMode === 'contain' ? 'contain' : 'cover', background: { r: 0, g: 0, b: 0, alpha: 0 } })
         .png()
         .toBuffer();
     } catch {
@@ -771,12 +785,60 @@ CRITICAL IMAGE REQUIREMENTS:
     // Select unique layouts intelligently using Template Agent sequentially to ensure diversity and history tracking works
     const agentDecisions: Array<{ selected_layout_id: string; reasoning: string; designSpec?: any }> = [];
 
+    const mapLegacyLayoutHint = (id: string): string => {
+      const map: Record<string, string> = {
+        split_before_after: 'before_after_side_by_side',
+        full_bleed_clean: 'editorial_full_bleed',
+        passepartout_text: 'editorial_portrait_hero',
+        passepartout_clean: 'editorial_feature_story',
+        text_only_editorial: 'premium_text_only',
+        testimonial_card: 'testimonial_quote_portrait',
+        giant_type_overlay: 'premium_hero_statement',
+        bold_editorial_poster: 'magazine_masthead_cover',
+        translucent_split: 'before_after_labeled',
+        art_director_split: 'editorial_split',
+        side_panel_split: 'clinical_hero',
+      };
+      return map[id] || id;
+    };
+
+    const beforeAfterPool = [
+      'before_after_side_by_side',
+      'before_after_stacked',
+      'before_after_labeled',
+    ];
+    const mappedCover = layoutType ? mapLegacyLayoutHint(layoutType) : '';
+    const isBeforeAfterJob =
+      templateIntent === 'before_after'
+      || mappedCover.includes('before_after')
+      || (layoutType || '').includes('before_after')
+      || layoutType === 'split_before_after';
+
     for (let i = 0; i < total; i++) {
       const concept = concepts[i];
 
-      if (i === 0 && params.layoutType) {
-        agentDecisions.push({ selected_layout_id: params.layoutType, reasoning: 'Pre-selected cover layout from orchestrator', designSpec: params.designSpec });
-        uniqueLayoutsForSlides.push(params.layoutType);
+      if (i === 0 && mappedCover) {
+        agentDecisions.push({
+          selected_layout_id: mappedCover,
+          reasoning: 'Pre-selected cover layout from orchestrator (mapped gallery hint)',
+          designSpec: params.designSpec,
+        });
+        uniqueLayoutsForSlides.push(mappedCover);
+        continue;
+      }
+
+      // Gallery before/after templates must stay in the transformation family —
+      // never fall into the generic rectangle+10% padding recipe fallback.
+      if (isBeforeAfterJob) {
+        const pick =
+          beforeAfterPool.find(id => !uniqueLayoutsForSlides.includes(id))
+          || beforeAfterPool[i % beforeAfterPool.length];
+        agentDecisions.push({
+          selected_layout_id: pick,
+          reasoning: 'before_after gallery template family lock',
+          designSpec: params.designSpec,
+        });
+        uniqueLayoutsForSlides.push(pick);
         continue;
       }
 
@@ -841,20 +903,32 @@ CRITICAL IMAGE REQUIREMENTS:
           let result: Awaited<ReturnType<AiImageGenerationService['generateSlide']>> | null = null;
           let attemptLayout = currentSlideLayout;
           const slideQC = new CompositionQualityController();
-          const lockedFamily = slideQC.inferFamilyFromLayoutId(currentSlideLayout);
+          const lockedFamily =
+            slideQC.inferFamilyFromLayoutId(currentSlideLayout)
+            || (isBeforeAfterJob ? 'before_after' : null);
+          const beforeAfterRetryPool = [
+            'before_after_side_by_side',
+            'before_after_stacked',
+            'before_after_labeled',
+          ];
           for (let attempt = 0; attempt < MAX_SLIDE_ATTEMPTS; attempt++) {
             if (attempt > 0) {
-              // Same-family ranked candidates only — never random redesign
-              const alts = slideQC.suggestAlternateLayouts(
-                attemptLayout,
-                layoutPool,
-                {
-                  visualPriority: agentDecisions[i]?.designSpec?.composition?.visualPriority,
-                  family: lockedFamily || undefined,
-                },
-                3,
-              );
-              attemptLayout = alts[(attempt - 1) % Math.max(1, alts.length)] || attemptLayout;
+              if (isBeforeAfterJob || lockedFamily === 'before_after' || lockedFamily === 'transformation') {
+                // Never escape the before/after family into clinical circles / random recipes
+                const alts = beforeAfterRetryPool.filter(id => id !== attemptLayout);
+                attemptLayout = alts[(attempt - 1) % Math.max(1, alts.length)] || attemptLayout;
+              } else {
+                const alts = slideQC.suggestAlternateLayouts(
+                  attemptLayout,
+                  layoutPool,
+                  {
+                    visualPriority: agentDecisions[i]?.designSpec?.composition?.visualPriority,
+                    family: lockedFamily || undefined,
+                  },
+                  3,
+                );
+                attemptLayout = alts[(attempt - 1) % Math.max(1, alts.length)] || attemptLayout;
+              }
               console.warn(
                 `[SlideQC] Retry slide ${concept.index} attempt ${attempt + 1} with same-family layout '${attemptLayout}' ` +
                 `(prev: ${result?.failReason || 'soft'}). Slide will not be excluded.`,
@@ -1382,6 +1456,26 @@ CRITICAL IMAGE REQUIREMENTS:
       // Layout type is passed directly from the Art Director/Template Agent without legacy shape overrides
       let computedLayoutType = layoutType;
 
+      // Gallery rendererKeys (e.g. split_before_after) are NOT CompositionEngine recipes —
+      // mapping them prevents the empty fallback (rectangle + 10% padding + center text).
+      const legacyHintMap: Record<string, string> = {
+        split_before_after: 'before_after_side_by_side',
+        full_bleed_clean: 'editorial_full_bleed',
+        passepartout_text: 'editorial_portrait_hero',
+        passepartout_clean: 'editorial_feature_story',
+        text_only_editorial: 'premium_text_only',
+        testimonial_card: 'testimonial_quote_portrait',
+        giant_type_overlay: 'premium_hero_statement',
+        bold_editorial_poster: 'magazine_masthead_cover',
+        translucent_split: 'before_after_labeled',
+        art_director_split: 'editorial_split',
+        side_panel_split: 'clinical_hero',
+      };
+      if (legacyHintMap[computedLayoutType]) {
+        console.log(`[LayoutHint] Mapped '${computedLayoutType}' → '${legacyHintMap[computedLayoutType]}'`);
+        computedLayoutType = legacyHintMap[computedLayoutType];
+      }
+
       if (!COMPILED_LAYOUTS[computedLayoutType]) {
         console.log(`[Dynamic Compilation] Layout '${computedLayoutType}' not found in COMPILED_LAYOUTS, compiling dynamically...`);
         const layoutAssembler = new LayoutAssemblerService();
@@ -1712,25 +1806,54 @@ CRITICAL IMAGE REQUIREMENTS:
 
           // --- Same-family Template Agent candidates (preserve intent) ---
           if (optResult.suggestLayoutChange) {
-            const alternates = compositionQC.suggestAlternateLayouts(
-              computedLayoutType,
-              Object.keys(COMPILED_LAYOUTS),
-              lockedIntent,
-              3,
-              failedSignatures,
-            );
+            const beforeAfterAlts = [
+              'before_after_side_by_side',
+              'before_after_stacked',
+              'before_after_labeled',
+            ];
+            const familyLock =
+              lockedIntent.family
+              || compositionQC.inferFamilyFromLayoutId(computedLayoutType);
+            const forceBeforeAfter =
+              templateIntent === 'before_after'
+              || familyLock === 'before_after'
+              || familyLock === 'transformation'
+              || computedLayoutType.includes('before_after');
+
+            const alternates = forceBeforeAfter
+              ? beforeAfterAlts.filter(id => id !== computedLayoutType && !id.includes(computedLayoutType.replace(/_\d+$/, '')))
+              : compositionQC.suggestAlternateLayouts(
+                  computedLayoutType,
+                  Object.keys(COMPILED_LAYOUTS),
+                  lockedIntent,
+                  3,
+                  failedSignatures,
+                );
 
             let attempt = maxSameTemplateRepairs;
             for (const altId of alternates) {
               attempt++;
-              const altDsl = COMPILED_LAYOUTS[altId];
+              // Dynamically compile recipe IDs that are not yet in COMPILED_LAYOUTS
+              let altDsl = COMPILED_LAYOUTS[altId];
+              if (!altDsl) {
+                try {
+                  const layoutAssembler = new LayoutAssemblerService();
+                  altDsl = layoutAssembler.compileFamilyToDSL(altId, index || 0, businessName || 'Brand');
+                  registerDynamicLayout(altDsl);
+                } catch {
+                  continue;
+                }
+              }
               if (!altDsl) continue;
 
               // Fresh policy derived from locked visualPriority — not a failed foreign geometry
-              const altPolicy = LayoutEngine.deriveSpatialPolicy(visualPriority, {
-                readingFlow: lockedIntent.readingFlow,
-              });
-              const altResult = runOptimize(altId, altDsl, altPolicy);
+              const altPolicy = LayoutEngine.seedPolicyFromTemplate(
+                altDsl,
+                LayoutEngine.deriveSpatialPolicy(visualPriority, {
+                  readingFlow: lockedIntent.readingFlow,
+                }),
+              );
+              const altResult = runOptimize(altDsl.id || altId, altDsl, altPolicy);
               const altAxis = (altResult.dsl as any)?._spatialPolicy?.splitAxis;
               const altKey = regionKey(altResult.dsl);
               console.log(
@@ -1742,10 +1865,10 @@ CRITICAL IMAGE REQUIREMENTS:
               considerBest(altResult);
 
               if (!altResult.suggestLayoutChange) {
-                computedLayoutType = altId;
+                computedLayoutType = altDsl.id || altId;
                 optimizedDsl = altResult.dsl;
                 optResult = altResult;
-                console.log(`[CompositionQC] Accepted same-family alternate '${altId}' (priority=${visualPriority})`);
+                console.log(`[CompositionQC] Accepted same-family alternate '${computedLayoutType}' (priority=${visualPriority})`);
                 break;
               }
               failedSignatures.push({

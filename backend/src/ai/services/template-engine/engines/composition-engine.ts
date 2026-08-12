@@ -79,15 +79,18 @@ export class CompositionEngine {
   }
 
   /**
-   * Builds the structural DSL for a design family variant. Every literal below (mask,
-   * anchor, zIndex, which primitive component) is genuine family DNA — a structural
-   * fact about this specific variant, not a per-generation creative choice, so it stays
-   * hardcoded here by design. Intent-driven values (alignment, whitespace/negativeSpace,
-   * photo treatment, typography scale, decoration density, mood) are deliberately NOT
-   * duplicated across these ~45 branches — they're applied once, generically, to every
-   * recipe (rigid or procedural) by DesignCompiler/GeometryCompiler downstream, which is
-   * what actually reads the Template Agent's Design Intent (see art-direction-engine.ts,
-   * design-compiler.ts, geometry-compiler.ts).
+   * Builds the structural DSL for a design family variant.
+   *
+   * RECIPE CONTRACT (current + future templates):
+   * Define geometry ONLY via layer fields — the pipeline honors them generically:
+   *   image.mask            full_bleed | rectangle | circle | arch | polaroid | split | before_after_split
+   *   image.paddingPercent  0 = edge-to-edge; >2 = inset sized by padding
+   *   image.anchor          where the photo sits (top_left … bottom_right, middle_*)
+   *   text.anchor           where each text layer sits (independent; not one stacked cluster)
+   *   text.role / alignment / maxWidthPercent
+   * visualPriority / QC may tune share & fonts INSIDE this contract — they must not invent
+   * a different composition. Unknown layoutIds get a safe full-bleed default (never a
+   * random 10% postage-stamp rectangle).
    */
   public buildRecipe(layoutId: string, slideIndex: number, brandName: string): ICompiledLayoutDSL {
     const layers: IDSLSceneLayer[] = [];
@@ -1648,11 +1651,41 @@ export class CompositionEngine {
       layers.push({ id: 'prem_cta_badge', type: 'decoration', zIndex: 35, component: 'handmade_mark', anchor: 'top_right' } as IDSLDecorationLayer);
 
       // ==========================================
-      // FALLBACK
+      // SAFE FALLBACK (unknown / future layout ids)
       // ==========================================
+      // Never invent a padded postage-stamp photo. Full-bleed + centered type is a
+      // readable default; add an explicit recipe branch when you need unique geometry.
     } else {
-      layers.push({ id: 'fb_image', type: 'image', zIndex: 10, mask: 'rectangle', anchor: 'center', paddingPercent: 10 } as IDSLImageLayer);
-      layers.push({ id: 'fb_text', type: 'text', zIndex: 30, anchor: 'center', role: 'heading', alignment: 'center', maxWidthPercent: 80 } as IDSLTextLayer);
+      console.warn(
+        `[CompositionEngine] No explicit recipe for '${layoutId}' — using safe full-bleed default. ` +
+        `Add a buildRecipe branch with mask/anchor/padding for a custom template.`,
+      );
+      layers.push({
+        id: 'fallback_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'full_bleed',
+        paddingPercent: 0,
+        anchor: 'center',
+      } as IDSLImageLayer);
+      layers.push({
+        id: 'fallback_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 82,
+      } as IDSLTextLayer);
+      layers.push({
+        id: 'fallback_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_center',
+        role: 'tagline',
+        alignment: 'center',
+        maxWidthPercent: 70,
+      } as IDSLTextLayer);
     }
 
     // Preserve ALL recipe-defined layers (including decoration primitives like premium_stars).

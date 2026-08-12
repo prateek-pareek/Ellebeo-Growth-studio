@@ -101,6 +101,12 @@ export class CompositionOptimizer {
           : behaviorProfile?.negativeSpaceMultiplier <= 0.7 ? 'tight' : 'comfortable'),
     });
 
+    // Template Agent owns composition geometry (mask / padding / anchors). visualPriority only
+    // tunes share/fonts INSIDE that contract — never invent a panel that contradicts the recipe.
+    // Re-seed on every call (including repair/escalation) so axis swaps cannot break full-bleed
+    // or inset templates.
+    policy = LayoutEngine.seedPolicyFromTemplate(optimized, policy);
+
     const roleWeight: Record<string, number> = { heading: 4, tagline: 3, body: 2, footnote: 1, cta: 0 };
     const allTextLayers = optimized.layers.filter(l => l.type === 'text') as IDSLTextLayer[];
     const textGroupLayers = optimized.layers.filter(l => l.type === 'text_group') as IDSLTextGroupLayer[];
@@ -129,17 +135,16 @@ export class CompositionOptimizer {
     let totalGroupHeight = estimated.total;
     const clusterGap = estimated.gap;
 
-    // CTA / subject-present: prefer a real panel so type is not merely enlarged over the photo
-    if (!spatialPolicy && (priority === 'cta_hero' || (priority === 'image_hero' && (subjectBox || additionalSubjects.length)))) {
-      if (priority === 'cta_hero') {
-        policy = {
-          ...policy,
-          splitAxis: 'vertical',
-          textShare: Math.max(policy.textShare, 0.42),
-          maxTextShare: Math.max(policy.maxTextShare, 0.58),
-          preferredTextBias: 'end',
-        };
-      }
+    // CTA prefers a real panel ONLY when the template already allows a split axis
+    if (!spatialPolicy && priority === 'cta_hero' && policy.splitAxis !== 'overlay') {
+      policy = {
+        ...policy,
+        splitAxis: 'vertical',
+        textShare: Math.max(policy.textShare, 0.42),
+        maxTextShare: Math.max(policy.maxTextShare, 0.58),
+        preferredTextBias: 'end',
+      };
+      policy = LayoutEngine.seedPolicyFromTemplate(optimized, policy);
     }
     const primaryAxis = policy.splitAxis === 'horizontal' ? canvasW : canvasHeight;
     const contentNeedPx = policy.splitAxis === 'horizontal'
@@ -191,6 +196,25 @@ export class CompositionOptimizer {
       && (regions.imageRegion.width < canvasW - 2 || regions.imageRegion.height < canvasHeight - 2);
 
     const obstacles: BoundingBox[] = logoBox ? [logoBox] : [];
+
+    // Inset / circle / arch photos occupy real pixels — treat as obstacles so
+    // headline anchors cannot sit on top of the mask (FLAWLESS-over-circle bug).
+    const imageOccupied = this.estimateImageOccupiedBox(
+      optimized.layers?.find((l: any) => l.type === 'image') as any,
+      canvasW,
+      canvasHeight,
+    );
+    if (imageOccupied && regions.spatial.splitAxis === 'overlay') {
+      obstacles.push(imageOccupied);
+      // Prefer text in the largest free band (often left/right of circle, or below inset)
+      const carved = this.carveBoxAroundObstacle(regions.textRegion, imageOccupied);
+      if (carved && carved.width >= 120 && carved.height >= 80) {
+        regions.textRegion = carved;
+        if (optimized.canvasRegions) optimized.canvasRegions.textRegion = carved;
+        if (optimized.canonicalGeometry) optimized.canonicalGeometry.textRegion = carved;
+      }
+    }
+
     if (!isDedicatedPanel) {
       const tr = regions.textRegion;
       if (tr.y > constraints.safeY) {
@@ -320,40 +344,79 @@ export class CompositionOptimizer {
     let currentY = groupRegion.y;
     const regionWidth = Math.round(groupRegion.width * Math.min(1, wrapWidthFactor));
 
-    for (const layer of groupedTextLayers) {
-      let x = groupRegion.x;
-      let width = Math.max(Math.round(canvasW * 0.28), Math.min(regionWidth, regions.textRegion.width));
-      x = Math.max(regions.textRegion.x, x);
+    // Overlay / full-frame: ALWAYS honor each layer's recipe anchor.
+    // Stacking from the top of textRegion is what pinned "BRASSY…" into the
+    // top-left while the recipe asked for center / bottom_center.
+    const usePerLayerAnchors = regions.spatial.splitAxis === 'overlay';
 
-      // typography_hero: give the heading most of the text panel so occupancy can
-      // boost type into the available negative space (not a tiny estimate-tall box).
-      let boxH = estimatedHeights[layer.id];
-      if (priority === 'typography_hero' && layer.role === 'heading') {
-        const supportReserve = Math.round(regions.textRegion.height * 0.28);
-        boxH = Math.max(
+    if (usePerLayerAnchors) {
+      for (const layer of groupedTextLayers) {
+        let width = Math.max(Math.round(canvasW * 0.28), Math.min(regionWidth, regions.textRegion.width));
+        // Overlay: keep allocated height close to content estimate so scrim/cards
+        // don't become giant empty panels (UNDERSTANDING BRASSINESS bug).
+        let boxH = estimatedHeights[layer.id];
+        if (priority === 'typography_hero' && layer.role === 'heading') {
+          boxH = Math.max(
+            boxH,
+            Math.round((typographyMetrics?.heroSize || canvasHeight * 0.08) * 2.6),
+          );
+          boxH = Math.min(boxH, Math.round(canvasHeight * 0.28));
+        }
+        const pos = layoutEngine.resolveAnchor(
+          String(layer.anchor || 'center'),
+          width,
           boxH,
-          Math.round(regions.textRegion.height * 0.55),
-          Math.min(regions.textRegion.height - supportReserve, Math.round((typographyMetrics?.heroSize || canvasHeight * 0.1) * 2.4)),
+          constraints,
+          regions.textRegion,
         );
+        let box: BoundingBox = { x: pos.x, y: pos.y, width, height: boxH };
+        box = this.clampBoxToSafe(box, constraints, canvasW, canvasHeight);
+        box = this.clampBoxToRegion(box, regions.textRegion);
+        layer.allocatedBox = box;
+        (layer as any)._groupScale = groupScale;
+        (layer as any)._estimatedFontSize = estimatedFontSizes[layer.id] * groupScale;
+        (layer as any)._preserveHeroSize = priority === 'typography_hero' && groupScale >= 0.88;
+        (layer as any)._textRegion = regions.textRegion;
+        // Only add solid_card on dedicated panels — overlay photos already get a scrim;
+        // stacking both produces the oversized grey card look.
+        currentY = box.y + box.height + clusterGap;
       }
+    } else {
+      for (const layer of groupedTextLayers) {
+        let x = groupRegion.x;
+        let width = Math.max(Math.round(canvasW * 0.28), Math.min(regionWidth, regions.textRegion.width));
+        x = Math.max(regions.textRegion.x, x);
 
-      let box: BoundingBox = {
-        x,
-        y: currentY,
-        width,
-        height: boxH,
-      };
-      box = this.clampBoxToSafe(box, constraints, canvasW, canvasHeight);
-      box = this.clampBoxToRegion(box, regions.textRegion);
-      layer.allocatedBox = box;
-      (layer as any)._groupScale = groupScale;
-      (layer as any)._estimatedFontSize = estimatedFontSizes[layer.id] * groupScale;
-      (layer as any)._preserveHeroSize = priority === 'typography_hero' && groupScale >= 0.88;
-      (layer as any)._textRegion = regions.textRegion;
-      if (priority === 'cta_hero' && layer.role === 'heading') {
-        (layer as any).component = (layer as any).component || 'solid_card';
+        // typography_hero: give the heading most of the text panel so occupancy can
+        // boost type into the available negative space (not a tiny estimate-tall box).
+        let boxH = estimatedHeights[layer.id];
+        if (priority === 'typography_hero' && layer.role === 'heading') {
+          const supportReserve = Math.round(regions.textRegion.height * 0.28);
+          boxH = Math.max(
+            boxH,
+            Math.round(regions.textRegion.height * 0.55),
+            Math.min(regions.textRegion.height - supportReserve, Math.round((typographyMetrics?.heroSize || canvasHeight * 0.1) * 2.4)),
+          );
+        }
+
+        let box: BoundingBox = {
+          x,
+          y: currentY,
+          width,
+          height: boxH,
+        };
+        box = this.clampBoxToSafe(box, constraints, canvasW, canvasHeight);
+        box = this.clampBoxToRegion(box, regions.textRegion);
+        layer.allocatedBox = box;
+        (layer as any)._groupScale = groupScale;
+        (layer as any)._estimatedFontSize = estimatedFontSizes[layer.id] * groupScale;
+        (layer as any)._preserveHeroSize = priority === 'typography_hero' && groupScale >= 0.88;
+        (layer as any)._textRegion = regions.textRegion;
+        if (priority === 'cta_hero' && layer.role === 'heading' && isDedicatedPanel) {
+          (layer as any).component = (layer as any).component || 'solid_card';
+        }
+        currentY = box.y + box.height + clusterGap;
       }
-      currentY = box.y + box.height + clusterGap;
     }
 
     for (const group of textGroupLayers) {
@@ -374,9 +437,21 @@ export class CompositionOptimizer {
 
     for (const layer of structuralLayers) {
       const h = Math.round(canvasHeight * 0.045);
-      let x = Math.max(regions.textRegion.x, groupRegion.x);
       const width = Math.min(regionWidth, regions.textRegion.width);
-      let box: BoundingBox = { x, y: currentY, width, height: h };
+      let box: BoundingBox;
+      if (usePerLayerAnchors) {
+        const pos = layoutEngine.resolveAnchor(
+          String(layer.anchor || (layer.role === 'cta' ? 'bottom_center' : 'bottom_left')),
+          width,
+          h,
+          constraints,
+          regions.textRegion,
+        );
+        box = { x: pos.x, y: pos.y, width, height: h };
+      } else {
+        let x = Math.max(regions.textRegion.x, groupRegion.x);
+        box = { x, y: currentY, width, height: h };
+      }
       box = this.clampBoxToSafe(box, constraints, canvasW, canvasHeight);
       box = this.clampBoxToRegion(box, regions.textRegion);
       layer.allocatedBox = box;
@@ -387,7 +462,9 @@ export class CompositionOptimizer {
           (typographyMetrics?.primarySize || canvasHeight * 0.035) * 0.85,
         );
       }
-      currentY = layer.allocatedBox.y + h + clusterGap;
+      if (!usePerLayerAnchors) {
+        currentY = layer.allocatedBox.y + h + clusterGap;
+      }
     }
 
     // Capture the ACTUAL union bounding box of every layer that was just placed above
@@ -397,7 +474,18 @@ export class CompositionOptimizer {
     // avoidance can pick a different y/height inside it). Consumers that need the *readability
     // scrim* to line up with the real text — not the candidate region — should read this instead.
     const placedBoxes: BoundingBox[] = [
-      ...groupedTextLayers.map(l => l.allocatedBox),
+      ...groupedTextLayers.map(l => {
+        const b = l.allocatedBox;
+        if (!b) return undefined;
+        // Scrim/meta bounds: prefer content estimate, not occupancy-inflated pocket
+        const contentH = estimatedHeights[l.id] || Math.round(canvasHeight * 0.08);
+        return {
+          x: b.x,
+          y: b.y,
+          width: b.width,
+          height: Math.min(b.height, Math.max(contentH, Math.round(canvasHeight * 0.06))),
+        };
+      }),
       ...textGroupLayers.map(g => g.allocatedBox),
       ...structuralLayers.map(l => l.allocatedBox),
     ].filter((b): b is BoundingBox => !!b);
@@ -501,13 +589,16 @@ export class CompositionOptimizer {
       suggestLayoutChange = false;
     }
 
-    // Stack heading + supporting copy as one cluster inside the text panel
-    this.applyTypographyGroupRhythm(
-      groupedTextLayers,
-      regions.textRegion,
-      clusterGap,
-      priority,
-    );
+    // Stack heading + supporting copy as one cluster inside the text panel.
+    // Skip when layers already sit on independent template anchors across the frame.
+    if (!usePerLayerAnchors) {
+      this.applyTypographyGroupRhythm(
+        groupedTextLayers,
+        regions.textRegion,
+        clusterGap,
+        priority,
+      );
+    }
 
     const failureCategory = needsTypographyRepair || (!contentIntegrity.ok && contentIntegrity.repairable)
       ? 'readability'
@@ -592,6 +683,113 @@ export class CompositionOptimizer {
       box.width = Math.min(box.width, textRegion.width);
       y = box.y + box.height;
     }
+  }
+
+  /**
+   * Estimate where an inset/circle/arch photo actually lands so text can avoid it.
+   * Full-bleed / before_after stitch leave null (text is meant to overlay).
+   */
+  private estimateImageOccupiedBox(
+    imageLayer: { mask?: string; paddingPercent?: number; anchor?: string } | undefined,
+    canvasW: number,
+    canvasH: number,
+  ): BoundingBox | null {
+    if (!imageLayer) return null;
+    const mask = String(imageLayer.mask || 'rectangle');
+    if (mask === 'full_bleed' || mask === 'before_after_split') return null;
+
+    const pad = Number(imageLayer.paddingPercent ?? 0);
+    const anchor = String(imageLayer.anchor || 'center');
+
+    if (mask === 'circle') {
+      const size = Math.floor(Math.min(canvasW, canvasH) * 0.6);
+      const paddingPx = Math.floor(canvasW * (pad || 15) / 100);
+      let cx = canvasW / 2;
+      let cy = canvasH / 2;
+      if (anchor.includes('right')) cx = canvasW - paddingPx - size / 2;
+      if (anchor.includes('left')) cx = paddingPx + size / 2;
+      if (anchor.includes('top')) cy = paddingPx + size / 2;
+      if (anchor.includes('bottom')) cy = canvasH - paddingPx - size / 2;
+      const halo = Math.round(size * 0.06);
+      return {
+        x: Math.max(0, Math.floor(cx - size / 2) - halo),
+        y: Math.max(0, Math.floor(cy - size / 2) - halo),
+        width: size + halo * 2,
+        height: size + halo * 2,
+      };
+    }
+
+    if (mask === 'arch' || mask === 'polaroid' || (mask === 'rectangle' && pad > 2)) {
+      const rawPadding = Math.min(pad || 10, 15);
+      const marginX = Math.round(canvasW * (rawPadding / 100));
+      const marginY = Math.round(canvasH * (rawPadding / 100));
+      let targetW = canvasW - marginX * 2;
+      let targetH = canvasH - marginY * 2;
+      // Arch/polaroid are typically shorter than full padded rectangle
+      if (mask === 'arch' || mask === 'polaroid') {
+        targetW = Math.round(Math.min(canvasW, canvasH) * 0.72);
+        targetH = Math.round(targetW * (mask === 'polaroid' ? 1.15 : 1.05));
+      }
+      let top = marginY;
+      let left = marginX;
+      if (anchor.includes('bottom')) top = canvasH - targetH - marginY;
+      else if (anchor.includes('top')) top = marginY;
+      else top = Math.round((canvasH - targetH) / 2);
+      if (anchor.includes('right')) left = canvasW - targetW - marginX;
+      else if (anchor.includes('left')) left = marginX;
+      else left = Math.round((canvasW - targetW) / 2);
+      return { x: left, y: top, width: targetW, height: targetH };
+    }
+
+    return null;
+  }
+
+  /** Pick the largest rectangle inside `region` that does not intersect `obstacle`. */
+  private carveBoxAroundObstacle(region: BoundingBox, obstacle: BoundingBox): BoundingBox | null {
+    const gap = 16;
+    const candidates: BoundingBox[] = [
+      // left of obstacle
+      {
+        x: region.x,
+        y: region.y,
+        width: Math.min(region.width, obstacle.x - gap - region.x),
+        height: region.height,
+      },
+      // right of obstacle
+      {
+        x: Math.max(region.x, obstacle.x + obstacle.width + gap),
+        y: region.y,
+        width: 0,
+        height: region.height,
+      },
+      // above obstacle
+      {
+        x: region.x,
+        y: region.y,
+        width: region.width,
+        height: Math.min(region.height, obstacle.y - gap - region.y),
+      },
+      // below obstacle
+      {
+        x: region.x,
+        y: Math.max(region.y, obstacle.y + obstacle.height + gap),
+        width: region.width,
+        height: 0,
+      },
+    ];
+    candidates[1].width = region.x + region.width - candidates[1].x;
+    candidates[3].height = region.y + region.height - candidates[3].y;
+
+    const valid = candidates
+      .map(c => ({
+        ...c,
+        width: Math.max(0, c.width),
+        height: Math.max(0, c.height),
+      }))
+      .filter(c => c.width >= 120 && c.height >= 80);
+    if (!valid.length) return null;
+    valid.sort((a, b) => b.width * b.height - a.width * a.height);
+    return valid[0];
   }
 
   /**
@@ -754,13 +952,18 @@ export class CompositionOptimizer {
     canvasW: number,
     canvasH: number,
   ): BoundingBox {
-    const maxX = canvasW - constraints.safeX;
-    const maxY = canvasH - constraints.margins.bottom;
+    // Hard floor so large display type never kisses/clips the canvas edge
+    // (seen as "FLAWLESS" chopped on the left of circle slides).
+    const insetX = Math.max(constraints.safeX, Math.round(canvasW * 0.045));
+    const insetTop = Math.max(constraints.safeY, Math.round(canvasH * 0.045));
+    const insetBottom = Math.max(constraints.margins.bottom, Math.round(canvasH * 0.06));
+    const maxX = canvasW - insetX;
+    const maxY = canvasH - insetBottom;
     let { x, y, width, height } = box;
-    width = Math.min(width, maxX - constraints.safeX);
-    height = Math.min(height, maxY - constraints.safeY);
-    x = Math.max(constraints.safeX, Math.min(x, maxX - width));
-    y = Math.max(constraints.safeY, Math.min(y, maxY - height));
+    width = Math.min(width, maxX - insetX);
+    height = Math.min(height, maxY - insetTop);
+    x = Math.max(insetX, Math.min(x, maxX - width));
+    y = Math.max(insetTop, Math.min(y, maxY - height));
     return { x, y, width, height };
   }
 

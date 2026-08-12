@@ -38,14 +38,47 @@ import { validateStateTransition } from '../types/job-payload.types';
 import type { JobState, BusinessGoalType } from '../types/job-payload.types';
 
 function getTemplateIntent(pillar: string): 'educational' | 'promotion' | 'testimonial' | 'before_after' | 'brand_story' {
-  switch (pillar) {
-    case 'education_tips': return 'educational';
-    case 'service_spotlight': return 'promotion';
-    case 'client_results': return 'before_after';
-    case 'behind_the_scenes': return 'brand_story';
-    case 'quotes_testimonials': return 'testimonial';
-    default: return 'brand_story';
+  const key = (pillar || '').toLowerCase().replace(/\s+/g, '_');
+  switch (key) {
+    case 'education_tips':
+    case 'education':
+      return 'educational';
+    case 'service_spotlight':
+      return 'promotion';
+    case 'client_results':
+    case 'transformations':
+      return 'before_after';
+    case 'behind_the_scenes':
+    case 'behind_the_chair':
+      return 'brand_story';
+    case 'quotes_testimonials':
+    case 'client_stories':
+      return 'testimonial';
+    default:
+      return 'brand_story';
   }
+}
+
+/** Map gallery rendererKeys / legacy grid IDs onto real CompositionEngine recipes. */
+function mapLayoutHintToRecipe(layoutHint: string | null | undefined): string {
+  if (!layoutHint) return '';
+  // Legacy gallery rendererKeys → CompositionEngine recipe ids.
+  // New gallery templates should set rendererKey to an existing recipe id
+  // (e.g. before_after_side_by_side, editorial_full_bleed) so no map entry is required.
+  const map: Record<string, string> = {
+    split_before_after: 'before_after_side_by_side',
+    full_bleed_clean: 'editorial_full_bleed',
+    passepartout_text: 'editorial_portrait_hero',
+    passepartout_clean: 'editorial_feature_story',
+    text_only_editorial: 'premium_text_only',
+    testimonial_card: 'testimonial_quote_portrait',
+    giant_type_overlay: 'premium_hero_statement',
+    bold_editorial_poster: 'magazine_masthead_cover',
+    translucent_split: 'before_after_labeled',
+    art_director_split: 'editorial_split',
+    side_panel_split: 'clinical_hero',
+  };
+  return map[layoutHint] || layoutHint;
 }
 
 // New services and chains
@@ -526,8 +559,15 @@ export class GenerationOrchestrator {
     let reelScriptPromise: Promise<ReelScriptResult | null> = Promise.resolve(null);
 
     if (payload.layoutHint) {
-      determinedGrid.layout = payload.layoutHint;
-      console.log(`[TEMPLATE AGENT] Bypassed — using tenant's explicit template layout hint: ${determinedGrid.layout}`);
+      determinedGrid.layout = mapLayoutHintToRecipe(payload.layoutHint);
+      // Gallery before/after templates must steer Template Agent + composition intent
+      if (payload.layoutHint === 'split_before_after' || determinedGrid.layout.startsWith('before_after')) {
+        (determinedGrid as any).templateIntentOverride = 'before_after';
+      }
+      console.log(
+        `[TEMPLATE AGENT] Bypassed — using tenant's explicit template layout hint: ` +
+        `${payload.layoutHint} → ${determinedGrid.layout}`,
+      );
     } else if (captionResult) {
       const isCarouselOpt = (generationOptions.outputFormats as string[]).includes('carousel');
       const isStoryOpt = (generationOptions.outputFormats as string[]).includes('story');
@@ -620,7 +660,8 @@ export class GenerationOrchestrator {
           accentBrandColor: brandDNA.accentBrandColor ?? '#D4A373',
           depthBrandColor: brandDNA.depthBrandColor ?? '#1E1E1C',
           moodboardVisionSummary: moodboardVisionSummary ?? undefined,
-          templateIntent: getTemplateIntent(determinedGrid.pillar)
+          templateIntent: (determinedGrid as any).templateIntentOverride
+              || getTemplateIntent(determinedGrid.pillar)
         });
         let heroUrl = heroImage.url;
         if (brandDNA.logoUrl) {
@@ -844,7 +885,8 @@ ${consentShowFace
             moodboardVisionSummary: moodboardVisionSummary ?? undefined,
             visionResult: visionResult ?? undefined,
             visionResultBefore: visionResultBefore ?? undefined,
-            templateIntent: getTemplateIntent(determinedGrid.pillar)
+            templateIntent: (determinedGrid as any).templateIntentOverride
+              || getTemplateIntent(determinedGrid.pillar)
           });
           // Apply logo to each carousel slide
           const slidesWithLogo = brandDNA.logoUrl
@@ -925,7 +967,8 @@ ${consentShowFace
             visionResult: visionResult ?? undefined,
             visionResultBefore: visionResultBefore ?? undefined,
             semanticFlow: this.narrativePlanner.getRecipe(payload.businessGoal as any).semanticFlow,
-            templateIntent: getTemplateIntent(determinedGrid.pillar)
+            templateIntent: (determinedGrid as any).templateIntentOverride
+              || getTemplateIntent(determinedGrid.pillar)
           });
           const framesWithLogo = brandDNA.logoUrl
             ? await Promise.all(aiFrames.map(async f => ({ ...f, url: await this.logoOverlay.applyLogo({ imageUrl: f.url, logoUrl: brandDNA.logoUrl as string, position: brandDNA.logoPosition as any, tenantId }) })))

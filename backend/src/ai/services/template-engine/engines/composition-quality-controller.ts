@@ -635,7 +635,28 @@ export class CompositionQualityController {
   }
 
   public inferFamilyFromLayoutId(id: string): string | null {
-    const families = ['editorial', 'minimalist', 'minimal', 'clinical', 'premium', 'scrapbook', 'architectural', 'split', 'luxury', 'vintage', 'polaroid', 'countdown', 'testimonial'];
+    const families = [
+      'before_after',
+      'transformation',
+      'editorial',
+      'minimalist',
+      'minimal',
+      'clinical',
+      'premium',
+      'scrapbook',
+      'architectural',
+      'split',
+      'luxury',
+      'vintage',
+      'polaroid',
+      'countdown',
+      'testimonial',
+      'magazine',
+      'product',
+      'notification',
+      'announcement',
+      'quadrant',
+    ];
     return families.find(f => id.includes(f)) || null;
   }
 }

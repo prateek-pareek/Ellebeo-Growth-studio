@@ -1483,10 +1483,20 @@ export class PrimitiveEngine {
 
     this.registry['large_numeral_bullet'] = {
       category: 'geometry', render: (ctx, layer) => {
+        // Quiet watermark — never a 250px gold numeral fighting the headline.
+        const pad = Math.max(ctx.constraints.safeX, Math.round(ctx.w * 0.05));
+        const size = Math.round(ctx.h * 0.14);
+        const anchor = String(layer?.anchor || 'top_left');
+        let x = pad;
+        let y = pad + size;
+        if (anchor.includes('right')) x = ctx.w - pad;
+        if (anchor.includes('bottom')) y = ctx.h - Math.max(ctx.constraints.margins?.bottom || pad, pad) - 8;
+        if (anchor.includes('center') && !anchor.includes('left') && !anchor.includes('right')) x = ctx.w / 2;
+        const anchorAttr = anchor.includes('right') ? 'end' : (anchor.includes('left') || anchor === 'top_left' ? 'start' : 'middle');
         return `
-      <!-- Educational Large Numeral Background -->
-      <text x="${ctx.constraints.safeX}" y="${ctx.constraints.safeY + 180}" font-family="Georgia, serif" font-size="250" font-weight="900" fill="${ctx.validBrandColor}" opacity="${ctx.resolveOpacity!(0.08)}" text-anchor="start">
-        1.
+      <!-- Quiet educational numeral watermark -->
+      <text x="${x}" y="${y}" font-family="Georgia, serif" font-size="${size}" font-weight="700" fill="${ctx.validBrandColor}" opacity="${ctx.resolveOpacity!(0.12)}" text-anchor="${anchorAttr}">
+        01
       </text>`;
       }
     };
@@ -1704,9 +1714,16 @@ export class PrimitiveEngine {
           const isLast = i === steps - 1;
           dots += `<circle cx="${cx}" cy="${y}" r="${isLast ? 8 : 5}" fill="${isLast ? ctx.validBrandColor : ctx.validBackgroundColor}" stroke="${ctx.validBrandColor}" stroke-width="${ctx.scaleStroke!(2)}" />`;
         }
+        // data-bounds lets renderPrimitive()'s collision engine actually see where this sits —
+        // without it, a bare <line>/<circle> group is invisible to isSafePlacement() and this
+        // track can be positioned (via the hardcoded offsetPercent above) straight across a
+        // headline with no relocate/shrink/suppress ever kicking in.
+        const dotRadius = 8;
+        const boundsY = y - dotRadius - 4;
+        const boundsHeight = (dotRadius + 4) * 2;
         return `
       <!-- Transformation Family Timeline Track -->
-      <g>
+      <g data-bounds="${x1},${boundsY},${x2 - x1},${boundsHeight}">
         <line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="${ctx.validBrandColor}" stroke-width="${ctx.scaleStroke!(1.5)}" opacity="${ctx.resolveOpacity!(0.35)}" />
         ${dots}
       </g>`;
