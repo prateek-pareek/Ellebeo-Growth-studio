@@ -29,6 +29,7 @@ import { ThemeEngine } from './template-engine/engines/theme-engine';
 import { CompositionEngine, TemplateIntent } from './template-engine/engines/composition-engine';
 import { ArtDirectionEngine } from './template-engine/engines/art-direction-engine';
 import { GeometryCompiler } from './template-engine/engines/geometry-compiler';
+import { VisualCommunicationDirector } from './template-engine/engines/visual-communication-director';
 import { ColorCompositionEngine } from './template-engine/engines/color-composition-engine';
 import { DesignCompiler } from './template-engine/engines/design-compiler';
 import { LayoutEngine, BoundingBox } from './template-engine/engines/layout-engine';
@@ -311,6 +312,7 @@ export class AiImageGenerationService {
   private readonly themeEngine: ThemeEngine;
   private readonly compositionEngine: CompositionEngine;
   private readonly artDirectionEngine: ArtDirectionEngine;
+  private readonly visualCommunicationDirector: VisualCommunicationDirector;
   private readonly colorCompositionEngine: ColorCompositionEngine;
   private readonly geometryCompiler: GeometryCompiler;
 
@@ -319,6 +321,7 @@ export class AiImageGenerationService {
     this.themeEngine = new ThemeEngine();
     this.compositionEngine = new CompositionEngine();
     this.artDirectionEngine = new ArtDirectionEngine();
+    this.visualCommunicationDirector = new VisualCommunicationDirector();
     this.colorCompositionEngine = new ColorCompositionEngine();
     this.geometryCompiler = new GeometryCompiler();
   }
@@ -363,7 +366,7 @@ export class AiImageGenerationService {
   }): Promise<{ url: string; variants?: { gemini?: string; dalle?: string }; compositionFailed?: boolean; failReason?: string }> {
     const {
       photoUrl, beforePhotoUrl, overlayText, headline, subheadline, cta, index, isFirst, isLast, isBeforePhoto,
-      tenantId, businessName, brandColor,
+      tenantId, businessName, brandColor, title,
       secondaryColor = '#f5f0eb',
       aesthetic = 'minimal editorial premium beauty',
       serviceType = 'beauty treatment',
@@ -493,7 +496,7 @@ export class AiImageGenerationService {
         depthBrandColor,
         outputSize,
         captionText: overlayText,
-        visionResult,
+        visionResult: undefined, // Clear stale client vision result for text layouts
         designSpec,
       });
       const url = await uploadBase64ToFirebase(overlayResult.base64, tenantId, `slide_${index}`);
@@ -651,7 +654,7 @@ CRITICAL IMAGE REQUIREMENTS:
       depthBrandColor,
       outputSize,
       captionText: overlayText,
-      visionResult,
+      visionResult: undefined, // Clear stale client vision result for AI-generated lifestyle images
       designSpec,
       logoUrl,
       logoPosition,
@@ -1180,7 +1183,8 @@ CRITICAL IMAGE REQUIREMENTS:
       templateIntent,
       logoUrl,
       logoPosition = 'bottom_right',
-      designSpec
+      designSpec,
+      captionText
     } = params;
 
     const hasText = (overlayText && overlayText.trim().length > 0) || !!headline || !!subheadline || !!cta;
@@ -1251,6 +1255,19 @@ CRITICAL IMAGE REQUIREMENTS:
         }
         if (currentLine) lines.push(currentLine.trim());
       }
+
+      // Copy sanitation: Strip trailing periods from AI-generated text
+      const sanitizeCopy = (text: string | undefined): string => {
+        if (!text) return '';
+        // Remove trailing dots from words (e.g. "HERBAL. MASSAGE." -> "HERBAL MASSAGE")
+        // and remove any trailing dots at the end of the string.
+        return text.replace(/\.\s+(?=[a-zA-Z])/g, ' ').replace(/\.$/, '').trim();
+      };
+      
+      let cleanHeadline = sanitizeCopy(headline);
+      let cleanSubheadline = sanitizeCopy(subheadline);
+      let cleanCta = sanitizeCopy(cta);
+      let cleanOverlayText = sanitizeCopy(overlayText);
 
       let rectY = h - 250;
       let textY = h - 195;
@@ -1398,7 +1415,9 @@ CRITICAL IMAGE REQUIREMENTS:
 
       // Step 2 (Plan): Face Coordinate Transformation
       let faceBox: any = undefined;
-      if (visionResult?.faceCoordinates && visionResult.faceCoordinates.eyesYPercent) {
+      // Do not use stale client vision data for AI generated image (CTA slide)
+      const useStaleVision = isLast; 
+      if (!useStaleVision && visionResult?.faceCoordinates && visionResult.faceCoordinates.eyesYPercent) {
         const sourceW = originalW;
         const sourceH = originalH;
         // Image scaling and translation (letterbox offset) from fit: contain
@@ -1477,6 +1496,24 @@ CRITICAL IMAGE REQUIREMENTS:
         console.log(`[ProtectedSubjects] ${additionalSubjects.length} additional visual subject(s) protected`);
       }
 
+      // ====================================================================
+      // SHADOW MODE: VISUAL COMMUNICATION DIRECTOR
+      // ====================================================================
+      const visualSpec = await this.visualCommunicationDirector.generateSpec({
+        brandName: businessName || 'Brand',
+        aesthetic: (visualRanking && visualRanking.length > 0) ? visualRanking[0] : 'minimalist',
+        brief: captionText || headline || 'Post',
+        slideIndex: index || 0,
+        totalSlides: totalSlides || 1,
+        textLength: (cleanHeadline?.length || 0) + (cleanSubheadline?.length || 0),
+        templateIntent: templateIntent as any,
+        visionResult: visionResult,
+        slideType: isFirst ? 'HOOK' : isLast ? 'CTA' : 'BODY',
+      });
+      console.log(`\n[Visual Communication Spec] (Shadow Mode)`);
+      console.log(JSON.stringify(visualSpec, null, 2));
+      console.log(`====================================================================\n`);
+
       // Step 3 (Plan): Optimizer + visual QC gate; alternate layout if gate fails
       let rawDsl = COMPILED_LAYOUTS[computedLayoutType];
       let optimizedDsl: any = undefined;
@@ -1485,9 +1522,9 @@ CRITICAL IMAGE REQUIREMENTS:
       const compositionQC = new CompositionQualityController();
 
       // CTA / last-slide copy: loud lead + adaptable supporting rest (never hard-slice to N words)
-      let effectiveCta = cta;
-      let effectiveHeadline = headline;
-      let effectiveSubheadline = subheadline;
+      let effectiveCta = cleanCta;
+      let effectiveHeadline = cleanHeadline;
+      let effectiveSubheadline = cleanSubheadline;
       if (isLast) {
         if (!effectiveCta || !String(effectiveCta).trim()) {
           effectiveCta = 'Book now';
@@ -1519,7 +1556,7 @@ CRITICAL IMAGE REQUIREMENTS:
         };
 
         if (!effectiveHeadline || !String(effectiveHeadline).trim()) {
-          const source = [overlayText, subheadline, cta].filter(s => s && String(s).trim()).join(' ').trim();
+          const source = [cleanOverlayText, cleanSubheadline, cleanCta].filter(s => s && String(s).trim()).join(' ').trim();
           const { lead, rest } = splitLoudLead(source || 'Ready when you are');
           effectiveHeadline = lead || 'Ready when you are';
           if (rest) {
@@ -1534,7 +1571,7 @@ CRITICAL IMAGE REQUIREMENTS:
           `[CTA Copy] lead="${effectiveHeadline}" support="${(effectiveSubheadline || '').slice(0, 80)}" cta="${effectiveCta}"`,
         );
       }
-      if (!effectiveHeadline && !overlayText) {
+      if (!effectiveHeadline && !cleanOverlayText) {
         compositionFailed = true;
         failReason = 'missing_headline';
       }
@@ -1590,15 +1627,27 @@ CRITICAL IMAGE REQUIREMENTS:
           const currentCategory = meta0.failureCategory || 'spatial_allocation';
 
           console.warn(
-            `[CompositionQC] Layout '${computedLayoutType}' failed QC in shadow mode ` +
-            `(category=${currentCategory} priority=${visualPriority} score=${meta0.qualityScore ?? 0} ` +
-            `gate=${JSON.stringify(meta0.gatePredicate || {})}). ` +
-            `SHADOW MODE: Ignoring rejection and proceeding with Attempt 1.`,
+            `[CompositionQC] Layout '${computedLayoutType}' failed spatial/visual QC ` +
+            `(category=${currentCategory} priority=${visualPriority} score=${meta0.qualityScore ?? 0}). ` +
+            `Escalating to dynamic layout renegotiation...`,
           );
           
-          // Shadow Mode: Caller ignores the suggestion to change layouts.
-          // The pipeline continues rendering the original Template Agent selection exactly as it is.
-          optResult.suggestLayoutChange = false;
+          const alternates = compositionQC.suggestAlternateLayouts(
+            computedLayoutType,
+            Object.keys(COMPILED_LAYOUTS),
+            { visualPriority, readingFlow: designLanguage?.intent?.readingFlow },
+            1,
+            [{ category: currentCategory }]
+          );
+          if (alternates.length > 0) {
+            console.log(`[CompositionQC] Dynamic Negotiation: Selected alternate layout '${alternates[0]}'`);
+            computedLayoutType = alternates[0];
+            rawDsl = COMPILED_LAYOUTS[computedLayoutType];
+            optResult = runOptimize(computedLayoutType, rawDsl);
+            optimizedDsl = optResult.dsl;
+          } else {
+             console.log(`[CompositionQC] Dynamic Negotiation: No viable alternate layouts found, proceeding with original.`);
+          }
         } else if (optResult.fitActions.length) {
           console.log(`[CompositionQC] Fit cascade: ${optResult.fitActions.join(' | ')}`);
         }
@@ -1610,7 +1659,7 @@ CRITICAL IMAGE REQUIREMENTS:
           && l.allocatedBox
           && !(l as any)._omitForComposition,
         );
-        if (textLayers.length > 0 && !hasHeadingBox && (effectiveHeadline || overlayText)) {
+        if (textLayers.length > 0 && !hasHeadingBox && (effectiveHeadline || cleanOverlayText)) {
           console.warn(`[CompositionQC] Missing heading allocation — rendering best-effort slide (not excluding)`);
           failReason = failReason || 'missing_heading_allocation_soft';
           // Do NOT set compositionFailed — carousel must keep this slide

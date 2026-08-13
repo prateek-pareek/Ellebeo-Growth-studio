@@ -1474,30 +1474,7 @@ export class PrimitiveEngine {
     // ==========================================
     // PHASE 3 & 4: CLINICAL AND EDUCATIONAL PRIMITIVES
     // ==========================================
-    this.registry['clinical_callout_box'] = {
-      category: 'geometry', render: (ctx, layer) => {
-        return `
-      <!-- Clinical Callout Box with Data / Analysis Style -->
-      <g transform="translate(${ctx.constraints.safeX}, ${ctx.h / 2 - 40})">
-        <rect x="0" y="0" width="360" height="220" fill="${ctx.validSecondaryColor}" opacity="${ctx.resolveOpacity!(1)}" filter="drop-shadow(0 15px 30px rgba(0,0,0,0.15))" />
-        <rect x="0" y="0" width="360" height="40" fill="${ctx.validBrandColor}" opacity="${ctx.resolveOpacity!(0.1)}" />
-        <rect x="0" y="0" width="4" height="220" fill="${ctx.validBrandColor}" />
-        <text x="20" y="25" font-family="monospace" font-size="12" font-weight="bold" fill="${ctx.validBrandColor}" letter-spacing="2px">CLINICAL ANALYSIS</text>
-        <!-- Mock Data Bars -->
-        <rect x="20" y="70" width="320" height="6" fill="${ctx.validBrandColor}" opacity="${ctx.resolveOpacity!(0.1)}" />
-        <rect x="20" y="70" width="240" height="6" fill="${ctx.validBrandColor}" />
-        <text x="20" y="95" font-family="monospace" font-size="10" fill="${ctx.validBrandColor}" opacity="${ctx.resolveOpacity!(0.6)}">EFFICACY 85%</text>
-        
-        <rect x="20" y="120" width="320" height="6" fill="${ctx.validBrandColor}" opacity="${ctx.resolveOpacity!(0.1)}" />
-        <rect x="20" y="120" width="160" height="6" fill="${ctx.validBrandColor}" />
-        <text x="20" y="145" font-family="monospace" font-size="10" fill="${ctx.validBrandColor}" opacity="${ctx.resolveOpacity!(0.6)}">TISSUE REPAIR 60%</text>
-        
-        <rect x="20" y="170" width="320" height="6" fill="${ctx.validBrandColor}" opacity="${ctx.resolveOpacity!(0.1)}" />
-        <rect x="20" y="170" width="280" height="6" fill="${ctx.validBrandColor}" />
-        <text x="20" y="195" font-family="monospace" font-size="10" fill="${ctx.validBrandColor}" opacity="${ctx.resolveOpacity!(0.6)}">HYDRATION 92%</text>
-      </g>`;
-      }
-    };
+
 
     this.registry['step_badge'] = {
       category: 'geometry', render: (ctx, layer) => {
@@ -1632,6 +1609,60 @@ export class PrimitiveEngine {
           stars += `<g transform="translate(${startX + i * 26}, ${y}) scale(1.1)"><path d="${starPath}" fill="${ctx.validAccentColor || ctx.validBrandColor}" /></g>`;
         }
         return `<!-- Testimonial Star Rating -->\n${stars}`;
+      }
+    };
+
+    this.registry['editorial_badge'] = {
+      category: 'geometry', render: (ctx, layer) => {
+        const anchor = layer?.anchor || 'bottom_right';
+        let x = ctx.constraints.safeX;
+        let y = ctx.constraints.safeY;
+        if (anchor.includes('right')) x = ctx.w - ctx.constraints.safeX - 140;
+        if (anchor.includes('bottom')) y = ctx.h - ctx.constraints.safeY - 40;
+        if (anchor.includes('center')) x = ctx.w / 2 - 70;
+        return `
+      <!-- Editorial Badge -->
+      <g transform="translate(${x}, ${y})">
+        <rect x="0" y="0" width="140" height="40" fill="none" stroke="${ctx.validBrandColor}" stroke-width="${ctx.scaleStroke!(1)}" />
+        <text x="70" y="24" font-family="sans-serif" font-size="10" font-weight="bold" fill="${ctx.validBrandColor}" text-anchor="middle" letter-spacing="3px">EDITORIAL</text>
+      </g>`;
+      }
+    };
+
+    this.registry['metric_label'] = {
+      category: 'geometry', render: (ctx, layer) => {
+        const anchor = layer?.anchor || 'middle_left';
+        let x = ctx.constraints.safeX;
+        let y = ctx.h / 2;
+        if (anchor.includes('right')) x = ctx.w - ctx.constraints.safeX - 120;
+        if (anchor.includes('bottom')) y = ctx.h - ctx.constraints.safeY - 60;
+        if (anchor.includes('top')) y = ctx.constraints.safeY + 60;
+        return `
+      <!-- Metric Label -->
+      <g transform="translate(${x}, ${y})">
+        <text x="0" y="0" font-family="Georgia, serif" font-size="48" font-style="italic" fill="${ctx.validBrandColor}">98%</text>
+        <rect x="0" y="12" width="60" height="2" fill="${ctx.validAccentColor || ctx.validBrandColor}" />
+        <text x="0" y="30" font-family="sans-serif" font-size="10" font-weight="bold" fill="${ctx.validBrandColor}" letter-spacing="2px">EFFICACY</text>
+      </g>`;
+      }
+    };
+
+    this.registry['notification_icon_badge'] = {
+      category: 'geometry', render: (ctx, layer) => {
+        // Notification bell icon in a circle.
+        const anchor = layer?.anchor || 'top_left';
+        let x = ctx.constraints.safeX;
+        let y = ctx.constraints.safeY;
+        if (anchor.includes('right')) x = ctx.w - ctx.constraints.safeX - 48;
+        if (anchor.includes('bottom')) y = ctx.h - ctx.constraints.safeY - 48;
+        
+        return `
+      <!-- Notification Icon Badge -->
+      <g transform="translate(${x}, ${y})">
+        <circle cx="24" cy="24" r="24" fill="${ctx.validBrandColor}" />
+        <path d="M24,10 c-4.4,0-8,3.6-8,8 v5.5 c0,0.8-0.7,1.5-1.5,1.5 h-1.5 v2 h22 v-2 h-1.5 c-0.8,0-1.5-0.7-1.5-1.5 V18 C32,13.6,28.4,10,24,10 z M24,31 c-1.7,0-3-1.3-3-3 h6 C27,29.7,25.7,31,24,31 z" fill="${ctx.validSecondaryColor}" />
+        <circle cx="34" cy="14" r="6" fill="${ctx.validAccentColor || '#E74C3C'}" />
+      </g>`;
       }
     };
 
@@ -1894,13 +1925,15 @@ export class PrimitiveEngine {
     };
 
     ctx.isSafePlacement = (candidateBox: BoundingBox): boolean => {
-      if (!ctx.canonicalGeometry) return true; // graceful fallback
-      const zones = ctx.canonicalGeometry.protectedZones;
+      const policy = (layer as any)?.collisionPolicy || 'avoid';
+      if (policy === 'allow' || policy === 'anchor') return true;
+
+      if (!ctx.layoutState?.occupiedRegions) return true;
       const halo = Math.round(Math.min(ctx.w, ctx.h) * 0.03);
-      for (const zone of zones) {
+      for (const region of ctx.layoutState.occupiedRegions) {
         const expanded = {
-          x: zone.x - halo, y: zone.y - halo,
-          width: zone.width + halo * 2, height: zone.height + halo * 2,
+          x: region.x - halo, y: region.y - halo,
+          width: region.width + halo * 2, height: region.height + halo * 2,
         };
         if (candidateBox.x < expanded.x + expanded.width &&
             candidateBox.x + candidateBox.width > expanded.x &&
@@ -1943,20 +1976,19 @@ export class PrimitiveEngine {
     }
 
     if (bounds && ctx.isSafePlacement && !ctx.isSafePlacement(bounds)) {
+       const priority = (layer as any)?.priority || 'decorative';
        // 1. Attempt minor Relocation (shift down or away)
        const relocatedBounds = { ...bounds, y: bounds.y + (ctx.h * 0.1) }; // Push it down slightly
        if (ctx.isSafePlacement(relocatedBounds)) {
            rawSvg = `<g transform="translate(0, ${ctx.h * 0.1})">${rawSvg}</g>`;
-           console.warn(`[PrimitiveEngine] Collision detected for '${name}' - relocated Y`);
+           console.log(`[PRIMITIVE] type: ${resolvedName} | collision: occupied_region | result: SHIFTED (down)`);
        } else {
-           // 2. Minor Scale Down (0.8 instead of crushing 0.5)
-           const shrunkBounds = { ...bounds, width: bounds.width * 0.8, height: bounds.height * 0.8 };
-           if (ctx.isSafePlacement(shrunkBounds)) {
+           if (priority === 'structural' || priority === 'brand') {
                rawSvg = `<g transform="scale(0.8) translate(${bounds.x * 0.2}, ${bounds.y * 0.2})">${rawSvg}</g>`;
-               console.warn(`[PrimitiveEngine] Collision detected for '${name}' - scaled to 80%`);
+               console.log(`[PRIMITIVE] type: ${resolvedName} | collision: occupied_region | result: SCALED (priority=${priority})`);
            } else {
                // 3. Disable
-               console.warn(`[PrimitiveEngine] DEGRADED: Hard collision detected for '${name}'. Required primitive was skipped.`);
+               console.warn(`[PRIMITIVE] type: ${resolvedName} | collision: occupied_region | result: SKIPPED (priority=${priority}, no safe region)`);
                return ''; // Disable primitive completely
            }
        }

@@ -507,6 +507,20 @@ export class TypographyEngine {
       boxX = anchor === 'middle' ? x - effectiveMaxW / 2 : anchor === 'end' ? x - effectiveMaxW : x;
     }
 
+    // Shrink-wrap the effective bounding box to the actual text content width
+    // This prevents background primitives (like solid_card) from leaving massive empty space
+    const longestFinalChars = escapedLines.reduce((m, l) => Math.max(m, l.replace(/&[a-z]+;/gi, ' ').length), 0);
+    const trackingFinal = this.parseTrackingEm(style.letterSpacing);
+    const casingFinal = (layer as any).capitalizationRule || ctx.typographyTokens?.casing || 'natural';
+    const isUpperFinal = casingFinal === 'force_uppercase' || casingFinal === 'uppercase';
+    const charWFinal = style.fontSize * ((isUpperFinal ? 0.70 : 0.60) + Math.max(0, trackingFinal));
+    const actualTextW = longestFinalChars * charWFinal;
+
+    if (actualTextW > 0 && actualTextW < effectiveMaxW) {
+      effectiveMaxW = actualTextW;
+      boxX = anchor === 'middle' ? x - effectiveMaxW / 2 : anchor === 'end' ? x - effectiveMaxW : x;
+    }
+
     let finalSvg = '';
 
     // Geometry locked. Get Font metrics for baseline.
@@ -536,10 +550,11 @@ export class TypographyEngine {
       opacityStr = ` opacity="${style.opacity}"`;
     }
     let containerSvg = '';
-    if (layer.component === 'pill_label' || layer.component === 'solid_card' || layer.component === 'inset_card') {
-      const padX = layer.component === 'pill_label' ? 24 : 40;
-      const padY = layer.component === 'pill_label' ? 12 : 30;
-      const radius = layer.component === 'pill_label' ? (textHeight + padY * 2) / 2 : (layer.component === 'inset_card' ? 8 : 0);
+    if (layer.component === 'pill_label' || layer.component === 'solid_card' || layer.component === 'inset_card' || layer.component === 'clinical_callout_box') {
+      const isCallout = layer.component === 'clinical_callout_box';
+      const padX = layer.component === 'pill_label' ? 24 : (isCallout ? 30 : 40);
+      const padY = layer.component === 'pill_label' ? 12 : (isCallout ? 45 : 30);
+      const radius = layer.component === 'pill_label' ? (textHeight + padY * 2) / 2 : (layer.component === 'inset_card' ? 8 : (isCallout ? 0 : 12));
 
       let bgFill = '#FFFFFF';
       if (ctx.colorHierarchy) {
@@ -548,10 +563,26 @@ export class TypographyEngine {
         style.fill = layer.role === 'heading' ? ctx.colorHierarchy.primaryText : ctx.colorHierarchy.primaryBackground;
       }
 
-      containerSvg = `
+      if (isCallout) {
+        const boxW = effectiveMaxW + padX * 2;
+        const boxH = textHeight + padY * 2;
+        const barColor = ctx.colorHierarchy?.primaryBackground || '#000000';
+        containerSvg = `
+          <!-- Structural Container: clinical_callout_box -->
+          <g transform="translate(${boxX - padX}, ${y - padY + 10})">
+            <rect x="0" y="0" width="${boxW}" height="${boxH}" fill="${ctx.colorHierarchy?.cardSurface || '#FFFFFF'}" filter="drop-shadow(0 15px 30px rgba(0,0,0,0.15))" />
+            <rect x="0" y="0" width="${boxW}" height="40" fill="${barColor}" opacity="0.1" />
+            <rect x="0" y="0" width="4" height="${boxH}" fill="${barColor}" />
+            <text x="20" y="25" font-family="monospace" font-size="12" font-weight="bold" fill="${barColor}" letter-spacing="2px">CLINICAL FOCUS</text>
+          </g>
+        `;
+        style.fill = ctx.colorHierarchy?.primaryText || '#000000';
+      } else {
+        containerSvg = `
           <!-- Structural Container: ${layer.component} -->
           <rect x="${boxX - padX}" y="${y - padY}" width="${effectiveMaxW + padX * 2}" height="${textHeight + padY * 2}" rx="${radius}" fill="${bgFill}" filter="url(#premium_shadow)" />
         `;
+      }
     }
 
     finalSvg = `${containerSvg}<text x="${x}" y="${baselineY}" text-anchor="${anchor}" class="overlay-text" style="font-family: ${style.fontFamily}; font-size: ${style.fontSize}px; fill: ${style.fill}; font-weight: ${style.fontWeight}; font-style: ${style.fontStyle}; letter-spacing: ${style.letterSpacing};" filter="url(#premium_shadow)"${strokeAddition}${transformStr}${opacityStr}>${content}</text>`;

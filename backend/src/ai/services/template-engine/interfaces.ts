@@ -106,8 +106,10 @@ export interface IDSLImageLayer extends IDSLBaseLayer {
 export interface IDSLDecorationLayer extends IDSLBaseLayer {
   type: 'decoration';
   component: 'wax_seal' | 'ticket_notches' | 'film_sprockets' | 'gallery_frame' | 'masking_tape' | 'gold_accents' | 'glass_card' | '3d_ribbon' | 'metric_panel' | 'editorial_sidebar' | 'status_chip' | 'divider' | 'chapter_tabs' | 'measurement_lines' | 'blueprint_grid' | 'museum_border' | 'thin_divider' | 'editorial_badge' | 'oversized_index' | 'quote_marks' | 'grain_overlay' | 'minimal_grid' | 'metadata_label' | 'ghost_headline' | 'outline_headline' | 'vertical_label' | 'running_header' | 'pull_quote' | 'organic_blob' | 'torn_paper' | 'pill_tag' | 'double_divider' | 'margin_rule' | 'accent_rule' | 'noise_texture' | 'paper_texture' | 'light_leak' | 'organic_accent' | 'structural_border' | 'handmade_mark' | 'margin_notes' | 'ink_stamp' | 'fold_line' | 'editorial_number_block' | 'corner_frame' | 'clinical_callout_box' | 'step_badge' | 'metric_label' | 'large_numeral_bullet' | 'myth_fact_badge' | 'quote_mark_accent' | 'meteor_shower' | 'elegant_line_art' | 'premium_stars' | 'abstract_rings' | 'split_seam_line' | 'countdown_urgency_badge' | 'product_halo_ring' | 'transformation_arrow' | 'star_rating_row' | 'editorial_tape' | 'geometric_badge' | 'timeline_track' | 'polaroid_frame' | 'sticker' | 'notification_icon_badge' | 'announcement_banner_ribbon' | 'starburst_badge';
-  anchor: LayoutAnchor;
+  anchor: LayoutAnchor | string; // supports semantic anchors like 'image.top_right'
   offsetPercent: number; // distance from the anchor
+  collisionPolicy?: 'avoid' | 'allow' | 'anchor' | 'clip';
+  priority?: 'structural' | 'brand' | 'accent' | 'decorative';
 }
 
 export interface IDSLTextLayer extends IDSLBaseLayer {
@@ -147,6 +149,32 @@ export interface ICompiledLayoutDSL {
 // ============================================================================
 // PHASE 2: SEMANTIC DESIGN SPECIFICATION CONTRACT
 // ============================================================================
+
+export interface IVisualCommunicationSpec {
+  // The visual hierarchy and cooperation of elements
+  hierarchy: {
+    primary: 'image' | 'typography' | 'composition';
+    secondary: 'image' | 'typography' | 'badge' | 'cta' | 'none';
+    tertiary: 'badge' | 'cta' | 'none';
+  };
+  
+  // Explicit instructions on how to treat the image
+  imageRole: 'hero' | 'supporting_evidence' | 'context' | 'atmosphere' | 'none';
+  imageImportance: 'critical' | 'high' | 'medium' | 'low';
+  
+  // How the image and typography should interact
+  relationship: 'separated' | 'integrated' | 'overlap' | 'framed' | 'stacked';
+  
+  // Differentiates purposeful airy design from broken dead space
+  whitespaceIntent: 'tight' | 'balanced' | 'airy' | 'intentional';
+  
+  // High-level aesthetic traits
+  readingFlow: 'z_pattern' | 'center_down' | 'circular' | 'center_anchored' | 'split';
+  energy: 'calm' | 'dynamic' | 'structured' | 'playful';
+  
+  // Direction for the Primitive Engine to select specific components
+  primitiveIntent: 'framing' | 'accent' | 'structural' | 'none';
+}
 
 export type CompositionHero = 'headline' | 'image' | 'badge' | 'balanced';
 export type CompositionBalance = 'symmetrical' | 'asymmetrical';

@@ -295,7 +295,7 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
         }
 
         // AI ART DIRECTION UPGRADE: Region-Based Extraction
-        if (dsl.canvasRegions && (!imageLayer.mask || imageLayer.mask === 'rectangle' || imageLayer.mask === 'split')) {
+        if (dsl.canvasRegions && (!imageLayer.mask || imageLayer.mask === 'rectangle' || imageLayer.mask === 'split' || dsl.canvasRegions.spatial.splitAxis !== 'overlay')) {
           const region = dsl.canvasRegions.imageRegion;
           const textPanel = dsl.canvasRegions.textRegion;
 
@@ -1157,6 +1157,47 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       }
     }
 
+    const occupiedRegions: import('../services/template-engine/interfaces').ILayoutRegion[] = [];
+    
+    if (ctx.faceBox) {
+      occupiedRegions.push({
+        id: 'faceBox',
+        role: 'face',
+        x: ctx.faceBox.x,
+        y: ctx.faceBox.y,
+        width: ctx.faceBox.width,
+        height: ctx.faceBox.height,
+        zIndex: 0
+      });
+    }
+    
+    if ((dsl as any)?.canvasRegions?.imageRegion) {
+      const ir = (dsl as any).canvasRegions.imageRegion;
+      occupiedRegions.push({
+        id: 'imageRegion',
+        role: 'image_bounds',
+        x: ir.x,
+        y: ir.y,
+        width: ir.width,
+        height: ir.height,
+        zIndex: 0
+      });
+    }
+    
+    for (const l of ((dsl as any)?.layers || [])) {
+      if (l.allocatedBox) {
+        occupiedRegions.push({
+          id: l.id || 'unknown',
+          role: l.role || l.type || 'element',
+          x: l.allocatedBox.x,
+          y: l.allocatedBox.y,
+          width: l.allocatedBox.width,
+          height: l.allocatedBox.height,
+          zIndex: l.zIndex || 0
+        });
+      }
+    }
+
     const primitiveCtx: PrimitiveContext = {
       w: ctx.w,
       h: ctx.h,
@@ -1165,7 +1206,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       validBackgroundColor: ctx.validBackgroundColor,
       constraints,
       behavior: behaviorProfile,
-      layoutState: { occupiedRegions: [], family, renderedStrings: [] },
+      layoutState: { occupiedRegions, family, renderedStrings: [] },
       colorHierarchy,
       recipe: visualRecipe.primitive,
       tokens: (dsl as any).primitiveTokens,
@@ -1205,15 +1246,8 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           console.log(`[Renderer Sprint] SUCCESS: Applied primitive decoration '${componentName}' to layout.`);
           svg += renderedPrimitive;
         } else {
-          // Strict Validation: Unknown components fail loudly
+          // Strict Validation: Unknown components fail loudly in logs but do not ruin the image
           console.error(`[Renderer Sprint] CRITICAL ERROR: Component '${componentName}' requested by DSL but not found in PrimitiveEngine!`);
-          // Render a visible placeholder block so developers see the missing component immediately
-          svg += `
-            <g transform="translate(40, ${Math.floor(Math.random() * (ctx.h - 100))})">
-              <rect width="300" height="40" fill="red" opacity="0.8" />
-              <text x="10" y="25" fill="white" font-weight="bold" font-family="sans-serif">MISSING COMPONENT: ${componentName}</text>
-            </g>
-          `;
         }
       } else if (layer.type === 'image') {
         // Many layout families (like desktop_course_hero, tablet_workbook_cover) define device mockups
@@ -1236,7 +1270,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           // 'solid_card', 'pill_label', 'inset_card' are text-container components: their
           // background rect is rendered by the TypographyEngine as part of the text pass,
           // so PrimitiveEngine intentionally returns '' for them. Treat empty return as success.
-          const TEXT_CONTAINER_COMPONENTS = ['solid_card', 'pill_label', 'inset_card'];
+          const TEXT_CONTAINER_COMPONENTS = ['solid_card', 'pill_label', 'inset_card', 'clinical_callout_box'];
           const isDelegatedContainer = TEXT_CONTAINER_COMPONENTS.includes(textLayer.component);
 
           const renderedPrimitive = primitiveEngine.renderPrimitive(textLayer.component, primitiveCtx, textLayer);

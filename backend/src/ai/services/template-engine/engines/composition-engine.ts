@@ -126,8 +126,7 @@ export class CompositionEngine {
       // ==========================================
     } else if (layoutId === 'clinical_hero') {
       layers.push({ id: 'clin_hero_img', type: 'image', zIndex: 10, mask: 'split', anchor: 'middle_right', paddingPercent: 5 } as IDSLImageLayer);
-      layers.push({ id: 'clin_hero_title', type: 'text', zIndex: 30, anchor: 'top_left', role: 'heading', alignment: 'left', maxWidthPercent: 40 } as IDSLTextLayer);
-      layers.push({ id: 'clin_hero_callout', type: 'decoration', zIndex: 20, component: 'clinical_callout_box', anchor: 'middle_left', offsetPercent: 5 } as IDSLDecorationLayer);
+      layers.push({ id: 'clin_hero_title', type: 'text', zIndex: 30, component: 'clinical_callout_box', anchor: 'top_left', role: 'heading', alignment: 'left', maxWidthPercent: 40 } as IDSLTextLayer);
 
     } else if (layoutId === 'clinical_procedure_steps') {
       layers.push({ id: 'clin_step_img', type: 'image', zIndex: 10, mask: 'circle', anchor: 'middle_right', paddingPercent: 10 } as IDSLImageLayer);
@@ -1649,20 +1648,209 @@ export class CompositionEngine {
 
       // ==========================================
       // FALLBACK
+      layers.push({
+        id: 'notif_banner_chip',
+        type: 'decoration',
+        zIndex: 30,
+        component: 'status_chip',
+        anchor: 'top_right',
+        offsetPercent: 5
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'notif_banner_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 80
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'notif_banner_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_center',
+        role: 'tagline',
+        alignment: 'center',
+        maxWidthPercent: 60
+      } as IDSLTextLayer);
+
+      // ==========================================
+      // ANNOUNCEMENT FAMILY
+      // ==========================================
+    } else if (layoutId === 'announcement_banner') {
+      // RECIPE: Announcement - Banner
+      // Solid megaphone banner ribbon across the top, bold headline and tagline stacked below
+      layers.push({
+        id: 'announce_banner_ribbon',
+        type: 'decoration',
+        zIndex: 20,
+        component: 'announcement_banner_ribbon',
+        anchor: 'top_center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'announce_banner_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 80
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'announce_banner_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_center',
+        role: 'tagline',
+        alignment: 'center',
+        maxWidthPercent: 60
+      } as IDSLTextLayer);
+
+    } else if (layoutId === 'announcement_spotlight') {
+      // RECIPE: Announcement - Spotlight
+      // Centered starburst spotlight badge behind the headline, tagline below, no image required
+      layers.push({
+        id: 'announce_spot_burst',
+        type: 'decoration',
+        zIndex: 10,
+        component: 'starburst_badge',
+        anchor: 'center',
+        offsetPercent: 0
+      } as IDSLDecorationLayer);
+
+      layers.push({
+        id: 'announce_spot_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 75
+      } as IDSLTextLayer);
+
+      layers.push({
+        id: 'announce_spot_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_center',
+        role: 'tagline',
+        alignment: 'center',
+        maxWidthPercent: 55
+      } as IDSLTextLayer);
+
+    } else if (layoutId.startsWith('clinical')) {
+      // RECIPE: Clinical Family (Precision, Alignment, Steps)
+      // Focuses on structured information, steps, and callout boxes
+      layers.push({
+        id: 'clinical_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'split',
+        paddingPercent: 5,
+        anchor: 'middle_right',
+        allowedAnchors: ['middle_right', 'top_center']
+      } as IDSLImageLayer);
+
+      layers.push({
+        id: 'clinical_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'top_left',
+        role: 'heading',
+        alignment: 'left',
+        maxWidthPercent: 40
+      } as IDSLTextLayer);
+
+    } else if (layoutId === 'clinical_benefits_grid') {
+      layers.push({ id: 'clin_grid_title', type: 'text', zIndex: 30, anchor: 'top_center', role: 'heading', alignment: 'center', maxWidthPercent: 80 } as IDSLTextLayer);
+      layers.push({ id: 'clin_grid_body', type: 'text', zIndex: 31, anchor: 'center', role: 'body', alignment: 'center', maxWidthPercent: 70 } as IDSLTextLayer);
+      layers.push({ id: 'clin_grid_metric', type: 'decoration', zIndex: 35, component: 'metric_label', anchor: 'bottom_center', offsetPercent: 10 } as IDSLDecorationLayer);
+
+    } else if (layoutId === 'clinical_ingredient_focus') {
+      layers.push({ id: 'clin_ing_img', type: 'image', zIndex: 10, mask: 'arch', anchor: 'center', paddingPercent: 15 } as IDSLImageLayer);
+      layers.push({ id: 'clin_ing_title', type: 'text', zIndex: 30, anchor: 'bottom_center', role: 'heading', alignment: 'center', maxWidthPercent: 60 } as IDSLTextLayer);
+      layers.push({ id: 'clin_ing_badge', type: 'decoration', zIndex: 35, component: 'myth_fact_badge', anchor: 'top_center', offsetPercent: 5 } as IDSLDecorationLayer);
+
+    } else if (layoutId === 'clinical_before_after') {
+      layers.push({ id: 'clin_ba_img', type: 'image', zIndex: 10, mask: 'rectangle', anchor: 'center', paddingPercent: 0 } as IDSLImageLayer);
+      layers.push({ id: 'clin_ba_title', type: 'text', zIndex: 30, anchor: 'bottom_center', role: 'heading', alignment: 'center', maxWidthPercent: 80 } as IDSLTextLayer);
+      layers.push({ id: 'clin_ba_rule', type: 'decoration', zIndex: 25, component: 'structural_border', anchor: 'center' } as IDSLDecorationLayer);
+
+      // ==========================================
+      // 3. MINIMALIST FAMILY
+      // ==========================================
+    } else if (layoutId === 'minimalist_centered_quote') {
+      layers.push({ id: 'min_cq_title', type: 'text', zIndex: 30, anchor: 'center', role: 'heading', alignment: 'center', maxWidthPercent: 70 } as IDSLTextLayer);
+
+    } else if (layoutId === 'minimalist_offset_quote') {
+      layers.push({ id: 'min_oq_title', type: 'text', zIndex: 30, anchor: 'middle_right', role: 'heading', alignment: 'right', maxWidthPercent: 60 } as IDSLTextLayer);
+      layers.push({ id: 'min_oq_caption', type: 'text', zIndex: 31, anchor: 'bottom_right', role: 'tagline', alignment: 'right', maxWidthPercent: 40 } as IDSLTextLayer);
+
+    } else if (layoutId === 'minimalist_quote_image') {
+      layers.push({ id: 'min_qi_img', type: 'image', zIndex: 10, mask: 'split', anchor: 'middle_left', paddingPercent: 20 } as IDSLImageLayer);
+      layers.push({ id: 'min_qi_title', type: 'text', zIndex: 30, anchor: 'middle_right', role: 'heading', alignment: 'left', maxWidthPercent: 45 } as IDSLTextLayer);
+
+    } else if (layoutId === 'minimalist_bottom_caption') {
+      layers.push({ id: 'min_bc_img', type: 'image', zIndex: 10, mask: 'rectangle', anchor: 'top_center', paddingPercent: 5 } as IDSLImageLayer);
+      layers.push({ id: 'min_bc_caption', type: 'text', zIndex: 30, anchor: 'bottom_center', role: 'tagline', alignment: 'center', maxWidthPercent: 80 } as IDSLTextLayer);
+
+    } else if (layoutId === 'minimalist_floating_card') {
+      layers.push({ id: 'min_fc_img', type: 'image', zIndex: 10, mask: 'full_bleed', paddingPercent: 0, anchor: 'center' } as IDSLImageLayer);
+      layers.push({ id: 'min_fc_title', type: 'text', zIndex: 30, anchor: 'center', role: 'heading', alignment: 'center', maxWidthPercent: 60 } as IDSLTextLayer);
+
+      // ==========================================
+      // 4. PREMIUM TEXT FAMILY
+      // ==========================================
+    } else if (layoutId === 'premium_hero_statement') {
+      layers.push({ id: 'prem_hs_title', type: 'text', zIndex: 30, anchor: 'center', role: 'heading', alignment: 'center', maxWidthPercent: 90 } as IDSLTextLayer);
+
+    } else if (layoutId === 'premium_stacked_typography') {
+      layers.push({ id: 'prem_st_title', type: 'text', zIndex: 30, anchor: 'top_left', role: 'heading', alignment: 'left', maxWidthPercent: 85 } as IDSLTextLayer);
+      layers.push({ id: 'prem_st_body', type: 'text', zIndex: 31, anchor: 'middle_left', role: 'body', alignment: 'left', maxWidthPercent: 85 } as IDSLTextLayer);
+      layers.push({ id: 'prem_st_rule', type: 'decoration', zIndex: 25, component: 'accent_rule', anchor: 'bottom_left', offsetPercent: 5 } as IDSLDecorationLayer);
+
+    } else if (layoutId === 'premium_manifesto') {
+      layers.push({ id: 'prem_man_title', type: 'text', zIndex: 30, anchor: 'top_center', role: 'heading', alignment: 'center', maxWidthPercent: 80 } as IDSLTextLayer);
+      layers.push({ id: 'prem_man_body', type: 'text', zIndex: 31, anchor: 'center', role: 'body', alignment: 'center', maxWidthPercent: 75 } as IDSLTextLayer);
+      layers.push({ id: 'prem_man_rings', type: 'decoration', zIndex: 10, component: 'abstract_rings', anchor: 'center' } as IDSLDecorationLayer);
+
+    } else if (layoutId === 'premium_quote_poster') {
+      layers.push({ id: 'prem_qp_title', type: 'text', zIndex: 30, anchor: 'center', role: 'heading', alignment: 'center', maxWidthPercent: 80 } as IDSLTextLayer);
+      layers.push({ id: 'prem_qp_stars', type: 'decoration', zIndex: 15, component: 'premium_stars', anchor: 'top_left' } as IDSLDecorationLayer);
+      layers.push({ id: 'prem_qp_quote', type: 'decoration', zIndex: 16, component: 'pull_quote', anchor: 'center' } as IDSLDecorationLayer);
+
+    } else if (layoutId === 'premium_text_only' || layoutId === 'premium_text_slide') {
+      // Text-only promotional / breather slide — NO image layer so base paints solid brand canvas
+      layers.push({ id: 'prem_to_texture', type: 'decoration', zIndex: 5, component: 'paper_texture', anchor: 'center', offsetPercent: 0 } as IDSLDecorationLayer);
+      layers.push({ id: 'prem_to_stars', type: 'decoration', zIndex: 12, component: 'premium_stars', anchor: 'top_right', offsetPercent: 5 } as IDSLDecorationLayer);
+      layers.push({ id: 'prem_to_line', type: 'decoration', zIndex: 14, component: 'elegant_line_art', anchor: 'bottom_left', offsetPercent: 8 } as IDSLDecorationLayer);
+      layers.push({ id: 'prem_to_rule', type: 'decoration', zIndex: 15, component: 'thin_divider', anchor: 'center', offsetPercent: 0 } as IDSLDecorationLayer);
+      layers.push({ id: 'prem_to_title', type: 'text', zIndex: 30, anchor: 'center', role: 'heading', alignment: 'center', maxWidthPercent: 85 } as IDSLTextLayer);
+      layers.push({ id: 'prem_to_body', type: 'text', zIndex: 31, anchor: 'bottom_center', role: 'body', alignment: 'center', maxWidthPercent: 75 } as IDSLTextLayer);
+
+    } else if (layoutId === 'premium_cta_poster') {
+      layers.push({ id: 'prem_cta_bg', type: 'image', zIndex: 10, mask: 'full_bleed', paddingPercent: 0, anchor: 'center' } as IDSLImageLayer);
+      layers.push({ id: 'prem_cta_title', type: 'text', zIndex: 30, anchor: 'center', role: 'heading', alignment: 'center', maxWidthPercent: 90 } as IDSLTextLayer);
+      // Upgraded role from footnote to body to ensure CTA is highly visible and legible.
+      layers.push({ id: 'prem_cta_caption', type: 'text', zIndex: 31, anchor: 'bottom_center', role: 'body', alignment: 'center', maxWidthPercent: 80 } as IDSLTextLayer);
+      layers.push({ id: 'prem_cta_badge', type: 'decoration', zIndex: 35, component: 'handmade_mark', anchor: 'top_right' } as IDSLDecorationLayer);
+
+      // ==========================================
+      // FALLBACK
       // ==========================================
     } else {
       layers.push({ id: 'fb_image', type: 'image', zIndex: 10, mask: 'rectangle', anchor: 'center', paddingPercent: 10 } as IDSLImageLayer);
       layers.push({ id: 'fb_text', type: 'text', zIndex: 30, anchor: 'center', role: 'heading', alignment: 'center', maxWidthPercent: 80 } as IDSLTextLayer);
     }
 
-    // Preserve ALL recipe-defined layers (including decoration primitives like premium_stars).
-    // The old filter aggressively stripped non-structural decorations, causing recipe-defined
-    // primitives to silently disappear from the render pipeline.
-    const filteredLayers = [...layers];
 
-    // Dynamically inject family primitives (additive — skips components already present)
-    const familyId = layoutId.split('_')[0];
-    this.injectFamilyPrimitives(familyId, filteredLayers);
+    const filteredLayers = [...layers];
 
     return {
       schemaVersion: '1.0',
@@ -1670,73 +1858,5 @@ export class CompositionEngine {
       id: recipeId,
       layers: filteredLayers
     };
-  }
-
-  private injectFamilyPrimitives(familyId: string, layers: IDSLSceneLayer[]) {
-    const anchors: Array<'top_left' | 'top_right' | 'bottom_left' | 'bottom_right' | 'center'> = ['top_left', 'top_right', 'bottom_left', 'bottom_right', 'center'];
-    const randomAnchor = () => anchors[Math.floor(Math.random() * anchors.length)];
-
-    let primitivesToInject: string[] = [];
-
-    if (familyId === 'editorial') {
-      primitivesToInject = ['accent_rule', 'editorial_badge', 'thin_divider', 'museum_border'];
-    } else if (familyId === 'clinical') {
-      primitivesToInject = ['step_badge', 'metric_label', 'clinical_callout_box', 'measurement_lines'];
-    } else if (familyId === 'scrapbook') {
-      primitivesToInject = ['editorial_tape', 'torn_paper', 'handmade_mark', 'ink_stamp', 'polaroid_frame'];
-    } else if (familyId === 'minimalist') {
-      primitivesToInject = ['minimal_grid', 'margin_rule', 'ghost_headline'];
-    } else if (familyId === 'premium') {
-      primitivesToInject = ['premium_stars', 'elegant_line_art'];
-    } else if (familyId === 'split') {
-      primitivesToInject = ['split_seam_line', 'divider'];
-    } else if (familyId === 'countdown') {
-      primitivesToInject = ['countdown_urgency_badge', 'status_chip'];
-    } else if (familyId === 'product') {
-      primitivesToInject = ['product_halo_ring', 'geometric_badge'];
-    } else if (familyId === 'before') { // before_after
-      primitivesToInject = ['transformation_arrow', 'editorial_tape'];
-    } else if (familyId === 'testimonial') {
-      primitivesToInject = ['quote_marks', 'star_rating_row', 'pull_quote'];
-    } else if (familyId === 'quadrant') {
-      primitivesToInject = ['blueprint_grid', 'corner_frame'];
-    } else if (familyId === 'transformation') {
-      primitivesToInject = ['timeline_track', 'step_badge'];
-    } else if (familyId === 'magazine') {
-      primitivesToInject = ['editorial_sidebar', 'running_header', 'oversized_index'];
-    } else if (familyId === 'polaroid') {
-      primitivesToInject = ['polaroid_frame', 'sticker', 'editorial_tape'];
-    } else if (familyId === 'notification') {
-      primitivesToInject = ['notification_icon_badge', 'status_chip'];
-    } else if (familyId === 'announcement') {
-      primitivesToInject = ['announcement_banner_ribbon', 'starburst_badge'];
-    }
-
-    if (primitivesToInject.length > 0) {
-      // Collect components already present in the recipe-defined layers
-      const existingComponents = new Set(
-        layers.filter((l: any) => l.type === 'decoration' && l.component)
-              .map((l: any) => l.component)
-      );
-
-      // Inject enough family DNA to be visible — not a single optional accent
-      const candidates = primitivesToInject.filter(p => !existingComponents.has(p));
-      if (candidates.length > 0) {
-        const minInject = Math.min(candidates.length, familyId === 'premium' || familyId === 'announcement' || familyId === 'countdown' ? 3 : 2);
-        const numToInject = Math.min(candidates.length, Math.max(minInject, Math.floor(Math.random() * 2) + minInject));
-        const shuffled = [...candidates].sort(() => Math.random() - 0.5);
-        for (let i = 0; i < numToInject; i++) {
-          const primitive = shuffled[i];
-          layers.push({
-            id: `dyn_prim_${familyId}_${i}`,
-            type: 'decoration',
-            zIndex: 25 + i,
-            component: primitive as any,
-            anchor: randomAnchor(),
-            offsetPercent: Math.floor(Math.random() * 10)
-          } as IDSLDecorationLayer);
-        }
-      }
-    }
   }
 }

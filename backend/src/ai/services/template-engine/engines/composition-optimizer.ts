@@ -333,6 +333,16 @@ export class CompositionOptimizer {
     // Pass actual text-region dimensions to typography
     groupRegion.width = regions.textRegion.width;
     groupRegion.x = regions.textRegion.x;
+    const regionWidth = Math.round(groupRegion.width * Math.min(1, wrapWidthFactor));
+
+    // Re-estimate heights now that the actual wrapped width is locked in. 
+    // This prevents text from wrapping into 3 lines but only spacing out as 1 line (overlap bug).
+    const accurateEstimate = this.qc.estimateGroupHeight(roleTexts, typographyMetrics, canvasHeight, priority, regionWidth, familyKey);
+    groupedTextLayers.forEach((l, i) => {
+      estimatedHeights[l.id] = Math.round((accurateEstimate.heights[i] || accurateEstimate.heights[0] || Math.round(canvasHeight * 0.06)) * groupScale);
+    });
+    totalGroupHeight = Math.round(accurateEstimate.total * groupScale);
+
     if (isDedicatedPanel || priority === 'typography_hero') {
       groupRegion.height = Math.max(
         groupRegion.height,
@@ -341,7 +351,15 @@ export class CompositionOptimizer {
     }
 
     let currentY = groupRegion.y;
-    const regionWidth = Math.round(groupRegion.width * Math.min(1, wrapWidthFactor));
+
+    // Calculate exactly how much vertical space the support layers need
+    let dynamicSupportReserve = 0;
+    for (const l of groupedTextLayers) {
+      if (l.role !== 'heading') dynamicSupportReserve += estimatedHeights[l.id] + clusterGap;
+    }
+    for (const l of structuralLayers) {
+      dynamicSupportReserve += Math.round(canvasHeight * 0.045) + clusterGap;
+    }
 
     for (const layer of groupedTextLayers) {
       let x = groupRegion.x;
@@ -352,11 +370,10 @@ export class CompositionOptimizer {
       // boost type into the available negative space (not a tiny estimate-tall box).
       let boxH = estimatedHeights[layer.id];
       if (priority === 'typography_hero' && layer.role === 'heading') {
-        const supportReserve = Math.round(regions.textRegion.height * 0.28);
+        const availableForHeading = Math.max(boxH, regions.textRegion.height - dynamicSupportReserve);
         boxH = Math.max(
           boxH,
-          Math.round(regions.textRegion.height * 0.55),
-          Math.min(regions.textRegion.height - supportReserve, Math.round((typographyMetrics?.heroSize || canvasHeight * 0.1) * 2.4)),
+          Math.min(availableForHeading, Math.round((typographyMetrics?.heroSize || canvasHeight * 0.1) * 2.4)),
         );
       }
 
@@ -482,8 +499,9 @@ export class CompositionOptimizer {
         (group as any)._suggestLayoutChange = true;
       }
       suggestLayoutChange = true;
+      const failureType = fitExhausted ? 'Spatial exhaustion' : 'Visual gate';
       console.warn(
-        `[CompositionQC] Visual gate FAILED (score=${quality.score.toFixed(1)} ` +
+        `[CompositionQC] ${failureType} FAILED (score=${quality.score.toFixed(1)} ` +
         `threshold=${quality.passThreshold ?? 7.5} critical=${quality.critical.join('|') || 'none'} ` +
         `issues=${quality.issues.join('|') || 'none'}). Triggering repair.`,
       );
