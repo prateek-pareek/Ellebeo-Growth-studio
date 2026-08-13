@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FlaskConical, ImagePlus, Loader2, Download, Sparkles, ChevronLeft, ChevronRight } from "lucide-react";
+import { FlaskConical, ImagePlus, Loader2, Download, Sparkles, ChevronLeft, ChevronRight, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useBrandDna } from "@/lib/providers/brand-dna-provider";
@@ -44,11 +44,28 @@ type LabSlide = {
   notes: string | null;
 };
 
+type PostCaption = {
+  hook: string;
+  body: string;
+  cta: string;
+  hashtags: string[];
+};
+
+type LabOption = {
+  id: string;
+  source: "gemini" | "chatgpt";
+  label: string;
+  angle: string;
+  caption: PostCaption;
+  slides: LabSlide[];
+};
+
 type LabResult = {
   model: string;
   aspectRatio: string;
   imageDataUrl: string;
   slides?: LabSlide[];
+  options?: LabOption[];
   notes: string | null;
   prompt: string | null;
   used: {
@@ -58,6 +75,8 @@ type LabResult = {
     templateName: string | null;
     format?: string | null;
     slideCount?: number;
+    optionCount?: number;
+    sources?: string[];
     references: string[];
   };
 };
@@ -82,6 +101,7 @@ function GeminiLabPage() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<LabResult | null>(null);
   const [activeSlide, setActiveSlide] = useState(0);
+  const [activeOption, setActiveOption] = useState(0);
   const [showPrompt, setShowPrompt] = useState(false);
 
   const templatePreview = useObjectUrl(templateFile);
@@ -132,15 +152,17 @@ function GeminiLabPage() {
     setBusy(true);
     setResult(null);
     setActiveSlide(0);
+    setActiveOption(0);
     try {
       const res = await api.post("/gemini-lab/generate", form, {
-        timeout: 180_000,
+        timeout: 240_000,
       });
       const data = res.data.data as LabResult;
       setResult(data);
       setActiveSlide(0);
-      const n = data.slides?.length || 1;
-      toast.success(n > 1 ? `Gemini returned ${n} carousel slides.` : "Gemini returned a reference image.");
+      setActiveOption(0);
+      const opts = data.options?.length || 1;
+      toast.success(opts > 1 ? `${opts} post options from Gemini and ChatGPT.` : "Post option ready.");
     } catch (err: any) {
       const message =
         err?.response?.data?.error?.message ||
@@ -168,7 +190,7 @@ function GeminiLabPage() {
           Try a <span className="italic text-brass-ink">simple Gemini</span> pipeline.
         </h1>
         <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[58ch]">
-          Original photos are never sent to an image model. Gemini writes the marketing copy; we composite your shots unchanged into Canva-style frames, pills and type. Finished looks, behind the scenes, details or before/after all work. Template is optional. Brand name, logo and palette come from your existing Brand DNA.
+          Original photos are never sent to an image model. Gemini and ChatGPT each write two post options — on-image copy plus the Instagram caption. We composite your shots unchanged. Template is optional. Brand name, logo and palette come from your existing Brand DNA.
         </p>
       </header>
 
@@ -384,25 +406,21 @@ function GeminiLabPage() {
             >
               {busy ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
               {busy
-                ? expectedSlides > 1
-                  ? `Generating ${expectedSlides} slides…`
-                  : "Asking Gemini…"
+                ? "Writing options…"
                 : expectedSlides > 1
-                  ? `Generate ${expectedSlides} slides`
-                  : "Generate with Gemini"}
+                  ? `Generate ${expectedSlides}-slide options`
+                  : "Generate options"}
             </button>
           </div>
         </section>
 
         <section className="bg-card rounded-2xl shadow-elevated p-6 min-h-[28rem]">
-          <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-taupe mb-4">Gemini result</p>
+          <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-taupe mb-4">Post options</p>
           {busy && (
             <div className="flex flex-col items-center justify-center py-24 text-taupe">
               <Loader2 className="size-8 animate-spin mb-4" />
               <p className="text-sm text-center max-w-[36ch]">
-                {expectedSlides > 1
-                  ? `Writing copy and compositing ${expectedSlides} slides with your original photos.`
-                  : "Writing copy and compositing your original photo."}
+                Asking Gemini and ChatGPT for distinct post angles, then compositing your original photos.
               </p>
             </div>
           )}
@@ -419,6 +437,11 @@ function GeminiLabPage() {
               result={result}
               activeSlide={activeSlide}
               onActiveSlide={setActiveSlide}
+              activeOption={activeOption}
+              onActiveOption={(i) => {
+                setActiveOption(i);
+                setActiveSlide(0);
+              }}
               showPrompt={showPrompt}
               onTogglePrompt={() => setShowPrompt((v) => !v)}
             />
@@ -429,26 +452,61 @@ function GeminiLabPage() {
   );
 }
 
+function formatCaption(caption: PostCaption | undefined): string {
+  if (!caption) return "";
+  const tags = (caption.hashtags || []).map((h) => (h.startsWith("#") ? h : `#${h}`)).join(" ");
+  return [caption.hook, caption.body, caption.cta, tags].filter(Boolean).join("\n\n");
+}
+
 function ResultSlides({
   result,
   activeSlide,
   onActiveSlide,
+  activeOption,
+  onActiveOption,
   showPrompt,
   onTogglePrompt,
 }: {
   result: LabResult;
   activeSlide: number;
   onActiveSlide: (index: number) => void;
+  activeOption: number;
+  onActiveOption: (index: number) => void;
   showPrompt: boolean;
   onTogglePrompt: () => void;
 }) {
-  const slides = result.slides?.length ? result.slides : [{ index: 0, label: "Post", imageDataUrl: result.imageDataUrl, notes: result.notes }];
+  const options = result.options?.length
+    ? result.options
+    : [{ id: "one", source: "gemini" as const, label: "Gemini 1", angle: "", caption: { hook: "", body: "", cta: "", hashtags: [] }, slides: result.slides?.length ? result.slides : [{ index: 0, label: "Post", imageDataUrl: result.imageDataUrl, notes: result.notes }] }];
+  const option = options[Math.min(activeOption, options.length - 1)] ?? options[0];
+  const slides = option.slides?.length ? option.slides : [{ index: 0, label: "Post", imageDataUrl: result.imageDataUrl, notes: result.notes }];
   const current = slides[Math.min(activeSlide, slides.length - 1)] ?? slides[0];
   const canPrev = activeSlide > 0;
   const canNext = activeSlide < slides.length - 1;
+  const captionText = formatCaption(option.caption);
 
   return (
     <div className="space-y-4">
+      {options.length > 1 && (
+        <div className="flex flex-wrap gap-2">
+          {options.map((opt, i) => (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => onActiveOption(i)}
+              className={
+                "text-[10px] font-semibold uppercase tracking-widest px-3.5 py-1.5 rounded-full border transition-all " +
+                (i === activeOption
+                  ? "bg-brass text-white border-brass"
+                  : "bg-muted text-taupe border-transparent hover:border-brass/40 hover:text-foreground")
+              }
+            >
+              {opt.label}
+              {opt.angle ? ` · ${opt.angle}` : ""}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="relative">
         <img
           src={current.imageDataUrl}
@@ -496,7 +554,27 @@ function ResultSlides({
         </div>
       )}
       <p className="text-sm font-medium">{current.label}</p>
+      {captionText && (
+        <div className="rounded-xl border border-border bg-muted/50 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-taupe">Caption</p>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-taupe hover:text-foreground"
+              onClick={async () => {
+                await navigator.clipboard.writeText(captionText);
+                toast.success("Caption copied.");
+              }}
+            >
+              <Copy className="size-3" />
+              Copy
+            </button>
+          </div>
+          <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{captionText}</p>
+        </div>
+      )}
       <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-widest text-taupe">
+        <span className="border border-border px-2.5 py-1 rounded-full">{option.source === "chatgpt" ? "ChatGPT" : "Gemini"}</span>
         <span className="border border-border px-2.5 py-1 rounded-full">{result.model}</span>
         <span className="border border-border px-2.5 py-1 rounded-full">{result.aspectRatio}</span>
         <span className="border border-border px-2.5 py-1 rounded-full">
