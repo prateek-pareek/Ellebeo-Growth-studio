@@ -193,22 +193,29 @@ function BrandDnaOnboardingV2() {
     setContract((prev) => (prev ? patch(prev) : prev));
   }, []);
 
-  // Debounced autosave — per-step, resumable.
+  // Immediate save — bypasses the debounce below. Used at points where losing
+  // the change to a closed tab or fast navigation would actually be visible
+  // (logo upload, leaving a step) rather than trusting a 900ms window.
+  const saveNow = useCallback(async (c: BrandDnaV2Contract) => {
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+    setSaving(true);
+    try {
+      await api.put("/brand-dna/v2", normalizeContractForSave(c));
+    } catch {
+      // Silent — the debounced autosave below retries on the next change; finish() surfaces errors explicitly.
+    } finally {
+      setSaving(false);
+    }
+  }, []);
+
+  // Debounced autosave — covers every other field-level edit (chips, sliders,
+  // text) where a 900ms window is fine.
   useEffect(() => {
     if (!contract || loading) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(async () => {
-      setSaving(true);
-      try {
-        await api.put("/brand-dna/v2", normalizeContractForSave(contract));
-      } catch {
-        // Silent — autosave retries on next change; explicit "Save & finish" on step 7 surfaces errors.
-      } finally {
-        setSaving(false);
-      }
-    }, 900);
+    saveTimer.current = setTimeout(() => saveNow(contract), 900);
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
-  }, [contract, loading]);
+  }, [contract, loading, saveNow]);
 
   const fetchIdentitySuggestion = useCallback(async () => {
     if (!contract || fetchedFor.current.has("identity")) return;
@@ -287,7 +294,14 @@ function BrandDnaOnboardingV2() {
       formData.append("file", file);
       const res = await api.post("/brand-dna/upload-logo", formData, { headers: { "Content-Type": "multipart/form-data" } });
       const url = res.data?.data?.url ?? res.data?.url;
-      if (url) update((c) => ({ ...c, identity: { ...c.identity, logoAssetId: url } }));
+      if (url && contract) {
+        const withNewLogo = { ...contract, identity: { ...contract.identity, logoAssetId: url } };
+        update(() => withNewLogo);
+        // Save immediately with the value we just computed — don't wait for the
+        // debounce or a re-render, since a fast Continue click could otherwise
+        // navigate (and eventually save) before this particular change lands.
+        await saveNow(withNewLogo);
+      }
       toast.success("Logo uploaded.");
     } catch {
       toast.error("Logo upload failed. Please try again.");
@@ -312,6 +326,7 @@ function BrandDnaOnboardingV2() {
     if (step === 6 && !contract.story.userWritten) {
       trackBrandDnaEvent("story_skipped", 6);
     }
+    saveNow(contract);
     setStep(step + 1);
   };
 
