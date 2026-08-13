@@ -486,8 +486,11 @@ export class ArtDirectionEngine {
       profile.metadataBaseFontSize = 20;
       profile.bodyBaseFontSize = 28;
       profile.elementOverlapAllowed = false;
-      profile.marginHugging = true;
+      // Do not margin-hug — typography_hero needs a real panel, not edge-crushed type
+      profile.marginHugging = false;
       profile.typographyScaleMultiplier = 1.15;
+      profile.imageBleedExtent = 'asymmetrical_65';
+      profile.cropIntent = 'tight_macro';
     } else {
       profile.heroBaseFontSize = 84;
       // image_hero = photo owns the FRAME via placement/whitespace, NOT micro-type.

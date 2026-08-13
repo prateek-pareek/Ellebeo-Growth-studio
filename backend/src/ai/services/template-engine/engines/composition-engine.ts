@@ -79,15 +79,18 @@ export class CompositionEngine {
   }
 
   /**
-   * Builds the structural DSL for a design family variant. Every literal below (mask,
-   * anchor, zIndex, which primitive component) is genuine family DNA — a structural
-   * fact about this specific variant, not a per-generation creative choice, so it stays
-   * hardcoded here by design. Intent-driven values (alignment, whitespace/negativeSpace,
-   * photo treatment, typography scale, decoration density, mood) are deliberately NOT
-   * duplicated across these ~45 branches — they're applied once, generically, to every
-   * recipe (rigid or procedural) by DesignCompiler/GeometryCompiler downstream, which is
-   * what actually reads the Template Agent's Design Intent (see art-direction-engine.ts,
-   * design-compiler.ts, geometry-compiler.ts).
+   * Builds the structural DSL for a design family variant.
+   *
+   * RECIPE CONTRACT (current + future templates):
+   * Define geometry ONLY via layer fields — the pipeline honors them generically:
+   *   image.mask            full_bleed | rectangle | circle | arch | polaroid | split | before_after_split
+   *   image.paddingPercent  0 = edge-to-edge; >2 = inset sized by padding
+   *   image.anchor          where the photo sits (top_left … bottom_right, middle_*)
+   *   text.anchor           where each text layer sits (independent; not one stacked cluster)
+   *   text.role / alignment / maxWidthPercent
+   * visualPriority / QC may tune share & fonts INSIDE this contract — they must not invent
+   * a different composition. Unknown layoutIds get a safe full-bleed default (never a
+   * random 10% postage-stamp rectangle).
    */
   public buildRecipe(layoutId: string, slideIndex: number, brandName: string): ICompiledLayoutDSL {
     const layers: IDSLSceneLayer[] = [];
@@ -1631,6 +1634,15 @@ export class CompositionEngine {
       layers.push({ id: 'prem_qp_stars', type: 'decoration', zIndex: 15, component: 'premium_stars', anchor: 'top_left' } as IDSLDecorationLayer);
       layers.push({ id: 'prem_qp_quote', type: 'decoration', zIndex: 16, component: 'pull_quote', anchor: 'center' } as IDSLDecorationLayer);
 
+    } else if (layoutId === 'premium_text_only' || layoutId === 'premium_text_slide') {
+      // Text-only promotional / breather slide — NO image layer so base paints solid brand canvas
+      layers.push({ id: 'prem_to_texture', type: 'decoration', zIndex: 5, component: 'paper_texture', anchor: 'center', offsetPercent: 0 } as IDSLDecorationLayer);
+      layers.push({ id: 'prem_to_stars', type: 'decoration', zIndex: 12, component: 'premium_stars', anchor: 'top_right', offsetPercent: 5 } as IDSLDecorationLayer);
+      layers.push({ id: 'prem_to_line', type: 'decoration', zIndex: 14, component: 'elegant_line_art', anchor: 'bottom_left', offsetPercent: 8 } as IDSLDecorationLayer);
+      layers.push({ id: 'prem_to_rule', type: 'decoration', zIndex: 15, component: 'thin_divider', anchor: 'center', offsetPercent: 0 } as IDSLDecorationLayer);
+      layers.push({ id: 'prem_to_title', type: 'text', zIndex: 30, anchor: 'center', role: 'heading', alignment: 'center', maxWidthPercent: 85 } as IDSLTextLayer);
+      layers.push({ id: 'prem_to_body', type: 'text', zIndex: 31, anchor: 'bottom_center', role: 'body', alignment: 'center', maxWidthPercent: 75 } as IDSLTextLayer);
+
     } else if (layoutId === 'premium_cta_poster') {
       layers.push({ id: 'prem_cta_bg', type: 'image', zIndex: 10, mask: 'full_bleed', paddingPercent: 0, anchor: 'center' } as IDSLImageLayer);
       layers.push({ id: 'prem_cta_title', type: 'text', zIndex: 30, anchor: 'center', role: 'heading', alignment: 'center', maxWidthPercent: 90 } as IDSLTextLayer);
@@ -1639,20 +1651,52 @@ export class CompositionEngine {
       layers.push({ id: 'prem_cta_badge', type: 'decoration', zIndex: 35, component: 'handmade_mark', anchor: 'top_right' } as IDSLDecorationLayer);
 
       // ==========================================
-      // FALLBACK
+      // SAFE FALLBACK (unknown / future layout ids)
       // ==========================================
+      // Never invent a padded postage-stamp photo. Full-bleed + centered type is a
+      // readable default; add an explicit recipe branch when you need unique geometry.
     } else {
-      layers.push({ id: 'fb_image', type: 'image', zIndex: 10, mask: 'rectangle', anchor: 'center', paddingPercent: 10 } as IDSLImageLayer);
-      layers.push({ id: 'fb_text', type: 'text', zIndex: 30, anchor: 'center', role: 'heading', alignment: 'center', maxWidthPercent: 80 } as IDSLTextLayer);
+      console.warn(
+        `[CompositionEngine] No explicit recipe for '${layoutId}' — using safe full-bleed default. ` +
+        `Add a buildRecipe branch with mask/anchor/padding for a custom template.`,
+      );
+      layers.push({
+        id: 'fallback_image',
+        type: 'image',
+        zIndex: 10,
+        mask: 'full_bleed',
+        paddingPercent: 0,
+        anchor: 'center',
+      } as IDSLImageLayer);
+      layers.push({
+        id: 'fallback_heading',
+        type: 'text',
+        zIndex: 30,
+        anchor: 'center',
+        role: 'heading',
+        alignment: 'center',
+        maxWidthPercent: 82,
+      } as IDSLTextLayer);
+      layers.push({
+        id: 'fallback_tagline',
+        type: 'text',
+        zIndex: 31,
+        anchor: 'bottom_center',
+        role: 'tagline',
+        alignment: 'center',
+        maxWidthPercent: 70,
+      } as IDSLTextLayer);
     }
 
-    // Filter out hardcoded decorations that aren't structural, allowing dynamic primitive injection
-    const structuralIds = ['split_border', 'breather_ghost_text', 'split_line', 'fb_gradient', 'mag_masthead', 'port_image'];
-    const filteredLayers = layers.filter(l => l.type !== 'decoration' || structuralIds.includes(l.id));
+    // Preserve ALL recipe-defined layers (including decoration primitives like premium_stars).
+    // The old filter aggressively stripped non-structural decorations, causing recipe-defined
+    // primitives to silently disappear from the render pipeline.
+    const filteredLayers = [...layers];
 
-    // Dynamically inject family primitives
+    // Dynamically inject family primitives (additive — skips components already present)
+    // Deterministic from layoutId so the same template places the same accents every run.
     const familyId = layoutId.split('_')[0];
-    this.injectFamilyPrimitives(familyId, filteredLayers);
+    this.injectFamilyPrimitives(familyId, filteredLayers, layoutId);
 
     return {
       schemaVersion: '1.0',
@@ -1662,22 +1706,44 @@ export class CompositionEngine {
     };
   }
 
-  private injectFamilyPrimitives(familyId: string, layers: IDSLSceneLayer[]) {
-    const anchors: Array<'top_left' | 'top_right' | 'bottom_left' | 'bottom_right' | 'center'> = ['top_left', 'top_right', 'bottom_left', 'bottom_right', 'center'];
-    const randomAnchor = () => anchors[Math.floor(Math.random() * anchors.length)];
+  private hashSeed(s: string): number {
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) {
+      h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+    }
+    return h >>> 0;
+  }
+
+  private mulberry32(seed: number): () => number {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  private injectFamilyPrimitives(familyId: string, layers: IDSLSceneLayer[], layoutId: string = familyId) {
+    const anchors: Array<'top_left' | 'top_right' | 'bottom_left' | 'bottom_right' | 'center'> = [
+      'top_left', 'top_right', 'bottom_left', 'bottom_right', 'center',
+    ];
+    const rand = this.mulberry32(this.hashSeed(`${layoutId}::${familyId}`));
+    const pickAnchor = () => anchors[Math.floor(rand() * anchors.length)];
 
     let primitivesToInject: string[] = [];
 
     if (familyId === 'editorial') {
-      primitivesToInject = ['accent_rule', 'editorial_badge', 'thin_divider', 'gallery_frame'];
+      primitivesToInject = ['accent_rule', 'editorial_badge', 'thin_divider', 'museum_border'];
     } else if (familyId === 'clinical') {
       primitivesToInject = ['step_badge', 'metric_label', 'clinical_callout_box', 'measurement_lines'];
     } else if (familyId === 'scrapbook') {
-      primitivesToInject = ['masking_tape', 'torn_paper', 'handmade_mark', 'ink_stamp', 'polaroid_frame'];
+      primitivesToInject = ['editorial_tape', 'torn_paper', 'handmade_mark', 'ink_stamp', 'polaroid_frame'];
     } else if (familyId === 'minimalist') {
       primitivesToInject = ['minimal_grid', 'margin_rule', 'ghost_headline'];
     } else if (familyId === 'premium') {
-      primitivesToInject = ['premium_stars', 'elegant_line_art', 'gold_accents'];
+      primitivesToInject = ['premium_stars', 'elegant_line_art'];
     } else if (familyId === 'split') {
       primitivesToInject = ['split_seam_line', 'divider'];
     } else if (familyId === 'countdown') {
@@ -1685,7 +1751,7 @@ export class CompositionEngine {
     } else if (familyId === 'product') {
       primitivesToInject = ['product_halo_ring', 'geometric_badge'];
     } else if (familyId === 'before') { // before_after
-      primitivesToInject = ['transformation_arrow', 'masking_tape'];
+      primitivesToInject = ['transformation_arrow', 'editorial_tape'];
     } else if (familyId === 'testimonial') {
       primitivesToInject = ['quote_marks', 'star_rating_row', 'pull_quote'];
     } else if (familyId === 'quadrant') {
@@ -1695,7 +1761,7 @@ export class CompositionEngine {
     } else if (familyId === 'magazine') {
       primitivesToInject = ['editorial_sidebar', 'running_header', 'oversized_index'];
     } else if (familyId === 'polaroid') {
-      primitivesToInject = ['polaroid_frame', 'sticker', 'masking_tape'];
+      primitivesToInject = ['polaroid_frame', 'sticker', 'editorial_tape'];
     } else if (familyId === 'notification') {
       primitivesToInject = ['notification_icon_badge', 'status_chip'];
     } else if (familyId === 'announcement') {
@@ -1703,18 +1769,31 @@ export class CompositionEngine {
     }
 
     if (primitivesToInject.length > 0) {
-      // Inject 1-2 random primitives
-      const numToInject = Math.floor(Math.random() * 2) + 1; // 1 or 2
-      for (let i = 0; i < numToInject; i++) {
-        const primitive = primitivesToInject[Math.floor(Math.random() * primitivesToInject.length)];
-        layers.push({
-          id: `dyn_prim_${familyId}_${i}`,
-          type: 'decoration',
-          zIndex: 25 + i, // Above images, below top text
-          component: primitive as any,
-          anchor: randomAnchor(),
-          offsetPercent: Math.floor(Math.random() * 10)
-        } as IDSLDecorationLayer);
+      const existingComponents = new Set(
+        layers.filter((l: any) => l.type === 'decoration' && l.component)
+              .map((l: any) => l.component)
+      );
+
+      const candidates = primitivesToInject.filter(p => !existingComponents.has(p));
+      if (candidates.length > 0) {
+        const minInject = Math.min(
+          candidates.length,
+          familyId === 'premium' || familyId === 'announcement' || familyId === 'countdown' ? 3 : 2,
+        );
+        const numToInject = Math.min(candidates.length, Math.max(minInject, Math.floor(rand() * 2) + minInject));
+        // Stable order (no Math.random shuffle) — same template ⇒ same accents
+        const ordered = [...candidates];
+        for (let i = 0; i < numToInject; i++) {
+          const primitive = ordered[i];
+          layers.push({
+            id: `dyn_prim_${familyId}_${i}`,
+            type: 'decoration',
+            zIndex: 25 + i,
+            component: primitive as any,
+            anchor: pickAnchor(),
+            offsetPercent: Math.floor(rand() * 10),
+          } as IDSLDecorationLayer);
+        }
       }
     }
   }

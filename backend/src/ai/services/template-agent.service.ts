@@ -225,7 +225,7 @@ export class TemplateAgentService {
       }).join('\n\n');
 
       const systemPrompt = `
-You are an elite Visual Art Director.
+You are an high-end premium Visual Art Director.
 We have mathematically narrowed down our layout library to the absolute Top ${topCandidates.length} candidates. These candidates represent specific, semantically distinct structural variants (e.g. "editorial_magazine_cover", "minimalist_offset_quote", "clinical_split").
 Your job has two parts: (1) select the single best structural variant from this shortlist, and (2) author a complete Design Intent for it so the renderer can faithfully recreate your decision instead of guessing.
 

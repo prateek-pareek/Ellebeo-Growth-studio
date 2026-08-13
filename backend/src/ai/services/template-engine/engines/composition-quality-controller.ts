@@ -15,6 +15,7 @@ export interface CompositionIntent {
   visualPriority?: VisualPriority;
   readingFlow?: ReadingFlow;
   family?: string;
+  role?: string;
 }
 
 export interface ContentBundle {
@@ -43,6 +44,10 @@ export interface VisualQualityResult {
   issues: string[];
   critical: string[];
   metrics: Record<string, number>;
+  failureCategory?: 'spatial_allocation' | 'collision' | 'readability' | 'renderer' | 'none';
+  /** Soft spatial issues that require a different geometry contract even if score passes */
+  needsSpatialEscalation?: boolean;
+  passThreshold?: number;
 }
 
 /**
@@ -84,6 +89,11 @@ export class CompositionQualityController {
     };
   }
 
+  /**
+   * Bidirectional font-size balance from copy length.
+   * Short headlines → larger display size; long headlines → smaller readable size.
+   * Width clamp is applied after the length target (never the other way around).
+   */
   public adaptFontSizeToContent(
     baseSize: number,
     text: string,
@@ -94,31 +104,74 @@ export class CompositionQualityController {
   ): number {
     const words = text.split(/\s+/).filter(Boolean);
     const chars = text.replace(/\s+/g, '').length;
-    let size = baseSize;
+    const longest = words.reduce((a, b) => (a.length >= b.length ? a : b), '');
+    const charRatio = 0.80;
 
     if (role === 'heading') {
-      if (chars > 18) size *= Math.max(0.78, 1 - (chars - 18) * 0.009);
-      if (words.length > 5) size *= Math.max(0.82, 1 - (words.length - 5) * 0.03);
-    } else if (role === 'tagline' || role === 'body') {
-      if (chars > 40) size *= Math.max(0.85, 1 - (chars - 40) * 0.005);
+      // Target size as fraction of canvas height — length ladder (same idea as box balance)
+      let targetRatio: number;
+      if (chars <= 8 && words.length <= 2) {
+        targetRatio = 0.105; // "GLOW" / "DEPTH"
+      } else if (chars <= 14 && words.length <= 3) {
+        targetRatio = 0.088; // "MAINTAIN GLOW"
+      } else if (chars <= 22 && words.length <= 4) {
+        targetRatio = 0.072; // "SEAMLESS TONE RESTORED"
+      } else if (chars <= 30 && words.length <= 5) {
+        targetRatio = 0.058; // "FLAWLESS COLOR CORRECTION"
+      } else if (chars <= 40) {
+        targetRatio = 0.048; // longer educational lines
+      } else {
+        targetRatio = 0.040; // very long — stay readable, not micro
+      }
+
+      // Priority nudges (keep ladder shape)
+      if (visualPriority === 'typography_hero') targetRatio *= 1.12;
+      else if (visualPriority === 'image_hero') targetRatio *= 0.92;
+      else if (visualPriority === 'cta_hero') targetRatio *= 0.96;
+
+      // Blend with brand base so DNA still matters, but length owns the result
+      let size = Math.round(canvasH * targetRatio * 0.72 + baseSize * 0.28);
+
+      // Extra pull when a single word is very long (DIMENSION, CORRECTION…)
+      if (longest.length >= 10) size = Math.round(size * 0.92);
+      if (longest.length >= 12) size = Math.round(size * 0.92);
+
+      // Width clamp — must fit longest word + typical line on the slot
+      if (safeWidth > 0 && longest.length > 0) {
+        const maxForWord = (safeWidth * 0.96) / (longest.length * charRatio);
+        if (size > maxForWord) size = maxForWord;
+
+        const targetLines = chars <= 14 ? 1
+          : chars <= 28 ? 2
+            : chars <= 40 ? 3
+              : 4;
+        const avgChars = Math.ceil(chars / targetLines) + 1;
+        const maxForLine = (safeWidth * 0.96) / (avgChars * charRatio);
+        if (size > maxForLine) size = maxForLine;
+      }
+
+      const minRatio = CompositionQualityController.MIN_HEADING_RATIO;
+      const maxRatio = visualPriority === 'typography_hero' ? 0.12
+        : visualPriority === 'image_hero' ? 0.09
+          : 0.105;
+      return Math.max(canvasH * minRatio, Math.min(size, canvasH * maxRatio));
     }
 
-    const longest = words.reduce((a, b) => (a.length >= b.length ? a : b), '');
-    if (longest.length > 0 && safeWidth > 0) {
-      const charRatio = 0.64;
-      const maxForWord = safeWidth / (longest.length * charRatio);
+    // Secondary / body — same short↔long idea, quieter range
+    let size = baseSize;
+    if (chars <= 18) size *= 1.12;
+    else if (chars > 50) size *= Math.max(0.78, 1 - (chars - 50) * 0.004);
+    else if (chars > 32) size *= 0.92;
+
+    if (safeWidth > 0 && longest.length > 0) {
+      const maxForWord = (safeWidth * 0.96) / (longest.length * charRatio);
       if (size > maxForWord) size = maxForWord;
     }
 
-    // image_hero: place type in clear bands — do NOT crush to micro type
-    const minRatio = role === 'heading'
-      ? CompositionQualityController.MIN_HEADING_RATIO
-      : CompositionQualityController.MIN_SECONDARY_RATIO;
-    const maxRatio = role === 'heading'
-      ? (visualPriority === 'typography_hero' ? 0.11 : visualPriority === 'image_hero' ? 0.09 : 0.10)
-      : 0.045;
-
-    return Math.max(canvasH * minRatio, Math.min(size, canvasH * maxRatio));
+    return Math.max(
+      canvasH * CompositionQualityController.MIN_SECONDARY_RATIO,
+      Math.min(size, canvasH * 0.042),
+    );
   }
 
   public estimateGroupHeight(
@@ -126,11 +179,17 @@ export class CompositionQualityController {
     metrics: TypographyMetricsHint | undefined,
     canvasH: number,
     visualPriority?: VisualPriority,
+    preferredWidth?: number,
   ): { heights: number[]; total: number; gap: number; fontSizes: number[] } {
     const gapRatio = visualPriority === 'image_hero' ? 0.02 : 0.014;
     const gap = Math.round(canvasH * gapRatio);
     const heights: number[] = [];
     const fontSizes: number[] = [];
+    // Use real text-column width when known — never invent a pocket from canvasH*0.7 alone
+    const measureWidth = Math.max(
+      canvasH * 0.28,
+      preferredWidth || canvasH * 0.55,
+    );
 
     for (const item of roles) {
       const base =
@@ -144,17 +203,20 @@ export class CompositionQualityController {
         item.text || 'X',
         item.role,
         canvasH,
-        canvasH * 0.7,
+        measureWidth,
         visualPriority,
       );
       fontSizes.push(adapted);
+      const words = (item.text || '').split(/\s+/).filter(Boolean);
+      const avgCharW = adapted * 0.78;
+      const charsPerLine = Math.max(4, Math.floor(measureWidth / Math.max(1, avgCharW)));
       const lineEstimate = Math.max(
         1,
-        Math.ceil((item.text || '').split(/\s+/).filter(Boolean).length / (item.role === 'heading' ? 3 : 6)),
+        Math.ceil(words.reduce((acc, w) => acc + w.length + 1, 0) / charsPerLine),
       );
-      const lineHeight = item.role === 'heading' ? 1.15 : 1.3;
+      const lineHeight = item.role === 'heading' ? 1.16 : 1.3;
       heights.push(
-        Math.round(adapted * lineHeight * Math.min(lineEstimate, item.role === 'heading' ? 4 : 2)),
+        Math.round(adapted * lineHeight * Math.min(lineEstimate, item.role === 'heading' ? 4 : 3)),
       );
     }
 
@@ -174,6 +236,8 @@ export class CompositionQualityController {
     preferredWidth: number;
     intent: CompositionIntent;
     subjectHits: (region: BoundingBox, heightNeed: number) => boolean;
+    /** Override readable scale floor (typography_hero uses a higher floor) */
+    minAcceptScale?: number;
   }): {
     region: BoundingBox | null;
     wrapWidthFactor: number;
@@ -184,6 +248,7 @@ export class CompositionQualityController {
     const actions: FitActionLog[] = [];
     const { layoutEngine, constraints, candidates, intent, subjectHits } = params;
     const neededHeight = params.neededHeight;
+    const minAccept = params.minAcceptScale ?? CompositionQualityController.MIN_ACCEPT_SCALE;
     let wrapWidthFactor = 1.0;
     let scale = 1.0;
 
@@ -209,8 +274,11 @@ export class CompositionQualityController {
       return best;
     };
 
-    // Stage 1 — WRAP
-    for (const factor of [1.0, 0.88, 0.76, 0.65]) {
+    // Stage 1 — WRAP (preferred over scale for typography_hero)
+    const wrapFactors = intent.visualPriority === 'typography_hero'
+      ? [1.0, 0.92, 0.84, 0.76]
+      : [1.0, 0.88, 0.76, 0.65];
+    for (const factor of wrapFactors) {
       const wrapHeightBoost = 1 + (1 - factor) * 0.3;
       const tryH = neededHeight * wrapHeightBoost;
       const region = pickBest(tryH, factor);
@@ -222,8 +290,12 @@ export class CompositionQualityController {
     }
     actions.push({ stage: 'wrap', detail: 'wrap exhausted' });
 
-    // Stage 2 — SCALE (stop before type becomes unreadable)
-    for (const s of [0.94, 0.88, 0.82]) {
+    // Stage 2 — SCALE (last resort for typography_hero — higher floor)
+    const scaleSteps = intent.visualPriority === 'typography_hero'
+      ? [0.96, 0.92]
+      : [0.94, 0.88, 0.82];
+    for (const s of scaleSteps) {
+      if (s < minAccept) continue;
       const tryH = neededHeight * s;
       const region = pickBest(tryH, wrapWidthFactor);
       if (region) {
@@ -232,14 +304,14 @@ export class CompositionQualityController {
       }
       scale = s;
     }
-    actions.push({ stage: 'scale', detail: 'scale exhausted at readable floor' });
+    actions.push({ stage: 'scale', detail: `scale exhausted at floor=${minAccept.toFixed(2)}` });
 
-    // Stage 3 — RELOCATE (only accept if scale stays readable)
+    // Stage 3 — RELOCATE
     let safest: BoundingBox | null = null;
     let bestDist = -1;
     const subjects = params.layoutEngine.getProtectedSubjects();
     for (const c of candidates) {
-      if (subjectHits(c, neededHeight * CompositionQualityController.MIN_ACCEPT_SCALE)) continue;
+      if (subjectHits(c, neededHeight * minAccept)) continue;
       const cx = c.x + c.width / 2;
       const cy = c.y + c.height / 2;
       let dist = 0;
@@ -261,7 +333,7 @@ export class CompositionQualityController {
       if (safest.height < neededHeight * relocateScale && neededHeight > 0) {
         relocateScale = safest.height / neededHeight;
       }
-      if (relocateScale >= CompositionQualityController.MIN_ACCEPT_SCALE) {
+      if (relocateScale >= minAccept) {
         actions.push({ stage: 'relocate', detail: `safest pocket scale=${relocateScale.toFixed(2)}` });
         return { region: safest, wrapWidthFactor, scale: relocateScale, suggestLayoutChange: false, actions };
       }
@@ -271,7 +343,6 @@ export class CompositionQualityController {
       });
     }
 
-    // Stage 4 — do not accept; alternate layout required
     actions.push({ stage: 'layout_change', detail: 'wrap+scale+relocate exhausted — alternate layout required' });
     return {
       region: null,
@@ -487,8 +558,52 @@ export class CompositionQualityController {
     }
 
     score = Math.max(0, Math.min(10, score));
-    const pass = score >= CompositionQualityController.PASS_SCORE && critical.length === 0;
-    return { pass, score, issues: [...new Set(issues)], critical: [...new Set(critical)], metrics };
+    const passThreshold = CompositionQualityController.PASS_SCORE;
+    const pass = score >= passThreshold && critical.length === 0;
+
+    let failureCategory: 'spatial_allocation' | 'collision' | 'readability' | 'renderer' | 'none' = 'none';
+    if (!pass) {
+      if (critical.includes('text_collision') || critical.includes('subject_collision')) {
+        failureCategory = 'collision';
+      } else if (critical.includes('unreadable_heading') || critical.includes('contrast') || critical.includes('dominance_over_scaled')) {
+        failureCategory = 'readability';
+      } else {
+        failureCategory = 'spatial_allocation';
+      }
+    } else if (
+      issues.includes('whitespace_tight_to_subject')
+      || issues.includes('reading_flow_band')
+      || issues.includes('whitespace_crowded')
+    ) {
+      // Soft spatial issues: score may still "pass" but geometry must escalate
+      failureCategory = 'spatial_allocation';
+    }
+
+    /** Soft spatial problems that require a different spatial contract, even if score passes */
+    const needsSpatialEscalation =
+      issues.includes('whitespace_tight_to_subject')
+      || issues.includes('subject_collision')
+      || issues.includes('reading_flow_band')
+      || critical.includes('subject_collision')
+      || critical.includes('text_clipping');
+
+    console.log(
+      `[CompositionQC] gate predicate: pass=${pass} score=${score.toFixed(2)} ` +
+      `threshold=${passThreshold} critical=[${critical.join(',')||'none'}] ` +
+      `issues=[${[...new Set(issues)].join(',')||'none'}] ` +
+      `needsSpatialEscalation=${needsSpatialEscalation} category=${failureCategory}`,
+    );
+
+    return {
+      pass,
+      score,
+      issues: [...new Set(issues)],
+      critical: [...new Set(critical)],
+      metrics,
+      failureCategory,
+      needsSpatialEscalation,
+      passThreshold,
+    };
   }
 
   /** @deprecated Use evaluateVisualQuality — kept for callers during transition */
@@ -516,30 +631,50 @@ export class CompositionQualityController {
     return (hash >>> 0) % 4;
   }
 
-  /**
-   * Pick alternate layout IDs when the current arrangement fails visual QC.
-   * Preference: same family → same reading flow → different flow — never hardcodes slide coords.
-   */
   public suggestAlternateLayouts(
     currentLayoutId: string,
     availableIds: string[],
     intent: CompositionIntent,
     max = 4,
+    failedSignatures: Array<{ axis?: string; share?: number; category: string }> = [],
   ): string[] {
     const flow = String(intent.readingFlow || 'center_down');
     const familyHint = intent.family || this.inferFamilyFromLayoutId(currentLayoutId);
+    const roleHint = intent.role || 'default';
     const others = availableIds.filter(id => id !== currentLayoutId);
-    const scored = others
+    const sameFamily = familyHint
+      ? others.filter(id => id.toLowerCase().includes(String(familyHint).toLowerCase()))
+      : [];
+    // Prefer same-family candidates; only widen if too few
+    const pool = sameFamily.length >= 1 ? sameFamily : others;
+
+    const scored = pool
       .map(id => {
-        let s = 1; // every alternate is eligible — never hardcode slide coords
-        if (familyHint && id.toLowerCase().includes(String(familyHint).toLowerCase())) s += 5;
-        if (id.includes(flow)) s += 4;
+        let s = 1;
+
+        if (familyHint && id.toLowerCase().includes(String(familyHint).toLowerCase())) {
+          s += 100; // hard preference for same family
+        }
+
+        if (roleHint === 'cta' || intent.visualPriority === 'cta_hero') {
+          if (id.includes('cta') || id.includes('promo') || id.includes('premium')) s += 30;
+        }
+        if (intent.visualPriority === 'typography_hero') {
+          if (id.includes('quote') || id.includes('minimal') || id.includes('editorial') || id.includes('type')) {
+            s += 40;
+          }
+        }
+        if (intent.visualPriority === 'image_hero') {
+          if (id.includes('hero') || id.includes('photo') || id.includes('portrait')) s += 30;
+        }
+
+        if (id.includes(flow)) s += 10;
         if (flow === 'center_down' && id.includes('z_pattern')) s += 3;
         if (flow === 'z_pattern' && (id.includes('center_down') || id.includes('center'))) s += 3;
-        if (intent.visualPriority === 'image_hero' && (id.includes('hero') || id.includes('editorial') || id.includes('bleed'))) s += 2;
-        if (intent.visualPriority === 'typography_hero' && (id.includes('quote') || id.includes('minimal') || id.includes('type'))) s += 2;
-        // Prefer a different reading-flow family when current arrangement failed
-        if (familyHint && !id.toLowerCase().includes(String(familyHint).toLowerCase())) s += 1;
+
+        // Soft-penalize ids that already failed with same category signature
+        if (failedSignatures.some(f => f.category === 'collision' && id === currentLayoutId)) s -= 5;
+
         return { id, s };
       })
       .sort((a, b) => b.s - a.s);
@@ -547,8 +682,29 @@ export class CompositionQualityController {
     return scored.slice(0, max).map(x => x.id);
   }
 
-  private inferFamilyFromLayoutId(id: string): string | null {
-    const families = ['editorial', 'minimalist', 'minimal', 'clinical', 'premium', 'scrapbook', 'architectural', 'split', 'luxury', 'vintage'];
+  public inferFamilyFromLayoutId(id: string): string | null {
+    const families = [
+      'before_after',
+      'transformation',
+      'editorial',
+      'minimalist',
+      'minimal',
+      'clinical',
+      'premium',
+      'scrapbook',
+      'architectural',
+      'split',
+      'luxury',
+      'vintage',
+      'polaroid',
+      'countdown',
+      'testimonial',
+      'magazine',
+      'product',
+      'notification',
+      'announcement',
+      'quadrant',
+    ];
     return families.find(f => id.includes(f)) || null;
   }
 }

@@ -13,6 +13,7 @@ import layoutTemplatesConfig from './layout-templates.config.json';
 import templateLibraryData from './template-library.json';
 import compiledLayouts from './compiled-layouts.v2.json';
 import { processPortraitFit } from '../services/ai-image-generation.service';
+import type { FaceFocus } from '../services/ai-image-generation.service';
 import { ICompiledLayoutDSL, IDSLSceneLayer, IDSLImageLayer, IDSLDecorationLayer, IDSLTextLayer, ISemanticDesignSpec } from '../services/template-engine/interfaces';
 import { IDesignLanguage } from '../services/template-engine/engines/art-direction-engine';
 import { LayoutEngine, LayoutFamily, NegativeSpace, BoundingBox, LayoutConstraints } from '../services/template-engine/engines/layout-engine';
@@ -26,6 +27,12 @@ import { ArtDirectionEngine } from '../services/template-engine/engines/art-dire
 const primitiveEngine = new PrimitiveEngine();
 const typographyEngine = new TypographyEngine();
 const artDirectionEngine = new ArtDirectionEngine();
+
+// Gate the visible red "MISSING COMPONENT" debug banner behind an explicit opt-in.
+// It must NEVER be baked into a creative asset that ships to a user/client — it exists
+// purely so engineers can spot a genuinely unregistered DSL component name while developing
+// new layout families locally.
+const DEBUG_PLACEHOLDERS = process.env.RENDER_DEBUG_PLACEHOLDERS === 'true';
 
 function getLuminanceSafe(hex: string): number {
   try {
@@ -122,7 +129,13 @@ export type BaseCtx = {
   downloadImageAsBuffer: (url: string) => Promise<Buffer>;
   designSpec?: ISemanticDesignSpec;
   designLanguage?: IDesignLanguage;
-  faceCoordinates?: { eyesYPercent: number; mouthYPercent: number; };
+  faceCoordinates?: {
+    eyesYPercent: number;
+    mouthYPercent: number;
+    faceCenterXPercent?: number;
+    faceWidthPercent?: number;
+  };
+  faceFocus?: FaceFocus;
   faceBox?: any;
   subjectBox?: any;
   additionalSubjects?: any[];
@@ -137,18 +150,17 @@ export type BaseResult = {
   compositeRight: number;
 };
 
-// Uses processPortraitFit: contain + blurred background — never crops faces on tall photos
+// Uses processPortraitFit: cover + optional face focus — fills allocated box
 const borderedDefault = async (ctx: BaseCtx): Promise<BaseResult> => ({
-  baseImage: sharp(await processPortraitFit(ctx.imageBuffer, ctx.innerW, ctx.innerH, ctx.validBackgroundColor)),
+  baseImage: sharp(await processPortraitFit(ctx.imageBuffer, ctx.innerW, ctx.innerH, ctx.validBackgroundColor, 'cover', ctx.faceFocus)),
   compositeTop: ctx.paddingTop,
   compositeBottom: ctx.paddingBottom,
   compositeLeft: ctx.paddingX,
   compositeRight: ctx.paddingX,
 });
 
-// Full-bleed: resize to canvas dimensions so SVG overlay coordinates match
 const fullBleedBase = async (ctx: BaseCtx): Promise<BaseResult> => ({
-  baseImage: sharp(await processPortraitFit(ctx.imageBuffer, ctx.w, ctx.h, ctx.validBackgroundColor)),
+  baseImage: sharp(await processPortraitFit(ctx.imageBuffer, ctx.w, ctx.h, ctx.validBackgroundColor, 'cover', ctx.faceFocus)),
   compositeTop: 0,
   compositeBottom: 0,
   compositeLeft: 0,
@@ -162,32 +174,59 @@ const fullBleedBase = async (ctx: BaseCtx): Promise<BaseResult> => ({
 // actual Sharp stitching logic. Falls back to a single-photo bordered
 // treatment when no before-photo is available for this appointment.
 const stitchBeforeAfterImages = async (ctx: BaseCtx, orientation: 'vertical' | 'horizontal'): Promise<BaseResult> => {
-  if (!ctx.beforePhotoUrl) return borderedDefault(ctx);
+  // No before-photo: still fill the frame. Never fall back to tiny borderedDefault —
+  // that was producing postage-stamp photos on colour-transformation carousels.
+    if (!ctx.beforePhotoUrl) {
+    return fullBleedBase(ctx);
+  }
   try {
     const beforeBuffer = await ctx.downloadImageAsBuffer(ctx.beforePhotoUrl);
     let composites: sharp.OverlayOptions[];
+    // Stitch on the FULL canvas (w/h), not innerW/innerH — text anchors are canvas-absolute.
+    const stitchW = ctx.w;
+    const stitchH = ctx.h;
+    const dividerColor = '#FFFFFF';
     if (orientation === 'horizontal') {
-      const topHalf = await processPortraitFit(beforeBuffer, ctx.innerW, Math.round(ctx.innerH / 2), ctx.validBackgroundColor);
-      const bottomHalf = await processPortraitFit(ctx.imageBuffer, ctx.innerW, Math.round(ctx.innerH / 2), ctx.validBackgroundColor);
+      const halfH = Math.round(stitchH / 2);
+      const topHalf = await processPortraitFit(beforeBuffer, stitchW, halfH, ctx.validBackgroundColor, 'cover');
+      const bottomHalf = await processPortraitFit(ctx.imageBuffer, stitchW, halfH, ctx.validBackgroundColor, 'cover');
+      const divider = Buffer.from(
+        `<svg width="${stitchW}" height="2" xmlns="http://www.w3.org/2000/svg">` +
+        `<rect width="${stitchW}" height="2" fill="${dividerColor}" fill-opacity="0.85"/></svg>`,
+      );
       composites = [
         { input: topHalf, top: 0, left: 0 },
-        { input: bottomHalf, top: Math.round(ctx.innerH / 2), left: 0 },
+        { input: bottomHalf, top: halfH, left: 0 },
+        { input: divider, top: halfH - 1, left: 0 },
       ];
     } else {
-      const leftHalf = await processPortraitFit(beforeBuffer, Math.round(ctx.innerW / 2), ctx.innerH, ctx.validBackgroundColor);
-      const rightHalf = await processPortraitFit(ctx.imageBuffer, Math.round(ctx.innerW / 2), ctx.innerH, ctx.validBackgroundColor);
+      const halfW = Math.round(stitchW / 2);
+      const leftHalf = await processPortraitFit(beforeBuffer, halfW, stitchH, ctx.validBackgroundColor, 'cover');
+      const rightHalf = await processPortraitFit(ctx.imageBuffer, halfW, stitchH, ctx.validBackgroundColor, 'cover');
+      const divider = Buffer.from(
+        `<svg width="2" height="${stitchH}" xmlns="http://www.w3.org/2000/svg">` +
+        `<rect width="2" height="${stitchH}" fill="${dividerColor}" fill-opacity="0.85"/></svg>`,
+      );
       composites = [
         { input: leftHalf, top: 0, left: 0 },
-        { input: rightHalf, top: 0, left: Math.round(ctx.innerW / 2) },
+        { input: rightHalf, top: 0, left: halfW },
+        { input: divider, top: 0, left: halfW - 1 },
       ];
     }
     const baseImageBuffer = await sharp({
-      create: { width: ctx.innerW, height: ctx.innerH, channels: 3, background: '#000000' },
+      create: { width: stitchW, height: stitchH, channels: 3, background: '#000000' },
     }).composite(composites).png().toBuffer();
-    return { baseImage: sharp(baseImageBuffer), compositeTop: ctx.paddingTop, compositeBottom: ctx.paddingBottom, compositeLeft: ctx.paddingX, compositeRight: ctx.paddingX };
+    // Text sits in the lower band over the stitch (before_after recipes use bottom_center)
+    return {
+      baseImage: sharp(baseImageBuffer),
+      compositeTop: Math.round(stitchH * 0.62),
+      compositeBottom: ctx.paddingBottom || Math.round(stitchH * 0.06),
+      compositeLeft: ctx.paddingX || Math.round(stitchW * 0.06),
+      compositeRight: ctx.paddingX || Math.round(stitchW * 0.06),
+    };
   } catch (err) {
-    console.error('[Before/After Stitch Error] Failed to stitch before/after images, falling back:', err);
-    return borderedDefault(ctx);
+    console.error('[Before/After Stitch Error] Failed to stitch before/after images, falling back to full bleed:', err);
+    return fullBleedBase(ctx);
   }
 };
 
@@ -224,7 +263,7 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
     const compositeTop = Math.floor(ctx.h * 0.05);
     const compositeLeft = Math.floor(ctx.w * 0.05);
     return {
-      baseImage: sharp(await processPortraitFit(ctx.imageBuffer, monoW, monoH, ctx.validBackgroundColor)),
+      baseImage: sharp(await processPortraitFit(ctx.imageBuffer, monoW, monoH, ctx.validBackgroundColor, 'cover', ctx.faceFocus)),
       compositeTop,
       compositeLeft,
       compositeBottom: ctx.h - monoH - compositeTop,
@@ -240,7 +279,7 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
         <svg width="${ctx.innerW}" height="${ctx.innerH}" xmlns="http://www.w3.org/2000/svg">
           <path d="M 0 ${ctx.innerH} L 0 ${Math.round(ctx.innerH * 0.42)} A ${Math.round(ctx.innerW / 2)} ${Math.round(ctx.innerH * 0.42)} 0 0 1 ${ctx.innerW} ${Math.round(ctx.innerH * 0.42)} L ${ctx.innerW} ${ctx.innerH} Z" fill="#fff"/>
         </svg>`;
-      const fittedBuffer = await processPortraitFit(ctx.imageBuffer, ctx.innerW, ctx.innerH, ctx.validBackgroundColor);
+      const fittedBuffer = await processPortraitFit(ctx.imageBuffer, ctx.innerW, ctx.innerH, ctx.validBackgroundColor, 'cover', ctx.faceFocus);
       const archPhoto = await sharp(fittedBuffer)
         .composite([{ input: Buffer.from(archMaskSvg), blend: 'dest-in' }])
         .png()
@@ -278,7 +317,7 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
               <rect x="${startX + (panelW + gap) * 2}" y="${startY}" width="${panelW}" height="${panelH}" fill="#fff"/>
             </svg>`;
 
-          const fullPhoto = await processPortraitFit(ctx.imageBuffer, ctx.w, ctx.h, ctx.validBackgroundColor);
+          const fullPhoto = await processPortraitFit(ctx.imageBuffer, ctx.w, ctx.h, ctx.validBackgroundColor, 'cover', ctx.faceFocus);
           const maskedPhoto = await sharp(fullPhoto).composite([{ input: Buffer.from(triptychSvg), blend: 'dest-in' }]).png().toBuffer();
 
           const baseImageBuffer = await sharp({
@@ -294,37 +333,55 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
           };
         }
 
-        // AI ART DIRECTION UPGRADE: Region-Based Extraction
-        if (dsl.canvasRegions && (!imageLayer.mask || imageLayer.mask === 'rectangle' || imageLayer.mask === 'split')) {
-          const region = dsl.canvasRegions.imageRegion;
+        // Genuine before/after stitch MUST run before panel extraction —
+        // seedPolicy treats before_after as a split axis, which would otherwise
+        // squash a single photo into imageRegion and skip the dual-photo stitch.
+        if (imageLayer.mask === 'before_after_split') {
+          return stitchBeforeAfterImages(ctx, imageLayer.orientation === 'horizontal' ? 'horizontal' : 'vertical');
+        }
 
-          if (region.width < ctx.w) {
-            // Asymmetrical Bleed or Split (Photo does not occupy 100% of canvas width)
-            const splitPhoto = await processPortraitFit(ctx.imageBuffer, region.width, region.height, ctx.validBackgroundColor);
+        // Region-based photo ONLY for true panel/split contracts.
+        // Full-bleed, padded rectangle, circle, etc. must use mask/padding/anchor math —
+        // never squeeze the photo into a typography textRegion leftover.
+        const spatialAxis = (dsl as any)?._spatialPolicy?.splitAxis as string | undefined;
+        const isTruePanelSplit =
+          imageLayer.mask === 'split'
+          || spatialAxis === 'vertical'
+          || spatialAxis === 'horizontal';
+
+        if (dsl.canvasRegions && isTruePanelSplit) {
+          const region = dsl.canvasRegions.imageRegion;
+          const textPanel = dsl.canvasRegions.textRegion;
+
+          // Image surrenders width OR height (typography_hero panel splits)
+          if (region && (region.width < ctx.w - 2 || region.height < ctx.h - 2)) {
+            const splitPhoto = await processPortraitFit(
+              ctx.imageBuffer,
+              Math.max(1, region.width),
+              Math.max(1, region.height),
+              ctx.validBackgroundColor,
+              'cover',
+              ctx.faceFocus,
+            );
 
             const baseImageBuffer = await sharp({
               create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validBackgroundColor },
-            }).composite([{ input: splitPhoto, top: region.y, left: region.x }]).png().toBuffer();
+            }).composite([{ input: splitPhoto, top: Math.max(0, region.y), left: Math.max(0, region.x) }]).png().toBuffer();
 
             return {
               baseImage: sharp(baseImageBuffer),
-              compositeTop: dsl.canvasRegions.textRegion.y,
+              compositeTop: textPanel?.y ?? 0,
               compositeBottom: 0,
-              compositeLeft: dsl.canvasRegions.textRegion.x,
-              compositeRight: ctx.w - (dsl.canvasRegions.textRegion.x + dsl.canvasRegions.textRegion.width)
+              compositeLeft: textPanel?.x ?? 0,
+              compositeRight: ctx.w - ((textPanel?.x ?? 0) + (textPanel?.width ?? ctx.w)),
             };
           }
         }
 
-        if (imageLayer.mask === 'before_after_split') {
-          // Genuine two-photo compositing for the before_after DSL family —
-          // real before-photo + real after-photo stitched together, not a
-          // single-photo crop. Falls back to a single-photo treatment inside
-          // stitchBeforeAfterImages() when no before-photo is available.
-          return stitchBeforeAfterImages(ctx, imageLayer.orientation === 'horizontal' ? 'horizontal' : 'vertical');
-        } else if (imageLayer.mask === 'circle') {
-          const size = Math.floor(Math.min(ctx.w, ctx.h) * 0.6); // 60% of canvas width
-          const paddingPx = Math.floor(ctx.w * (imageLayer.paddingPercent || 15) / 100);
+        if (imageLayer.mask === 'circle') {
+          // Recipe geometry: ~60% centered disk (do not shrink/nudge the client photo)
+          const size = Math.floor(Math.min(ctx.w, ctx.h) * 0.6);
+          const paddingPx = Math.floor(ctx.w * (Number(imageLayer.paddingPercent) || 15) / 100);
 
           let cx = ctx.w / 2;
           let cy = ctx.h / 2;
@@ -340,19 +397,77 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
           const topOffset = Math.floor(cy - (size / 2));
 
           const circleSvg = `<svg width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${size / 2}" fill="#fff"/></svg>`;
-          const splitPhoto = await processPortraitFit(ctx.imageBuffer, size, size, ctx.validBackgroundColor);
+          const splitPhoto = await processPortraitFit(ctx.imageBuffer, size, size, ctx.validBackgroundColor, 'cover');
           const roundedPhoto = await sharp(splitPhoto).composite([{ input: Buffer.from(circleSvg), blend: 'dest-in' }]).png().toBuffer();
 
-          const baseImageBuffer = await sharp({
-            create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor },
-          }).composite([{ input: roundedPhoto, top: topOffset, left: leftOffset }]).png().toBuffer();
+          // Background: Blurry, toned version of the original client image
+          const bgImage = await sharp(ctx.imageBuffer)
+              .resize(ctx.w, ctx.h, { fit: 'cover' })
+              .blur(40)
+              .modulate({ brightness: 0.8, saturation: 0.9 })
+              .toBuffer();
+
+          const baseImageBuffer = await sharp(bgImage)
+            .composite([
+              { input: Buffer.from(`<svg><rect width="${ctx.w}" height="${ctx.h}" fill="${ctx.validSecondaryColor}" fill-opacity="0.5" /></svg>`), blend: 'over' },
+              { input: roundedPhoto, top: topOffset, left: leftOffset }
+            ]).png().toBuffer();
 
           const isRight = imageLayer.anchor?.includes('right');
           const isLeft = imageLayer.anchor?.includes('left');
-          const compLeft = isRight ? ctx.paddingX : (isLeft ? leftOffset + size + ctx.paddingX : ctx.paddingX);
-          const compRight = isLeft ? ctx.paddingX : (isRight ? ctx.w - leftOffset + ctx.paddingX : ctx.paddingX);
+          const isTop = imageLayer.anchor?.includes('top');
+          const isBottom = imageLayer.anchor?.includes('bottom');
+          const gap = 28;
 
-          return { baseImage: sharp(baseImageBuffer), compositeTop: ctx.paddingTop, compositeBottom: ctx.paddingBottom, compositeLeft: compLeft, compositeRight: compRight };
+          // Reserve a real free text band — center circles used to return full-frame
+          // composite bounds, so headlines drew ON TOP of the disk and clipped the edge.
+          let compTop = ctx.paddingTop;
+          let compBottom = ctx.paddingBottom;
+          let compLeft = ctx.paddingX;
+          let compRight = ctx.paddingX;
+
+          if (isRight) {
+            compLeft = ctx.paddingX;
+            compRight = Math.max(ctx.paddingX, ctx.w - leftOffset + gap);
+          } else if (isLeft) {
+            compLeft = leftOffset + size + gap;
+            compRight = ctx.paddingX;
+          } else if (isTop) {
+            compTop = topOffset + size + gap;
+            compBottom = ctx.paddingBottom;
+          } else if (isBottom) {
+            compTop = ctx.paddingTop;
+            compBottom = Math.max(ctx.paddingBottom, ctx.h - topOffset + gap);
+          } else {
+            // Center circle: prefer the wider side pocket, else the taller band
+            const leftW = Math.max(0, leftOffset - gap - ctx.paddingX);
+            const rightW = Math.max(0, ctx.w - (leftOffset + size) - gap - ctx.paddingX);
+            const topH = Math.max(0, topOffset - gap - ctx.paddingTop);
+            const botH = Math.max(0, ctx.h - (topOffset + size) - gap - ctx.paddingBottom);
+            if (Math.max(leftW, rightW) >= Math.max(topH, botH) && Math.max(leftW, rightW) >= 140) {
+              if (leftW >= rightW) {
+                compLeft = ctx.paddingX;
+                compRight = Math.max(ctx.paddingX, ctx.w - leftOffset + gap);
+              } else {
+                compLeft = leftOffset + size + gap;
+                compRight = ctx.paddingX;
+              }
+            } else if (botH >= topH) {
+              compTop = topOffset + size + gap;
+              compBottom = ctx.paddingBottom;
+            } else {
+              compTop = ctx.paddingTop;
+              compBottom = Math.max(ctx.paddingBottom, ctx.h - topOffset + gap);
+            }
+          }
+
+          return {
+            baseImage: sharp(baseImageBuffer),
+            compositeTop: compTop,
+            compositeBottom: compBottom,
+            compositeLeft: compLeft,
+            compositeRight: compRight,
+          };
         } else {
           let targetW: number;
           let targetH: number;
@@ -360,6 +475,7 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
           let left: number;
 
           // Device mockup screen viewport mapping
+          let insetPad = 0;
           if (imageLayer.component === 'desktop_monitor_mockup') {
             targetW = 460;
             targetH = 276;
@@ -372,16 +488,25 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
             top = Math.round(ctx.h * 0.25) + 14;
             left = Math.round(ctx.w / 2 - 190) + 14;
           } else {
-            // Outer margin calculation: paddingPercent represents outer margin (e.g. 5% to 12%)
-            const rawPadding = Math.min(imageLayer.paddingPercent || 0, 15); // Cap outer margin to max 15%
+            // Recipe paddingPercent is authoritative (template accuracy).
+            // Soft-cap only pathological values (>30%) so future recipes stay expressible.
+            const rawPadding = Math.min(Math.max(0, Number(imageLayer.paddingPercent) || 0), 30);
+            insetPad = rawPadding;
             const marginX = Math.round(ctx.w * (rawPadding / 100));
             const marginY = Math.round(ctx.h * (rawPadding / 100));
 
-            targetW = ctx.w - (marginX * 2);
-            targetH = ctx.h - (marginY * 2);
+            targetW = Math.max(1, ctx.w - (marginX * 2));
+            targetH = Math.max(1, ctx.h - (marginY * 2));
 
-            // Anchor Positioning Math (All 9 Anchors)
-            const anchor = imageLayer.anchor || 'center';
+            // When pad is 0, fill the canvas exactly (true full-bleed rectangle)
+            if (rawPadding <= 0) {
+              targetW = ctx.w;
+              targetH = ctx.h;
+              top = 0;
+              left = 0;
+            } else {
+            // Anchor Positioning Math (All 9 Anchors + middle_* aliases)
+            const anchor = String(imageLayer.anchor || 'center');
             if (anchor === 'top_left') {
               top = marginY; left = marginX;
             } else if (anchor === 'top_right') {
@@ -394,24 +519,49 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
               top = ctx.h - targetH - marginY; left = ctx.w - targetW - marginX;
             } else if (anchor === 'bottom_center') {
               top = ctx.h - targetH - marginY; left = Math.round((ctx.w - targetW) / 2);
-            } else if (anchor === 'center_left') {
+            } else if (anchor === 'center_left' || anchor === 'middle_left') {
               top = Math.round((ctx.h - targetH) / 2); left = marginX;
-            } else if (anchor === 'center_right') {
+            } else if (anchor === 'center_right' || anchor === 'middle_right') {
               top = Math.round((ctx.h - targetH) / 2); left = ctx.w - targetW - marginX;
+            } else if (anchor === 'middle_center' || anchor === 'middle') {
+              top = Math.round((ctx.h - targetH) / 2);
+              left = Math.round((ctx.w - targetW) / 2);
             } else {
               // Exact center
               top = Math.round((ctx.h - targetH) / 2);
               left = Math.round((ctx.w - targetW) / 2);
             }
+            }
           }
 
-          const scaledPhoto = await processPortraitFit(ctx.imageBuffer, targetW, targetH, ctx.validBackgroundColor);
+          const scaledPhoto = await processPortraitFit(ctx.imageBuffer, targetW, targetH, ctx.validBackgroundColor, 'cover', ctx.faceFocus);
 
-          const backgroundCanvas = sharp({
-            create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validBackgroundColor },
-          });
+          // Consistent inset language: soft rounded corners on padded rectangle masks
+          let photoInput: Buffer = scaledPhoto;
+          if (insetPad > 0 && (imageLayer.mask === 'rectangle' || !imageLayer.mask)) {
+            const rx = Math.min(24, Math.round(Math.min(targetW, targetH) * 0.04));
+            const roundMask = Buffer.from(
+              `<svg width="${targetW}" height="${targetH}" xmlns="http://www.w3.org/2000/svg">` +
+              `<rect width="${targetW}" height="${targetH}" rx="${rx}" fill="#fff"/></svg>`,
+            );
+            photoInput = await sharp(scaledPhoto)
+              .composite([{ input: roundMask, blend: 'dest-in' }])
+              .png()
+              .toBuffer();
+          }
 
-          const baseImageBuffer = await backgroundCanvas.composite([{ input: scaledPhoto, top, left }]).png().toBuffer();
+          // Background: Blurry, toned version of the original client image
+          const bgImage = await sharp(ctx.imageBuffer)
+              .resize(ctx.w, ctx.h, { fit: 'cover' })
+              .blur(40)
+              .modulate({ brightness: 0.8, saturation: 0.9 })
+              .toBuffer();
+
+          const baseImageBuffer = await sharp(bgImage)
+            .composite([
+              { input: Buffer.from(`<svg><rect width="${ctx.w}" height="${ctx.h}" fill="${ctx.validBackgroundColor}" fill-opacity="0.8" /></svg>`), blend: 'over' },
+              { input: photoInput, top, left }
+            ]).png().toBuffer();
           const baseImage = sharp(baseImageBuffer);
 
           // Canva-Level Polish: Dynamically adjust text boundaries to dodge the photo
@@ -468,38 +618,71 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
 
   polaroid_stack: async (ctx) => {
     const minDim = Math.floor(Math.min(ctx.w, ctx.h) * 0.85);
-    const photo = await processPortraitFit(ctx.imageBuffer, minDim, minDim, ctx.validBackgroundColor);
+    const photo = await processPortraitFit(ctx.imageBuffer, minDim, minDim, ctx.validBackgroundColor, 'cover', ctx.faceFocus);
     const frameW = minDim + 60;
     const frameH = minDim + 160;
     const polaroidFrame = await sharp({ create: { width: frameW, height: frameH, channels: 3, background: '#ffffff' } }).png().toBuffer();
-    const baseImage = sharp({ create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor } })
+    
+    // Background: Blurry, toned version of the original client image
+    const bgImage = await sharp(ctx.imageBuffer)
+        .resize(ctx.w, ctx.h, { fit: 'cover' })
+        .blur(40)
+        .modulate({ brightness: 0.8, saturation: 0.9 })
+        .toBuffer();
+        
+    const baseImage = sharp(bgImage)
       .composite([
+        // Darken overlay to ensure frame pops and text is legible
+        { input: Buffer.from(`<svg><rect width="${ctx.w}" height="${ctx.h}" fill="${ctx.validSecondaryColor}" fill-opacity="0.5" /></svg>`), blend: 'over' },
         { input: polaroidFrame, top: Math.floor((ctx.h - frameH) / 2), left: Math.floor((ctx.w - frameW) / 2) },
         { input: photo, top: Math.floor((ctx.h - frameH) / 2) + 30, left: Math.floor((ctx.w - frameW) / 2) + 30 }
       ]);
+      
     return { baseImage, compositeTop: Math.floor((ctx.h - frameH) / 2) + minDim + 50, compositeBottom: ctx.paddingBottom, compositeLeft: Math.floor((ctx.w - frameW) / 2) + 40, compositeRight: Math.floor((ctx.w - frameW) / 2) + 40 };
   },
 
   circle_crop: async (ctx) => {
     const minDim = Math.floor(Math.min(ctx.w, ctx.h) * 0.75);
-    const photo = await processPortraitFit(ctx.imageBuffer, minDim, minDim, ctx.validBackgroundColor);
+    const photo = await processPortraitFit(ctx.imageBuffer, minDim, minDim, ctx.validBackgroundColor, 'cover', ctx.faceFocus);
     const circleSvg = Buffer.from(`<svg width="${minDim}" height="${minDim}"><circle cx="${minDim / 2}" cy="${minDim / 2}" r="${minDim / 2}" fill="white"/></svg>`);
     const masked = await sharp(photo).composite([{ input: circleSvg, blend: 'dest-in' }]).png().toBuffer();
-    const baseImage = sharp({ create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor } })
-      .composite([{ input: masked, top: Math.floor((ctx.h - minDim) / 2), left: Math.floor((ctx.w - minDim) / 2) }]);
+    
+    // Background: Blurry, toned version of the original client image
+    const bgImage = await sharp(ctx.imageBuffer)
+        .resize(ctx.w, ctx.h, { fit: 'cover' })
+        .blur(40)
+        .modulate({ brightness: 0.8, saturation: 0.9 })
+        .toBuffer();
+
+    const baseImage = sharp(bgImage)
+      .composite([
+        { input: Buffer.from(`<svg><rect width="${ctx.w}" height="${ctx.h}" fill="${ctx.validSecondaryColor}" fill-opacity="0.5" /></svg>`), blend: 'over' },
+        { input: masked, top: Math.floor((ctx.h - minDim) / 2), left: Math.floor((ctx.w - minDim) / 2) }
+      ]);
     return { baseImage, compositeTop: Math.floor((ctx.h - minDim) / 2) + minDim + 40, compositeBottom: ctx.paddingBottom, compositeLeft: ctx.paddingX, compositeRight: ctx.paddingX };
   },
 
 
   torn_paper_edge: async (ctx) => {
-    const photo = await processPortraitFit(ctx.imageBuffer, ctx.w, ctx.h, ctx.validBackgroundColor);
+    const photo = await processPortraitFit(ctx.imageBuffer, ctx.w, ctx.h, ctx.validBackgroundColor, 'cover', ctx.faceFocus);
     const tearSvg = Buffer.from(`
       <svg width="${ctx.w}" height="${ctx.h}" xmlns="http://www.w3.org/2000/svg">
         <path d="M 0 0 L ${ctx.w} 0 L ${ctx.w} ${ctx.h - 150} Q ${ctx.w * 0.75} ${ctx.h - 180} ${ctx.w / 2} ${ctx.h - 130} T 0 ${ctx.h - 160} Z" fill="white"/>
       </svg>`);
     const masked = await sharp(photo).composite([{ input: tearSvg, blend: 'dest-in' }]).png().toBuffer();
-    const baseImage = sharp({ create: { width: ctx.w, height: ctx.h, channels: 3, background: ctx.validSecondaryColor } })
-      .composite([{ input: masked, top: 0, left: 0 }]);
+
+    // Background: Blurry, toned version of the original client image
+    const bgImage = await sharp(ctx.imageBuffer)
+        .resize(ctx.w, ctx.h, { fit: 'cover' })
+        .blur(40)
+        .modulate({ brightness: 0.8, saturation: 0.9 })
+        .toBuffer();
+
+    const baseImage = sharp(bgImage)
+      .composite([
+        { input: Buffer.from(`<svg><rect width="${ctx.w}" height="${ctx.h}" fill="${ctx.validSecondaryColor}" fill-opacity="0.5" /></svg>`), blend: 'over' },
+        { input: masked, top: 0, left: 0 }
+      ]);
     return { baseImage, compositeTop: ctx.h - 120, compositeBottom: 20, compositeLeft: ctx.paddingX, compositeRight: ctx.paddingX };
   },
 };
@@ -657,7 +840,7 @@ export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
       <text x="${ctx.w / 2}" y="${Math.round(ctx.h * 0.16)}" text-anchor="middle" font-family="'${ctx.brandFont}', system-ui, sans-serif" font-weight="bold" font-size="${posterFontSize}px" fill="${ctx.posterTextColor}" letter-spacing="1px">
         ${ctx.escapedLines.map((line, idx) => `<tspan x="${ctx.w / 2}" dy="${idx === 0 ? 0 : posterFontSize * 1.05}">${line}</tspan>`).join('')}
       </text>
-      <text x="${ctx.w - 30}" y="${ctx.h / 2}" text-anchor="middle" font-family="'${ctx.brandFont}', system-ui, sans-serif" font-weight="bold" font-size="22px" fill="${ctx.validBrandColor}" fill-opacity="0.85" letter-spacing="6px" transform="rotate(90 ${ctx.w - 30} ${ctx.h / 2})">${ctx.escapedSpacedName}</text>`;
+      <text x="${ctx.w - 30}" y="${ctx.h / 2}" text-anchor="middle" font-family="'${ctx.brandFont}', system-ui, sans-serif" font-weight="bold" font-size="22px" fill="${ctx.dynamicTextColor || ctx.posterTextColor || ctx.validBrandColor}" fill-opacity="0.9" letter-spacing="6px" transform="rotate(90 ${ctx.w - 30} ${ctx.h / 2})">${ctx.escapedSpacedName}</text>`;
   },
 
   speech_bubble: (ctx) => {
@@ -694,7 +877,7 @@ export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
 
   side_panel_label: (ctx) => `
       <!-- Label + headline block sitting in the solid side panel -->
-      <text x="50" y="${Math.round(ctx.h * 0.42)}" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-size="13px" letter-spacing="3px" fill="${ctx.validBrandColor}" fill-opacity="0.8">${ctx.escapedSpacedName}</text>
+      <text x="50" y="${Math.round(ctx.h * 0.42)}" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-size="13px" letter-spacing="3px" fill="${ctx.dynamicTextColor || ctx.posterTextColor || ctx.validBrandColor}" fill-opacity="0.88">${ctx.escapedSpacedName}</text>
       <text x="50" y="${Math.round(ctx.h * 0.42) + 40}" class="overlay-text text-left" style="font-size: ${ctx.dynamicFontSize + 4}px; fill: ${ctx.dynamicTextColor};">
         ${tspans(ctx, '50')}
       </text>`,
@@ -721,9 +904,9 @@ export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
       <!-- Day: Large centered number -->
       <text x="${cx}" y="${cy + 22}" text-anchor="middle" font-family="'${ctx.brandFont}', Georgia, serif" font-weight="bold" font-size="92px" fill="${ctx.dynamicTextColor}">${day}</text>
       <!-- Year below the day -->
-      <text x="${cx}" y="${cy + 68}" text-anchor="middle" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-size="20px" letter-spacing="8px" fill="${ctx.validBrandColor}" fill-opacity="0.8">${year}</text>
+      <text x="${cx}" y="${cy + 68}" text-anchor="middle" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-size="20px" letter-spacing="8px" fill="${ctx.dynamicTextColor || ctx.posterTextColor || ctx.validBrandColor}" fill-opacity="0.88">${year}</text>
       <!-- Brand name at bottom of seal -->
-      <text x="${cx}" y="${cy + r - 28}" text-anchor="middle" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-size="11px" letter-spacing="5px" fill="${ctx.validBrandColor}" fill-opacity="0.6">${ctx.escapedSpacedName}</text>`;
+      <text x="${cx}" y="${cy + r - 28}" text-anchor="middle" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-size="11px" letter-spacing="5px" fill="${ctx.dynamicTextColor || ctx.posterTextColor || ctx.validBrandColor}" fill-opacity="0.75">${ctx.escapedSpacedName}</text>`;
   },
 
   // ── Premium Certificate Signature Card ──────────────────────────────────
@@ -761,7 +944,7 @@ export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
       <!-- Small flourish dot at the end -->
       <circle cx="${endX + 6}" cy="${endY}" r="3" fill="${ctx.validBrandColor}" />
       <!-- Footer: "Est. YEAR" -->
-      <text x="${cx}" y="${cardY + cardH - 28}" text-anchor="middle" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-size="12px" letter-spacing="4px" fill="${ctx.validBrandColor}" fill-opacity="0.6">EST. ${new Date().getFullYear()}</text>`;
+      <text x="${cx}" y="${cardY + cardH - 28}" text-anchor="middle" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-size="12px" letter-spacing="4px" fill="${ctx.dynamicTextColor || ctx.posterTextColor || ctx.validBrandColor}" fill-opacity="0.75">EST. ${new Date().getFullYear()}</text>`;
   },
 
   // ── Randomized Always-On Text Overlays ──────────────────────────────────
@@ -790,7 +973,7 @@ export const TEXT_TEMPLATES: Record<string, (ctx: TextCtx) => string> = {
       case 2: {
         // Vertical side text (right edge) + top left caption
         return `
-          <text x="${ctx.w - 40}" y="${ctx.h / 2}" text-anchor="middle" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-weight="bold" font-size="18px" fill="${ctx.validBrandColor}" fill-opacity="0.6" letter-spacing="4px" transform="rotate(90 ${ctx.w - 40} ${ctx.h / 2})">${ctx.escapedSpacedName}</text>
+          <text x="${ctx.w - 40}" y="${ctx.h / 2}" text-anchor="middle" font-family="'${ctx.bodyFont}', system-ui, sans-serif" font-weight="bold" font-size="18px" fill="${ctx.dynamicTextColor || ctx.posterTextColor || ctx.validBrandColor}" fill-opacity="0.75" letter-spacing="4px" transform="rotate(90 ${ctx.w - 40} ${ctx.h / 2})">${ctx.escapedSpacedName}</text>
           <text x="60" y="120" class="overlay-text text-left" style="font-size: ${ctx.dynamicFontSize}px; fill: ${ctx.dynamicTextColor}; fill-opacity: 0.9;">
             ${tspans(ctx, '60')}
           </text>`;
@@ -877,6 +1060,7 @@ export type DecoCtx = {
   dyOffset: number;
   dynamicFontSize: number;
   dynamicTextColor: string;
+  posterTextColor?: string;
   overlayText: string;
   maxLength: number;
   visionResult?: any;
@@ -996,7 +1180,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     }
 
     // Check if we need to apply a global overlay (like noise) based on brand DNA
-    let overlayLayers = dsl.layers.filter((l: any) => l.type === 'decoration' || l.type === 'text' || (l.type === 'image' && l.component));
+    let overlayLayers = dsl.layers.filter((l: any) => l.type === 'decoration' || l.type === 'text' || l.type === 'text_group' || (l.type === 'image' && l.component));
 
     // Generate the Visual Recipe instead of relying on rigid family names
     let visualRecipe;
@@ -1028,7 +1212,10 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       : themeEngine.getMoodDecorations(visualRecipe.texture);
     overlayLayers = [...overlayLayers, ...moodDecorations];
 
-    overlayLayers.sort((a: any, b: any) => a.zIndex - b.zIndex);
+    // Default a missing zIndex to 0 — `undefined - undefined` is NaN, and Array#sort treats a
+    // NaN comparator result as "don't move", which makes stacking order unstable/inconsistent
+    // between runs for any layer (e.g. dynamically injected moodDecorations) that lacks one.
+    overlayLayers.sort((a: any, b: any) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
 
 
 
@@ -1082,6 +1269,32 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       );
     }
 
+    // Photo-overlaid type uses dynamicTextColor in TypographyEngine (non-card layers).
+    // Do NOT rewrite colorHierarchy.primaryText here — that ink is for cards/surfaces and
+    // forcing photo-white into it made solid_card headings invisible (white on cream).
+    const imageLayerMask = String(
+      ((dsl.layers || []).find((l: any) => l.type === 'image') as any)?.mask || '',
+    );
+    const overlaysPhoto = imageLayerMask === 'full_bleed'
+      || imageLayerMask === 'circle'
+      || imageLayerMask === 'arch'
+      || imageLayerMask === 'polaroid'
+      || imageLayerMask === 'before_after_split'
+      || imageLayerMask === ''
+      || (dsl as any)?._spatialPolicy?.splitAxis === 'overlay';
+    // Soft photo-aware nudge only when hierarchy ink would fail on a dark photo band
+    if (overlaysPhoto && ctx.dynamicTextColor) {
+      const photoInk = ctx.dynamicTextColor;
+      const hierarchyInk = colorHierarchy.primaryText || '#1A1A1A';
+      const photoIsDark = getLuminanceSafe(photoInk) > 150; // light ink ⇒ dark photo
+      const hierarchyIsDark = getLuminanceSafe(hierarchyInk) < 120;
+      if (photoIsDark && hierarchyIsDark) {
+        // Keep hierarchy for cards; typography already prefers dynamicTextColor off-card.
+        // Mark only — do not mutate primaryText.
+        (ctx as any)._photoNeedsLightInk = true;
+      }
+    }
+
     // Resolve typography recipe from family + BrandDNA visual ranking / casing
     const brandStyle = Array.isArray(ctx.visualRanking) && ctx.visualRanking[0]
       ? String(ctx.visualRanking[0])
@@ -1103,6 +1316,47 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       }
     }
 
+    const occupiedRegions: import('../services/template-engine/interfaces').ILayoutRegion[] = [];
+    
+    if (ctx.faceBox) {
+      occupiedRegions.push({
+        id: 'faceBox',
+        role: 'face',
+        x: ctx.faceBox.x,
+        y: ctx.faceBox.y,
+        width: ctx.faceBox.width,
+        height: ctx.faceBox.height,
+        zIndex: 0
+      });
+    }
+    
+    if ((dsl as any)?.canvasRegions?.imageRegion) {
+      const ir = (dsl as any).canvasRegions.imageRegion;
+      occupiedRegions.push({
+        id: 'imageRegion',
+        role: 'image_bounds',
+        x: ir.x,
+        y: ir.y,
+        width: ir.width,
+        height: ir.height,
+        zIndex: 0
+      });
+    }
+    
+    for (const l of ((dsl as any)?.layers || [])) {
+      if (l.allocatedBox) {
+        occupiedRegions.push({
+          id: l.id || 'unknown',
+          role: l.role || l.type || 'element',
+          x: l.allocatedBox.x,
+          y: l.allocatedBox.y,
+          width: l.allocatedBox.width,
+          height: l.allocatedBox.height,
+          zIndex: l.zIndex || 0
+        });
+      }
+    }
+
     const primitiveCtx: PrimitiveContext = {
       w: ctx.w,
       h: ctx.h,
@@ -1111,26 +1365,126 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       validBackgroundColor: ctx.validBackgroundColor,
       constraints,
       behavior: behaviorProfile,
-      layoutState: { occupiedRegions: [], family, renderedStrings: [] },
+      layoutState: { occupiedRegions, family, renderedStrings: [] },
       colorHierarchy,
-      recipe: visualRecipe.primitive
+      recipe: visualRecipe.primitive,
+      tokens: (dsl as any).primitiveTokens,
+      canonicalGeometry: (dsl as any).canonicalGeometry
     };
 
     const layoutState = primitiveCtx.layoutState!;
     // Do not seed a fake full-frame hero-image occupied region — that lied about free space
     // for any fallback path without allocatedBox.
 
-    // Text-band readability scrim: when type sits in a dedicated band over the photo
-    const textBand = (dsl as any)?.canvasRegions?.textRegion;
+    // Text-band / panel readability: scrim only when type overlays the photo (overlay axis).
+    // Dedicated panels sit on brand background — no scrim needed.
+    // Prefer the post-fit `actualTextRegion` (real union bounds of the placed text layers) so the
+    // scrim lines up with where the glyphs actually landed — obstacle/subject avoidance can move
+    // text to a different y/height than the pre-fit `canvasRegions.textRegion` candidate.
+    const textBand = (dsl as any)?._compositionMeta?.actualTextRegion || (dsl as any)?.canvasRegions?.textRegion;
+    const spatialAxis = (dsl as any)?._spatialPolicy?.splitAxis
+      || ((dsl as any)?.canvasRegions?.imageRegion?.width < ctx.w - 2
+        || (dsl as any)?.canvasRegions?.imageRegion?.height < ctx.h - 2
+        ? 'panel'
+        : 'overlay');
     const priority = ctx.designLanguage?.intent?.visualPriority || ctx.designSpec?.composition?.visualPriority;
-    if (textBand && (priority === 'image_hero' || priority === 'cta_hero' || priority === 'composition_hero')) {
-      const pad = 16;
-      const scrimOpacity = priority === 'cta_hero' ? 0.55 : 0.42;
-      const scrimFill = (ctx.validDepthColor && getLuminanceSafe(ctx.validDepthColor) < 140)
-        ? ctx.validDepthColor
-        : '#0A0A0A';
-      svg += `<rect x="${Math.max(0, textBand.x - pad)}" y="${Math.max(0, textBand.y - pad)}" width="${textBand.width + pad * 2}" height="${textBand.height + pad * 2}" fill="${scrimFill}" fill-opacity="${scrimOpacity}" rx="12" />`;
+    // Safety net: if Composition QC still flagged text sitting on top of a protected subject
+    // (face/subject) even in its best/soft-accepted attempt — see `[SlideQC] soft-accepted`
+    // logs in ai-image-generation.service.ts — force the readability scrim on regardless of
+    // visualPriority. Shipping unprotected text over a face is worse than an extra scrim.
+    const isBeforeAfter = imageLayerMask === 'before_after_split';
+    const isCircleLike = imageLayerMask === 'circle' || imageLayerMask === 'arch' || imageLayerMask === 'polaroid';
+
+    // Scrim: NEVER on before/after (was painting a dark slab over the after-face — Slide 3).
+    // NEVER force huge cards on circle — place light type in free band instead.
+    const qualityCritical: string[] = (dsl as any)?._compositionMeta?.qualityCritical || [];
+    const forceScrimForSafety = !isBeforeAfter && !isCircleLike && (
+      qualityCritical.includes('subject_collision')
+      || qualityCritical.includes('text_collision')
+      || qualityCritical.includes('contrast')
+    );
+    if (textBand && spatialAxis === 'overlay' && !isBeforeAfter
+      && (forceScrimForSafety || (priority === 'image_hero' && !isCircleLike))) {
+      const pad = 10;
+      const inkIsLight = getLuminanceSafe(ctx.dynamicTextColor || '#FFF') > 150;
+      const scrimOpacity = forceScrimForSafety ? 0.36 : 0.18;
+      const scrimFill = inkIsLight
+        ? ((ctx.validDepthColor && getLuminanceSafe(ctx.validDepthColor) < 140) ? ctx.validDepthColor : '#0A0A0A')
+        : '#F7F4EF';
+      const maxScrimH = Math.round(ctx.h * 0.22);
+      const scrimH = Math.min(textBand.height + pad * 2, maxScrimH);
+      const scrimW = Math.min(textBand.width + pad * 2, Math.round(ctx.w * 0.62));
+      // Keep scrim off the face/subject box if we know it
+      let scrimX = Math.max(0, Math.min(textBand.x - pad, ctx.w - scrimW));
+      let scrimY = Math.max(0, Math.min(textBand.y - pad, ctx.h - scrimH));
+      const face = (ctx.subjectBox || ctx.faceBox) as BoundingBox | undefined;
+      if (face) {
+        const overlapsFace = scrimX < face.x + face.width && scrimX + scrimW > face.x
+          && scrimY < face.y + face.height && scrimY + scrimH > face.y;
+        if (overlapsFace) {
+          // Prefer below face; skip scrim if nowhere safe
+          const below = face.y + face.height + 8;
+          if (below + scrimH < ctx.h - 80) scrimY = below;
+          else {
+            // skip drawing scrim over face
+            scrimY = -1;
+          }
+        }
+      }
+      if (scrimY >= 0) {
+        svg += `<rect x="${scrimX}" y="${scrimY}" width="${scrimW}" height="${scrimH}" fill="${scrimFill}" fill-opacity="${scrimOpacity}" rx="12" />`;
+      }
     }
+
+    // Circle / before-after: never force solid_card (white-on-white + face cover).
+    // Only use cards on true overlay collisions for non-inset layouts, with locked dark ink.
+    if (!isCircleLike && !isBeforeAfter && qualityCritical.includes('subject_collision')) {
+      for (const layer of (dsl.layers || [])) {
+        if (layer.type === 'text' && (layer as any).role === 'heading' && !(layer as any).component) {
+          (layer as any).component = 'solid_card';
+          (layer as any)._forceCardInk = '#1A1A1A';
+        }
+      }
+    }
+    // Circle + before/after: strip accidental solid_card so type uses proper ink on free bands
+    if (isCircleLike || isBeforeAfter) {
+      for (const layer of (dsl.layers || [])) {
+        if (layer.type === 'text' && (layer as any).component === 'solid_card') {
+          delete (layer as any).component;
+        }
+      }
+    }
+
+    // Standalone decoration primitives (dividers, timelines, badges, stickers…) only ever get
+    // collision-checked against `canonicalGeometry.protectedZones`, which is built from detected
+    // faces/subjects — it never included where the text layers themselves actually landed. That's
+    // why things like the 'transformation' family's `timeline_track` line can be positioned (via a
+    // hardcoded offsetPercent) right across a headline: nothing ever told the collision engine the
+    // headline's box was there to avoid. Build a decoration-only ctx whose protectedZones also
+    // include every placed text layer's real allocatedBox, so `isSafePlacement` (already wired up
+    // in primitive-engine.ts to relocate/shrink/suppress on collision) treats text the same as a
+    // face. Scoped to decoration layers only — text layers' OWN background components (solid_card,
+    // pill_label, etc.) are supposed to hug their own text, so they keep using the unmodified ctx.
+    const placedTextBoxes: BoundingBox[] = (dsl.layers || [])
+      .filter((l: any) => (l.type === 'text' || l.type === 'text_group') && l.allocatedBox)
+      .map((l: any) => l.allocatedBox as BoundingBox);
+    const faceProtected: BoundingBox[] = [];
+    if (ctx.subjectBox) faceProtected.push(ctx.subjectBox as BoundingBox);
+    else if (ctx.faceBox) faceProtected.push(ctx.faceBox as BoundingBox);
+    if (Array.isArray(ctx.additionalSubjects)) {
+      faceProtected.push(...(ctx.additionalSubjects as BoundingBox[]));
+    }
+    const decorationPrimitiveCtx: PrimitiveContext = {
+      ...primitiveCtx,
+      canonicalGeometry: {
+        ...(primitiveCtx.canonicalGeometry as any),
+        protectedZones: [
+          ...(((primitiveCtx.canonicalGeometry as any)?.protectedZones) || []),
+          ...placedTextBoxes,
+          ...faceProtected,
+        ],
+      } as any,
+    };
 
     // Iteratively render each layer using the Primitive Engine
     for (const layer of overlayLayers) {
@@ -1138,20 +1492,26 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
         const componentName = (layer as IDSLDecorationLayer).component;
         if (!componentName) continue;
 
-        const renderedPrimitive = primitiveEngine.renderPrimitive(componentName, primitiveCtx, layer as IDSLDecorationLayer);
+        const renderedPrimitive = primitiveEngine.renderPrimitive(componentName, decorationPrimitiveCtx, layer as IDSLDecorationLayer);
         if (renderedPrimitive) {
           console.log(`[Renderer Sprint] SUCCESS: Applied primitive decoration '${componentName}' to layout.`);
           svg += renderedPrimitive;
-        } else {
-          // Strict Validation: Unknown components fail loudly
+        } else if (renderedPrimitive === null) {
+          // Strict Validation: genuinely unregistered components fail loudly (dev-only signal —
+          // never gated behind this in production output; see DEBUG_PLACEHOLDERS below).
           console.error(`[Renderer Sprint] CRITICAL ERROR: Component '${componentName}' requested by DSL but not found in PrimitiveEngine!`);
-          // Render a visible placeholder block so developers see the missing component immediately
-          svg += `
-            <g transform="translate(40, ${Math.floor(Math.random() * (ctx.h - 100))})">
-              <rect width="300" height="40" fill="red" opacity="0.8" />
-              <text x="10" y="25" fill="white" font-weight="bold" font-family="sans-serif">MISSING COMPONENT: ${componentName}</text>
-            </g>
-          `;
+          if (DEBUG_PLACEHOLDERS) {
+            svg += `
+              <g transform="translate(40, ${Math.floor(Math.random() * (ctx.h - 100))})">
+                <rect width="300" height="40" fill="red" opacity="0.8" />
+                <text x="10" y="25" fill="white" font-weight="bold" font-family="sans-serif">MISSING COMPONENT: ${componentName}</text>
+              </g>
+            `;
+          }
+        } else {
+          // '' → component was found and handled but intentionally produced no output
+          // (e.g. hard-collision-disabled by the Collision Engine). Not an error — skip silently.
+          console.log(`[Renderer Sprint] Primitive '${componentName}' intentionally suppressed no output (collision or delegated render).`);
         }
       } else if (layer.type === 'image') {
         // Many layout families (like desktop_course_hero, tablet_workbook_cover) define device mockups
@@ -1162,7 +1522,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           if (renderedPrimitive) {
             console.log(`[Renderer Sprint] SUCCESS: Applied primitive image component '${imageLayer.component}' to layout.`);
             svg += renderedPrimitive;
-          } else {
+          } else if (renderedPrimitive === null) {
             console.error(`[Renderer Sprint] CRITICAL ERROR: Image Component '${imageLayer.component}' not found in PrimitiveEngine!`);
           }
         }
@@ -1171,13 +1531,20 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
 
         // If the text layer defines a background component (e.g. editorial_sidebar, metric_panel), render it FIRST
         if (textLayer.component) {
+          // 'solid_card', 'pill_label', 'inset_card' are text-container components: their
+          // background rect is rendered by the TypographyEngine as part of the text pass,
+          // so PrimitiveEngine intentionally returns '' for them. Treat empty return as success.
+          const TEXT_CONTAINER_COMPONENTS = ['solid_card', 'pill_label', 'inset_card', 'clinical_callout_box'];
+          const isDelegatedContainer = TEXT_CONTAINER_COMPONENTS.includes(textLayer.component);
+
           const renderedPrimitive = primitiveEngine.renderPrimitive(textLayer.component, primitiveCtx, textLayer);
           if (renderedPrimitive) {
             svg += renderedPrimitive;
-          } else {
+          } else if (renderedPrimitive === null && !isDelegatedContainer) {
             console.error(`[Renderer Sprint] CRITICAL ERROR: Text Component '${textLayer.component}' not found in PrimitiveEngine!`);
           }
         }
+
 
         // CONDITIONAL SCRIM REMOVED IN SPRINT 3.
         // We now rely on high-contrast Structural Containers (Cards/Pills) instead of muddy full-bleed gradients.
