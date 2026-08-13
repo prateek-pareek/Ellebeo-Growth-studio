@@ -1,7 +1,7 @@
 # Agentic Video Pipeline — PLAN
 
 Feature flag: `GROWTH_STUDIO_VIDEO`
-Status: **Phase 1 GATE — contract green; awaiting go-ahead before Phase 2**
+Status: **Phase 2 GATE — mocked slideshow core green; real staging MP4 still blocked on webhook URL + Shotstack key**
 Last updated: 2026-08-13
 
 Work in a plan → act → self-test → self-correct → checkpoint loop.
@@ -66,15 +66,15 @@ SQL: `backend/prisma/migrations/20260813_add_video_pipeline/migration.sql` (not 
 
 ## Phase 2 — Deterministic core FIRST (slideshow, no agents)
 
-- [ ] Rule-based slideshow plan builder (no LLM)
-- [ ] Render job: Video Plan → Shotstack edit JSON → submit → store `renderId` → `RENDERING`
-- [ ] Webhook endpoint + callback queue → `RENDERED` + `outputUrl` (or `FAILED`). Never poll.
-- [ ] Publish job reuses `publishScheduledPost`
-- [ ] Integration test with Shotstack mocked (submit → simulated webhook → RENDERED)
-- [ ] Behind `GROWTH_STUDIO_VIDEO`
-- [ ] GATE: slideshow renders with zero agents
+- [x] Rule-based slideshow plan builder (no LLM) — `core/slideshow-plan-builder.ts`
+- [x] Render job: Video Plan → Shotstack edit JSON → submit → store `renderId` → `RENDERING`
+- [x] Webhook `POST /api/v1/video/webhook?token=` + `video-callback` queue → `RENDERED` + `outputUrl` (or `FAILED`). Never poll.
+- [x] Publish job reuses `publishScheduledPost` and writes `ContentItem.finalVideoUrl`
+- [x] Integration test with Shotstack mocked (submit → simulated webhook → RENDERED); idempotent duplicate webhook; flag-off refusal
+- [x] Behind `GROWTH_STUDIO_VIDEO` (404 when off)
+- [x] GATE — mocked path green. Real staging MP4 not run (needs `SHOTSTACK_API_KEY` + public `API_PUBLIC_URL` + `VIDEO_WEBHOOK_SECRET`).
 
-**Blocked on:** staging Shotstack key + a reachable webhook URL (see gaps).
+HTTP (flag on, JWT): `POST /api/v1/video/slideshow/render`, `GET /api/v1/video/jobs/:id`.
 
 ---
 

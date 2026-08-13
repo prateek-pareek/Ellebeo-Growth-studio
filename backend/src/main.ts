@@ -15,6 +15,9 @@ import { SmsService } from './notifications/sms.service';
 import { PrismaService } from './prisma/prisma.service';
 import { startNotificationsWorker } from './notifications/notifications.worker';
 import { startPublishWorker } from './schedule/publish.worker';
+import { startVideoRenderWorker } from './ai/video-pipeline/workers/video-render.worker';
+import { startVideoCallbackWorker } from './ai/video-pipeline/workers/video-callback.worker';
+import { startVideoPublishWorker } from './ai/video-pipeline/workers/video-publish.worker';
 import { getAllowedOrigins, isOriginAllowed } from './config/cors';
 import { closeRedisClient } from './config/redis.client';
 
@@ -90,6 +93,9 @@ async function bootstrap() {
   const smsService = app.get(SmsService);
   startNotificationsWorker(prismaService, notificationsGateway, smsService);
   startPublishWorker(prismaService);
+  startVideoRenderWorker(prismaService);
+  startVideoCallbackWorker(prismaService);
+  startVideoPublishWorker(prismaService);
   console.log("Server is running on port", port);
   console.log("Environment:", process.env.NODE_ENV);
   console.log("Front end url: ", process.env.FRONTEND_URL);

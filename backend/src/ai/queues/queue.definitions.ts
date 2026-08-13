@@ -169,6 +169,48 @@ export const videoAssemblyQueueEvents = new QueueEvents(
   { connection: bullMQConnection }
 );
 
+export interface VideoRenderJobPayload {
+  videoJobId: string;
+  tenantId: string;
+}
+
+export const videoRenderQueue = new Queue<VideoRenderJobPayload>(
+  AI_CONFIG.queues.videoRender.name,
+  {
+    connection: bullMQConnection,
+    defaultJobOptions: { ...AI_CONFIG.queues.videoRender.defaultJobOptions },
+  },
+);
+
+export interface VideoCallbackJobPayload {
+  renderId: string;
+  status: 'done' | 'failed';
+  url?: string | null;
+  error?: string | null;
+}
+
+export const videoCallbackQueue = new Queue<VideoCallbackJobPayload>(
+  AI_CONFIG.queues.videoCallback.name,
+  {
+    connection: bullMQConnection,
+    defaultJobOptions: { ...AI_CONFIG.queues.videoCallback.defaultJobOptions },
+  },
+);
+
+export interface VideoPublishJobPayload {
+  videoJobId: string;
+  tenantId: string;
+  scheduledPostId: string;
+}
+
+export const videoPublishQueue = new Queue<VideoPublishJobPayload>(
+  AI_CONFIG.queues.videoPublish.name,
+  {
+    connection: bullMQConnection,
+    defaultJobOptions: { ...AI_CONFIG.queues.videoPublish.defaultJobOptions },
+  },
+);
+
 // ---------------------------------------------------------------------------
 // Helper: graceful shutdown of all queues
 // ---------------------------------------------------------------------------
@@ -178,6 +220,9 @@ export async function closeAllQueues(): Promise<void> {
     contentGenerationQueue.close(),
     imageProcessingQueue.close(),
     videoAssemblyQueue.close(),
+    videoRenderQueue.close(),
+    videoCallbackQueue.close(),
+    videoPublishQueue.close(),
     publishScheduledQueue.close(),
     deadLetterQueue.close(),
     contentGenerationQueueEvents.close(),

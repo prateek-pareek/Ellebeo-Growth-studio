@@ -81,6 +81,12 @@ class EnvironmentVariables {
   @IsOptional()
   @IsIn(['true', 'false'])
   GROWTH_STUDIO_VIDEO?: string;
+
+  @IsOptional() @IsString()
+  API_PUBLIC_URL?: string;
+
+  @IsOptional() @IsString()
+  VIDEO_WEBHOOK_SECRET?: string;
 }
 
 export function validateEnv(config: Record<string, unknown>): EnvironmentVariables {

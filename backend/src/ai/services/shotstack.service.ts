@@ -8,6 +8,7 @@ import { AI_CONFIG } from '../../config/ai.config';
 interface ShotstackRenderJson {
   timeline: unknown;
   output: unknown;
+  callback?: string;
 }
 
 interface ShotstackSubmitResponse {

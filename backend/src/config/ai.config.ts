@@ -104,6 +104,37 @@ export const AI_CONFIG = {
         removeOnFail: false,
       },
     },
+    videoRender: {
+      name: 'video-render',
+      concurrency: 5,
+      rateLimit: { max: 10, duration: 60_000 },
+      defaultJobOptions: {
+        attempts: 2,
+        backoff: { type: 'exponential' as const, delay: 5_000 },
+        removeOnComplete: { count: 100 },
+        removeOnFail: false,
+      },
+    },
+    videoCallback: {
+      name: 'video-callback',
+      concurrency: 10,
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: 'exponential' as const, delay: 2_000 },
+        removeOnComplete: { count: 200 },
+        removeOnFail: false,
+      },
+    },
+    videoPublish: {
+      name: 'video-publish',
+      concurrency: 5,
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: 'exponential' as const, delay: 30_000 },
+        removeOnComplete: { count: 200 },
+        removeOnFail: false,
+      },
+    },
     deadLetter: {
       name: 'dead-letter-queue',
       concurrency: 0,   // no workers — manual review only
