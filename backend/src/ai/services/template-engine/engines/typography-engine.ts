@@ -243,6 +243,7 @@ export class TypographyEngine {
       }
 
       if (isSecondary && textHeight > pocketH * 1.02) {
+        (layer as any)._omitForComposition = true;
         return '';
       }
     }
@@ -250,10 +251,11 @@ export class TypographyEngine {
     // ==========================================
     // TWO-PASS TYPOGRAPHY OCCUPANCY BOOST
     // ==========================================
-    // For typography_hero headings: if text significantly underutilizes its
-    // allocated region, boost font size proportionally. This is a single
-    // controlled pass — no infinite loops.
-    if (preserveHero && layer.role === 'heading' && layer.allocatedBox) {
+    // Skip boost when optimizer already width-adapted the slot — re-boosting
+    // undoes fit and causes edge clip / overflow.
+    const slotFitted = typeof (layer as any)._fittedLineCount === 'number'
+      || ((layer as any)._preserveHeroSize === false && !!(layer as any)._estimatedFontSize);
+    if (!slotFitted && preserveHero && layer.role === 'heading' && layer.allocatedBox) {
       // Prefer full text panel for occupancy when available (large negative space)
       const fillBox = (layer as any)._textRegion || layer.allocatedBox;
       const allocatedArea = fillBox.width * fillBox.height;
@@ -469,26 +471,38 @@ export class TypographyEngine {
 
     // If measured text still exceeds safe width, shrink font to fit whole words
     const longestLineChars = escapedLines.reduce((m, l) => Math.max(m, l.replace(/&[a-z]+;/gi, ' ').length), 0);
+    const availW = Math.max(40, maxX - minX);
+    // Hard cap: never let effective width exceed the safe column (prevents left-edge glyph clip)
+    if (effectiveMaxW > availW) effectiveMaxW = availW;
     if (longestLineChars > 0) {
       const trackingEmNow = this.parseTrackingEm(style.letterSpacing);
       const casingNow = (layer as any).capitalizationRule || ctx.typographyTokens?.casing || 'natural';
       const isUpperNow = casingNow === 'force_uppercase' || casingNow === 'uppercase';
       const lhMult = lineHeight / Math.max(1, style.fontSize);
-      const charW = style.fontSize * ((isUpperNow ? 0.70 : 0.60) + Math.max(0, trackingEmNow));
+      const charW = style.fontSize * ((isUpperNow ? 0.80 : 0.62) + Math.max(0, trackingEmNow));
       const neededW = longestLineChars * charW;
-      const availW = maxX - minX;
       if (neededW > availW && neededW > 0) {
         const shrink = availW / neededW;
         const vp =
           ctx.visualPriority
           || ctx.designLanguage?.intent?.visualPriority
           || ctx.designSpec?.composition?.visualPriority;
-        const floorRatio = (vp === 'typography_hero' || preserveHero) ? 0.065 : 0.022;
+        // Floor low enough that long display words ("DIMENSION") still fit inside safeX
+        const floorRatio = (vp === 'typography_hero' || preserveHero) ? 0.038 : 0.022;
         style.fontSize = Math.max(Math.round(ctx.h * floorRatio), Math.floor(style.fontSize * shrink));
         lineHeight = Math.max(1, Math.round(style.fontSize * lhMult));
         escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, Math.min(effectiveMaxW, availW), trackingEmNow);
         textHeight = escapedLines.length * lineHeight;
         effectiveMaxW = Math.min(effectiveMaxW, availW);
+        // Re-measure after wrap — may still need one more shrink pass
+        const longest2 = escapedLines.reduce((m, l) => Math.max(m, l.replace(/&[a-z]+;/gi, ' ').length), 0);
+        const needed2 = longest2 * style.fontSize * ((isUpperNow ? 0.80 : 0.62) + Math.max(0, trackingEmNow));
+        if (needed2 > availW && needed2 > 0) {
+          style.fontSize = Math.max(Math.round(ctx.h * floorRatio), Math.floor(style.fontSize * (availW / needed2)));
+          lineHeight = Math.max(1, Math.round(style.fontSize * lhMult));
+          escapedLines = this.wrapText(textToWrap, style.fontSize, layer, ctx, availW, trackingEmNow);
+          textHeight = escapedLines.length * lineHeight;
+        }
         if (anchor === 'middle') x = Math.max(minX + effectiveMaxW / 2, Math.min(x, maxX - effectiveMaxW / 2));
         else if (anchor === 'end') x = Math.max(minX + effectiveMaxW, Math.min(x, maxX));
         else x = Math.max(minX, Math.min(x, maxX - effectiveMaxW));
@@ -496,15 +510,37 @@ export class TypographyEngine {
       }
     }
 
+    // When the wrap width still exceeds the pocket, recenter inside safe bounds
+    if (effectiveMaxW > availW) {
+      effectiveMaxW = availW;
+      if (anchor === 'middle') x = (minX + maxX) / 2;
+      else if (anchor === 'end') x = maxX;
+      else x = minX;
+      boxX = anchor === 'middle' ? x - effectiveMaxW / 2 : anchor === 'end' ? x - effectiveMaxW : x;
+    }
+
     if (boxX < minX || boxX + effectiveMaxW > maxX) {
       if (anchor === 'middle') {
-        x = Math.max(minX + effectiveMaxW / 2, Math.min(x, maxX - effectiveMaxW / 2));
+        // Avoid inverted clamp when effectiveMaxW ≈ availW
+        x = (minX + maxX) / 2;
       } else if (anchor === 'end') {
-        x = Math.max(minX + effectiveMaxW, Math.min(x, maxX));
+        x = Math.max(minX + Math.min(effectiveMaxW, availW), Math.min(x, maxX));
       } else {
-        x = Math.max(minX, Math.min(x, maxX - effectiveMaxW));
+        x = Math.max(minX, Math.min(x, maxX - Math.min(effectiveMaxW, availW)));
       }
       boxX = anchor === 'middle' ? x - effectiveMaxW / 2 : anchor === 'end' ? x - effectiveMaxW : x;
+    }
+    // Absolute edge lock — first glyph must never start before safe inset
+    const edgePad = Math.max(4, Math.round(style.fontSize * 0.06));
+    if (boxX < minX + edgePad) {
+      const shift = (minX + edgePad) - boxX;
+      boxX += shift;
+      x += shift;
+    }
+    if (boxX + effectiveMaxW > maxX - edgePad) {
+      const shift = (boxX + effectiveMaxW) - (maxX - edgePad);
+      boxX -= shift;
+      x -= shift;
     }
 
     // Shrink-wrap the effective bounding box to the actual text content width
@@ -552,26 +588,61 @@ export class TypographyEngine {
     let containerSvg = '';
     if (layer.component === 'pill_label' || layer.component === 'solid_card' || layer.component === 'inset_card' || layer.component === 'clinical_callout_box') {
       const isCallout = layer.component === 'clinical_callout_box';
-      const padX = layer.component === 'pill_label' ? 24 : (isCallout ? 30 : 40);
-      const padY = layer.component === 'pill_label' ? 12 : (isCallout ? 45 : 30);
-      const radius = layer.component === 'pill_label' ? (textHeight + padY * 2) / 2 : (layer.component === 'inset_card' ? 8 : (isCallout ? 0 : 12));
+      // Breathing room like good slides 2/4 — never a cramped stamp on the chest
+      const lineCount = Math.max(1, escapedLines.length);
+      const padX = layer.component === 'pill_label' ? 28 : (isCallout ? 30 : Math.max(36, Math.round(style.fontSize * 0.45)));
+      const padY = layer.component === 'pill_label'
+        ? 14
+        : (isCallout ? 45 : Math.max(22, Math.round(style.fontSize * (lineCount >= 3 ? 0.38 : 0.32))));
+      const radius = layer.component === 'pill_label'
+        ? (textHeight + padY * 2) / 2
+        : (layer.component === 'inset_card' ? 10 : (isCallout ? 0 : 14));
 
       let bgFill = '#FFFFFF';
       if (ctx.colorHierarchy) {
         bgFill = layer.role === 'heading' ? ctx.colorHierarchy.cardSurface : ctx.colorHierarchy.accent;
-        // Ensure text contrasts with the new background
-        style.fill = layer.role === 'heading' ? ctx.colorHierarchy.primaryText : ctx.colorHierarchy.primaryBackground;
+      }
+      // Absolute card contrast lock — never ship white-on-white / dark-on-dark cards
+      const cardLum = this.hexLuminance(bgFill);
+      if (cardLum > 0.45) {
+        style.fill = (layer as any)._forceCardInk && this.hexLuminance((layer as any)._forceCardInk) < 0.45
+          ? (layer as any)._forceCardInk
+          : '#1A1A1A';
+        if (this.hexLuminance(bgFill) > 0.85) bgFill = '#F7F4EF';
+      } else {
+        style.fill = '#FFFFFF';
       }
 
+      // Card width hugs measured lines — short copy shouldn't float in a huge empty panel
+      const trackingEmCard = this.parseTrackingEm(style.letterSpacing);
+      const casingCard = (layer as any).capitalizationRule || ctx.typographyTokens?.casing || 'natural';
+      const isUpperCard = casingCard === 'force_uppercase' || casingCard === 'uppercase';
+      const approxLineW = Math.ceil(
+        longestLineChars * style.fontSize * ((isUpperCard ? 0.82 : 0.65) + Math.max(0, trackingEmCard)),
+      );
+      const balance = String((layer as any)._copyBalance || '');
+      // Short: hug tight. Long/medium: keep a little air but still track the longest line.
+      const hug = balance === 'short' ? 1.12 : balance === 'long' ? 1.08 : 1.1;
+      const contentW = Math.max(
+        100,
+        Math.min(effectiveMaxW, Math.round(approxLineW * hug) || Math.round(style.fontSize * 5)),
+      );
+      let cardX = anchor === 'middle'
+        ? x - contentW / 2
+        : anchor === 'end'
+          ? x - contentW
+          : boxX;
+      if (cardX - padX < minX) cardX = minX + padX;
+      if (cardX + contentW + padX > maxX) cardX = Math.max(minX + padX, maxX - padX - contentW);
+
       if (isCallout) {
-        const boxW = effectiveMaxW + padX * 2;
         const boxH = textHeight + padY * 2;
         const barColor = ctx.colorHierarchy?.primaryBackground || '#000000';
         containerSvg = `
           <!-- Structural Container: clinical_callout_box -->
-          <g transform="translate(${boxX - padX}, ${y - padY + 10})">
-            <rect x="0" y="0" width="${boxW}" height="${boxH}" fill="${ctx.colorHierarchy?.cardSurface || '#FFFFFF'}" filter="drop-shadow(0 15px 30px rgba(0,0,0,0.15))" />
-            <rect x="0" y="0" width="${boxW}" height="40" fill="${barColor}" opacity="0.1" />
+          <g transform="translate(${cardX - padX}, ${y - padY + 10})">
+            <rect x="0" y="0" width="${contentW + padX * 2}" height="${boxH}" fill="${ctx.colorHierarchy?.cardSurface || '#FFFFFF'}" filter="drop-shadow(0 15px 30px rgba(0,0,0,0.15))" />
+            <rect x="0" y="0" width="${contentW + padX * 2}" height="40" fill="${barColor}" opacity="0.1" />
             <rect x="0" y="0" width="4" height="${boxH}" fill="${barColor}" />
             <text x="20" y="25" font-family="monospace" font-size="12" font-weight="bold" fill="${barColor}" letter-spacing="2px">CLINICAL FOCUS</text>
           </g>
@@ -580,7 +651,7 @@ export class TypographyEngine {
       } else {
         containerSvg = `
           <!-- Structural Container: ${layer.component} -->
-          <rect x="${boxX - padX}" y="${y - padY}" width="${effectiveMaxW + padX * 2}" height="${textHeight + padY * 2}" rx="${radius}" fill="${bgFill}" filter="url(#premium_shadow)" />
+          <rect x="${cardX - padX}" y="${y - padY}" width="${contentW + padX * 2}" height="${textHeight + padY * 2}" rx="${radius}" fill="${bgFill}" filter="url(#premium_shadow)" />
         `;
       }
     }
@@ -896,13 +967,14 @@ export class TypographyEngine {
     let fontSize = ctx.dynamicFontSize;
     let fontWeight = 'normal';
     let fontStyle = 'normal';
-    // Prefer BrandDNA ink hierarchy (rotated primary/secondary/accent/depth).
-    // dynamicTextColor is photo-luminance fallback only when hierarchy is absent.
-    // Background is never used as text fill.
-    let fill =
-      (ctx.colorHierarchy?.primaryText)
-      || ctx.dynamicTextColor
-      || '#1E1E1C';
+    // Photo-aware ink first for overlay type (hierarchy primaryText is card-relative and
+    // often depth/black — invisible on dark photo bands). Cards keep hierarchy inks.
+    const onCard = layer.component === 'pill_label'
+      || layer.component === 'solid_card'
+      || layer.component === 'inset_card';
+    let fill = onCard
+      ? ((ctx.colorHierarchy?.primaryText) || ctx.dynamicTextColor || '#1E1E1C')
+      : ((ctx.dynamicTextColor) || (ctx.colorHierarchy?.primaryText) || '#FFFFFF');
     let letterSpacing = 'normal';
     let fontFamily = `'${ctx.brandFont}', sans-serif`;
 
@@ -931,6 +1003,17 @@ export class TypographyEngine {
       } else if (role === 'cta') {
         fontSize = ctx.typographyMetrics ? ctx.typographyMetrics.primarySize * 0.75 : 24;
       }
+    }
+
+    // Optimizer slot fit is authoritative — use it before dominance / length tweaks
+    const slotFittedSize = Number(layerObj._estimatedFontSize);
+    const hasSlotFit = Number.isFinite(slotFittedSize) && slotFittedSize > 8;
+    if (hasSlotFit) {
+      fontSize = Math.round(slotFittedSize);
+    }
+    // Circle free-band: force light ink on dark blur
+    if (layerObj._forceOverlayInk && !onCard) {
+      fill = layerObj._forceOverlayInk;
     }
 
     // NEW ARCHITECTURE: Configuration-Driven Design Recipe
@@ -970,7 +1053,10 @@ export class TypographyEngine {
         }
       }
       if (fontBehavior.dominanceStrategy === 'scale' || fontBehavior.dominanceStrategy === 'both') {
-        fontSize = Math.round(fontSize * (tokens.headlineWeight === 'hero' ? 1.08 : 1.04));
+        // Don't inflate past the slot-fitted size — that undoes width adaptation
+        if (!hasSlotFit) {
+          fontSize = Math.round(fontSize * (tokens.headlineWeight === 'hero' ? 1.08 : 1.04));
+        }
       }
       if (fontBehavior.dominanceStrategy === 'weight' || fontBehavior.dominanceStrategy === 'both') {
         const desired = parseInt(fontWeight, 10) || 700;
@@ -980,21 +1066,24 @@ export class TypographyEngine {
         fontWeight = String(Math.min(parseInt(fontWeight, 10) || 700, fontBehavior.maxWeight));
       }
       layerObj.capitalizationRule = tokens.casing;
-      fill = ctx.colorHierarchy?.primaryText || ctx.dynamicTextColor || fill;
+      fill = onCard
+        ? (ctx.colorHierarchy?.primaryText || ctx.dynamicTextColor || fill)
+        : (ctx.dynamicTextColor || ctx.colorHierarchy?.primaryText || fill);
     } else if (role === 'body') {
       fontWeight = weightMap[tokens.bodyWeight] || '400';
-      fill = ctx.colorHierarchy?.secondaryText || ctx.dynamicTextColor || fill;
+      fill = onCard
+        ? (ctx.colorHierarchy?.secondaryText || ctx.dynamicTextColor || fill)
+        : (ctx.dynamicTextColor || ctx.colorHierarchy?.secondaryText || fill);
     } else if (role === 'tagline' || role === 'footnote' || role === 'cta') {
       fontWeight = weightMap[tokens.bodyWeight] === 'light' ? '400' : '600';
       letterSpacing = layerObj.tracking !== undefined
         ? `${layerObj.tracking}em`
         : `${fontBehavior.taglineTracking}em`;
       layerObj.capitalizationRule = tokens.casing;
-      // Secondary ink from BrandDNA — never background
-      fill = ctx.colorHierarchy?.secondaryText
-        || ctx.colorHierarchy?.accent
-        || ctx.dynamicTextColor
-        || fill;
+      // Secondary ink — photo-aware when not on a card; never background
+      fill = onCard
+        ? (ctx.colorHierarchy?.secondaryText || ctx.colorHierarchy?.accent || ctx.dynamicTextColor || fill)
+        : (ctx.dynamicTextColor || ctx.colorHierarchy?.secondaryText || ctx.colorHierarchy?.accent || fill);
     }
 
     // Inject serif font if the brand font is an editorial serif and it requires support
@@ -1085,19 +1174,23 @@ export class TypographyEngine {
     const safeW = layer.allocatedBox?.width
       || ((layer as any).maxWidthPercent ? Math.round(ctx.w * ((layer as any).maxWidthPercent / 100)) : ctx.constraints.contentMaxWidth);
     const chars = text.replace(/\s+/g, '').length;
-    if (role === 'heading' && chars > 18) {
-      fontSize *= Math.max(0.70, 1 - (chars - 18) * 0.011);
-    } else if ((role === 'tagline' || role === 'body') && chars > 40) {
-      fontSize *= Math.max(0.82, 1 - (chars - 40) * 0.006);
+    if (!hasSlotFit) {
+      if (role === 'heading' && chars > 18) {
+        fontSize *= Math.max(0.70, 1 - (chars - 18) * 0.011);
+      } else if ((role === 'tagline' || role === 'body') && chars > 40) {
+        fontSize *= Math.max(0.82, 1 - (chars - 40) * 0.006);
+      }
     }
 
     // DYNAMIC CLAMPING: longest whole word must fit — never break words
     const words = text.split(/\s+/).filter(Boolean);
     const longestWord = words.reduce((a, b) => (a.length > b.length ? a : b), '');
     if (longestWord.length > 0) {
-      const maxAvailableWidth = Math.min(safeW, ctx.constraints.contentMaxWidth);
+      const maxAvailableWidth = Math.min(safeW, ctx.constraints.contentMaxWidth) * 0.96;
       const trackingEm = this.parseTrackingEm(letterSpacing);
-      const charRatio = 0.64 + Math.max(0, trackingEm) + ((layer as any).capitalizationRule === 'force_uppercase' || (layer as any).capitalizationRule === 'uppercase' ? 0.06 : 0);
+      const isUpperCasing = (layer as any).capitalizationRule === 'force_uppercase'
+        || (layer as any).capitalizationRule === 'uppercase';
+      const charRatio = (isUpperCasing ? 0.80 : 0.62) + Math.max(0, trackingEm);
       const maxFontSizeForLongestWord = maxAvailableWidth / (longestWord.length * charRatio);
       if (fontSize > maxFontSizeForLongestWord) {
         fontSize = Math.floor(maxFontSizeForLongestWord);
@@ -1110,13 +1203,48 @@ export class TypographyEngine {
       if (fontSize > maxSecondary) fontSize = maxSecondary;
     }
 
-    // Hierarchy floor absolute: heading must remain the visual dominant when metrics exist
-    if (role === 'heading' && ctx.typographyMetrics?.primarySize) {
+    // Hierarchy floor absolute — skip when slot already width-adapted
+    if (!hasSlotFit && role === 'heading' && ctx.typographyMetrics?.primarySize) {
       const minHero = Math.round(ctx.typographyMetrics.primarySize / 0.48);
       if (fontSize < minHero) fontSize = Math.min(fontSize * 1.15, Math.max(fontSize, minHero));
     }
 
+    // Final contrast lock for overlay type: never ship dark ink on dark photo / light on light.
+    // Cards already pick ink vs cardSurface — skip them.
+    if (!onCard && fill) {
+      // Explicit circle/band override wins
+      if (layerObj._forceOverlayInk) {
+        fill = layerObj._forceOverlayInk;
+      } else if (ctx.dynamicTextColor) {
+        // Trust photo-band ink when hierarchy fill would clash (black-on-black / white-on-white)
+        const fillLum = this.hexLuminance(fill);
+        const dynLum = this.hexLuminance(ctx.dynamicTextColor);
+        if (Math.abs(fillLum - dynLum) > 0.3) {
+          fill = ctx.dynamicTextColor;
+        }
+      }
+      // Never use canvas background as ink
+      if (fill.toUpperCase() === (ctx.validBackgroundColor || '').toUpperCase()) {
+        const dyn = ctx.dynamicTextColor ? this.hexLuminance(ctx.dynamicTextColor) : 1;
+        fill = dyn > 0.55 ? '#FFFFFF' : '#1A1A1A';
+      }
+    }
+
     return { fontSize, fontWeight, fontStyle, fill, letterSpacing, fontFamily, opacity };
+  }
+
+  private hexLuminance(hex: string): number {
+    try {
+      const cleaned = hex.replace('#', '');
+      const full = cleaned.length === 3 ? cleaned.split('').map(c => c + c).join('') : cleaned;
+      const rgb = parseInt(full, 16);
+      const r = (rgb >> 16) & 0xff;
+      const g = (rgb >> 8) & 0xff;
+      const b = rgb & 0xff;
+      return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    } catch {
+      return 0.5;
+    }
   }
 
   private parseTrackingEm(letterSpacing: string | undefined): number {
@@ -1143,8 +1271,8 @@ export class TypographyEngine {
   ): string[] {
     const casing = (layer as any).capitalizationRule || ctx.typographyTokens?.casing || 'natural';
     const isUpper = casing === 'force_uppercase' || casing === 'uppercase';
-    // Slightly wider estimate to prevent canvas edge clipping
-    const estimatedCharWidth = fontSize * ((isUpper ? 0.70 : 0.60) + Math.max(0, trackingEm));
+    // Match real display-serif uppercase advance (~0.78–0.82) — 0.70 under-wrapped and clipped
+    const estimatedCharWidth = fontSize * ((isUpper ? 0.80 : 0.62) + Math.max(0, trackingEm));
 
     let layerMaxWidth = resolvedMaxWidth || ctx.constraints.contentMaxWidth;
     if (!resolvedMaxWidth && (layer as any).maxWidthPercent) {
@@ -1152,46 +1280,75 @@ export class TypographyEngine {
     }
 
     const maxAvailableWidth = Math.min(layerMaxWidth, ctx.constraints.contentMaxWidth);
-    // Leave a small safety gutter so glyphs never kiss the clip edge
-    const usableWidth = Math.max(8, maxAvailableWidth - Math.round(ctx.w * 0.01));
+    // Leave a safety gutter so glyphs never kiss the clip edge
+    const usableWidth = Math.max(8, maxAvailableWidth - Math.round(Math.max(8, ctx.w * 0.02)));
     let maxCharsPerLine = Math.max(4, Math.floor(usableWidth / estimatedCharWidth));
 
     if (layer.role === 'heading') {
       if (ctx.typographyTokens?.headlineWeight === 'light' && ctx.typographyTokens?.tracking === 'wide') {
         maxCharsPerLine = Math.min(maxCharsPerLine, 14);
-      } else if (fontSize >= 80) {
-        maxCharsPerLine = Math.min(maxCharsPerLine, 18);
+      } else if (fontSize >= 72) {
+        maxCharsPerLine = Math.min(maxCharsPerLine, 16);
       }
     }
 
     const words = text.split(/\s+/).filter(Boolean);
     let smartLines: string[] = [];
 
-    // Balanced split for short headings — whole words only
-    if (layer.role === 'heading' && words.length > 1 && text.length <= maxCharsPerLine * 2.5) {
-      let bestSplitIndex = 0;
-      let minDiff = Infinity;
-      const targetLength = text.length / 2;
-      let currentLength = 0;
-      for (let i = 0; i < words.length - 1; i++) {
-        currentLength += words[i].length + 1;
-        const diff = Math.abs(currentLength - targetLength);
-        if (diff < minDiff) {
-          minDiff = diff;
-          bestSplitIndex = i;
+    // Balanced split for headings — whole words only
+    // Short (≤3 words): prefer 1–2 lines, never force awkward wraps
+    // Long: prefer 2–3 balanced lines so it doesn't crush into one ugly box line
+    if (layer.role === 'heading' && words.length > 1) {
+      const totalChars = text.length;
+      const preferLines = totalChars > 28 || words.length > 5
+        ? Math.min(3, words.length)
+        : totalChars <= 14 && words.length <= 3
+          ? 1
+          : 2;
+
+      if (preferLines === 1 && totalChars <= maxCharsPerLine) {
+        smartLines = [words.join(' ')];
+      } else if (preferLines >= 2 && text.length <= maxCharsPerLine * preferLines) {
+        const targetLen = text.length / preferLines;
+        const breaks: number[] = [];
+        let currentLength = 0;
+        let nextTarget = targetLen;
+        for (let i = 0; i < words.length - 1; i++) {
+          currentLength += words[i].length + 1;
+          if (breaks.length < preferLines - 1 && currentLength >= nextTarget * 0.85) {
+            breaks.push(i);
+            nextTarget = targetLen * (breaks.length + 1);
+          }
         }
-      }
+        // Fallback to mid split for 2-line
+        if (breaks.length === 0) {
+          let bestSplitIndex = 0;
+          let minDiff = Infinity;
+          let len = 0;
+          for (let i = 0; i < words.length - 1; i++) {
+            len += words[i].length + 1;
+            const diff = Math.abs(len - text.length / 2);
+            if (diff < minDiff) {
+              minDiff = diff;
+              bestSplitIndex = i;
+            }
+          }
+          breaks.push(bestSplitIndex);
+        }
 
-      const line1 = words.slice(0, bestSplitIndex + 1).join(' ');
-      const line2 = words.slice(bestSplitIndex + 1).join(' ');
+        const slices: string[] = [];
+        let start = 0;
+        for (const b of breaks) {
+          slices.push(words.slice(start, b + 1).join(' '));
+          start = b + 1;
+        }
+        slices.push(words.slice(start).join(' '));
 
-      // Accept only if every word fits on its line (never split a word)
-      const line1Ok = words.slice(0, bestSplitIndex + 1).every(w => w.length <= maxCharsPerLine)
-        && line1.length <= maxCharsPerLine;
-      const line2Ok = words.slice(bestSplitIndex + 1).every(w => w.length <= maxCharsPerLine)
-        && line2.length <= maxCharsPerLine;
-      if (line1Ok && line2Ok) {
-        smartLines = [line1, line2];
+        const allFit = slices.every(line => line.length <= maxCharsPerLine)
+          && slices.every(line => line.split(/\s+/).every(w => w.length <= maxCharsPerLine));
+        if (allFit && slices.length >= 1) {
+          smartLines = slices;
+        }
       }
     }
 
@@ -1224,23 +1381,44 @@ export class TypographyEngine {
     if (layer.role !== 'heading') {
       const maxLines = layer.role === 'tagline' ? 2 : 3;
       if (smartLines.length > maxLines) {
+        const droppedLines = smartLines.length - maxLines;
         smartLines = smartLines.slice(0, maxLines);
+        // Never let the cap silently swallow words mid-sentence with no visual trace — that's
+        // what produced copy that just stops ("...RESERVING YOUR"). Mark the cut with an
+        // ellipsis so it reads as intentionally-shortened copy instead of a broken fragment.
+        const lastIdx = smartLines.length - 1;
+        let lastLine = smartLines[lastIdx];
+        if (lastLine && !/[.!?…]$/.test(lastLine)) {
+          if (lastLine.length > maxCharsPerLine - 1) {
+            const budget = lastLine.slice(0, maxCharsPerLine - 1);
+            const lastSpace = budget.lastIndexOf(' ');
+            lastLine = lastSpace > 0 ? budget.slice(0, lastSpace) : budget;
+          }
+          smartLines[lastIdx] = `${lastLine}…`;
+        }
+        console.warn(
+          `[TypographyEngine] Line cap dropped ${droppedLines} line(s) for role='${layer.role}' — ellipsis applied to avoid a silently truncated sentence.`,
+        );
       }
     } else if (smartLines.length > 6) {
       // Absolute safety ceiling only
       smartLines = smartLines.slice(0, 6);
     }
 
-    // Integrity annotation for callers
+    // Integrity annotation for callers (all roles — not just headings — so truncation from
+    // either the wrap pass above or the line-cap above is visible to logging/QC).
     const renderedWords = smartLines.join(' ').split(/\s+/).filter(Boolean);
     const sourceWords = words;
-    if (layer.role === 'heading' && sourceWords.length > 0 && renderedWords.length < sourceWords.length) {
+    if (sourceWords.length > 0 && renderedWords.length < sourceWords.length) {
       (layer as any)._contentIntegrity = {
-        ok: false,
+        // Headings must still hard-fail (upstream relies on ok:false to trigger repair/reject).
+        // Non-heading roles are now visually flagged with an ellipsis above, so treat this as a
+        // soft/non-blocking notice rather than a gate failure.
+        ok: layer.role !== 'heading' ? true : false,
         reason: `wrap_truncated:${renderedWords.length}/${sourceWords.length}`,
         missing: sourceWords.filter(w => !renderedWords.includes(w)),
       };
-    } else if (layer.role === 'heading') {
+    } else {
       (layer as any)._contentIntegrity = { ok: true, wordCount: renderedWords.length };
     }
 

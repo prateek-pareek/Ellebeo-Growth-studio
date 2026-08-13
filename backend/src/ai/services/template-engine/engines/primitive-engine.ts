@@ -10,9 +10,6 @@ export interface PrimitiveContext {
   validSecondaryColor: string;
   validBackgroundColor: string;
   validAccentColor?: string;
-  fallbackFamily?: string;
-  x?: number;
-  y?: number;
   constraints: any; // Using any for brevity, typically LayoutConstraints
   behavior?: any; // Semantic Design Behavior Profile
   layoutState?: import('../interfaces').ILayoutState; // Shared geometric state
@@ -126,16 +123,10 @@ export class PrimitiveEngine {
       }
     };
 
-    this.registry['handmade_mark'] = {
-      category: 'effects',
-      render: (ctx, layer) => {
-        const color = ctx.colorHierarchy ? ctx.colorHierarchy.accent : ctx.validBrandColor;
-        return `
-        <!-- Abstract Handmade Mark (Brush Stroke) -->
-        <path d="M${ctx.w * 0.8},${ctx.h * 0.15} Q${ctx.w * 0.85},${ctx.h * 0.12} ${ctx.w * 0.9},${ctx.h * 0.16} T${ctx.w * 0.95},${ctx.h * 0.14}" fill="none" stroke="${color}" stroke-width="${ctx.scaleStroke!(4)}" stroke-linecap="round" opacity="${ctx.resolveOpacity!(0.6)}" />
-      `;
-      }
-    };
+    // NOTE: 'handmade_mark' used to be registered here as a single brush-stroke primitive, but it
+    // was immediately overwritten below (~line 869) by a random-delegate version. That made this
+    // definition permanently dead code, so it has been removed — the delegate at line 869 is the
+    // one real registration.
 
     this.registry['museum_border'] = {
       category: 'geometry',
@@ -499,11 +490,32 @@ export class PrimitiveEngine {
 
     this.registry['glass_card'] = {
       category: 'layout',
-      render: (ctx) => `
-        <g transform="translate(60, ${ctx.h - 260})">
-          <rect x="0" y="0" width="${ctx.w - 120}" height="200" rx="24" fill="${ctx.validSecondaryColor}" fill-opacity="${ctx.resolveOpacity!(0.8)}" stroke="${ctx.validBrandColor}" stroke-width="${ctx.scaleStroke!(1.5)}" style="backdrop-filter: blur(10px);" filter="drop-shadow(0 20px 40px rgba(0,0,0,0.15))" />
+      render: (ctx) => {
+        const zones = ((ctx.canonicalGeometry as any)?.protectedZones || []) as Array<{
+          x: number; y: number; width: number; height: number;
+        }>;
+        const textish = zones
+          .filter(z => z.width > 80 && z.height > 40 && z.width < ctx.w * 0.92 && z.height < ctx.h * 0.55)
+          .sort((a, b) => (b.width * b.height) - (a.width * a.height));
+        const heading = textish[0];
+        const padX = 40;
+        const padY = 28;
+        const w = heading
+          ? Math.min(ctx.w - 120, Math.max(320, heading.width + padX * 2))
+          : Math.max(320, ctx.w - 120);
+        const h = heading ? Math.max(140, heading.height + padY * 2) : 200;
+        const x = heading
+          ? Math.max(60, Math.round(heading.x + heading.width / 2 - w / 2))
+          : 60;
+        const y = heading
+          ? Math.max(60, heading.y - padY)
+          : Math.max(60, ctx.h - 260);
+        return `
+        <g transform="translate(${x}, ${y})">
+          <rect x="0" y="0" width="${w}" height="${h}" rx="24" fill="${ctx.validSecondaryColor}" fill-opacity="${ctx.resolveOpacity!(0.8)}" stroke="${ctx.validBrandColor}" stroke-width="${ctx.scaleStroke!(1.5)}" filter="drop-shadow(0 20px 40px rgba(0,0,0,0.15))" />
         </g>
-      `
+      `;
+      }
     };
 
     this.registry['organic_blob'] = {
@@ -1058,15 +1070,34 @@ export class PrimitiveEngine {
 
     this.registry['glass_card'] = {
       category: 'geometry', render: (ctx, layer) => {
-        const w = 400;
-        const h = 250;
-        const x = ctx.constraints.safeX;
-        const y = ctx.h - ctx.constraints.safeY - h;
+        // Prefer the headline's allocated pocket (injected into protectedZones before
+        // decorations render) so the panel hugs the real type — not a fixed bottom-left box.
+        const zones = ((ctx.canonicalGeometry as any)?.protectedZones || []) as Array<{
+          x: number; y: number; width: number; height: number;
+        }>;
+        const textish = zones
+          .filter(z => z.width > 80 && z.height > 40 && z.width < ctx.w * 0.92 && z.height < ctx.h * 0.55)
+          .sort((a, b) => (b.width * b.height) - (a.width * a.height));
+        const heading = textish[0];
+        const padX = 36;
+        const padY = 28;
+        const w = heading
+          ? Math.min(ctx.w - ctx.constraints.safeX * 2, Math.max(280, heading.width + padX * 2))
+          : Math.min(520, ctx.w - ctx.constraints.safeX * 2);
+        const h = heading
+          ? Math.max(120, heading.height + padY * 2)
+          : 200;
+        const x = heading
+          ? Math.max(ctx.constraints.safeX, Math.round(heading.x + heading.width / 2 - w / 2))
+          : Math.round((ctx.w - w) / 2);
+        const y = heading
+          ? Math.max(ctx.constraints.safeY, heading.y - padY)
+          : Math.round(ctx.h * 0.32);
         return `
-      <!-- Glassmorphism Card -->
+      <!-- Glassmorphism Card (bound to headline pocket) -->
       <g transform="translate(${x}, ${y})">
-        <rect x="0" y="0" width="${w}" height="${h}" rx="16" fill="${ctx.validSecondaryColor}" opacity="${ctx.resolveOpacity!(0.6)}" filter="blur(8px)" />
-        <rect x="0" y="0" width="${w}" height="${h}" rx="16" fill="none" stroke="${ctx.validSecondaryColor}" stroke-width="${ctx.scaleStroke!(1.5)}" opacity="${ctx.resolveOpacity!(0.8)}" />
+        <rect x="0" y="0" width="${w}" height="${h}" rx="16" fill="${ctx.validSecondaryColor}" opacity="${ctx.resolveOpacity!(0.55)}" />
+        <rect x="0" y="0" width="${w}" height="${h}" rx="16" fill="none" stroke="${ctx.validSecondaryColor}" stroke-width="${ctx.scaleStroke!(1.5)}" opacity="${ctx.resolveOpacity!(0.7)}" />
       </g>`;
       }
     };
@@ -1321,26 +1352,6 @@ export class PrimitiveEngine {
       }
     };
 
-    // Pull quote mark — large decorative quotation mark
-    this.registry['pull_quote'] = {
-      category: 'typography', render: (ctx) => {
-        let x = ctx.x || Math.round(ctx.w * 0.1);
-        let y = ctx.y || Math.round(ctx.h * 0.1);
-        
-        // Use negotiated text geometry if available so decoration travels with the text
-        if (ctx.canonicalGeometry?.textRegion) {
-          x = ctx.canonicalGeometry.textRegion.x - 40; // slightly left of text box
-          y = ctx.canonicalGeometry.textRegion.y; // top aligned with text box
-        }
-        
-        return `
-      <!-- Pull Quote Decoration -->
-      <text x="${x}" y="${y + 120}" font-size="160" font-family="${ctx.fallbackFamily}" font-weight="bold" fill="${ctx.validBrandColor}" opacity="${ctx.resolveOpacity!(0.15)}">“</text>`;
-      }
-    };
-
-
-
     // Dashed/dotted perimeter border — scrapbook / editorial feel
     this.registry['dotted_border'] = {
       category: 'geometry', render: (ctx) => {
@@ -1474,7 +1485,30 @@ export class PrimitiveEngine {
     // ==========================================
     // PHASE 3 & 4: CLINICAL AND EDUCATIONAL PRIMITIVES
     // ==========================================
-
+    this.registry['clinical_callout_box'] = {
+      category: 'geometry', render: (ctx, layer) => {
+        return `
+      <!-- Clinical Callout Box with Data / Analysis Style -->
+      <g transform="translate(${ctx.constraints.safeX}, ${ctx.h / 2 - 40})">
+        <rect x="0" y="0" width="360" height="220" fill="${ctx.validSecondaryColor}" opacity="${ctx.resolveOpacity!(1)}" filter="drop-shadow(0 15px 30px rgba(0,0,0,0.15))" />
+        <rect x="0" y="0" width="360" height="40" fill="${ctx.validBrandColor}" opacity="${ctx.resolveOpacity!(0.1)}" />
+        <rect x="0" y="0" width="4" height="220" fill="${ctx.validBrandColor}" />
+        <text x="20" y="25" font-family="monospace" font-size="12" font-weight="bold" fill="${ctx.validBrandColor}" letter-spacing="2px">CLINICAL ANALYSIS</text>
+        <!-- Mock Data Bars -->
+        <rect x="20" y="70" width="320" height="6" fill="${ctx.validBrandColor}" opacity="${ctx.resolveOpacity!(0.1)}" />
+        <rect x="20" y="70" width="240" height="6" fill="${ctx.validBrandColor}" />
+        <text x="20" y="95" font-family="monospace" font-size="10" fill="${ctx.validBrandColor}" opacity="${ctx.resolveOpacity!(0.6)}">EFFICACY 85%</text>
+        
+        <rect x="20" y="120" width="320" height="6" fill="${ctx.validBrandColor}" opacity="${ctx.resolveOpacity!(0.1)}" />
+        <rect x="20" y="120" width="160" height="6" fill="${ctx.validBrandColor}" />
+        <text x="20" y="145" font-family="monospace" font-size="10" fill="${ctx.validBrandColor}" opacity="${ctx.resolveOpacity!(0.6)}">TISSUE REPAIR 60%</text>
+        
+        <rect x="20" y="170" width="320" height="6" fill="${ctx.validBrandColor}" opacity="${ctx.resolveOpacity!(0.1)}" />
+        <rect x="20" y="170" width="280" height="6" fill="${ctx.validBrandColor}" />
+        <text x="20" y="195" font-family="monospace" font-size="10" fill="${ctx.validBrandColor}" opacity="${ctx.resolveOpacity!(0.6)}">HYDRATION 92%</text>
+      </g>`;
+      }
+    };
 
     this.registry['step_badge'] = {
       category: 'geometry', render: (ctx, layer) => {
@@ -1489,10 +1523,20 @@ export class PrimitiveEngine {
 
     this.registry['large_numeral_bullet'] = {
       category: 'geometry', render: (ctx, layer) => {
+        // Quiet watermark — never a 250px gold numeral fighting the headline.
+        const pad = Math.max(ctx.constraints.safeX, Math.round(ctx.w * 0.05));
+        const size = Math.round(ctx.h * 0.14);
+        const anchor = String(layer?.anchor || 'top_left');
+        let x = pad;
+        let y = pad + size;
+        if (anchor.includes('right')) x = ctx.w - pad;
+        if (anchor.includes('bottom')) y = ctx.h - Math.max(ctx.constraints.margins?.bottom || pad, pad) - 8;
+        if (anchor.includes('center') && !anchor.includes('left') && !anchor.includes('right')) x = ctx.w / 2;
+        const anchorAttr = anchor.includes('right') ? 'end' : (anchor.includes('left') || anchor === 'top_left' ? 'start' : 'middle');
         return `
-      <!-- Educational Large Numeral Background -->
-      <text x="${ctx.constraints.safeX}" y="${ctx.constraints.safeY + 180}" font-family="Georgia, serif" font-size="250" font-weight="900" fill="${ctx.validBrandColor}" opacity="${ctx.resolveOpacity!(0.08)}" text-anchor="start">
-        1.
+      <!-- Quiet educational numeral watermark -->
+      <text x="${x}" y="${y}" font-family="Georgia, serif" font-size="${size}" font-weight="700" fill="${ctx.validBrandColor}" opacity="${ctx.resolveOpacity!(0.12)}" text-anchor="${anchorAttr}">
+        01
       </text>`;
       }
     };
@@ -1612,60 +1656,6 @@ export class PrimitiveEngine {
       }
     };
 
-    this.registry['editorial_badge'] = {
-      category: 'geometry', render: (ctx, layer) => {
-        const anchor = layer?.anchor || 'bottom_right';
-        let x = ctx.constraints.safeX;
-        let y = ctx.constraints.safeY;
-        if (anchor.includes('right')) x = ctx.w - ctx.constraints.safeX - 140;
-        if (anchor.includes('bottom')) y = ctx.h - ctx.constraints.safeY - 40;
-        if (anchor.includes('center')) x = ctx.w / 2 - 70;
-        return `
-      <!-- Editorial Badge -->
-      <g transform="translate(${x}, ${y})">
-        <rect x="0" y="0" width="140" height="40" fill="none" stroke="${ctx.validBrandColor}" stroke-width="${ctx.scaleStroke!(1)}" />
-        <text x="70" y="24" font-family="sans-serif" font-size="10" font-weight="bold" fill="${ctx.validBrandColor}" text-anchor="middle" letter-spacing="3px">EDITORIAL</text>
-      </g>`;
-      }
-    };
-
-    this.registry['metric_label'] = {
-      category: 'geometry', render: (ctx, layer) => {
-        const anchor = layer?.anchor || 'middle_left';
-        let x = ctx.constraints.safeX;
-        let y = ctx.h / 2;
-        if (anchor.includes('right')) x = ctx.w - ctx.constraints.safeX - 120;
-        if (anchor.includes('bottom')) y = ctx.h - ctx.constraints.safeY - 60;
-        if (anchor.includes('top')) y = ctx.constraints.safeY + 60;
-        return `
-      <!-- Metric Label -->
-      <g transform="translate(${x}, ${y})">
-        <text x="0" y="0" font-family="Georgia, serif" font-size="48" font-style="italic" fill="${ctx.validBrandColor}">98%</text>
-        <rect x="0" y="12" width="60" height="2" fill="${ctx.validAccentColor || ctx.validBrandColor}" />
-        <text x="0" y="30" font-family="sans-serif" font-size="10" font-weight="bold" fill="${ctx.validBrandColor}" letter-spacing="2px">EFFICACY</text>
-      </g>`;
-      }
-    };
-
-    this.registry['notification_icon_badge'] = {
-      category: 'geometry', render: (ctx, layer) => {
-        // Notification bell icon in a circle.
-        const anchor = layer?.anchor || 'top_left';
-        let x = ctx.constraints.safeX;
-        let y = ctx.constraints.safeY;
-        if (anchor.includes('right')) x = ctx.w - ctx.constraints.safeX - 48;
-        if (anchor.includes('bottom')) y = ctx.h - ctx.constraints.safeY - 48;
-        
-        return `
-      <!-- Notification Icon Badge -->
-      <g transform="translate(${x}, ${y})">
-        <circle cx="24" cy="24" r="24" fill="${ctx.validBrandColor}" />
-        <path d="M24,10 c-4.4,0-8,3.6-8,8 v5.5 c0,0.8-0.7,1.5-1.5,1.5 h-1.5 v2 h22 v-2 h-1.5 c-0.8,0-1.5-0.7-1.5-1.5 V18 C32,13.6,28.4,10,24,10 z M24,31 c-1.7,0-3-1.3-3-3 h6 C27,29.7,25.7,31,24,31 z" fill="${ctx.validSecondaryColor}" />
-        <circle cx="34" cy="14" r="6" fill="${ctx.validAccentColor || '#E74C3C'}" />
-      </g>`;
-      }
-    };
-
     // Pre-existing gap (not introduced this session): ThemeEngine.getMoodDecorations('luxury_black')
     // has always requested a decoration named 'dark_scrim', but only 'dark_scrim_overlay' was ever
     // registered — and only in the legacy DECORATIONS registry (layout-renderers.ts), a different,
@@ -1764,9 +1754,16 @@ export class PrimitiveEngine {
           const isLast = i === steps - 1;
           dots += `<circle cx="${cx}" cy="${y}" r="${isLast ? 8 : 5}" fill="${isLast ? ctx.validBrandColor : ctx.validBackgroundColor}" stroke="${ctx.validBrandColor}" stroke-width="${ctx.scaleStroke!(2)}" />`;
         }
+        // data-bounds lets renderPrimitive()'s collision engine actually see where this sits —
+        // without it, a bare <line>/<circle> group is invisible to isSafePlacement() and this
+        // track can be positioned (via the hardcoded offsetPercent above) straight across a
+        // headline with no relocate/shrink/suppress ever kicking in.
+        const dotRadius = 8;
+        const boundsY = y - dotRadius - 4;
+        const boundsHeight = (dotRadius + 4) * 2;
         return `
       <!-- Transformation Family Timeline Track -->
-      <g>
+      <g data-bounds="${x1},${boundsY},${x2 - x1},${boundsHeight}">
         <line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="${ctx.validBrandColor}" stroke-width="${ctx.scaleStroke!(1.5)}" opacity="${ctx.resolveOpacity!(0.35)}" />
         ${dots}
       </g>`;
@@ -1888,7 +1885,18 @@ export class PrimitiveEngine {
     return 0.299 * r + 0.587 * g + 0.114 * b;
   }
 
-  public renderPrimitive(name: string, ctx: PrimitiveContext, layer?: IDSLDecorationLayer | IDSLTextLayer): string {
+  /**
+   * Renders a primitive by name.
+   *
+   * Return value carries meaning that callers MUST distinguish:
+   *  - `null`   → the component name is genuinely unregistered (a real DSL/authoring error).
+   *  - `''`     → the component was found and handled, but intentionally produced no visual
+   *               output (e.g. delegated to another engine, or hard-collision-disabled by the
+   *               Collision Engine below). This is an expected, silent outcome — NOT an error —
+   *               and must never be surfaced as a "missing component" placeholder.
+   *  - non-empty string → the rendered SVG fragment.
+   */
+  public renderPrimitive(name: string, ctx: PrimitiveContext, layer?: IDSLDecorationLayer | IDSLTextLayer): string | null {
     // Aliases for family-inject / theme names that map to real registry entries
     const ALIASES: Record<string, string> = {
       gallery_frame: 'museum_border',
@@ -1899,8 +1907,8 @@ export class PrimitiveEngine {
     const resolvedName = ALIASES[name] || name;
     const primitive = this.registry[resolvedName];
     if (!primitive) {
-      console.warn(`[PrimitiveEngine] DEGRADED: Primitive '${name}'${resolvedName !== name ? ` (alias→${resolvedName})` : ''} not found in registry. Required primitive was skipped.`);
-      return '';
+      console.warn(`[PrimitiveEngine] Warning: Primitive '${name}'${resolvedName !== name ? ` (alias→${resolvedName})` : ''} not found.`);
+      return null;
     }
     if (resolvedName !== name) {
       console.log(`[PrimitiveEngine] Aliased '${name}' → '${resolvedName}'`);
@@ -1925,15 +1933,13 @@ export class PrimitiveEngine {
     };
 
     ctx.isSafePlacement = (candidateBox: BoundingBox): boolean => {
-      const policy = (layer as any)?.collisionPolicy || 'avoid';
-      if (policy === 'allow' || policy === 'anchor') return true;
-
-      if (!ctx.layoutState?.occupiedRegions) return true;
+      if (!ctx.canonicalGeometry) return true; // graceful fallback
+      const zones = ctx.canonicalGeometry.protectedZones;
       const halo = Math.round(Math.min(ctx.w, ctx.h) * 0.03);
-      for (const region of ctx.layoutState.occupiedRegions) {
+      for (const zone of zones) {
         const expanded = {
-          x: region.x - halo, y: region.y - halo,
-          width: region.width + halo * 2, height: region.height + halo * 2,
+          x: zone.x - halo, y: zone.y - halo,
+          width: zone.width + halo * 2, height: zone.height + halo * 2,
         };
         if (candidateBox.x < expanded.x + expanded.width &&
             candidateBox.x + candidateBox.width > expanded.x &&
@@ -1976,19 +1982,20 @@ export class PrimitiveEngine {
     }
 
     if (bounds && ctx.isSafePlacement && !ctx.isSafePlacement(bounds)) {
-       const priority = (layer as any)?.priority || 'decorative';
        // 1. Attempt minor Relocation (shift down or away)
        const relocatedBounds = { ...bounds, y: bounds.y + (ctx.h * 0.1) }; // Push it down slightly
        if (ctx.isSafePlacement(relocatedBounds)) {
            rawSvg = `<g transform="translate(0, ${ctx.h * 0.1})">${rawSvg}</g>`;
-           console.log(`[PRIMITIVE] type: ${resolvedName} | collision: occupied_region | result: SHIFTED (down)`);
+           console.warn(`[PrimitiveEngine] Collision detected for '${name}' - relocated Y`);
        } else {
-           if (priority === 'structural' || priority === 'brand') {
+           // 2. Minor Scale Down (0.8 instead of crushing 0.5)
+           const shrunkBounds = { ...bounds, width: bounds.width * 0.8, height: bounds.height * 0.8 };
+           if (ctx.isSafePlacement(shrunkBounds)) {
                rawSvg = `<g transform="scale(0.8) translate(${bounds.x * 0.2}, ${bounds.y * 0.2})">${rawSvg}</g>`;
-               console.log(`[PRIMITIVE] type: ${resolvedName} | collision: occupied_region | result: SCALED (priority=${priority})`);
+               console.warn(`[PrimitiveEngine] Collision detected for '${name}' - scaled to 80%`);
            } else {
                // 3. Disable
-               console.warn(`[PRIMITIVE] type: ${resolvedName} | collision: occupied_region | result: SKIPPED (priority=${priority}, no safe region)`);
+               console.warn(`[PrimitiveEngine] Hard collision detected for '${name}' - Silently disabling primitive.`);
                return ''; // Disable primitive completely
            }
        }

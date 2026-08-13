@@ -153,6 +153,50 @@ export class LayoutEngine {
     return { x, y, width: w, height: h };
   }
 
+  /**
+   * Cover-crop window in source pixels (matches processPortraitFit face-aware cover).
+   * Keeps face focus near the crop center when possible.
+   */
+  public static coverCropWindow(
+    sourceW: number,
+    sourceH: number,
+    targetW: number,
+    targetH: number,
+    focusXPercent = 50,
+    focusYPercent = 40,
+  ): { left: number; top: number; width: number; height: number; scale: number } {
+    const scale = Math.max(targetW / Math.max(1, sourceW), targetH / Math.max(1, sourceH));
+    const width = Math.min(sourceW, Math.max(1, Math.round(targetW / scale)));
+    const height = Math.min(sourceH, Math.max(1, Math.round(targetH / scale)));
+    const cx = (Math.min(100, Math.max(0, focusXPercent)) / 100) * sourceW;
+    const cy = (Math.min(100, Math.max(0, focusYPercent)) / 100) * sourceH;
+    const left = Math.max(0, Math.min(sourceW - width, Math.round(cx - width / 2)));
+    const top = Math.max(0, Math.min(sourceH - height, Math.round(cy - height / 2)));
+    return { left, top, width, height, scale };
+  }
+
+  /** Map a source % point onto canvas after face-aware cover crop. */
+  public static mapSourcePercentThroughCover(
+    sourceXPercent: number,
+    sourceYPercent: number,
+    sourceW: number,
+    sourceH: number,
+    targetW: number,
+    targetH: number,
+    focusXPercent = 50,
+    focusYPercent = 40,
+  ): { x: number; y: number } {
+    const crop = LayoutEngine.coverCropWindow(
+      sourceW, sourceH, targetW, targetH, focusXPercent, focusYPercent,
+    );
+    const sx = (sourceXPercent / 100) * sourceW;
+    const sy = (sourceYPercent / 100) * sourceH;
+    return {
+      x: Math.round((sx - crop.left) * crop.scale),
+      y: Math.round((sy - crop.top) * crop.scale),
+    };
+  }
+
   public getSubjectBox(): BoundingBox | undefined {
     return this.subjectBox;
   }
@@ -610,7 +654,12 @@ export class LayoutEngine {
 
       if (anchor.includes('top')) y = targetRegion.y;
       else if (anchor.includes('bottom')) y = targetRegion.y + Math.max(0, targetRegion.height - boxHeight);
-      else if (anchor === 'center' || anchor.includes('middle')) {
+      else if (
+        anchor === 'center'
+        || anchor.includes('middle')
+        || anchor.includes('center')
+      ) {
+        // center / middle / center_left / center_right / middle_* → vertical middle
         y = targetRegion.y + Math.max(0, (targetRegion.height - boxHeight) / 2);
       }
       return { x, y };
@@ -637,6 +686,64 @@ export class LayoutEngine {
     if (anchor.includes('bottom')) y = whitespace.y + whitespace.height - boxHeight;
 
     return { x, y };
+  }
+
+  /**
+   * Seed spatial axis from the Template Agent recipe (image mask / padding / anchors).
+   * visualPriority only tunes share/fonts inside this contract — it must not invent a
+   * panel split that contradicts a full-bleed or inset template.
+   */
+  public static seedPolicyFromTemplate(
+    dsl: { layers?: Array<{ type?: string; mask?: string; paddingPercent?: number; anchor?: string; orientation?: string }>; id?: string },
+    base: SpatialAllocationPolicy,
+  ): SpatialAllocationPolicy {
+    const imageLayer = (dsl.layers || []).find(l => l.type === 'image');
+    if (!imageLayer) {
+      // Text-only recipes: no photo panel to carve
+      return { ...base, splitAxis: 'overlay' };
+    }
+
+    const mask = String(imageLayer.mask || 'rectangle');
+    const pad = Number(imageLayer.paddingPercent ?? 0);
+    const anchor = String(imageLayer.anchor || 'center');
+    const id = String(dsl.id || '');
+
+    // Explicit split recipes — image surrenders a real half
+    // before_after_split is special: photos are stitched full-frame by the renderer;
+    // text must use overlay anchors (e.g. bottom_center), not a carved panel.
+    if (mask === 'before_after_split' || id.includes('before_after')) {
+      return { ...base, splitAxis: 'overlay' };
+    }
+
+    if (
+      mask === 'split'
+      || id.includes('split')
+    ) {
+      const horizontal =
+        imageLayer.orientation === 'horizontal'
+        || anchor.includes('left')
+        || anchor.includes('right')
+        || id.includes('horizontal');
+      return {
+        ...base,
+        splitAxis: horizontal ? 'horizontal' : 'vertical',
+        preferredTextBias:
+          anchor.includes('left') || anchor.includes('top') ? 'end' : 'start',
+      };
+    }
+
+    // Full-bleed / near-full photo — ALWAYS overlay (text on photo, not a surrendered panel)
+    if (mask === 'full_bleed' || pad <= 2) {
+      return { ...base, splitAxis: 'overlay' };
+    }
+
+    // Inset circle / arch / polaroid / padded rectangle — photo sized by padding+anchor;
+    // text overlays remaining negative space (still overlay axis, full imageRegion)
+    if (mask === 'circle' || mask === 'arch' || mask === 'polaroid' || pad > 2) {
+      return { ...base, splitAxis: 'overlay' };
+    }
+
+    return base;
   }
 
   /**
@@ -978,28 +1085,40 @@ export class LayoutEngine {
       };
     }
 
-    // Overlay band — photo full-bleed; text in subject-aware band (image_hero / cta_hero)
+    // Overlay band — photo full-bleed; text placed in subject-aware safe frame.
+    // Use the FULL safe content area as textRegion so template anchors (top/center/bottom)
+    // can resolve correctly — a thin band collapses independent anchors into one cluster.
     const imageRegion: BoundingBox = { x: 0, y: 0, width: this.canvasWidth, height: this.canvasHeight };
+    const fullSafe: BoundingBox = {
+      x: constraints.safeX,
+      y: constraints.safeY,
+      width: constraints.contentMaxWidth,
+      height: Math.max(80, this.canvasHeight - constraints.safeY - constraints.margins.bottom),
+    };
+    // Optional reading-band hint for image_hero density (scrim prefers actualTextRegion anyway)
     const bandH = Math.max(
-      Math.round(this.canvasHeight * policy.textShare),
-      Math.round(constraints.safeY + this.canvasHeight * 0.16),
+      Math.round(this.canvasHeight * Math.min(0.55, Math.max(0.22, policy.textShare))),
+      Math.round(constraints.safeY + this.canvasHeight * 0.18),
     );
-    let textRegion: BoundingBox;
-    if (bias === 'end') {
-      const y = this.canvasHeight - constraints.margins.bottom - bandH;
-      textRegion = {
-        x: constraints.safeX,
-        y: Math.max(constraints.safeY, y),
-        width: constraints.contentMaxWidth,
-        height: bandH,
-      };
-    } else {
-      textRegion = {
-        x: constraints.safeX,
-        y: constraints.safeY,
-        width: constraints.contentMaxWidth,
-        height: bandH,
-      };
+    let textRegion: BoundingBox = { ...fullSafe };
+    // Only shrink to a band when share is small AND bias is set — still prefer full safe for placement
+    if (policy.textShare < 0.28) {
+      if (bias === 'end') {
+        const y = this.canvasHeight - constraints.margins.bottom - bandH;
+        textRegion = {
+          x: constraints.safeX,
+          y: Math.max(constraints.safeY, y),
+          width: constraints.contentMaxWidth,
+          height: bandH,
+        };
+      } else {
+        textRegion = {
+          x: constraints.safeX,
+          y: constraints.safeY,
+          width: constraints.contentMaxWidth,
+          height: bandH,
+        };
+      }
     }
 
     const carvedTextRegion = this.carveSubjectsFromRegion(textRegion, 'overlay', requiredTextWidth);

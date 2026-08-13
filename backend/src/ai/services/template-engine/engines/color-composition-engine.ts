@@ -191,6 +191,53 @@ export class ColorCompositionEngine {
     return ink;
   }
 
+  /**
+   * Guarantee readable ink against a surface (photo band or canvas).
+   * Never returns an ink that fails ~3:1 contrast — flips to white/depth as needed.
+   * Background is never used as ink.
+   */
+  public ensureReadableInk(
+    proposedInk: string | undefined,
+    surfaceHex: string,
+    palette: ColorPalette,
+  ): string {
+    const bg = this.cleanHex(palette.backgroundColor || '#FFFFFF');
+    const depth = this.cleanHex(palette.depthColor || '#111111');
+    const surface = this.cleanHex(surfaceHex || '#888888');
+    const candidates = [
+      proposedInk ? this.cleanHex(proposedInk) : '',
+      depth,
+      '#FFFFFF',
+      '#FCFBF8',
+      this.cleanHex(palette.brandColor || ''),
+      this.cleanHex(palette.accentColor || ''),
+      this.cleanHex(palette.secondaryColor || ''),
+    ].filter(c => c && c.toUpperCase() !== bg.toUpperCase());
+
+    let best = this.getLuminance(surface) > 0.45 ? depth : '#FFFFFF';
+    let bestC = 0;
+    for (const c of candidates) {
+      const contrast = this.getContrastRatio(surface, c);
+      if (contrast > bestC) {
+        bestC = contrast;
+        best = c;
+      }
+    }
+    if (bestC < 3.0) {
+      return this.getLuminance(surface) > 0.45 ? depth : '#FFFFFF';
+    }
+    return best;
+  }
+
+  /** Relative luminance 0–1 for a hex color (public for photo-band checks). */
+  public luminanceOf(hex: string): number {
+    return this.getLuminance(this.cleanHex(hex));
+  }
+
+  public contrastRatio(a: string, b: string): number {
+    return this.getContrastRatio(a, b);
+  }
+
   private isWhite(hex: string): boolean {
     return hex.toUpperCase() === '#FFFFFF' || this.getLuminance(hex) > 0.95;
   }

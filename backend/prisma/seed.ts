@@ -20,15 +20,21 @@ async function main() {
   });
 
   // 2. Create Tenant
+  // hasGrowthStudioAccess is a dedicated boolean column (default: false) that gates the
+  // "ACCESS REQUIRED / Unlock Growth Studio" paywall in the frontend — it is NOT derived from
+  // subscriptionTier or status. Real signups get it set explicitly in auth.service.ts; the seed
+  // tenant needs the same, on both create and update, so re-running `db:seed` against an
+  // already-seeded database also fixes it (upsert's `update` was previously a no-op `{}`).
   const tenant = await prisma.tenant.upsert({
     where: { userId: user.id },
-    update: {},
+    update: { hasGrowthStudioAccess: true },
     create: {
       userId: user.id,
       businessName: 'Luminous Glow Beauty',
       displayName: 'Luminous Glow',
       subscriptionTier: 'premium',
       status: 'active',
+      hasGrowthStudioAccess: true,
       timezone: 'Australia/Sydney',
       locale: 'en-AU',
       onboardingCompleted: true,
@@ -98,8 +104,57 @@ async function main() {
     });
   }
 
+  // 6. Create an Appointment with before/after photos so the Generate flow has something to
+  // work with (GeneratePage shows "No appointments yet" until at least one row exists for the
+  // tenant; consent resolves via the client-level ConsentRecord from step 5, so no direct
+  // consentRecordId link is needed here). Photos are freely-licensed Unsplash stock portraits —
+  // placeholders only, so the AI image pipeline (face detection, subject-avoidance layout) has a
+  // real photo to run against locally.
+  let appointment = await prisma.appointment.findFirst({
+    where: { tenantId: tenant.id, clientId: client.id, serviceName: 'Balayage Color Correction' },
+  });
+  if (!appointment) {
+    appointment = await prisma.appointment.create({
+      data: {
+        tenantId: tenant.id,
+        clientId: client.id,
+        serviceCategory: 'hair_colour',
+        serviceName: 'Balayage Color Correction',
+        serviceDescription: 'Corrected brassy box-dye colour into a lived-in, dimensional blonde balayage.',
+        appointmentDate: new Date('2026-08-10T10:30:00+10:00'),
+        durationMinutes: 180,
+        source: 'manual',
+        notes: 'Client wanted low-maintenance regrowth and softer, warmer tone.',
+      },
+    });
+
+    await prisma.imageAsset.createMany({
+      data: [
+        {
+          tenantId: tenant.id,
+          appointmentId: appointment.id,
+          rawUrl: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=1200&q=80',
+          assetType: 'image',
+          isBeforePhoto: true,
+          source: 'manual',
+          uploadValidated: true,
+        },
+        {
+          tenantId: tenant.id,
+          appointmentId: appointment.id,
+          rawUrl: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=1200&q=80',
+          assetType: 'image',
+          isAfterPhoto: true,
+          source: 'manual',
+          uploadValidated: true,
+        },
+      ],
+    });
+  }
+
   console.log('Seeding completed successfully!');
   console.log('Login: admin@ellebeo.com / password123');
+  console.log(`Appointment ready: ${appointment.serviceName} for ${client.firstName} ${client.lastName} (${appointment.id})`);
 }
 
 main()
