@@ -80,12 +80,16 @@ HTTP (flag on, JWT): `POST /api/v1/video/slideshow/render`, `GET /api/v1/video/j
 
 ## Phase 3 — Agent runtime + Director + Script
 
-- [ ] Agent runtime: system prompt + tools + JSON contract + schema validation + JSON-repair
-- [ ] Director (orchestrator job, persist after each step)
-- [ ] Script agent
-- [ ] Bounds: max tool calls, per-video token/cost ceiling
-- [ ] Self-test: valid slideshow plan; malformed-output repair test
+- [x] Agent runtime: system prompt + tools + JSON contract + schema validation + JSON-repair (`agents/runtime.ts`, `@anthropic-ai/sdk` beta tools via `LlmPort`)
+- [x] Director (orchestrator job, persist after each step: scripted → assembled → render_queued)
+- [x] Script agent (`submit_script` → hook/scenes/captions)
+- [x] Bounds: `maxToolCallsPerAgent`, `maxTokensPerVideo`, `maxCostUsdPerVideo` in `AI_CONFIG.video`
+- [x] Self-test: valid slideshow plan handoff to Phase 2 mapper/render; malformed-output repair; resume; cost ceiling
 - [ ] GATE
+
+HTTP (flag on, JWT): `POST /api/v1/video/slideshow/agentic` (Director + Script, then enqueue render). Rule-based `POST .../slideshow/render` unchanged.
+
+Director is a resumable BullMQ orchestrator (not a free-form LLM). Script is the Phase 3 reasoning agent. Assembly + Shotstack remain LLM-free.
 
 ---
 

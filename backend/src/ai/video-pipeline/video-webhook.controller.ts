@@ -53,6 +53,15 @@ export class VideoWebhookController {
     return this.pipeline.createAndRenderSlideshow(req.user.tenantId, req.user.userId, dto);
   }
 
+  @UseGuards(JwtAuthGuard, TenantStatusGuard, GrowthStudioVideoGuard, GenerationRestrictionGuard)
+  @Post('slideshow/agentic')
+  createAgenticSlideshow(
+    @Req() req: { user: { tenantId: string; userId: string } },
+    @Body() dto: CreateSlideshowDto,
+  ) {
+    return this.pipeline.createAndDirectSlideshow(req.user.tenantId, req.user.userId, dto);
+  }
+
   @UseGuards(JwtAuthGuard, TenantStatusGuard, GrowthStudioVideoGuard)
   @Get('jobs/:id')
   getJob(@Req() req: { user: { tenantId: string } }, @Param('id') id: string) {

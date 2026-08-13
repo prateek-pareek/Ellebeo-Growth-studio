@@ -1097,6 +1097,7 @@ model VideoJob {
   tokensUsed        Int          @default(0) @map("tokens_used")
   estimatedCostUsd  Float?       @map("estimated_cost_usd")
   revisionCount     Int          @default(0) @map("revision_count")
+  loopState         Json?        @map("loop_state")
   createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz
   updatedAt         DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 

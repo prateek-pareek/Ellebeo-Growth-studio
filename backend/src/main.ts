@@ -15,6 +15,7 @@ import { SmsService } from './notifications/sms.service';
 import { PrismaService } from './prisma/prisma.service';
 import { startNotificationsWorker } from './notifications/notifications.worker';
 import { startPublishWorker } from './schedule/publish.worker';
+import { startVideoDirectorWorker } from './ai/video-pipeline/agents/director.worker';
 import { startVideoRenderWorker } from './ai/video-pipeline/workers/video-render.worker';
 import { startVideoCallbackWorker } from './ai/video-pipeline/workers/video-callback.worker';
 import { startVideoPublishWorker } from './ai/video-pipeline/workers/video-publish.worker';
@@ -93,6 +94,7 @@ async function bootstrap() {
   const smsService = app.get(SmsService);
   startNotificationsWorker(prismaService, notificationsGateway, smsService);
   startPublishWorker(prismaService);
+  startVideoDirectorWorker(prismaService);
   startVideoRenderWorker(prismaService);
   startVideoCallbackWorker(prismaService);
   startVideoPublishWorker(prismaService);

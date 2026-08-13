@@ -211,6 +211,19 @@ export const videoPublishQueue = new Queue<VideoPublishJobPayload>(
   },
 );
 
+export interface VideoDirectorJobPayload {
+  videoJobId: string;
+  tenantId: string;
+}
+
+export const videoDirectorQueue = new Queue<VideoDirectorJobPayload>(
+  AI_CONFIG.queues.videoDirector.name,
+  {
+    connection: bullMQConnection,
+    defaultJobOptions: { ...AI_CONFIG.queues.videoDirector.defaultJobOptions },
+  },
+);
+
 // ---------------------------------------------------------------------------
 // Helper: graceful shutdown of all queues
 // ---------------------------------------------------------------------------
@@ -223,6 +236,7 @@ export async function closeAllQueues(): Promise<void> {
     videoRenderQueue.close(),
     videoCallbackQueue.close(),
     videoPublishQueue.close(),
+    videoDirectorQueue.close(),
     publishScheduledQueue.close(),
     deadLetterQueue.close(),
     contentGenerationQueueEvents.close(),

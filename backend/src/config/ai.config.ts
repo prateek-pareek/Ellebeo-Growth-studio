@@ -135,6 +135,16 @@ export const AI_CONFIG = {
         removeOnFail: false,
       },
     },
+    videoDirector: {
+      name: 'video-director',
+      concurrency: 3,
+      defaultJobOptions: {
+        attempts: 2,
+        backoff: { type: 'exponential' as const, delay: 5_000 },
+        removeOnComplete: { count: 100 },
+        removeOnFail: false,
+      },
+    },
     deadLetter: {
       name: 'dead-letter-queue',
       concurrency: 0,   // no workers — manual review only
@@ -293,6 +303,11 @@ export const AI_CONFIG = {
     flag: 'GROWTH_STUDIO_VIDEO' as const,
     defaultCriticMaxRevisions: 2,
     renderProvider: 'shotstack' as const,
+    maxToolCallsPerAgent: 6,
+    maxTokensPerVideo: 8_000,
+    maxCostUsdPerVideo: 0.25,
+    directorMaxTokens: 1024,
+    scriptMaxTokens: 1024,
   },
 
   // --------------------------------------------------------------------------

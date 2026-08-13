@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   videoCallbackQueue,
+  videoDirectorQueue,
   videoPublishQueue,
   videoRenderQueue,
 } from '../queues/queue.definitions';
@@ -29,6 +30,14 @@ export class VideoQueueService {
       'publish',
       { videoJobId, tenantId, scheduledPostId },
       { jobId: `video-publish:${videoJobId}:${scheduledPostId}` },
+    );
+  }
+
+  enqueueDirector(videoJobId: string, tenantId: string) {
+    return videoDirectorQueue.add(
+      'direct',
+      { videoJobId, tenantId },
+      { jobId: `video-director:${videoJobId}` },
     );
   }
 }
