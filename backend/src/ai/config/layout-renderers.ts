@@ -1438,35 +1438,28 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     );
     if (textBand && spatialAxis === 'overlay' && !isBeforeAfter
       && (forceScrimForSafety || (priority === 'image_hero' && !isCircleLike))) {
-      const pad = 10;
       const inkIsLight = getLuminanceSafe(ctx.dynamicTextColor || '#FFF') > 150;
       const scrimOpacity = forceScrimForSafety ? 0.36 : 0.18;
       const scrimFill = inkIsLight
         ? ((ctx.validDepthColor && getLuminanceSafe(ctx.validDepthColor) < 140) ? ctx.validDepthColor : '#0A0A0A')
         : '#F7F4EF';
-      const maxScrimH = Math.round(ctx.h * 0.22);
-      const scrimH = Math.min(textBand.height + pad * 2, maxScrimH);
-      const scrimW = Math.min(textBand.width + pad * 2, Math.round(ctx.w * 0.62));
-      // Keep scrim off the face/subject box if we know it
-      let scrimX = Math.max(0, Math.min(textBand.x - pad, ctx.w - scrimW));
-      let scrimY = Math.max(0, Math.min(textBand.y - pad, ctx.h - scrimH));
-      const face = (ctx.subjectBox || ctx.faceBox) as BoundingBox | undefined;
-      if (face) {
-        const overlapsFace = scrimX < face.x + face.width && scrimX + scrimW > face.x
-          && scrimY < face.y + face.height && scrimY + scrimH > face.y;
-        if (overlapsFace) {
-          // Prefer below face; skip scrim if nowhere safe
-          const below = face.y + face.height + 8;
-          if (below + scrimH < ctx.h - 80) scrimY = below;
-          else {
-            // skip drawing scrim over face
-            scrimY = -1;
-          }
-        }
-      }
-      if (scrimY >= 0) {
-        svg += `<rect x="${scrimX}" y="${scrimY}" width="${scrimW}" height="${scrimH}" fill="${scrimFill}" fill-opacity="${scrimOpacity}" rx="12" />`;
-      }
+      // Task 1 (AI pipeline work list): geometry now comes from the text_scrim
+      // primitive, which hugs the real rendered text via
+      // ctx.layoutState.occupiedRegions (populated by the pre-pass above)
+      // instead of sizing off the pre-fit textBand estimate this block used to
+      // size itself from — that estimate is what caused the oversized-panel
+      // bug. Trigger condition (whether to scrim at all) and fill/opacity
+      // policy are untouched — neither was the bug.
+      const scrimSvg = primitiveEngine.renderPrimitive('text_scrim', primitiveCtx, {
+        id: 'auto_text_scrim',
+        zIndex: 0,
+        type: 'decoration',
+        component: 'text_scrim',
+        fill: scrimFill,
+        opacity: scrimOpacity,
+        padding: 10,
+      } as any);
+      if (scrimSvg) svg += scrimSvg;
     }
 
     // Circle / before-after: never force solid_card (white-on-white + face cover).
