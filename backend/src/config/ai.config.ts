@@ -30,6 +30,12 @@ export const AI_CONFIG = {
       maxTokens: 2048,
       timeoutMs: 45_000,
     },
+    // Isolated Gemini Lab playground only — does not feed the Sharp compositor.
+    imageGeneration: {
+      provider: 'google' as const,
+      modelId: 'gemini-2.5-flash-image',
+      timeoutMs: 90_000,
+    },
     reelScript: {
       provider: 'openai' as const,
       modelId: 'gemini-flash-latest',

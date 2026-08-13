@@ -312,6 +312,7 @@ model Tenant {
   feedbacks              ContentFeedback[]
   performances           PostPerformance[]
   videoJobs              VideoJob[]
+  geminiLabBrandDna      GeminiLabBrandDna?
 
   @@index([userId])
   @@index([status])
@@ -469,6 +470,23 @@ model BrandDNA {
   @@unique([tenantId, isCurrent], name: "unique_current_brand_dna")
   @@index([tenantId])
   @@map("brand_dna")
+  @@schema("platform")
+}
+
+/// Gemini Lab–only guided Brand DNA. Isolated from production BrandDNA /generate.
+model GeminiLabBrandDna {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @unique @map("tenant_id") @db.Uuid
+  currentStep Int       @default(1) @map("current_step")
+  draft       Json
+  profile     Json?
+  completedAt DateTime? @map("completed_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("gemini_lab_brand_dna")
   @@schema("platform")
 }
 

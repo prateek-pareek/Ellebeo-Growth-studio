@@ -146,7 +146,7 @@ export class GeometryCompiler {
     // typography_hero: allow large presence; airy whitespace means room TO FILL with type
     const canvasCeiling = Math.round(canvasHeight * (
       visualPriority === 'typography_hero' ? 0.20
-        : visualPriority === 'image_hero' ? 0.09
+        : visualPriority === 'image_hero' ? 0.11
           : 0.11
     ));
     heroSize = Math.max(minHero, Math.min(heroSize, maxHero, canvasCeiling));

@@ -55,6 +55,9 @@ class EnvironmentVariables {
   GEMINI_MODEL?: string;
 
   @IsOptional() @IsString()
+  GEMINI_IMAGE_MODEL?: string;
+
+  @IsOptional() @IsString()
   ANTHROPIC_API_KEY?: string;
 
   @IsOptional() @IsString()
@@ -81,6 +84,11 @@ class EnvironmentVariables {
   @IsOptional()
   @IsIn(['true', 'false'])
   GROWTH_STUDIO_VIDEO?: string;
+
+  /** Gemini Lab guided Brand DNA. Default on. Does not change /brand or /generate. */
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  BRAND_DNA_GUIDED_V2?: string;
 
   @IsOptional() @IsString()
   API_PUBLIC_URL?: string;

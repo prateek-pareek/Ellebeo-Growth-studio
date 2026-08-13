@@ -17,6 +17,7 @@ import { Route as BrandRouteImport } from './routes/brand'
 import { Route as CalendarRouteImport } from './routes/calendar'
 import { Route as CampaignsRouteImport } from './routes/campaigns'
 import { Route as ContentRouteImport } from './routes/content'
+import { Route as GeminiLabRouteImport } from './routes/gemini-lab'
 import { Route as GenerateRouteImport } from './routes/generate'
 import { Route as LandingRouteImport } from './routes/landing'
 import { Route as LoginRouteImport } from './routes/login'
@@ -65,6 +66,11 @@ const CampaignsRoute = CampaignsRouteImport.update({
 const ContentRoute = ContentRouteImport.update({
   id: '/content',
   path: '/content',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GeminiLabRoute = GeminiLabRouteImport.update({
+  id: '/gemini-lab',
+  path: '/gemini-lab',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GenerateRoute = GenerateRouteImport.update({
@@ -122,6 +128,7 @@ export interface FileRoutesByFullPath {
   '/calendar': typeof CalendarRoute
   '/campaigns': typeof CampaignsRoute
   '/content': typeof ContentRoute
+  '/gemini-lab': typeof GeminiLabRoute
   '/generate': typeof GenerateRoute
   '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
@@ -141,6 +148,7 @@ export interface FileRoutesByTo {
   '/calendar': typeof CalendarRoute
   '/campaigns': typeof CampaignsRoute
   '/content': typeof ContentRoute
+  '/gemini-lab': typeof GeminiLabRoute
   '/generate': typeof GenerateRoute
   '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
@@ -161,6 +169,7 @@ export interface FileRoutesById {
   '/calendar': typeof CalendarRoute
   '/campaigns': typeof CampaignsRoute
   '/content': typeof ContentRoute
+  '/gemini-lab': typeof GeminiLabRoute
   '/generate': typeof GenerateRoute
   '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
@@ -182,6 +191,7 @@ export interface FileRouteTypes {
     | '/calendar'
     | '/campaigns'
     | '/content'
+    | '/gemini-lab'
     | '/generate'
     | '/landing'
     | '/login'
@@ -201,6 +211,7 @@ export interface FileRouteTypes {
     | '/calendar'
     | '/campaigns'
     | '/content'
+    | '/gemini-lab'
     | '/generate'
     | '/landing'
     | '/login'
@@ -220,6 +231,7 @@ export interface FileRouteTypes {
     | '/calendar'
     | '/campaigns'
     | '/content'
+    | '/gemini-lab'
     | '/generate'
     | '/landing'
     | '/login'
@@ -240,6 +252,7 @@ export interface RootRouteChildren {
   CalendarRoute: typeof CalendarRoute
   CampaignsRoute: typeof CampaignsRoute
   ContentRoute: typeof ContentRoute
+  GeminiLabRoute: typeof GeminiLabRoute
   GenerateRoute: typeof GenerateRoute
   LandingRoute: typeof LandingRoute
   LoginRoute: typeof LoginRoute
@@ -306,6 +319,13 @@ declare module '@tanstack/react-router' {
       path: '/content'
       fullPath: '/content'
       preLoaderRoute: typeof ContentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/gemini-lab': {
+      id: '/gemini-lab'
+      path: '/gemini-lab'
+      fullPath: '/gemini-lab'
+      preLoaderRoute: typeof GeminiLabRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/generate': {
@@ -393,6 +413,7 @@ const rootRouteChildren: RootRouteChildren = {
   CalendarRoute: CalendarRoute,
   CampaignsRoute: CampaignsRoute,
   ContentRoute: ContentRoute,
+  GeminiLabRoute: GeminiLabRoute,
   GenerateRoute: GenerateRoute,
   LandingRoute: LandingRoute,
   LoginRoute: LoginRoute,

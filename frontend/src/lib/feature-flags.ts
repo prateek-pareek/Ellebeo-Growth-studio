@@ -8,11 +8,13 @@
  */
 import { useEffect, useState } from "react";
 
-export type FeatureFlagKey = "feature_cloud_backend" | "GROWTH_STUDIO_VIDEO";
+export type FeatureFlagKey = "feature_cloud_backend" | "GROWTH_STUDIO_VIDEO" | "BRAND_DNA_GUIDED_V2";
 
 const LOCAL_DEFAULTS: Record<FeatureFlagKey, boolean> = {
   feature_cloud_backend: true, // ← LIVE: routes now call the real backend
   GROWTH_STUDIO_VIDEO: import.meta.env.VITE_GROWTH_STUDIO_VIDEO === "true",
+  // Gemini Lab guided Brand DNA. Default on. Does not replace /brand/onboarding.
+  BRAND_DNA_GUIDED_V2: import.meta.env.VITE_BRAND_DNA_GUIDED_V2 !== "false",
 };
 
 // Simple hook — returns the flag value from LOCAL_DEFAULTS.

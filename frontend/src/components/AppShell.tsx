@@ -29,6 +29,7 @@ const DESKTOP_NAV: Array<{ to: string; label: string }> = [
   { to: "/content", label: "Content" },
   { to: "/calendar", label: "Calendar" },
   { to: "/templates", label: "Templates" },
+  { to: "/gemini-lab", label: "Lab" },
   // { to: "/campaigns", label: "Campaigns" },
   { to: "/profile", label: "Profile" },
 ];

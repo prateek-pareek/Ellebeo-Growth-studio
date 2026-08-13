@@ -1,7 +1,8 @@
 // ============================================================================
-// ai-image-generation.service.ts — Original photo + selected template
-// Takes the real before/after photo and composites it into the chosen layout.
-// The source image is never rewritten, restyled, or replaced by an image model.
+// ai-image-generation.service.ts — Original photo + template as style idea
+// The client photo is never rewritten, graded, or replaced by an image model.
+// The selected template is a composition hint (overlay / circle / split, type
+// hierarchy), not a pixel-perfect lock — the compositor aims for a clean slide.
 // ============================================================================
 
 import { firebaseStorage } from '../../config/firebase.client';
@@ -74,10 +75,12 @@ export async function downloadImageAsBuffer(url: string): Promise<Buffer> {
   }
 }
 
-/** Optional face/subject focus — used ONLY for text avoidance mapping, never to re-crop photos. */
+/** Optional face/subject focus — frames the original photo into the template slot. */
 export type FaceFocus = {
   centerXPercent?: number;
   centerYPercent?: number;
+  /** 1 = no crop, ~1.18 = gentle fill, Infinity = full cover. */
+  maxCrop?: number;
 };
 
 export async function processPortraitFit(
@@ -87,51 +90,68 @@ export async function processPortraitFit(
   backgroundColor: string = '#F7F4EF',
   /** cover fills the allocated box (correct size); contain letterboxes and looks undersized */
   fitMode: 'cover' | 'contain' = 'cover',
-  /** @deprecated Ignored — do not re-frame client photos via face crop */
-  _faceFocus?: FaceFocus,
+  /** Bias crop so the subject stays in frame. Same photo, no generation. */
+  faceFocus?: FaceFocus,
 ): Promise<Buffer> {
   try {
     const metadata = await sharp(imageBuffer).metadata();
-    const inputW = metadata.width || targetW;
-    const inputH = metadata.height || targetH;
+    const srcW = metadata.width || targetW;
+    const srcH = metadata.height || targetH;
 
-    let baseSharp = sharp(imageBuffer);
-
-    // Upscale if smaller than 80% of target canvas to prevent pixelation
-    if (inputW < targetW * 0.8 || inputH < targetH * 0.8) {
-      baseSharp = baseSharp.resize({
-        width: Math.max(inputW * 2, targetW),
-        height: Math.max(inputH * 2, targetH),
-        fit: 'inside',
-        kernel: 'lanczos3'
-      });
-      // Skip aggressive sharpening for very small images as it creates artifacts
-    } else {
-      // Apply aggressive HD sharpening, light color modulation, and gamma correction for premium output
-      baseSharp = baseSharp.sharpen({ sigma: 2.2, m1: 0.6, m2: 3.5 });
-    }
-
-    const enhancedBuffer = await baseSharp
-      .modulate({ saturation: 1.06, brightness: 1.02 })
-      .gamma(1.1)
-      .toBuffer();
-
-    if (fitMode === 'cover') {
-      // Neutral cover — never face-extract / re-frame the client's photo
-      return await sharp(enhancedBuffer)
-        .resize(targetW, targetH, { fit: 'cover', position: 'centre' })
+    if (fitMode === 'contain') {
+      const containedImg = await sharp(imageBuffer)
+        .resize(targetW, targetH, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 }, kernel: 'lanczos3' })
+        .toBuffer();
+      return await sharp({
+        create: { width: targetW, height: targetH, channels: 3, background: backgroundColor },
+      })
+        .composite([{ input: containedImg }])
         .png()
         .toBuffer();
     }
 
-    const containedImg = await sharp(enhancedBuffer)
-      .resize(targetW, targetH, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    const focusX = typeof faceFocus?.centerXPercent === 'number' ? faceFocus.centerXPercent : 50;
+    const focusY = typeof faceFocus?.centerYPercent === 'number' ? faceFocus.centerYPercent : 40;
+    const maxCrop = typeof faceFocus?.maxCrop === 'number' ? faceFocus.maxCrop : 1.18;
+    const fit = LayoutEngine.smartFitWindow(srcW, srcH, targetW, targetH, focusX, focusY, maxCrop);
+
+    const extracted = await sharp(imageBuffer)
+      .extract({ left: fit.left, top: fit.top, width: fit.width, height: fit.height })
+      .resize(Math.max(1, Math.round(fit.width * fit.scale)), Math.max(1, Math.round(fit.height * fit.scale)), {
+        kernel: 'lanczos3',
+      })
+      .png()
       .toBuffer();
 
-    return await sharp({
-      create: { width: targetW, height: targetH, channels: 3, background: backgroundColor }
-    })
-      .composite([{ input: containedImg }])
+    const outMeta = await sharp(extracted).metadata();
+    const pw = outMeta.width || targetW;
+    const ph = outMeta.height || targetH;
+
+    if (pw >= targetW && ph >= targetH) {
+      const left = Math.max(0, Math.round((pw - targetW) / 2));
+      const top = Math.max(0, Math.round((ph - targetH) / 2));
+      return await sharp(extracted)
+        .extract({
+          left,
+          top,
+          width: Math.min(targetW, pw - left),
+          height: Math.min(targetH, ph - top),
+        })
+        .resize(targetW, targetH)
+        .png()
+        .toBuffer();
+    }
+
+    // Fill leftover edges with a blurred copy of the same photo — no empty bars, no extra crop.
+    const bg = await sharp(imageBuffer)
+      .resize(targetW, targetH, { fit: 'cover' })
+      .blur(32)
+      .modulate({ brightness: 0.94, saturation: 0.88 })
+      .toBuffer();
+    const left = Math.max(0, Math.round((targetW - pw) / 2));
+    const top = Math.max(0, Math.round((targetH - ph) / 2));
+    return await sharp(bg)
+      .composite([{ input: extracted, left, top }])
       .png()
       .toBuffer();
   } catch (err) {
@@ -1430,64 +1450,89 @@ export class AiImageGenerationService {
         template.base = computedLayoutType as any;
       }
 
-      // Step 2: Face coords for TEXT avoidance only — never re-crop the client photo
+      // Step 2: Face coords — same focus as the photo fit, so text dodge matches pixels
+      const recipeImageLayer = (COMPILED_LAYOUTS[computedLayoutType]?.layers || [])
+        .find((l: any) => l.type === 'image') as any;
+      const photoSlot = LayoutEngine.recipeImageSlot(w, h, recipeImageLayer);
+      const insetFillMask = ['circle', 'arch', 'polaroid'].includes(String(recipeImageLayer?.mask || ''));
+      const photoMaxCrop = insetFillMask ? 99 : 1.18;
+      const faceFocus: FaceFocus = {
+        centerXPercent: typeof visionResult?.faceCoordinates?.faceCenterXPercent === 'number'
+          ? visionResult.faceCoordinates.faceCenterXPercent
+          : 50,
+        centerYPercent: typeof visionResult?.faceCoordinates?.eyesYPercent === 'number'
+          ? visionResult.faceCoordinates.eyesYPercent
+          : 40,
+        maxCrop: photoMaxCrop,
+      };
       let faceBox: any = undefined;
       if (visionResult?.faceCoordinates && visionResult.faceCoordinates.eyesYPercent) {
         const sourceW = originalW;
         const sourceH = originalH;
         const coords = visionResult.faceCoordinates;
-        // Match processPortraitFit centre cover (50/50) so avoidance aligns with real pixels
-        const focusX = 50;
-        const focusY = 50;
+        const focusX = faceFocus.centerXPercent ?? 50;
+        const focusY = faceFocus.centerYPercent ?? 40;
 
-        const eyesMapped = LayoutEngine.mapSourcePercentThroughCover(
+        const eyesMapped = LayoutEngine.mapSourcePercentIntoSlot(
           typeof coords.faceCenterXPercent === 'number' ? coords.faceCenterXPercent : 50,
           coords.eyesYPercent,
-          sourceW, sourceH, w, h, focusX, focusY,
+          sourceW, sourceH, photoSlot, focusX, focusY, photoMaxCrop,
         );
         const mouthMapped = coords.mouthYPercent
-          ? LayoutEngine.mapSourcePercentThroughCover(
+          ? LayoutEngine.mapSourcePercentIntoSlot(
             typeof coords.faceCenterXPercent === 'number' ? coords.faceCenterXPercent : 50,
             coords.mouthYPercent,
-            sourceW, sourceH, w, h, focusX, focusY,
+            sourceW, sourceH, photoSlot, focusX, focusY, photoMaxCrop,
           )
-          : { x: eyesMapped.x, y: Math.round(eyesMapped.y + h * 0.12) };
+          : { x: eyesMapped.x, y: Math.round(eyesMapped.y + photoSlot.height * 0.18) };
 
-        const faceTop = Math.max(0, eyesMapped.y - Math.round(h * 0.10));
-        const faceBottom = Math.min(h, mouthMapped.y + Math.round(h * 0.12));
-        const faceHeight = Math.max(120, faceBottom - faceTop);
+        const faceTop = Math.max(photoSlot.y, eyesMapped.y - Math.round(photoSlot.height * 0.18));
+        const faceBottom = Math.min(
+          photoSlot.y + photoSlot.height,
+          mouthMapped.y + Math.round(photoSlot.height * 0.22),
+        );
+        const faceHeight = Math.max(140, faceBottom - faceTop);
 
         const hasW = typeof coords.faceWidthPercent === 'number' && coords.faceWidthPercent > 5;
         const widthPct = hasW
-          ? Math.min(85, Math.max(22, coords.faceWidthPercent as number))
-          : 72;
-        const faceWidth = Math.round(w * (widthPct / 100));
+          ? Math.min(88, Math.max(28, coords.faceWidthPercent as number))
+          : 56;
+        const faceWidth = Math.round(photoSlot.width * (widthPct / 100));
         let faceX = Math.round(eyesMapped.x - faceWidth / 2);
-        faceX = Math.max(0, Math.min(faceX, w - faceWidth));
+        faceX = Math.max(photoSlot.x, Math.min(faceX, photoSlot.x + photoSlot.width - faceWidth));
 
         faceBox = { x: faceX, y: faceTop, width: faceWidth, height: faceHeight };
-        console.log(`[FaceBox] Centre-cover zone x=${faceX} y=${faceTop}-${faceBottom} w=${faceWidth} (text avoidance only)`);
+        console.log(`[FaceBox] Recipe-slot zone x=${faceX} y=${faceTop}-${faceBottom} w=${faceWidth} slot=${photoSlot.width}x${photoSlot.height}`);
+      } else if (base64Image) {
+        // No detector: still protect the typical portrait zone so type does not sit on a face
+        faceBox = {
+          x: Math.round(photoSlot.x + photoSlot.width * 0.16),
+          y: Math.round(photoSlot.y + photoSlot.height * 0.06),
+          width: Math.round(photoSlot.width * 0.68),
+          height: Math.round(photoSlot.height * 0.58),
+        };
+        console.log(`[FaceBox] Default portrait keep-out x=${faceBox.x} y=${faceBox.y} w=${faceBox.width} h=${faceBox.height}`);
       }
 
       const additionalSubjects: BoundingBox[] = [];
       if (Array.isArray(visionResult?.protectedSubjects)) {
         for (const sub of visionResult.protectedSubjects) {
           if (sub.type === 'face' && faceBox) continue;
-          const mapped = LayoutEngine.mapSourcePercentThroughCover(
+          const mapped = LayoutEngine.mapSourcePercentIntoSlot(
             sub.centerXPercent,
             sub.centerYPercent,
             originalW,
             originalH,
-            w,
-            h,
-            50,
-            50,
+            photoSlot,
+            faceFocus?.centerXPercent ?? 50,
+            faceFocus?.centerYPercent ?? 40,
+            photoMaxCrop,
           );
-          const sw = Math.round(w * (Math.min(90, Math.max(8, sub.widthPercent)) / 100));
-          const sh = Math.round(h * (Math.min(90, Math.max(8, sub.heightPercent)) / 100));
+          const sw = Math.round(photoSlot.width * (Math.min(90, Math.max(8, sub.widthPercent)) / 100));
+          const sh = Math.round(photoSlot.height * (Math.min(90, Math.max(8, sub.heightPercent)) / 100));
           additionalSubjects.push({
-            x: Math.max(0, Math.min(w - sw, Math.round(mapped.x - sw / 2))),
-            y: Math.max(0, Math.min(h - sh, Math.round(mapped.y - sh / 2))),
+            x: Math.max(photoSlot.x, Math.min(photoSlot.x + photoSlot.width - sw, Math.round(mapped.x - sw / 2))),
+            y: Math.max(photoSlot.y, Math.min(photoSlot.y + photoSlot.height - sh, Math.round(mapped.y - sh / 2))),
             width: sw,
             height: sh,
           });
@@ -1867,6 +1912,7 @@ export class AiImageGenerationService {
         designSpec,
         designLanguage,
         faceCoordinates: visionResult?.faceCoordinates,
+        faceFocus,
         faceBox,
         subjectBox,
         additionalSubjects,
@@ -2069,6 +2115,7 @@ export class AiImageGenerationService {
         visualRanking,
         activeTheme,
         optimizedDsl,
+        photoBandIsDark: overlaysPhotoInk ? photoBandIsDark : undefined,
       };
 
       const visualAdditions = template.decoration
@@ -2169,37 +2216,24 @@ export class AiImageGenerationService {
           .toBuffer();
       }
 
-      // â”€â”€ Step 5: Finish Control (grain + soft vignette for premium presence) â”€â”€
+      // Marketing finish: original photo pixels stay as-is. Light vignette +
+      // output sharpen on the final ad (not a grade/rewrite of the client photo).
       try {
-        const noiseSize = 256;
-        const noisePixels = Buffer.alloc(noiseSize * noiseSize * 2); // 2 channels: Grayscale (Y) + Alpha (A)
-        for (let i = 0; i < noisePixels.length; i += 2) {
-          noisePixels[i] = Math.floor(Math.random() * 255); // Grayscale value
-          noisePixels[i + 1] = 5; // Alpha opacity (~2% opacity: 5/255)
-        }
-        const noiseBuffer = await sharp(noisePixels, { raw: { width: noiseSize, height: noiseSize, channels: 2 } })
-          .resize(w, h)
-          .png()
-          .toBuffer();
-
         const vignetteSvg = Buffer.from(
           `<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">` +
-          `<defs><radialGradient id="v" cx="50%" cy="42%" r="78%">` +
-          `<stop offset="62%" stop-color="#000" stop-opacity="0"/>` +
-          `<stop offset="100%" stop-color="#000" stop-opacity="0.10"/>` +
+          `<defs><radialGradient id="v" cx="50%" cy="40%" r="76%">` +
+          `<stop offset="58%" stop-color="#000" stop-opacity="0"/>` +
+          `<stop offset="100%" stop-color="#000" stop-opacity="0.14"/>` +
           `</radialGradient></defs>` +
           `<rect width="${w}" height="${h}" fill="url(#v)"/></svg>`,
         );
-
         compositeBuffer = await sharp(compositeBuffer)
-          .composite([
-            { input: noiseBuffer, blend: 'overlay' },
-            { input: vignetteSvg, blend: 'over' },
-          ])
-          .png()
+          .composite([{ input: vignetteSvg, blend: 'over' }])
+          .sharpen({ sigma: 0.7, m1: 0.6, m2: 2.2 })
+          .png({ compressionLevel: 6, adaptiveFiltering: true })
           .toBuffer();
-      } catch (noiseErr) {
-        console.warn('[Sharp Finish Control Warning] Could not apply grain/vignette, falling back to clean image:', noiseErr);
+      } catch (finishErr) {
+        console.warn('[Sharp Finish Control Warning] Could not apply marketing finish:', finishErr);
       }
 
       const compositionWeak = !!(optimizedDsl as any)?._compositionMeta?.compositionWeak
