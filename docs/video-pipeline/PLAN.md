@@ -1,7 +1,7 @@
 # Agentic Video Pipeline — PLAN
 
 Feature flag: `GROWTH_STUDIO_VIDEO`
-Status: **Phase 0 GATE — awaiting go-ahead before Phase 1**
+Status: **Phase 1 GATE — contract green; awaiting go-ahead before Phase 2**
 Last updated: 2026-08-13
 
 Work in a plan → act → self-test → self-correct → checkpoint loop.
@@ -50,12 +50,17 @@ Deterministic core (2) before agents. Slideshow before reels/clips.
 
 ## Phase 1 — Video Plan contract
 
-- [ ] Prisma enums: `VideoType`, `SceneAssetKind`, `Motion`, `Transition`, `VideoStatus`, `CriticStatus`
-- [ ] Prisma models for Video Plan / VideoJob (do not overload `ContentItem` blindly)
-- [ ] Shared TS type + Zod schema (single source of truth)
-- [ ] Constants: motions / transitions / caption styles
-- [ ] Self-test: compiles; validation rejects off-enum values
-- [ ] GATE
+GATE decisions accepted 2026-08-13: IG Reels only for v1 publish; new agent runtime later; env+AI_CONFIG (no AdminConfig); new `VideoJob`/`VideoPlanRevision` tables; webhook in Phase 2; stock images are a new adapter.
+
+- [x] Prisma enums: `VideoType`, `SceneAssetKind`, `VideoMotion`, `VideoTransition`, `VideoStatus`, `CriticStatus` (+ `VideoObjective`, `CaptionStyle`, `TextPosition`)
+- [x] Prisma models: `VideoJob` (plan JSON, optional appointmentId) + `VideoPlanRevision`
+- [x] Shared TS type + Zod schema at `backend/src/ai/video-pipeline/contract/` (UI re-export: `frontend/src/lib/video-plan.ts`)
+- [x] Constants: motions / transitions / caption styles / objectives
+- [x] `GROWTH_STUDIO_VIDEO` env flag (default off) + `isGrowthStudioVideoEnabled()`
+- [x] Self-test: `npx prisma validate`; `npx nest build`; jest `video-pipeline` 26 passed (valid plan + off-enum rejection + Prisma/Zod lockstep)
+- [x] GATE — present before Phase 2
+
+SQL: `backend/prisma/migrations/20260813_add_video_pipeline/migration.sql` (not applied to staging in this phase).
 
 ---
 

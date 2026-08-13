@@ -8,10 +8,11 @@
  */
 import { useEffect, useState } from "react";
 
-export type FeatureFlagKey = "feature_cloud_backend";
+export type FeatureFlagKey = "feature_cloud_backend" | "GROWTH_STUDIO_VIDEO";
 
 const LOCAL_DEFAULTS: Record<FeatureFlagKey, boolean> = {
   feature_cloud_backend: true, // ← LIVE: routes now call the real backend
+  GROWTH_STUDIO_VIDEO: import.meta.env.VITE_GROWTH_STUDIO_VIDEO === "true",
 };
 
 // Simple hook — returns the flag value from LOCAL_DEFAULTS.

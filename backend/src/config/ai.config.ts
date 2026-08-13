@@ -256,6 +256,15 @@ export const AI_CONFIG = {
   },
 
   // --------------------------------------------------------------------------
+  // Agentic video pipeline (GROWTH_STUDIO_VIDEO — default off)
+  // --------------------------------------------------------------------------
+  video: {
+    flag: 'GROWTH_STUDIO_VIDEO' as const,
+    defaultCriticMaxRevisions: 2,
+    renderProvider: 'shotstack' as const,
+  },
+
+  // --------------------------------------------------------------------------
   // Shotstack Reel Settings
   // --------------------------------------------------------------------------
   shotstack: {

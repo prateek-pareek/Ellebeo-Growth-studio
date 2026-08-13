@@ -1,6 +1,7 @@
 import { plainToInstance } from 'class-transformer';
 import {
   IsEnum,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -76,6 +77,10 @@ class EnvironmentVariables {
 
   @IsOptional() @IsString()
   CLOUDINARY_API_SECRET?: string;
+
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  GROWTH_STUDIO_VIDEO?: string;
 }
 
 export function validateEnv(config: Record<string, unknown>): EnvironmentVariables {

@@ -11,6 +11,7 @@ module.exports = {
     '^@ai/(.*)$': '<rootDir>/ai/$1',
     '^@config/(.*)$': '<rootDir>/config/$1',
     '^@types-local/(.*)$': '<rootDir>/ai/types/$1',
+    '^@ellebeo/video-plan$': '<rootDir>/ai/video-pipeline/contract/index.ts',
   },
   collectCoverageFrom: ['**/*.(t|j)s'],
   coveragePathIgnorePatterns: ['\\.spec\\.ts$', '\\.module\\.ts$', 'main\\.ts$'],

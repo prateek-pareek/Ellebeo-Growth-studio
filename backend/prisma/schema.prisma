@@ -128,6 +128,91 @@ enum ToneRating {
   @@schema("platform")
 }
 
+// --- Agentic video pipeline (GROWTH_STUDIO_VIDEO) ---
+// JSON contract values are SCREAMING_SNAKE so Prisma enums match the Zod schema
+// in src/ai/video-pipeline/contract (single source of truth for agents, UI, core).
+
+enum VideoType {
+  SLIDESHOW
+  REELS
+  AI_CLIPS
+
+  @@schema("platform")
+}
+
+enum SceneAssetKind {
+  IMAGE
+  VIDEO
+  GENERATED_CLIP
+  STOCK
+
+  @@schema("platform")
+}
+
+enum VideoMotion {
+  KEN_BURNS
+  NONE
+  SLIDE
+
+  @@schema("platform")
+}
+
+enum VideoTransition {
+  FADE
+  CUT
+  SLIDE
+
+  @@schema("platform")
+}
+
+enum VideoStatus {
+  DRAFT
+  IN_REVIEW
+  EDITED
+  RENDERING
+  RENDERED
+  PUBLISHED
+  FAILED
+
+  @@schema("platform")
+}
+
+enum CriticStatus {
+  PENDING
+  PASSED
+  FAILED
+  REVISION_REQUESTED
+
+  @@schema("platform")
+}
+
+enum VideoObjective {
+  PREMIUM_CLIENTS
+  FILL_QUIET_DAYS
+  EDUCATE_TRUST
+  ATTRACT_NEW_CLIENTS
+  PROMOTE_HIGH_MARGIN
+  CLIENT_RETENTION
+  LAUNCH_NEW_SERVICE
+
+  @@schema("platform")
+}
+
+enum CaptionStyle {
+  BOLD
+  MINIMAL
+
+  @@schema("platform")
+}
+
+enum TextPosition {
+  TOP
+  CENTER
+  BOTTOM
+
+  @@schema("platform")
+}
+
 enum BrandAesthetic {
   minimalist_clean
   moody_editorial
@@ -164,6 +249,7 @@ model User {
   refreshTokens RefreshToken[]
   approvedItems ContentItem[]  @relation("ApprovedBy")
   resolvedJobs  FailedJob[]    @relation("ResolvedBy")
+  videoJobs     VideoJob[]     @relation("VideoJobTechnician")
 
   @@index([email])
   @@index([role])
@@ -225,6 +311,7 @@ model Tenant {
   notifications          Notification[]
   feedbacks              ContentFeedback[]
   performances           PostPerformance[]
+  videoJobs              VideoJob[]
 
   @@index([userId])
   @@index([status])
@@ -375,6 +462,7 @@ model BrandDNA {
   autoPopulated            Boolean       @default(false) @map("auto_populated")
   pillars                  BrandPillar[]
   goals                    BrandGoal[]
+  videoJobs                VideoJob[]
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
@@ -521,6 +609,7 @@ model Appointment {
   contentItems           ContentItem[]
   imageAssets            ImageAsset[]
   questionnaireResponses AppointmentQuestionnaireResponse[]
+  videoJobs              VideoJob[]
 
   @@index([tenantId, appointmentDate])
   @@index([clientId])
@@ -700,6 +789,7 @@ model ContentItem {
   generationFingerprints GenerationFingerprint[]
   feedbacks              ContentFeedback[]
   performances           PostPerformance[]
+  videoJobs              VideoJob[]
 
   @@index([tenantId, status])
   @@index([appointmentId])
@@ -975,5 +1065,70 @@ model PostPerformance {
 
   @@index([tenantId])
   @@map("post_performances")
+  @@schema("platform")
+}
+
+// ---------------------------------------------------------------------------
+// Agentic video pipeline — one VideoJob owns one current Video Plan (JSON)
+// plus optional revision history. appointmentId is optional so brand /
+// unlinked videos are not forced through ContentItem's required booking FK.
+// ---------------------------------------------------------------------------
+
+model VideoJob {
+  id                String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String       @map("tenant_id") @db.Uuid
+  technicianId      String       @map("technician_id") @db.Uuid
+  brandDnaId        String       @map("brand_dna_id") @db.Uuid
+  appointmentId     String?      @map("appointment_id") @db.Uuid
+  contentItemId     String?      @map("content_item_id") @db.Uuid
+  videoType         VideoType        @map("video_type")
+  status            VideoStatus      @default(DRAFT)
+  criticStatus      CriticStatus     @default(PENDING) @map("critic_status")
+  objective         VideoObjective
+  captionStyle      CaptionStyle     @default(BOLD) @map("caption_style")
+  primaryAssetKind  SceneAssetKind?  @map("primary_asset_kind")
+  primaryMotion     VideoMotion?     @map("primary_motion")
+  primaryTransition VideoTransition? @map("primary_transition")
+  primaryTextPosition TextPosition?  @map("primary_text_position")
+  planVersion       Int              @default(1) @map("plan_version")
+  plan              Json
+  shotstackRenderId String?      @map("shotstack_render_id") @db.VarChar(255)
+  outputUrl         String?      @map("output_url") @db.VarChar(2000)
+  tokensUsed        Int          @default(0) @map("tokens_used")
+  estimatedCostUsd  Float?       @map("estimated_cost_usd")
+  revisionCount     Int          @default(0) @map("revision_count")
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  technician  User         @relation("VideoJobTechnician", fields: [technicianId], references: [id])
+  brandDna    BrandDNA     @relation(fields: [brandDnaId], references: [id])
+  appointment Appointment? @relation(fields: [appointmentId], references: [id])
+  contentItem ContentItem? @relation(fields: [contentItemId], references: [id])
+  revisions   VideoPlanRevision[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+  @@index([shotstackRenderId])
+  @@index([contentItemId])
+  @@map("video_jobs")
+  @@schema("platform")
+}
+
+model VideoPlanRevision {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  videoJobId   String   @map("video_job_id") @db.Uuid
+  revision     Int
+  plan         Json
+  criticScore  Float?   @map("critic_score")
+  criticPassed Boolean? @map("critic_passed")
+  criticNotes  Json     @default("[]") @map("critic_notes")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  videoJob VideoJob @relation(fields: [videoJobId], references: [id], onDelete: Cascade)
+
+  @@unique([videoJobId, revision])
+  @@index([videoJobId])
+  @@map("video_plan_revisions")
   @@schema("platform")
 }
