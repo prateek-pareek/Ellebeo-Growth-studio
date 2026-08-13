@@ -168,7 +168,11 @@ function GeneratePage() {
     let errorCount = 0;
     let latestSeq = 0;
     const MAX_POLLS = 150; // 5 minutes at 2s intervals
-    const MAX_ERRORS = 5;
+    // 30 consecutive errors (~60s) instead of 5 (~10s) — a backend restart
+    // (e.g. a dev server recompiling) routinely takes longer than 10s, and the
+    // job itself keeps running server-side the whole time; giving up too fast
+    // just abandons a generation that's still actually in progress.
+    const MAX_ERRORS = 30;
     // If a newer "Generate" click has since started a different attempt, this poll
     // belongs to an abandoned job — never let it write to state anymore.
     const isStale = () => attemptRef.current !== myAttempt;
@@ -233,6 +237,49 @@ function GeneratePage() {
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, [jobId, generating, attempt]);
+
+  // Recovers from the case above giving up (or the tab being backgrounded
+  // through a backend restart): whenever the tab becomes visible/focused
+  // again, silently recheck the last job. The generation itself is a BullMQ
+  // job persisted in Redis — it keeps running (or gets picked up again after
+  // a restart) independent of whether this tab is watching it, so this can
+  // recover a result the poll loop already gave up on, or resume watching a
+  // job that's still genuinely in progress.
+  useEffect(() => {
+    const TERMINAL_STATES = ['completed', 'failed', 'dead_letter'];
+    const recheckOnFocus = async () => {
+      if (document.visibilityState !== 'visible' || !jobId) return;
+      try {
+        const res = await api.get(`/generation/jobs/${jobId}`);
+        const status = res.data.data?.state;
+        if (status === 'completed' && backendVariants === null) {
+          const contentRes = await api.get(`/content?jobId=${jobId}`);
+          const contentBody = contentRes.data.data;
+          const items = Array.isArray(contentBody) ? contentBody : (contentBody?.data ?? []);
+          setBackendVariants(items);
+          setGenerating(false);
+          setJobStatus('completed');
+          setStep("review"); // the poll effect may have already bounced us to "format" before this landed
+          toast.success("Your post finished generating while you were away.");
+        } else if (!TERMINAL_STATES.includes(status) && !generating) {
+          setGenerating(true); // re-arms the poll effect above for this same jobId
+          setStep("review"); // undo the "format" bounce from the poll effect giving up earlier
+          toast("Reconnected — your post is still generating, resuming...");
+        } else if (TERMINAL_STATES.includes(status) && status !== 'completed' && generating) {
+          setGenerating(false);
+          setStep("format");
+        }
+      } catch {
+        // Backend likely still down — next focus/visibility event will retry.
+      }
+    };
+    document.addEventListener('visibilitychange', recheckOnFocus);
+    window.addEventListener('focus', recheckOnFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', recheckOnFocus);
+      window.removeEventListener('focus', recheckOnFocus);
+    };
+  }, [jobId, generating, backendVariants]);
 
   const handleGenerate = async (selectedFormat?: Format) => {
     if (!appointment) return;
