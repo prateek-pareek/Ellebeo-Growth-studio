@@ -2358,12 +2358,42 @@ CRITICAL IMAGE REQUIREMENTS:
 
       const compositionWeak = !!(optimizedDsl as any)?._compositionMeta?.compositionWeak
         || !!(optimizedDsl as any)?._compositionMeta?.softAccepted;
+      const finalFailReason = failReason || ((optimizedDsl as any)?._compositionMeta?.compositionWeakReason);
+
+      // Task 12 (AI pipeline work list): one comprehensive per-slide diagnostic —
+      // what the art director wanted (visualSpec/priority) vs what the spatial
+      // engine did (bboxes/coverage) vs the final outcome (primitive counts,
+      // fallback reason) in a single log line, instead of piecing it together
+      // from a dozen separate console lines scattered across the pipeline.
+      const imageBBox = (optimizedDsl as any)?.canvasRegions?.imageRegion;
+      const textCoverage: number | undefined = (optimizedDsl as any)?._compositionMeta?.qualityMetrics?.textCoverage;
+      const imageCoverage = imageBBox ? (imageBBox.width * imageBBox.height) / (w * h) : undefined;
+      const whitespaceRatio = (textCoverage !== undefined || imageCoverage !== undefined)
+        ? Math.max(0, 1 - (textCoverage || 0) - (imageCoverage || 0))
+        : undefined;
+      // Every key defaults to null (not undefined) rather than being dropped by
+      // JSON.stringify — a diagnostic log meant for cross-slide comparison needs
+      // a consistent schema even when a given slide has no face/fallback/etc.
+      console.log(`[SlideDiagnostics] slide=${index}`, JSON.stringify({
+        visualCommunicationSpec: visualSpec ?? null,
+        visualPriority: designLanguage?.intent?.visualPriority ?? null,
+        spatialPriority: (optimizedDsl as any)?._spatialPolicy?.splitAxis ?? (optimizedDsl as any)?._compositionMeta?.spatial?.splitAxis ?? null,
+        textBBox: (optimizedDsl as any)?._compositionMeta?.actualTextRegion ?? null,
+        imageBBox: imageBBox ?? null,
+        faceBBox: faceBox ?? null,
+        imageCoverage: imageCoverage ?? null,
+        textCoverage: textCoverage ?? null,
+        whitespaceRatio: whitespaceRatio ?? null,
+        primitiveCount: (optimizedDsl as any)?._compositionMeta?.primitiveCount ?? 0,
+        primitiveSkippedCount: (optimizedDsl as any)?._compositionMeta?.primitiveSkippedCount ?? 0,
+        fallbackReason: finalFailReason ?? null,
+      }, null, 2));
 
       return {
         base64: compositeBuffer.toString('base64'),
         compositionFailed,
         compositionWeak,
-        failReason: failReason || ((optimizedDsl as any)?._compositionMeta?.compositionWeakReason),
+        failReason: finalFailReason,
       };
     } catch (err) {
       console.error('Failed to apply Sharp text overlay. Returning raw model output:', err);

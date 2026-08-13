@@ -1436,6 +1436,16 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
       || qualityCritical.includes('text_collision')
       || qualityCritical.includes('contrast')
     );
+    // Task 12 (AI pipeline work list): no primitive count/skip tally existed
+    // anywhere before this — every render/suppress decision was only ever an
+    // individual console line. Tally here (covering the text_scrim call right
+    // below and the main per-layer loop further down), then attach to
+    // dsl._compositionMeta at the end of this function so
+    // overlayBrandingAndText (ai-image-generation.service.ts) can read it back
+    // into one comprehensive per-slide diagnostic log.
+    let primitiveCount = 0;
+    let primitiveSkippedCount = 0;
+
     if (textBand && spatialAxis === 'overlay' && !isBeforeAfter
       && (forceScrimForSafety || (priority === 'image_hero' && !isCircleLike))) {
       const inkIsLight = getLuminanceSafe(ctx.dynamicTextColor || '#FFF') > 150;
@@ -1459,7 +1469,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
         opacity: scrimOpacity,
         padding: 10,
       } as any);
-      if (scrimSvg) svg += scrimSvg;
+      if (scrimSvg) { svg += scrimSvg; primitiveCount++; } else { primitiveSkippedCount++; }
     }
 
     // Circle / before-after: never force solid_card (white-on-white + face cover).
@@ -1522,10 +1532,12 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
         if (renderedPrimitive) {
           console.log(`[Renderer Sprint] SUCCESS: Applied primitive decoration '${componentName}' to layout.`);
           svg += renderedPrimitive;
+          primitiveCount++;
         } else if (renderedPrimitive === null) {
           // Strict Validation: genuinely unregistered components fail loudly (dev-only signal —
           // never gated behind this in production output; see DEBUG_PLACEHOLDERS below).
           console.error(`[Renderer Sprint] CRITICAL ERROR: Component '${componentName}' requested by DSL but not found in PrimitiveEngine!`);
+          primitiveSkippedCount++;
           if (DEBUG_PLACEHOLDERS) {
             svg += `
               <g transform="translate(40, ${Math.floor(Math.random() * (ctx.h - 100))})">
@@ -1538,6 +1550,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           // '' → component was found and handled but intentionally produced no output
           // (e.g. hard-collision-disabled by the Collision Engine). Not an error — skip silently.
           console.log(`[Renderer Sprint] Primitive '${componentName}' intentionally suppressed no output (collision or delegated render).`);
+          primitiveSkippedCount++;
         }
       } else if (layer.type === 'image') {
         // Many layout families (like desktop_course_hero, tablet_workbook_cover) define device mockups
@@ -1548,8 +1561,10 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           if (renderedPrimitive) {
             console.log(`[Renderer Sprint] SUCCESS: Applied primitive image component '${imageLayer.component}' to layout.`);
             svg += renderedPrimitive;
+            primitiveCount++;
           } else if (renderedPrimitive === null) {
             console.error(`[Renderer Sprint] CRITICAL ERROR: Image Component '${imageLayer.component}' not found in PrimitiveEngine!`);
+            primitiveSkippedCount++;
           }
         }
       } else if (layer.type === 'text') {
@@ -1566,8 +1581,14 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           const renderedPrimitive = primitiveEngine.renderPrimitive(textLayer.component, primitiveCtx, textLayer);
           if (renderedPrimitive) {
             svg += renderedPrimitive;
+            primitiveCount++;
           } else if (renderedPrimitive === null && !isDelegatedContainer) {
             console.error(`[Renderer Sprint] CRITICAL ERROR: Text Component '${textLayer.component}' not found in PrimitiveEngine!`);
+            primitiveSkippedCount++;
+          } else {
+            // Delegated container (background rendered by TypographyEngine) or genuinely
+            // empty — either way it's accounted for, not a silent gap.
+            isDelegatedContainer ? primitiveCount++ : primitiveSkippedCount++;
           }
         }
 
@@ -1587,6 +1608,18 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     // Gradient-only vignette finishing pass (see ThemeEngine.generateGlobalOverlay for
     // why this isn't the old feTurbulence-based overlay that caused librsvg blanketing).
     svg += themeEngine.generateGlobalOverlay(ctx.w, ctx.h);
+
+    // Task 12: surface the tally onto the same optimizedDsl object the caller
+    // (overlayBrandingAndText) still holds a reference to — dsl IS ctx.optimizedDsl
+    // when one was provided, so this mutation is visible to the caller without
+    // changing this function's return type (DECORATIONS is a Record<string, (ctx) => string>
+    // used by every other decoration renderer too).
+    (dsl as any)._compositionMeta = {
+      ...((dsl as any)._compositionMeta || {}),
+      primitiveCount,
+      primitiveSkippedCount,
+    };
+
     return svg;
   },
 };
