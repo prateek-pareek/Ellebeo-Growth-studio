@@ -1,3 +1,5 @@
+import { assertResolvedAssetsHardGate } from '../compliance/hard-gate';
+import { isPeopleStockTagList } from '../compliance/terms';
 import { MAX_SCENES } from '../contract';
 import {
   AssetResolveError,
@@ -30,10 +32,13 @@ export async function resolveStudioAssets(
 
   const missing = resolved.filter((asset) => asset === null).length;
   if (missing > 0) {
-    const hits = await stock.search(stockSearchQuery(input), {
-      count: missing,
+    const rawHits = await stock.search(stockSearchQuery(input), {
+      count: input.medicalAesthetics ? missing * 3 : missing,
       orientation: 'vertical',
     });
+    const hits = input.medicalAesthetics
+      ? rawHits.filter((hit) => !isPeopleStockTagList(hit.tags))
+      : rawHits;
     let cursor = 0;
     for (let i = 0; i < resolved.length; i++) {
       if (resolved[i]) continue;
@@ -54,10 +59,12 @@ export async function resolveStudioAssets(
     }
   }
 
-  return resolved.map((asset, index) => {
+  const assets = resolved.map((asset, index) => {
     if (!asset) throw new AssetResolveError(`Scene ${index} has no asset URL`);
     return asset;
   });
+  assertResolvedAssetsHardGate(assets, input.medicalAesthetics);
+  return assets;
 }
 
 function normalizeTechnician(asset: TechnicianAssetInput): ResolvedSceneAsset | null {

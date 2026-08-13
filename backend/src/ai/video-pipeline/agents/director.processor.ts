@@ -2,10 +2,12 @@ import { AI_CONFIG } from '../../../config/ai.config';
 import type { AssetProvider } from '../assets/asset-provider';
 import { defaultVoiceId } from '../assets/voice-id';
 import type { VoiceoverAsset, VoiceoverPort } from '../assets/voiceover.port';
+import { assertVideoPlanHardGate, ComplianceHardGateError } from '../compliance/hard-gate';
 import { DEFAULT_CRITIC_MAX_REVISIONS, parseVideoPlan, type VideoPlan } from '../contract';
 import { applyResolvedAssetsToPlan, applyVoiceoverToPlan } from '../core/plan-overlays';
 import { videoJobDenormalizedFields } from '../core/plan-status';
 import { isGrowthStudioVideoEnabled } from '../feature-flag';
+import { runComplianceAgent } from './compliance.agent';
 import { runCriticAgent, type CriticResult } from './critic.agent';
 import type { LlmPort } from './llm-port';
 import {
@@ -183,6 +185,7 @@ export async function processDirectorJob(
     assetProvider?: AssetProvider;
     voiceover?: VoiceoverPort;
     maxCriticRevisions?: number;
+    runComplianceAgent?: boolean;
   },
   payload: DirectorPayload,
 ): Promise<{ status: string; step: DirectorStep; videoJobId: string }> {
@@ -395,6 +398,17 @@ export async function processDirectorJob(
     }
 
     if (state.step === 'reviewed') {
+      const plan = parseVideoPlan(row.plan);
+      assertVideoPlanHardGate(plan);
+      if (deps.runComplianceAgent) {
+        const edge = await runComplianceAgent(plan, deps.llm, budget);
+        if (edge.block) {
+          throw new ComplianceHardGateError(
+            `Compliance agent blocked render: ${edge.notes.join('; ')}`,
+            edge.notes,
+          );
+        }
+      }
       if (deps.enqueueRender) {
         await deps.enqueueRender(row.id, row.tenantId);
       }
@@ -412,7 +426,12 @@ export async function processDirectorJob(
       estimatedCostUsd: budget.costUsd,
       status: 'FAILED',
     });
-    if (err instanceof AgentBudgetError || err instanceof AgentRuntimeError || err instanceof DirectorError) {
+    if (
+      err instanceof AgentBudgetError ||
+      err instanceof AgentRuntimeError ||
+      err instanceof DirectorError ||
+      err instanceof ComplianceHardGateError
+    ) {
       throw err;
     }
     throw new DirectorError(message);

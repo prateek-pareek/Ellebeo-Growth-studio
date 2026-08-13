@@ -1,7 +1,7 @@
 # Agentic Video Pipeline — PLAN
 
 Feature flag: `GROWTH_STUDIO_VIDEO`
-Status: **Phase 5 GATE — mocked critic loop green; live LLM not required**
+Status: **Phase 6 GATE — mocked compliance hard gate green**
 Last updated: 2026-08-13
 
 Work in a plan → act → self-test → self-correct → checkpoint loop.
@@ -121,10 +121,12 @@ Pass threshold is `DEFAULT_CRITIC_PASS_SCORE` (70), computed in code from rubric
 
 ## Phase 6 — Compliance agent + hard gate
 
-- [ ] Compliance agent (edge cases)
-- [ ] Code hard gate (no LLM) in asset + render path
-- [ ] Tests across slideshow / reels / AI-clips
+- [x] Compliance agent (edge cases via `submit_compliance`; `block=true` refuses render)
+- [x] Code hard gate (no LLM) on asset resolve + Shotstack submit + Director enqueue
+- [x] Tests: slideshow / reels / AI-clips; medical generated-clip block; people-stock filter
 - [ ] GATE
+
+Keyword gate is word-boundary based (does not flag "treatment" as "treats", or "Book in" as "book now"). Medical brands: no `GENERATED_CLIP`, no people-tagged stock. Critic failure is still not a hard block; this gate is.
 
 ---
 

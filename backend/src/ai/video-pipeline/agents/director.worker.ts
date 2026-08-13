@@ -24,6 +24,7 @@ export function startVideoDirectorWorker(prisma: PrismaClient): Worker<VideoDire
           llm,
           assetProvider,
           voiceover,
+          runComplianceAgent: true,
           enqueueRender: (videoJobId, tenantId) =>
             videoRenderQueue.add(
               'render',

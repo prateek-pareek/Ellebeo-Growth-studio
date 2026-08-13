@@ -61,6 +61,38 @@ describe('resolveStudioAssets', () => {
     expect(resolved[1]!.kind).toBe('IMAGE');
   });
 
+  it('skips people-tagged stock for medical-aesthetics slideshows', async () => {
+    const search = jest.fn(async () => [
+      { id: '1', url: 'https://stock.example.com/face.jpg', tags: ['portrait', 'woman'] },
+      { id: '2', url: 'https://stock.example.com/marble.jpg', tags: ['marble', 'interior'] },
+    ]);
+    const resolved = await resolveStudioAssets(
+      {
+        videoType: 'SLIDESHOW',
+        sceneCount: 2,
+        technicianAssets: [{ url: 'https://cdn.example.com/a.jpg' }],
+        medicalAesthetics: true,
+      },
+      { search },
+    );
+    expect(resolved[1]!.url).toBe('https://stock.example.com/marble.jpg');
+    expect(resolved[1]!.kind).toBe('STOCK');
+  });
+
+  it('blocks generated clips on the medical-aesthetics asset path', async () => {
+    await expect(
+      resolveStudioAssets(
+        {
+          videoType: 'AI_CLIPS',
+          sceneCount: 1,
+          technicianAssets: [{ url: 'https://cdn.example.com/gen.mp4', kind: 'GENERATED_CLIP' }],
+          medicalAesthetics: true,
+        },
+        { search: async () => [] },
+      ),
+    ).rejects.toThrow(/generated clips/);
+  });
+
   it('throws when stock cannot fill remaining scenes', async () => {
     await expect(
       resolveStudioAssets(

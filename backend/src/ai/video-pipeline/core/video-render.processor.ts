@@ -1,5 +1,6 @@
 // Deterministic render job: Video Plan → Shotstack submit. No LLM. Idempotent.
 
+import { assertVideoPlanHardGate, ComplianceHardGateError } from '../compliance/hard-gate';
 import { parseVideoPlan, type VideoPlan } from '../contract';
 import { isGrowthStudioVideoEnabled } from '../feature-flag';
 import { mapVideoPlanToShotstackEdit } from './shotstack-edit-mapper';
@@ -67,6 +68,14 @@ export async function processVideoRenderJob(
   }
 
   const plan = parseVideoPlan(row.plan);
+  try {
+    assertVideoPlanHardGate(plan);
+  } catch (err) {
+    if (err instanceof ComplianceHardGateError) {
+      throw new VideoRenderError(err.message);
+    }
+    throw err;
+  }
   const edit = mapVideoPlanToShotstackEdit(plan, { callbackUrl: deps.callbackUrl });
   const renderId = await deps.shotstack.submitRender(edit);
 

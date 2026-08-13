@@ -1,6 +1,7 @@
 import { alignCaptionsToVoiceover } from '../assets/caption-timing';
 import { createStudioAssetProvider } from '../assets/studio-assets';
 import type { VoiceoverPort } from '../assets/voiceover.port';
+import { ComplianceHardGateError } from '../compliance/hard-gate';
 import { parseVideoPlan } from '../contract';
 import { VIDEO_PLAN_FIXTURE_BRAND_DNA_ID, VIDEO_PLAN_FIXTURE_TECHNICIAN_ID } from '../contract/fixture';
 import { buildReelsPlan } from '../core/reels-plan-builder';
@@ -476,6 +477,83 @@ describe('processDirectorJob', () => {
     expect(plan.critic.passed).toBe(false);
     expect(plan.critic.revisions).toBe(2);
     expect(parseLoopState(rows.get(job.id)!.loopState).step).toBe('render_queued');
+  });
+
+  it('fails the job when assembled copy trips the compliance hard gate', async () => {
+    const banned: ScriptDraft = {
+      ...scriptDraft,
+      hook: 'Guaranteed glow tonight',
+      scenes: [
+        { index: 0, headline: 'Guaranteed glow tonight', caption: null, position: 'BOTTOM' },
+        { index: 1, headline: 'Consult when you are ready', caption: null, position: 'BOTTOM' },
+      ],
+    };
+    const job = seedJob();
+    const { prisma, rows } = createStore(job);
+    const enqueueRender = jest.fn(async () => undefined);
+
+    await expect(
+      processDirectorJob(
+        {
+          prisma,
+          llm: pipelineLlm({ script: banned }),
+          enqueueRender,
+          isEnabled: () => true,
+        },
+        { videoJobId: job.id, tenantId: job.tenantId },
+      ),
+    ).rejects.toThrow(ComplianceHardGateError);
+
+    expect(enqueueRender).not.toHaveBeenCalled();
+    expect(rows.get(job.id)!.status).toBe('FAILED');
+  });
+
+  it('lets the compliance agent block an edge-case plan the keyword gate missed', async () => {
+    const job = seedJob();
+    const { prisma } = createStore(job);
+    const enqueueRender = jest.fn(async () => undefined);
+    const llm: LlmPort = {
+      messagesCreate: async (req) => {
+        if (req.tools.some((tool) => tool.name === 'submit_compliance')) {
+          return {
+            stopReason: 'tool_use',
+            usage: { inputTokens: 8, outputTokens: 12 },
+            content: [{
+              type: 'tool_use',
+              id: 'cmp',
+              name: 'submit_compliance',
+              input: { block: true, notes: ['Implies a promised outcome.'] },
+            }],
+          };
+        }
+        if (req.tools.some((tool) => tool.name === 'submit_critique')) {
+          return {
+            stopReason: 'tool_use',
+            usage: { inputTokens: 8, outputTokens: 12 },
+            content: [{ type: 'tool_use', id: 'c1', name: 'submit_critique', input: passingCritique }],
+          };
+        }
+        return {
+          stopReason: 'tool_use',
+          usage: { inputTokens: 8, outputTokens: 12 },
+          content: [{ type: 'tool_use', id: 's1', name: 'submit_script', input: scriptDraft }],
+        };
+      },
+    };
+
+    await expect(
+      processDirectorJob(
+        {
+          prisma,
+          llm,
+          enqueueRender,
+          isEnabled: () => true,
+          runComplianceAgent: true,
+        },
+        { videoJobId: job.id, tenantId: job.tenantId },
+      ),
+    ).rejects.toThrow(ComplianceHardGateError);
+    expect(enqueueRender).not.toHaveBeenCalled();
   });
 });
 
