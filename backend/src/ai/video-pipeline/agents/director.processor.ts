@@ -1,10 +1,12 @@
+import { AI_CONFIG } from '../../../config/ai.config';
 import type { AssetProvider } from '../assets/asset-provider';
 import { defaultVoiceId } from '../assets/voice-id';
 import type { VoiceoverAsset, VoiceoverPort } from '../assets/voiceover.port';
-import { parseVideoPlan, type VideoPlan } from '../contract';
+import { DEFAULT_CRITIC_MAX_REVISIONS, parseVideoPlan, type VideoPlan } from '../contract';
 import { applyResolvedAssetsToPlan, applyVoiceoverToPlan } from '../core/plan-overlays';
 import { videoJobDenormalizedFields } from '../core/plan-status';
 import { isGrowthStudioVideoEnabled } from '../feature-flag';
+import { runCriticAgent, type CriticResult } from './critic.agent';
 import type { LlmPort } from './llm-port';
 import {
   AgentBudgetError,
@@ -20,6 +22,7 @@ export const DIRECTOR_STEPS = [
   'assets',
   'scripted',
   'assembled',
+  'reviewed',
   'render_queued',
   'failed',
 ] as const;
@@ -127,6 +130,18 @@ function isVoiceoverAsset(value: unknown): value is VoiceoverAsset {
   );
 }
 
+export function applyCriticToPlan(plan: VideoPlan, result: CriticResult, revisions: number): VideoPlan {
+  return parseVideoPlan({
+    ...plan,
+    critic: {
+      score: result.score,
+      passed: result.passed,
+      revisions,
+      notes: result.notes,
+    },
+  });
+}
+
 export function applyScriptDraftToPlan(plan: VideoPlan, script: ScriptDraft): VideoPlan {
   const scenes = plan.scenes.map((scene, index) => {
     const draft = script.scenes.find((item) => item.index === index) ?? script.scenes[index];
@@ -167,6 +182,7 @@ export async function processDirectorJob(
     budget?: Partial<AgentBudget>;
     assetProvider?: AssetProvider;
     voiceover?: VoiceoverPort;
+    maxCriticRevisions?: number;
   },
   payload: DirectorPayload,
 ): Promise<{ status: string; step: DirectorStep; videoJobId: string }> {
@@ -252,26 +268,15 @@ export async function processDirectorJob(
       });
     }
 
-    if (state.step !== 'assembled' && state.step !== 'render_queued' && state.scriptDraft) {
-      let plan = applyScriptDraftToPlan(parseVideoPlan(row.plan), state.scriptDraft);
-      if (plan.videoType === 'REELS') {
-        if (state.voiceover) {
-          plan = applyVoiceoverToPlan(plan, state.voiceover);
-        } else if (deps.voiceover) {
-          const scriptText =
-            state.scriptDraft.voiceoverScript?.trim() ||
-            [state.scriptDraft.hook, ...state.scriptDraft.scenes.map((scene) => scene.headline)]
-              .filter(Boolean)
-              .join('. ');
-          const synthesized = await deps.voiceover.synthesize({
-            script: scriptText,
-            voiceId: state.voiceId ?? defaultVoiceId(),
-          });
-          const voiceover: VoiceoverAsset = { ...synthesized, script: scriptText };
-          state = { ...state, voiceover };
-          plan = applyVoiceoverToPlan(plan, voiceover);
-        }
-      }
+    if (
+      state.step !== 'assembled' &&
+      state.step !== 'reviewed' &&
+      state.step !== 'render_queued' &&
+      state.scriptDraft
+    ) {
+      const assembled = await assembleFromScript(parseVideoPlan(row.plan), state, deps.voiceover);
+      state = assembled.state;
+      const plan = assembled.plan;
       state = {
         ...state,
         step: 'assembled',
@@ -279,28 +284,117 @@ export async function processDirectorJob(
         costUsd: budget.costUsd,
         toolCalls: budget.toolCalls,
       };
-      const revision = row.revisionCount;
       await persistDirector(deps.prisma, row.id, {
         ...videoJobDenormalizedFields(plan),
         loopState: state,
         tokensUsed: budget.tokensUsed,
         estimatedCostUsd: budget.costUsd,
-        revisionCount: revision + 1,
       });
-      if (deps.prisma.videoPlanRevision) {
-        await deps.prisma.videoPlanRevision.create({
-          data: {
-            videoJobId: row.id,
-            revision,
-            plan,
-          },
-        });
-      }
       row.plan = plan;
-      row.revisionCount = revision + 1;
     }
 
-    if (state.step === 'assembled') {
+    if (state.step === 'assembled' && state.scriptDraft) {
+      const maxRevisions =
+        deps.maxCriticRevisions ??
+        AI_CONFIG.video.defaultCriticMaxRevisions ??
+        DEFAULT_CRITIC_MAX_REVISIONS;
+      let plan = parseVideoPlan(row.plan);
+
+      for (let attempt = 0; attempt <= maxRevisions; attempt++) {
+        const critique = await runCriticAgent(
+          { plan, brandVoice: state.brandVoice },
+          deps.llm,
+          budget,
+        );
+        plan = applyCriticToPlan(plan, critique, attempt);
+        state = {
+          ...state,
+          tokensUsed: budget.tokensUsed,
+          costUsd: budget.costUsd,
+          toolCalls: budget.toolCalls,
+          repaired: state.repaired || critique.repaired,
+        };
+        const revision = row.revisionCount;
+        await persistDirector(deps.prisma, row.id, {
+          ...videoJobDenormalizedFields(plan),
+          loopState: state,
+          tokensUsed: budget.tokensUsed,
+          estimatedCostUsd: budget.costUsd,
+          revisionCount: revision + 1,
+        });
+        if (deps.prisma.videoPlanRevision) {
+          await deps.prisma.videoPlanRevision.create({
+            data: {
+              videoJobId: row.id,
+              revision,
+              plan,
+              criticScore: critique.score,
+              criticPassed: critique.passed,
+              criticNotes: critique.notes,
+            },
+          });
+        }
+        row.revisionCount = revision + 1;
+        row.plan = plan;
+
+        if (critique.passed || attempt >= maxRevisions) {
+          state = { ...state, step: 'reviewed' };
+          await persistDirector(deps.prisma, row.id, {
+            ...videoJobDenormalizedFields(plan),
+            loopState: state,
+          });
+          break;
+        }
+
+        const revised = await runScriptAgent(
+          {
+            sceneCount: plan.scenes.length,
+            objective: plan.objective,
+            brandVoice: state.brandVoice ?? '',
+            medicalAesthetics: plan.compliance.medicalAesthetics,
+            videoType: plan.videoType,
+            requireVoiceover: plan.videoType === 'REELS',
+            reviseNotes: critique.notes,
+            imageNotes: plan.scenes.map(
+              (scene, index) =>
+                scene.text.headline ?? `${scene.asset.kind.toLowerCase()} ${index + 1}`,
+            ),
+          },
+          deps.llm,
+          budget,
+        );
+        state = {
+          ...state,
+          scriptDraft: revised.output,
+          tokensUsed: budget.tokensUsed,
+          costUsd: budget.costUsd,
+          toolCalls: budget.toolCalls,
+          repaired: state.repaired || revised.repaired,
+        };
+        const failedRevisions = plan.critic.revisions;
+        const next = await assembleFromScript(parseVideoPlan(row.plan), state, deps.voiceover);
+        state = next.state;
+        plan = parseVideoPlan({
+          ...next.plan,
+          critic: {
+            score: null,
+            passed: false,
+            revisions: failedRevisions + 1,
+            notes: critique.notes,
+          },
+        });
+        state = { ...state, step: 'assembled' };
+        await persistDirector(deps.prisma, row.id, {
+          ...videoJobDenormalizedFields(plan),
+          loopState: state,
+          tokensUsed: budget.tokensUsed,
+          estimatedCostUsd: budget.costUsd,
+        });
+        row.plan = plan;
+      }
+    }
+
+    if (state.step === 'reviewed') {
       if (deps.enqueueRender) {
         await deps.enqueueRender(row.id, row.tenantId);
       }
@@ -323,6 +417,39 @@ export async function processDirectorJob(
     }
     throw new DirectorError(message);
   }
+}
+
+async function assembleFromScript(
+  base: VideoPlan,
+  state: DirectorLoopState,
+  voiceoverPort?: VoiceoverPort,
+): Promise<{ plan: VideoPlan; state: DirectorLoopState }> {
+  if (!state.scriptDraft) {
+    throw new DirectorError('No script draft to assemble');
+  }
+  let plan = applyScriptDraftToPlan(base, state.scriptDraft);
+  let nextState = state;
+  if (plan.videoType === 'REELS' && voiceoverPort) {
+    const scriptText =
+      state.scriptDraft.voiceoverScript?.trim() ||
+      [state.scriptDraft.hook, ...state.scriptDraft.scenes.map((scene) => scene.headline)]
+        .filter(Boolean)
+        .join('. ');
+    if (nextState.voiceover?.script === scriptText) {
+      plan = applyVoiceoverToPlan(plan, nextState.voiceover);
+    } else {
+      const synthesized = await voiceoverPort.synthesize({
+        script: scriptText,
+        voiceId: nextState.voiceId ?? defaultVoiceId(),
+      });
+      const voiceover: VoiceoverAsset = { ...synthesized, script: scriptText };
+      nextState = { ...nextState, voiceover };
+      plan = applyVoiceoverToPlan(plan, voiceover);
+    }
+  } else if (plan.videoType === 'REELS' && nextState.voiceover) {
+    plan = applyVoiceoverToPlan(plan, nextState.voiceover);
+  }
+  return { plan, state: nextState };
 }
 
 async function persistDirector(

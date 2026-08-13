@@ -105,3 +105,4 @@ export const MAX_VIDEO_DURATION_SECONDS = 90;
 export const MIN_VIDEO_DURATION_SECONDS = 4;
 export const MAX_SCENES = 12;
 export const DEFAULT_CRITIC_MAX_REVISIONS = 2;
+export const DEFAULT_CRITIC_PASS_SCORE = 70;

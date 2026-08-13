@@ -7,6 +7,7 @@ import { buildReelsPlan } from '../core/reels-plan-builder';
 import { mapVideoPlanToShotstackEdit } from '../core/shotstack-edit-mapper';
 import { buildSlideshowPlan } from '../core/slideshow-plan-builder';
 import { processVideoRenderJob } from '../core/video-render.processor';
+import type { CriticVerdict } from './critic.schema';
 import type { LlmPort } from './llm-port';
 import {
   applyScriptDraftToPlan,
@@ -87,14 +88,57 @@ function seedJob(overrides: Partial<DirectorJobRecord> = {}): DirectorJobRecord 
   };
 }
 
-function scriptLlm(): LlmPort {
+const passingCritique: CriticVerdict = {
+  hook: 20,
+  clarity: 16,
+  brandVoice: 12,
+  pacing: 8,
+  objectiveFit: 12,
+  compliance: 12,
+  notes: ['Hook is specific.'],
+};
+
+const weakCritique: CriticVerdict = {
+  hook: 6,
+  clarity: 6,
+  brandVoice: 6,
+  pacing: 4,
+  objectiveFit: 6,
+  compliance: 8,
+  notes: ['Hook is generic. Name a real treatment moment.'],
+};
+
+function pipelineLlm(opts?: {
+  script?: ScriptDraft;
+  critiques?: CriticVerdict[];
+}): LlmPort {
+  const critiques = opts?.critiques ?? [passingCritique];
+  let critiqueIndex = 0;
+  let scriptCalls = 0;
   return {
-    messagesCreate: async () => ({
-      stopReason: 'tool_use',
-      usage: { inputTokens: 50, outputTokens: 90 },
-      content: [{ type: 'tool_use', id: 's1', name: 'submit_script', input: scriptDraft }],
-    }),
+    messagesCreate: async (req) => {
+      if (req.tools.some((tool) => tool.name === 'submit_critique')) {
+        const input = critiques[Math.min(critiqueIndex, critiques.length - 1)]!;
+        critiqueIndex += 1;
+        return {
+          stopReason: 'tool_use',
+          usage: { inputTokens: 20, outputTokens: 40 },
+          content: [{ type: 'tool_use', id: `c${critiqueIndex}`, name: 'submit_critique', input }],
+        };
+      }
+      scriptCalls += 1;
+      const draft = opts?.script ?? scriptDraft;
+      return {
+        stopReason: 'tool_use',
+        usage: { inputTokens: 50, outputTokens: 90 },
+        content: [{ type: 'tool_use', id: `s${scriptCalls}`, name: 'submit_script', input: draft }],
+      };
+    },
   };
+}
+
+function scriptLlm(): LlmPort {
+  return pipelineLlm();
 }
 
 describe('processDirectorJob', () => {
@@ -121,11 +165,13 @@ describe('processDirectorJob', () => {
     );
 
     expect(result.step).toBe('render_queued');
-    expect(persisted).toEqual(['scripted', 'assembled', 'render_queued']);
+    expect(persisted).toEqual(['scripted', 'assembled', 'assembled', 'reviewed', 'render_queued']);
     expect(enqueueRender).toHaveBeenCalledWith(job.id, job.tenantId);
     expect(revisions).toHaveLength(1);
 
     const assembled = parseVideoPlan(rows.get(job.id)!.plan);
+    expect(assembled.critic.passed).toBe(true);
+    expect(assembled.critic.score).toBeGreaterThanOrEqual(70);
     expect(assembled.meta.source).toBe('agentic_v1');
     expect(assembled.scenes[0].text.headline).toBe('Glow, not guesswork');
     expect(assembled.scenes[1].text.headline).toBe('Consult when you are ready');
@@ -161,7 +207,7 @@ describe('processDirectorJob', () => {
     expect(submitted.renderId).toBe('render-from-agent');
   });
 
-  it('resumes from a persisted script draft without calling the LLM', async () => {
+  it('resumes from a persisted script draft without calling Script again', async () => {
     const job = seedJob({
       loopState: {
         step: 'scripted',
@@ -173,9 +219,18 @@ describe('processDirectorJob', () => {
       },
     });
     const { prisma } = createStore(job);
+    let scriptCalls = 0;
     const llm: LlmPort = {
-      messagesCreate: async () => {
-        throw new Error('LLM should not run on resume');
+      messagesCreate: async (req) => {
+        if (req.tools.some((tool) => tool.name === 'submit_critique')) {
+          return {
+            stopReason: 'tool_use',
+            usage: { inputTokens: 10, outputTokens: 20 },
+            content: [{ type: 'tool_use', id: 'c1', name: 'submit_critique', input: passingCritique }],
+          };
+        }
+        scriptCalls += 1;
+        throw new Error('Script should not run on resume');
       },
     };
 
@@ -184,6 +239,7 @@ describe('processDirectorJob', () => {
       { videoJobId: job.id, tenantId: job.tenantId },
     );
     expect(result.step).toBe('render_queued');
+    expect(scriptCalls).toBe(0);
   });
 
   it('honours the per-video cost ceiling before Script runs', async () => {
@@ -240,13 +296,7 @@ describe('processDirectorJob', () => {
       ],
       voiceoverScript: null,
     };
-    const llm: LlmPort = {
-      messagesCreate: async () => ({
-        stopReason: 'tool_use',
-        usage: { inputTokens: 20, outputTokens: 40 },
-        content: [{ type: 'tool_use', id: 's1', name: 'submit_script', input: threeSceneScript }],
-      }),
-    };
+    const llm = pipelineLlm({ script: threeSceneScript });
 
     await processDirectorJob(
       {
@@ -292,13 +342,7 @@ describe('processDirectorJob', () => {
       ],
       voiceoverScript: voScript,
     };
-    const llm: LlmPort = {
-      messagesCreate: async () => ({
-        stopReason: 'tool_use',
-        usage: { inputTokens: 30, outputTokens: 60 },
-        content: [{ type: 'tool_use', id: 's1', name: 'submit_script', input: reelsScript }],
-      }),
-    };
+    const llm = pipelineLlm({ script: reelsScript });
     const voiceover: VoiceoverPort = {
       synthesize: async ({ script }) => ({
         assetUrl: 'https://cdn.example.com/vo.mp3',
@@ -353,6 +397,85 @@ describe('processDirectorJob', () => {
     );
     expect(submitted.renderId).toBe('reels-render');
     expect(scene0End).toBeGreaterThan(0);
+  });
+
+  it('revises a weak draft then passes, and never exceeds N revises', async () => {
+    const job = seedJob();
+    const { prisma, rows, revisions } = createStore(job);
+    let scriptCalls = 0;
+    let criticCalls = 0;
+    const llm: LlmPort = {
+      messagesCreate: async (req) => {
+        if (req.tools.some((tool) => tool.name === 'submit_critique')) {
+          criticCalls += 1;
+          const input = criticCalls === 1 ? weakCritique : passingCritique;
+          return {
+            stopReason: 'tool_use',
+            usage: { inputTokens: 20, outputTokens: 40 },
+            content: [{ type: 'tool_use', id: `c${criticCalls}`, name: 'submit_critique', input }],
+          };
+        }
+        scriptCalls += 1;
+        expect(req.system).toContain(scriptCalls === 1 ? 'submit_script' : 'CRITIC REJECTED');
+        return {
+          stopReason: 'tool_use',
+          usage: { inputTokens: 40, outputTokens: 80 },
+          content: [{ type: 'tool_use', id: `s${scriptCalls}`, name: 'submit_script', input: scriptDraft }],
+        };
+      },
+    };
+
+    await processDirectorJob(
+      { prisma, llm, isEnabled: () => true, maxCriticRevisions: 2 },
+      { videoJobId: job.id, tenantId: job.tenantId },
+    );
+
+    expect(scriptCalls).toBe(2);
+    expect(criticCalls).toBe(2);
+    const plan = parseVideoPlan(rows.get(job.id)!.plan);
+    expect(plan.critic.passed).toBe(true);
+    expect(plan.critic.revisions).toBe(1);
+    expect(plan.critic.notes[0]).toContain('Hook is specific');
+    expect(revisions).toHaveLength(2);
+    expect(revisions[0]).toMatchObject({ criticPassed: false });
+    expect(revisions[1]).toMatchObject({ criticPassed: true });
+  });
+
+  it('stops the critic loop at N even when every draft fails', async () => {
+    const job = seedJob();
+    const { prisma, rows } = createStore(job);
+    let scriptCalls = 0;
+    let criticCalls = 0;
+    const llm: LlmPort = {
+      messagesCreate: async (req) => {
+        if (req.tools.some((tool) => tool.name === 'submit_critique')) {
+          criticCalls += 1;
+          return {
+            stopReason: 'tool_use',
+            usage: { inputTokens: 10, outputTokens: 20 },
+            content: [{ type: 'tool_use', id: `c${criticCalls}`, name: 'submit_critique', input: weakCritique }],
+          };
+        }
+        scriptCalls += 1;
+        return {
+          stopReason: 'tool_use',
+          usage: { inputTokens: 10, outputTokens: 20 },
+          content: [{ type: 'tool_use', id: `s${scriptCalls}`, name: 'submit_script', input: scriptDraft }],
+        };
+      },
+    };
+
+    await processDirectorJob(
+      { prisma, llm, isEnabled: () => true, maxCriticRevisions: 2 },
+      { videoJobId: job.id, tenantId: job.tenantId },
+    );
+
+    expect(scriptCalls).toBe(3);
+    expect(criticCalls).toBe(3);
+    const plan = parseVideoPlan(rows.get(job.id)!.plan);
+    expect(plan.critic.passed).toBe(false);
+    expect(plan.critic.revisions).toBe(2);
+    expect(parseLoopState(rows.get(job.id)!.loopState).step).toBe('render_queued');
   });
 });
 

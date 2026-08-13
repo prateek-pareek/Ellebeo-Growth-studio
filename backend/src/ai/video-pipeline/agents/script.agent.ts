@@ -18,6 +18,7 @@ export interface ScriptAgentInput {
   imageNotes?: string[];
   videoType?: VideoType;
   requireVoiceover?: boolean;
+  reviseNotes?: string[];
 }
 
 export function buildScriptAgentDefinition(input: ScriptAgentInput): AgentDefinition<ScriptDraft> {
@@ -36,6 +37,9 @@ export function buildScriptAgentDefinition(input: ScriptAgentInput): AgentDefini
       `Objective: ${input.objective}.`,
       input.brandVoice ? `Brand voice:\n${input.brandVoice}` : '',
       input.medicalAesthetics ? AHPRA_RULES : 'This is not a medical-aesthetics brand. Still avoid body-shaming and guaranteed-results language.',
+      input.reviseNotes?.length
+        ? `CRITIC REJECTED THE LAST DRAFT. You MUST address every note:\n${input.reviseNotes.map((note) => `- ${note}`).join('\n')}`
+        : '',
     ]
       .filter(Boolean)
       .join('\n\n'),
@@ -55,7 +59,8 @@ export function buildScriptUserPrompt(input: ScriptAgentInput): string {
     ? input.imageNotes.map((note, i) => `- Scene ${i}: ${note}`).join('\n')
     : `Write copy for ${input.sceneCount} still images.`;
   const kind = input.videoType === 'REELS' ? 'Reels' : 'slideshow';
-  return `Draft a ${input.sceneCount}-scene ${kind} script.\n${notes}`;
+  const revise = input.reviseNotes?.length ? '\nRevise the previous draft. Do not repeat the rejected lines.' : '';
+  return `Draft a ${input.sceneCount}-scene ${kind} script.\n${notes}${revise}`;
 }
 
 export function runScriptAgent(

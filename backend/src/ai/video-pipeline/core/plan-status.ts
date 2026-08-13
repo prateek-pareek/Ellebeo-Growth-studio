@@ -1,4 +1,10 @@
-import { parseVideoPlan, type VideoPlan, type VideoStatus } from '../contract';
+import {
+  DEFAULT_CRITIC_MAX_REVISIONS,
+  parseVideoPlan,
+  type CriticStatus,
+  type VideoPlan,
+  type VideoStatus,
+} from '../contract';
 
 export function withPlanStatus(
   plan: VideoPlan,
@@ -30,5 +36,16 @@ export function videoJobDenormalizedFields(plan: VideoPlan) {
     plan: plan as object,
     shotstackRenderId: plan.render.renderId,
     outputUrl: plan.render.outputUrl,
+    criticStatus: criticStatusFromPlan(plan),
   };
+}
+
+export function criticStatusFromPlan(
+  plan: VideoPlan,
+  maxRevisions = DEFAULT_CRITIC_MAX_REVISIONS,
+): CriticStatus {
+  if (plan.critic.passed) return 'PASSED';
+  if (plan.critic.score == null) return 'PENDING';
+  if (!plan.critic.passed && plan.critic.revisions < maxRevisions) return 'REVISION_REQUESTED';
+  return 'FAILED';
 }

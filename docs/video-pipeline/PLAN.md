@@ -1,7 +1,7 @@
 # Agentic Video Pipeline — PLAN
 
 Feature flag: `GROWTH_STUDIO_VIDEO`
-Status: **Phase 4 GATE — mocked reels + stock fallback green; live ElevenLabs/Pixabay/Shotstack not run**
+Status: **Phase 5 GATE — mocked critic loop green; live LLM not required**
 Last updated: 2026-08-13
 
 Work in a plan → act → self-test → self-correct → checkpoint loop.
@@ -109,11 +109,13 @@ Director step `assets` runs before Script when an `AssetProvider` is injected. R
 
 ## Phase 5 — QA / critic loop
 
-- [ ] Critic agent + rubric
-- [ ] Bounded revise loop (default N=2)
-- [ ] Persist `critic.score`, `passed`, `revisions`, `notes`
-- [ ] Self-test: weak draft revises; loop never exceeds N
+- [x] Critic agent + rubric (`submit_critique`: hook/clarity/brandVoice/pacing/objectiveFit/compliance → score/100)
+- [x] Bounded revise loop (default N=2) in Director between `assembled` and `reviewed`
+- [x] Persist `critic.score`, `passed`, `revisions`, `notes` on the plan + `VideoPlanRevision` + `VideoJob.criticStatus`
+- [x] Self-test: weak draft revises then passes; always-fail stops at N=2 and still enqueues render
 - [ ] GATE
+
+Pass threshold is `DEFAULT_CRITIC_PASS_SCORE` (70), computed in code from rubric points (LLM cannot override `passed`). Render/webhook remain LLM-free. Critic failure after N is not a hard block (Phase 6 is).
 
 ---
 
