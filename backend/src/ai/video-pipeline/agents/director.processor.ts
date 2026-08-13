@@ -1,4 +1,8 @@
+import type { AssetProvider } from '../assets/asset-provider';
+import { defaultVoiceId } from '../assets/voice-id';
+import type { VoiceoverAsset, VoiceoverPort } from '../assets/voiceover.port';
 import { parseVideoPlan, type VideoPlan } from '../contract';
+import { applyResolvedAssetsToPlan, applyVoiceoverToPlan } from '../core/plan-overlays';
 import { videoJobDenormalizedFields } from '../core/plan-status';
 import { isGrowthStudioVideoEnabled } from '../feature-flag';
 import type { LlmPort } from './llm-port';
@@ -13,6 +17,7 @@ import { scriptDraftSchema, type ScriptDraft } from './script.schema';
 
 export const DIRECTOR_STEPS = [
   'created',
+  'assets',
   'scripted',
   'assembled',
   'render_queued',
@@ -29,6 +34,11 @@ export interface DirectorLoopState {
   toolCalls: number;
   repaired: boolean;
   error?: string;
+  assetsResolved?: boolean;
+  requestedSceneCount?: number;
+  stockQuery?: string;
+  voiceId?: string;
+  voiceover?: VoiceoverAsset;
 }
 
 export interface DirectorJobRecord {
@@ -97,7 +107,24 @@ export function parseLoopState(raw: unknown): DirectorLoopState {
     toolCalls: typeof value.toolCalls === 'number' ? value.toolCalls : 0,
     repaired: Boolean(value.repaired),
     error: typeof value.error === 'string' ? value.error : undefined,
+    assetsResolved: Boolean(value.assetsResolved),
+    requestedSceneCount:
+      typeof value.requestedSceneCount === 'number' ? value.requestedSceneCount : undefined,
+    stockQuery: typeof value.stockQuery === 'string' ? value.stockQuery : undefined,
+    voiceId: typeof value.voiceId === 'string' ? value.voiceId : undefined,
+    voiceover: isVoiceoverAsset(value.voiceover) ? value.voiceover : undefined,
   };
+}
+
+function isVoiceoverAsset(value: unknown): value is VoiceoverAsset {
+  if (!value || typeof value !== 'object') return false;
+  const asset = value as VoiceoverAsset;
+  return (
+    typeof asset.assetUrl === 'string' &&
+    typeof asset.durationSeconds === 'number' &&
+    typeof asset.voiceId === 'string' &&
+    typeof asset.script === 'string'
+  );
 }
 
 export function applyScriptDraftToPlan(plan: VideoPlan, script: ScriptDraft): VideoPlan {
@@ -138,6 +165,8 @@ export async function processDirectorJob(
     enqueueRender?: (videoJobId: string, tenantId: string) => Promise<unknown>;
     isEnabled?: () => boolean;
     budget?: Partial<AgentBudget>;
+    assetProvider?: AssetProvider;
+    voiceover?: VoiceoverPort;
   },
   payload: DirectorPayload,
 ): Promise<{ status: string; step: DirectorStep; videoJobId: string }> {
@@ -166,6 +195,28 @@ export async function processDirectorJob(
   });
 
   try {
+    if (deps.assetProvider && !state.assetsResolved) {
+      const plan = parseVideoPlan(row.plan);
+      const resolved = await deps.assetProvider.resolve({
+        videoType: plan.videoType,
+        sceneCount: state.requestedSceneCount ?? plan.scenes.length,
+        technicianAssets: plan.scenes.map((scene) => ({
+          url: scene.asset.url ?? '',
+          assetId: scene.asset.assetId,
+          kind: scene.asset.kind,
+        })),
+        query: state.stockQuery,
+        medicalAesthetics: plan.compliance.medicalAesthetics,
+      });
+      const nextPlan = applyResolvedAssetsToPlan(plan, resolved);
+      state = { ...state, step: 'assets', assetsResolved: true, error: undefined };
+      await persistDirector(deps.prisma, row.id, {
+        ...videoJobDenormalizedFields(nextPlan),
+        loopState: state,
+      });
+      row.plan = nextPlan;
+    }
+
     if (!state.scriptDraft) {
       const plan = parseVideoPlan(row.plan);
       const script = await runScriptAgent(
@@ -174,9 +225,11 @@ export async function processDirectorJob(
           objective: plan.objective,
           brandVoice: state.brandVoice ?? '',
           medicalAesthetics: plan.compliance.medicalAesthetics,
+          videoType: plan.videoType,
+          requireVoiceover: plan.videoType === 'REELS',
           imageNotes: plan.scenes.map(
             (scene, index) =>
-              scene.text.headline ?? `still image ${index + 1}`,
+              scene.text.headline ?? `${scene.asset.kind.toLowerCase()} ${index + 1}`,
           ),
         },
         deps.llm,
@@ -200,7 +253,25 @@ export async function processDirectorJob(
     }
 
     if (state.step !== 'assembled' && state.step !== 'render_queued' && state.scriptDraft) {
-      const plan = applyScriptDraftToPlan(parseVideoPlan(row.plan), state.scriptDraft);
+      let plan = applyScriptDraftToPlan(parseVideoPlan(row.plan), state.scriptDraft);
+      if (plan.videoType === 'REELS') {
+        if (state.voiceover) {
+          plan = applyVoiceoverToPlan(plan, state.voiceover);
+        } else if (deps.voiceover) {
+          const scriptText =
+            state.scriptDraft.voiceoverScript?.trim() ||
+            [state.scriptDraft.hook, ...state.scriptDraft.scenes.map((scene) => scene.headline)]
+              .filter(Boolean)
+              .join('. ');
+          const synthesized = await deps.voiceover.synthesize({
+            script: scriptText,
+            voiceId: state.voiceId ?? defaultVoiceId(),
+          });
+          const voiceover: VoiceoverAsset = { ...synthesized, script: scriptText };
+          state = { ...state, voiceover };
+          plan = applyVoiceoverToPlan(plan, voiceover);
+        }
+      }
       state = {
         ...state,
         step: 'assembled',

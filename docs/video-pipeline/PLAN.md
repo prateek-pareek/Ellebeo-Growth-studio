@@ -1,7 +1,7 @@
 # Agentic Video Pipeline — PLAN
 
 Feature flag: `GROWTH_STUDIO_VIDEO`
-Status: **Phase 2 GATE — mocked slideshow core green; real staging MP4 still blocked on webhook URL + Shotstack key**
+Status: **Phase 4 GATE — mocked reels + stock fallback green; live ElevenLabs/Pixabay/Shotstack not run**
 Last updated: 2026-08-13
 
 Work in a plan → act → self-test → self-correct → checkpoint loop.
@@ -95,11 +95,15 @@ Director is a resumable BullMQ orchestrator (not a free-form LLM). Script is the
 
 ## Phase 4 — Asset agent + reels
 
-- [ ] `AssetProvider` interface
-- [ ] Slideshow strategy (tech images + stock fallback — Pixabay images TBD)
-- [ ] Reels strategy (images/clips + ElevenLabs VO + burned-in captions)
-- [ ] Self-test: reels E2E; captions align to VO
+- [x] `AssetProvider` interface (`assets/asset-provider.ts`) + studio resolver
+- [x] Slideshow strategy: technician images first, stock fills missing scenes. New Pixabay **photo** adapter (`pixabay-image.adapter.ts`) — not the music client.
+- [x] Reels strategy: images/clips + ElevenLabs `VoiceoverPort` + burned-in captions timed from the VO script
+- [x] Self-test: reels E2E through Phase 2 mapper/render (mocked VO); caption cues cover the VO timeline; slideshow stock fallback
 - [ ] GATE
+
+HTTP (flag on, JWT): `POST /api/v1/video/reels/agentic`. Slideshow `sceneCount` pads with stock when larger than `imageUrls`.
+
+Director step `assets` runs before Script when an `AssetProvider` is injected. Render/webhook remain LLM-free.
 
 ---
 

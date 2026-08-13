@@ -3,12 +3,17 @@ import { PrismaClient } from '@prisma/client';
 import { AI_CONFIG } from '../../../config/ai.config';
 import { bullMQConnection, videoRenderQueue } from '../../queues/queue.definitions';
 import type { VideoDirectorJobPayload } from '../../queues/queue.definitions';
+import { createElevenLabsVoiceoverPort } from '../assets/elevenlabs-voiceover.adapter';
+import { createPixabayImageAdapter } from '../assets/pixabay-image.adapter';
+import { createStudioAssetProvider } from '../assets/studio-assets';
 import { isGrowthStudioVideoEnabled } from '../feature-flag';
 import { createAnthropicLlmPort } from './anthropic-llm.adapter';
 import { processDirectorJob, type DirectorStore } from './director.processor';
 
 export function startVideoDirectorWorker(prisma: PrismaClient): Worker<VideoDirectorJobPayload> {
   const llm = createAnthropicLlmPort();
+  const assetProvider = createStudioAssetProvider(createPixabayImageAdapter());
+  const voiceover = createElevenLabsVoiceoverPort();
 
   return new Worker<VideoDirectorJobPayload>(
     AI_CONFIG.queues.videoDirector.name,
@@ -17,6 +22,8 @@ export function startVideoDirectorWorker(prisma: PrismaClient): Worker<VideoDire
         {
           prisma: prisma as unknown as DirectorStore,
           llm,
+          assetProvider,
+          voiceover,
           enqueueRender: (videoJobId, tenantId) =>
             videoRenderQueue.add(
               'render',

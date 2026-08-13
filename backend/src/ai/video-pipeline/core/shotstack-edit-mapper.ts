@@ -1,6 +1,7 @@
 // Map a validated Video Plan to Shotstack edit JSON. No LLM. No network.
 
 import { AI_CONFIG } from '../../../config/ai.config';
+import { alignCaptionsToVoiceover } from '../assets/caption-timing';
 import type { VideoPlan, VideoScene } from '../contract';
 
 export interface ShotstackEditJson {
@@ -58,16 +59,21 @@ export function mapVideoPlanToShotstackEdit(
     }
   }
 
-  const imageClips = scenes.map((scene, i) => {
+  const visualClips = scenes.map((scene, i) => {
     const start = startTime(scenes, i);
-    const effect = scene.motion === 'KEN_BURNS'
-      ? (i % 2 === 0 ? 'zoomIn' : 'zoomOut')
-      : MOTION_EFFECT[scene.motion];
+    const isVideo = scene.asset.kind === 'VIDEO' || scene.asset.kind === 'GENERATED_CLIP';
+    const effect = isVideo
+      ? undefined
+      : scene.motion === 'KEN_BURNS'
+        ? (i % 2 === 0 ? 'zoomIn' : 'zoomOut')
+        : MOTION_EFFECT[scene.motion];
     const transitionIn = i === 0 ? 'fade' : TRANSITION_IN[scenes[i - 1]!.transitionOut];
     const transitionOut = TRANSITION_IN[scene.transitionOut];
 
     const clip: Record<string, unknown> = {
-      asset: { type: 'image', src: scene.asset.url },
+      asset: isVideo
+        ? { type: 'video', src: scene.asset.url, volume: 0 }
+        : { type: 'image', src: scene.asset.url },
       start,
       length: scene.durationSeconds,
       fit: 'cover',
@@ -80,9 +86,30 @@ export function mapVideoPlanToShotstackEdit(
     return clip;
   });
 
-  const tracks: unknown[] = [{ clips: imageClips }];
+  const tracks: unknown[] = [{ clips: visualClips }];
 
-  const textClips = scenes.flatMap((scene, i) => {
+  const voCues = burnedInVoiceoverCues(plan);
+  if (voCues.length > 0) {
+    tracks.push({
+      clips: voCues.map((cue) => ({
+        asset: {
+          type: 'html',
+          html: captionCueHtml(cue.text, plan),
+          width: 1000,
+          height: 180,
+        },
+        start: cue.start,
+        length: cue.durationSeconds,
+        position: 'bottom',
+        transition: { in: 'fade', out: 'fade' },
+      })),
+    });
+  }
+
+  const overlayScenes = voCues.length > 0
+    ? scenes.map((scene) => ({ ...scene, text: { ...scene.text, caption: null } }))
+    : scenes;
+  const textClips = overlayScenes.flatMap((scene, i) => {
     const overlay = overlayHtml(scene, plan);
     if (!overlay) return [];
     return [{
@@ -165,6 +192,18 @@ export function mapVideoPlanToShotstackEdit(
 
 function startTime(scenes: VideoScene[], index: number): number {
   return scenes.slice(0, index).reduce((sum, scene) => sum + scene.durationSeconds, 0);
+}
+
+function burnedInVoiceoverCues(plan: VideoPlan) {
+  if (!plan.captions.burnedIn || !plan.audio.voiceover.enabled || !plan.audio.voiceover.script) {
+    return [];
+  }
+  return alignCaptionsToVoiceover(plan.audio.voiceover.script, plan.durationSeconds);
+}
+
+function captionCueHtml(text: string, plan: VideoPlan): string {
+  const font = escapeHtml(plan.branding.font || 'Montserrat');
+  return `<div style="padding:16px 32px;"><div style="font-family:${font},sans-serif;font-weight:600;font-size:28px;color:#ffffff;text-align:center;text-shadow:0 2px 8px rgba(0,0,0,0.75);">${escapeHtml(text.slice(0, 80))}</div></div>`;
 }
 
 function overlayHtml(scene: VideoScene, plan: VideoPlan): string | null {

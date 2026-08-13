@@ -16,6 +16,7 @@ import { GenerationRestrictionGuard } from '../../common/guards/generation-restr
 import { TenantStatusGuard } from '../../common/guards/tenant-status.guard';
 import { parseShotstackWebhookBody } from './core/video-callback.processor';
 import { isValidVideoWebhookToken } from './core/video-webhook.util';
+import { CreateReelsDto } from './dto/create-reels.dto';
 import { CreateSlideshowDto } from './dto/create-slideshow.dto';
 import { isGrowthStudioVideoEnabled } from './feature-flag';
 import { GrowthStudioVideoGuard } from './growth-studio-video.guard';
@@ -60,6 +61,15 @@ export class VideoWebhookController {
     @Body() dto: CreateSlideshowDto,
   ) {
     return this.pipeline.createAndDirectSlideshow(req.user.tenantId, req.user.userId, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, TenantStatusGuard, GrowthStudioVideoGuard, GenerationRestrictionGuard)
+  @Post('reels/agentic')
+  createAgenticReels(
+    @Req() req: { user: { tenantId: string; userId: string } },
+    @Body() dto: CreateReelsDto,
+  ) {
+    return this.pipeline.createAndDirectReels(req.user.tenantId, req.user.userId, dto);
   }
 
   @UseGuards(JwtAuthGuard, TenantStatusGuard, GrowthStudioVideoGuard)

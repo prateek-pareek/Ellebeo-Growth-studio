@@ -1,5 +1,9 @@
+import { alignCaptionsToVoiceover } from '../assets/caption-timing';
+import { createStudioAssetProvider } from '../assets/studio-assets';
+import type { VoiceoverPort } from '../assets/voiceover.port';
 import { parseVideoPlan } from '../contract';
 import { VIDEO_PLAN_FIXTURE_BRAND_DNA_ID, VIDEO_PLAN_FIXTURE_TECHNICIAN_ID } from '../contract/fixture';
+import { buildReelsPlan } from '../core/reels-plan-builder';
 import { mapVideoPlanToShotstackEdit } from '../core/shotstack-edit-mapper';
 import { buildSlideshowPlan } from '../core/slideshow-plan-builder';
 import { processVideoRenderJob } from '../core/video-render.processor';
@@ -197,6 +201,158 @@ describe('processDirectorJob', () => {
       ),
     ).rejects.toThrow('cost ceiling');
     expect(parseLoopState(rows.get(job.id)!.loopState).step).toBe('failed');
+  });
+
+  it('fills missing slideshow scenes from stock before Script runs', async () => {
+    const plan = parseVideoPlan(
+      buildSlideshowPlan({
+        technicianId: VIDEO_PLAN_FIXTURE_TECHNICIAN_ID,
+        brandDnaRef: VIDEO_PLAN_FIXTURE_BRAND_DNA_ID,
+        objective: 'EDUCATE_TRUST',
+        images: [{ url: 'https://cdn.example.com/a.jpg' }],
+        branding: { logoAssetId: null, palette: ['#C4A484'], font: 'Montserrat' },
+        medicalAesthetics: false,
+        createdAt: '2026-08-13T00:00:00.000Z',
+      }),
+    );
+    const job = seedJob({
+      plan,
+      loopState: {
+        step: 'created',
+        tokensUsed: 0,
+        costUsd: 0,
+        toolCalls: 0,
+        repaired: false,
+        requestedSceneCount: 3,
+      },
+    });
+    const { prisma, rows } = createStore(job);
+    const search = jest.fn(async () => [
+      { id: '1', url: 'https://stock.example.com/1.jpg', tags: ['spa'] },
+      { id: '2', url: 'https://stock.example.com/2.jpg', tags: ['linen'] },
+    ]);
+    const threeSceneScript = {
+      hook: 'Glow, not guesswork',
+      scenes: [
+        { index: 0, headline: 'Glow, not guesswork', caption: 'Education first', position: 'BOTTOM' as const },
+        { index: 1, headline: 'Texture, not trend', caption: null, position: 'BOTTOM' as const },
+        { index: 2, headline: 'Consult when you are ready', caption: null, position: 'BOTTOM' as const },
+      ],
+      voiceoverScript: null,
+    };
+    const llm: LlmPort = {
+      messagesCreate: async () => ({
+        stopReason: 'tool_use',
+        usage: { inputTokens: 20, outputTokens: 40 },
+        content: [{ type: 'tool_use', id: 's1', name: 'submit_script', input: threeSceneScript }],
+      }),
+    };
+
+    await processDirectorJob(
+      {
+        prisma,
+        llm,
+        isEnabled: () => true,
+        assetProvider: createStudioAssetProvider({ search }),
+      },
+      { videoJobId: job.id, tenantId: job.tenantId },
+    );
+
+    expect(search).toHaveBeenCalled();
+    const assembled = parseVideoPlan(rows.get(job.id)!.plan);
+    expect(assembled.scenes).toHaveLength(3);
+    expect(assembled.scenes[0]!.asset.url).toBe('https://cdn.example.com/a.jpg');
+    expect(assembled.scenes[1]!.asset.kind).toBe('STOCK');
+    expect(assembled.scenes[2]!.asset.url).toBe('https://stock.example.com/2.jpg');
+  });
+
+  it('Reels E2E: VO + burned-in captions align and the Phase 2 core can render', async () => {
+    const voScript = 'Skin literacy starts with a consult not a promise today';
+    const plan = parseVideoPlan(
+      buildReelsPlan({
+        technicianId: VIDEO_PLAN_FIXTURE_TECHNICIAN_ID,
+        brandDnaRef: VIDEO_PLAN_FIXTURE_BRAND_DNA_ID,
+        objective: 'EDUCATE_TRUST',
+        assets: [
+          { url: 'https://cdn.example.com/clip.mp4', kind: 'VIDEO' },
+          { url: 'https://cdn.example.com/still.jpg', kind: 'IMAGE' },
+        ],
+        branding: { logoAssetId: null, palette: ['#C4A484'], font: 'Montserrat' },
+        medicalAesthetics: false,
+        createdAt: '2026-08-13T00:00:00.000Z',
+      }),
+    );
+    const job = seedJob({ plan });
+    const { prisma, rows } = createStore(job);
+    const reelsScript = {
+      hook: 'Glow, not guesswork',
+      scenes: [
+        { index: 0, headline: 'Glow, not guesswork', caption: null, position: 'BOTTOM' as const },
+        { index: 1, headline: 'Consult when you are ready', caption: null, position: 'BOTTOM' as const },
+      ],
+      voiceoverScript: voScript,
+    };
+    const llm: LlmPort = {
+      messagesCreate: async () => ({
+        stopReason: 'tool_use',
+        usage: { inputTokens: 30, outputTokens: 60 },
+        content: [{ type: 'tool_use', id: 's1', name: 'submit_script', input: reelsScript }],
+      }),
+    };
+    const voiceover: VoiceoverPort = {
+      synthesize: async ({ script }) => ({
+        assetUrl: 'https://cdn.example.com/vo.mp3',
+        durationSeconds: 8,
+        voiceId: '21m00Tcm4TlvDq8ikWAM',
+        script,
+      }),
+    };
+
+    await processDirectorJob(
+      { prisma, llm, voiceover, isEnabled: () => true },
+      { videoJobId: job.id, tenantId: job.tenantId },
+    );
+
+    const assembled = parseVideoPlan(rows.get(job.id)!.plan);
+    expect(assembled.videoType).toBe('REELS');
+    expect(assembled.audio.voiceover.enabled).toBe(true);
+    expect(assembled.audio.voiceover.assetUrl).toContain('vo.mp3');
+    expect(assembled.durationSeconds).toBe(8);
+    expect(assembled.captions.burnedIn).toBe(true);
+
+    const cues = alignCaptionsToVoiceover(voScript, assembled.durationSeconds);
+    const scene0End = assembled.scenes[0]!.durationSeconds;
+    expect(assembled.scenes[0]!.text.caption).toContain(cues[0]!.text.split(' ')[0]!);
+
+    const edit = mapVideoPlanToShotstackEdit(assembled);
+    expect(JSON.stringify(edit)).toContain('vo.mp3');
+    expect(JSON.stringify(edit)).toContain(cues[0]!.text);
+    const visual = (edit.timeline.tracks[0] as { clips: Array<{ asset: { type: string } }> }).clips;
+    expect(visual[0]!.asset.type).toBe('video');
+
+    const submitted = await processVideoRenderJob(
+      {
+        prisma: {
+          videoJob: {
+            findUnique: async () => ({
+              id: job.id,
+              tenantId: job.tenantId,
+              status: assembled.status,
+              plan: assembled,
+              shotstackRenderId: null,
+              outputUrl: null,
+              contentItemId: null,
+            }),
+            update: async () => undefined,
+          },
+        },
+        shotstack: { submitRender: async () => 'reels-render' },
+        isEnabled: () => true,
+      },
+      { videoJobId: job.id, tenantId: job.tenantId },
+    );
+    expect(submitted.renderId).toBe('reels-render');
+    expect(scene0End).toBeGreaterThan(0);
   });
 });
 
