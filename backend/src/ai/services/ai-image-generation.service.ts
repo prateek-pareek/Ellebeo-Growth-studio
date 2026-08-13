@@ -443,7 +443,10 @@ export class AiImageGenerationService {
         accentBrandColor,
         outputSize,
         captionText: overlayText,
-        visionResult,
+        // Task 8 (AI pipeline work list): this branch renders a solid brand-colour
+        // tile, not the client's photo — the real photo's face/subject geometry
+        // must not be inherited here (see faceBox handling in overlayBrandingAndText).
+        visionResult: undefined,
         logoUrl,
         logoPosition,
       });
@@ -531,7 +534,9 @@ export class AiImageGenerationService {
         depthBrandColor,
         outputSize,
         captionText: overlayText,
-        visionResult,
+        // Task 8: text-only procedural tile — no client photo involved, so no
+        // inherited face/subject geometry should apply either.
+        visionResult: undefined,
         designSpec,
       });
       const url = await uploadBase64ToFirebase(overlayResult.base64, tenantId, `slide_${index}`);
@@ -690,7 +695,14 @@ CRITICAL IMAGE REQUIREMENTS:
       depthBrandColor,
       outputSize,
       captionText: overlayText,
-      visionResult,
+      // Task 8 (AI pipeline work list): this is a freshly AI-generated lifestyle/
+      // studio image — the prompt above explicitly forbids people/faces/bodies, so
+      // it never contains the client's subject. Reusing the appointment photo's
+      // vision-analysis faceBox/subjectBox here was the actual bug: primitives and
+      // text placement would avoid a face that isn't in this frame at all. Passing
+      // undefined is already handled correctly downstream (verified: empty
+      // protectedZones -> no spurious collision), so this is a safe, direct fix.
+      visionResult: undefined,
       designSpec,
       logoUrl,
       logoPosition,
@@ -741,7 +753,10 @@ CRITICAL IMAGE REQUIREMENTS:
         accentBrandColor,
         outputSize,
         captionText: altOverlayText,
-        visionResult,
+        // Task 8: same AI-generated faceless lifestyle image as the primary
+        // variant above (just a different model's output) — no inherited
+        // client subject geometry applies here either.
+        visionResult: undefined,
         designSpec,
       });
 
