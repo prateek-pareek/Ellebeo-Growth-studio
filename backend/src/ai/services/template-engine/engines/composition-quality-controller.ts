@@ -90,9 +90,10 @@ export class CompositionQualityController {
   }
 
   /**
-   * Bidirectional font-size balance from copy length.
-   * Short headlines → larger display size; long headlines → smaller readable size.
-   * Width clamp is applied after the length target (never the other way around).
+   * Fit Brand DNA / template hero size into the slot.
+   * baseSize (from geometry compiler + Brand DNA behavior) is authoritative —
+   * we only shrink when the copy cannot fit the allocated width. Never invent
+   * a competing "length ladder" size that ignores brand/template config.
    */
   public adaptFontSizeToContent(
     baseSize: number,
@@ -107,71 +108,44 @@ export class CompositionQualityController {
     const longest = words.reduce((a, b) => (a.length >= b.length ? a : b), '');
     const charRatio = 0.80;
 
+    // Start from configured size (Brand DNA × template behavior × designSpec)
+    let size = Math.max(1, baseSize);
+
+    // Gentle length ease only — keep brand size dominant (±12% max before width clamp)
     if (role === 'heading') {
-      // Target size as fraction of canvas height — length ladder (same idea as box balance)
-      let targetRatio: number;
-      if (chars <= 8 && words.length <= 2) {
-        targetRatio = 0.105; // "GLOW" / "DEPTH"
-      } else if (chars <= 14 && words.length <= 3) {
-        targetRatio = 0.088; // "MAINTAIN GLOW"
-      } else if (chars <= 22 && words.length <= 4) {
-        targetRatio = 0.072; // "SEAMLESS TONE RESTORED"
-      } else if (chars <= 30 && words.length <= 5) {
-        targetRatio = 0.058; // "FLAWLESS COLOR CORRECTION"
-      } else if (chars <= 40) {
-        targetRatio = 0.048; // longer educational lines
-      } else {
-        targetRatio = 0.040; // very long — stay readable, not micro
-      }
+      if (chars > 36 || words.length > 6) size *= 0.92;
+      else if (chars > 28 || words.length > 5) size *= 0.96;
+      else if (chars <= 10 && words.length <= 2) size *= 1.06;
+    } else {
+      if (chars > 48) size *= 0.94;
+      else if (chars <= 16) size *= 1.04;
+    }
 
-      // Priority nudges (keep ladder shape)
-      if (visualPriority === 'typography_hero') targetRatio *= 1.12;
-      else if (visualPriority === 'image_hero') targetRatio *= 0.92;
-      else if (visualPriority === 'cta_hero') targetRatio *= 0.96;
+    // Width clamp: fit longest word + typical wrap lines into the template slot
+    if (safeWidth > 0 && longest.length > 0) {
+      const maxForWord = (safeWidth * 0.96) / (longest.length * charRatio);
+      if (size > maxForWord) size = maxForWord;
 
-      // Blend with brand base so DNA still matters, but length owns the result
-      let size = Math.round(canvasH * targetRatio * 0.72 + baseSize * 0.28);
-
-      // Extra pull when a single word is very long (DIMENSION, CORRECTION…)
-      if (longest.length >= 10) size = Math.round(size * 0.92);
-      if (longest.length >= 12) size = Math.round(size * 0.92);
-
-      // Width clamp — must fit longest word + typical line on the slot
-      if (safeWidth > 0 && longest.length > 0) {
-        const maxForWord = (safeWidth * 0.96) / (longest.length * charRatio);
-        if (size > maxForWord) size = maxForWord;
-
-        const targetLines = chars <= 14 ? 1
-          : chars <= 28 ? 2
-            : chars <= 40 ? 3
-              : 4;
+      if (role === 'heading' && words.length > 1) {
+        const targetLines = chars <= 16 ? 1 : chars <= 32 ? 2 : 3;
         const avgChars = Math.ceil(chars / targetLines) + 1;
         const maxForLine = (safeWidth * 0.96) / (avgChars * charRatio);
         if (size > maxForLine) size = maxForLine;
       }
-
-      const minRatio = CompositionQualityController.MIN_HEADING_RATIO;
-      const maxRatio = visualPriority === 'typography_hero' ? 0.12
-        : visualPriority === 'image_hero' ? 0.09
-          : 0.105;
-      return Math.max(canvasH * minRatio, Math.min(size, canvasH * maxRatio));
     }
 
-    // Secondary / body — same short↔long idea, quieter range
-    let size = baseSize;
-    if (chars <= 18) size *= 1.12;
-    else if (chars > 50) size *= Math.max(0.78, 1 - (chars - 50) * 0.004);
-    else if (chars > 32) size *= 0.92;
+    // Stay near the configured size — allow shrink to fit, soft ceiling at 1.12× base
+    const floor = role === 'heading'
+      ? Math.max(canvasH * CompositionQualityController.MIN_HEADING_RATIO, baseSize * 0.72)
+      : Math.max(canvasH * CompositionQualityController.MIN_SECONDARY_RATIO, baseSize * 0.78);
+    const ceiling = role === 'heading'
+      ? Math.min(
+        baseSize * 1.12,
+        canvasH * (visualPriority === 'typography_hero' ? 0.14 : visualPriority === 'image_hero' ? 0.10 : 0.12),
+      )
+      : Math.min(baseSize * 1.08, canvasH * 0.045);
 
-    if (safeWidth > 0 && longest.length > 0) {
-      const maxForWord = (safeWidth * 0.96) / (longest.length * charRatio);
-      if (size > maxForWord) size = maxForWord;
-    }
-
-    return Math.max(
-      canvasH * CompositionQualityController.MIN_SECONDARY_RATIO,
-      Math.min(size, canvasH * 0.042),
-    );
+    return Math.max(floor, Math.min(size, ceiling));
   }
 
   public estimateGroupHeight(
@@ -181,7 +155,8 @@ export class CompositionQualityController {
     visualPriority?: VisualPriority,
     preferredWidth?: number,
   ): { heights: number[]; total: number; gap: number; fontSizes: number[] } {
-    const gapRatio = visualPriority === 'image_hero' ? 0.02 : 0.014;
+    // Clean template rhythm between heading ↔ support (not cramped, not sparse)
+    const gapRatio = visualPriority === 'image_hero' ? 0.022 : 0.016;
     const gap = Math.round(canvasH * gapRatio);
     const heights: number[] = [];
     const fontSizes: number[] = [];

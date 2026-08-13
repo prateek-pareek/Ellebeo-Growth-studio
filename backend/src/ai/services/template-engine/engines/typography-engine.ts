@@ -7,6 +7,8 @@ export interface TypographyContext {
   w: number;
   h: number;
   brandFont: string;
+  /** Brand DNA body/secondary font — used for tagline, body, footnote, cta */
+  bodyFont?: string;
   dynamicFontSize: number;
   dynamicTextColor: string;
   validSecondaryColor: string;
@@ -394,13 +396,22 @@ export class TypographyEngine {
       BRANDING_FOOTER_RESERVE_PX
     ) + FOOTER_GAP_PX;
 
-    if (layer.allocatedBox) {
+    // Vertically center type inside its allocated pocket (cards / bottom bands look template-true)
+    if (layer.allocatedBox && textHeight > 0) {
       const pocketTop = Math.max(layer.allocatedBox.y, ctx.constraints.safeY);
       const pocketBottom = Math.min(
         layer.allocatedBox.y + layer.allocatedBox.height,
         ctx.h - bottomClearance,
       );
-      y = Math.max(pocketTop, Math.min(y, Math.max(pocketTop, pocketBottom - textHeight)));
+      const pocketH = Math.max(0, pocketBottom - pocketTop);
+      const onCard = layer.component === 'solid_card'
+        || layer.component === 'inset_card'
+        || layer.component === 'pill_label';
+      if (pocketH > textHeight + 4 && (onCard || String(layer.anchor || '').includes('center') || (layer as any).alignment === 'center')) {
+        y = pocketTop + Math.round((pocketH - textHeight) / 2);
+      } else {
+        y = Math.max(pocketTop, Math.min(y, Math.max(pocketTop, pocketBottom - textHeight)));
+      }
     } else {
       if (y + textHeight > ctx.h - bottomClearance) {
         y = ctx.h - textHeight - bottomClearance;
@@ -573,15 +584,17 @@ export class TypographyEngine {
     }
     let containerSvg = '';
     if (layer.component === 'pill_label' || layer.component === 'solid_card' || layer.component === 'inset_card') {
-      // Breathing room like good slides 2/4 — never a cramped stamp on the chest
+      // Even inset like template cards — proportional to type, not stamp-cramped
       const lineCount = Math.max(1, escapedLines.length);
-      const padX = layer.component === 'pill_label' ? 28 : Math.max(36, Math.round(style.fontSize * 0.45));
+      const padX = layer.component === 'pill_label'
+        ? 28
+        : Math.max(40, Math.round(style.fontSize * 0.52));
       const padY = layer.component === 'pill_label'
         ? 14
-        : Math.max(22, Math.round(style.fontSize * (lineCount >= 3 ? 0.38 : 0.32)));
+        : Math.max(24, Math.round(style.fontSize * (lineCount >= 3 ? 0.42 : 0.36)));
       const radius = layer.component === 'pill_label'
         ? (textHeight + padY * 2) / 2
-        : (layer.component === 'inset_card' ? 10 : 14);
+        : (layer.component === 'inset_card' ? 10 : 16);
 
       let bgFill = '#FFFFFF';
       if (ctx.colorHierarchy) {
@@ -598,7 +611,7 @@ export class TypographyEngine {
         style.fill = '#FFFFFF';
       }
 
-      // Card width hugs measured lines — short copy shouldn't float in a huge empty panel
+      // Card tracks measured lines with even air — template-clean, not over-hugged
       const trackingEmCard = this.parseTrackingEm(style.letterSpacing);
       const casingCard = (layer as any).capitalizationRule || ctx.typographyTokens?.casing || 'natural';
       const isUpperCard = casingCard === 'force_uppercase' || casingCard === 'uppercase';
@@ -606,8 +619,7 @@ export class TypographyEngine {
         longestLineChars * style.fontSize * ((isUpperCard ? 0.82 : 0.65) + Math.max(0, trackingEmCard)),
       );
       const balance = String((layer as any)._copyBalance || '');
-      // Short: hug tight. Long/medium: keep a little air but still track the longest line.
-      const hug = balance === 'short' ? 1.12 : balance === 'long' ? 1.08 : 1.1;
+      const hug = balance === 'short' ? 1.08 : balance === 'long' ? 1.06 : 1.08;
       const contentW = Math.max(
         100,
         Math.min(effectiveMaxW, Math.round(approxLineW * hug) || Math.round(style.fontSize * 5)),
@@ -625,7 +637,7 @@ export class TypographyEngine {
         `;
     }
 
-    finalSvg = `${containerSvg}<text x="${x}" y="${baselineY}" text-anchor="${anchor}" class="overlay-text" style="font-family: ${style.fontFamily}; font-size: ${style.fontSize}px; fill: ${style.fill}; font-weight: ${style.fontWeight}; font-style: ${style.fontStyle}; letter-spacing: ${style.letterSpacing};" filter="url(#premium_shadow)"${strokeAddition}${transformStr}${opacityStr}>${content}</text>`;
+    finalSvg = `${containerSvg}<text x="${x}" y="${baselineY}" text-anchor="${anchor}" class="${layer.role === 'heading' ? 'overlay-text' : 'overlay-text-body'}" style="font-family: ${style.fontFamily}; font-size: ${style.fontSize}px; fill: ${style.fill}; font-weight: ${style.fontWeight}; font-style: ${style.fontStyle}; letter-spacing: ${style.letterSpacing};" filter="url(#premium_shadow)"${strokeAddition}${transformStr}${opacityStr}>${content}</text>`;
 
     // Write to Shared Layout State
     if (ctx.layoutState) {
@@ -946,6 +958,8 @@ export class TypographyEngine {
       : ((ctx.dynamicTextColor) || (ctx.colorHierarchy?.primaryText) || '#FFFFFF');
     let letterSpacing = 'normal';
     let fontFamily = `'${ctx.brandFont}', sans-serif`;
+    const bodyFamilyName = (ctx.bodyFont && ctx.bodyFont.trim()) || ctx.brandFont;
+    const bodyFontFamily = `'${bodyFamilyName}', sans-serif`;
 
     const fontBehavior = this.fontRegistry.getBehavior(ctx.brandFont);
 
@@ -974,11 +988,18 @@ export class TypographyEngine {
       }
     }
 
-    // Optimizer slot fit is authoritative — use it before dominance / length tweaks
+    // Slot fit = DNA size gently fitted into the template pocket (not a separate ladder)
     const slotFittedSize = Number(layerObj._estimatedFontSize);
     const hasSlotFit = Number.isFinite(slotFittedSize) && slotFittedSize > 8;
     if (hasSlotFit) {
       fontSize = Math.round(slotFittedSize);
+      // When DNA is preserved, never let a stale layer.fontSize pull us off metrics
+      if (layerObj._preserveHeroSize && ctx.typographyMetrics?.heroSize && role === 'heading') {
+        const dna = ctx.typographyMetrics.heroSize;
+        // Stay within DNA band: prefer closer of slot vs DNA if slot drifted up hard
+        if (fontSize > dna * 1.12) fontSize = Math.round(dna * 1.08);
+        if (fontSize < dna * 0.78) fontSize = Math.round(Math.max(fontSize, dna * 0.85));
+      }
     }
     // Circle free-band: force light ink on dark blur
     if (layerObj._forceOverlayInk && !onCard) {
@@ -1040,11 +1061,13 @@ export class TypographyEngine {
         : (ctx.dynamicTextColor || ctx.colorHierarchy?.primaryText || fill);
     } else if (role === 'body') {
       fontWeight = weightMap[tokens.bodyWeight] || '400';
+      fontFamily = bodyFontFamily;
       fill = onCard
         ? (ctx.colorHierarchy?.secondaryText || ctx.dynamicTextColor || fill)
         : (ctx.dynamicTextColor || ctx.colorHierarchy?.secondaryText || fill);
     } else if (role === 'tagline' || role === 'footnote' || role === 'cta') {
       fontWeight = weightMap[tokens.bodyWeight] === 'light' ? '400' : '600';
+      fontFamily = bodyFontFamily;
       letterSpacing = layerObj.tracking !== undefined
         ? `${layerObj.tracking}em`
         : `${fontBehavior.taglineTracking}em`;
@@ -1056,10 +1079,10 @@ export class TypographyEngine {
     }
 
     // Inject serif font if the brand font is an editorial serif and it requires support
-    if (tokens.headlineWeight === 'light' && tokens.tracking === 'wide') {
+    if (role === 'heading' && tokens.headlineWeight === 'light' && tokens.tracking === 'wide') {
       fontFamily = `'${ctx.brandFont}', 'Playfair Display', 'Georgia', 'Times New Roman', serif`;
     }
-    if (fontBehavior.classification === 'serif_display' || fontBehavior.classification === 'serif_text') {
+    if (role === 'heading' && (fontBehavior.classification === 'serif_display' || fontBehavior.classification === 'serif_text')) {
       fontFamily = `'${ctx.brandFont}', 'Playfair Display', 'Georgia', serif`;
     }
 

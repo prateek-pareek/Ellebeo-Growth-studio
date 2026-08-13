@@ -1,23 +1,13 @@
 // ============================================================================
-// ai-image-generation.service.ts â€” Multi-model Image Generation (Gemini > GPT-Image-1)
-// Takes real before/after photo + brand context â†’ beautiful designed image
-//
-// CRITICAL ARCHITECTURE NOTE:
-// - Gemini (gemini-2.5-flash-image): Uses vision+generation. Treats input photo as
-//   reference context to preserve. SAFE for face/identity â€” will NOT beautify or alter faces.
-// - GPT (gpt-image-1): Uses images.edit() which implies "enhance/edit" semantics.
-//   REQUIRES explicit face-preservation instructions in prompts to prevent facial alterations.
-//
-// This service prioritizes Gemini (lines 189-243) and falls back to GPT only if Gemini fails.
-// For GPT fallback: strict face-preservation clauses are injected into prompts (line 185-194).
+// ai-image-generation.service.ts — Original photo + selected template
+// Takes the real before/after photo and composites it into the chosen layout.
+// The source image is never rewritten, restyled, or replaced by an image model.
 // ============================================================================
 
-import OpenAI from 'openai';
 import { firebaseStorage } from '../../config/firebase.client';
 import * as https from 'https';
 import * as http from 'http';
 import * as fs from 'fs';
-import { GoogleGenAI } from '@google/genai';
 import sharp from 'sharp';
 import { ModelRouter } from '../orchestrator/model-router';
 import type { VisionAnalysisResult } from '../types/chain-output.types';
@@ -34,8 +24,6 @@ import { DesignCompiler } from './template-engine/engines/design-compiler';
 import { LayoutEngine, BoundingBox } from './template-engine/engines/layout-engine';
 import { CompositionOptimizer } from './template-engine/engines/composition-optimizer';
 import { CompositionQualityController } from './template-engine/engines/composition-quality-controller';
-
-const openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
 
 export interface GeneratedSlide {
   url: string;
@@ -162,62 +150,195 @@ export async function processPortraitFit(
 
 // In-memory cache for fonts to prevent repeated network calls
 const fontCache: Record<string, string> = {};
+const fontFaceCache: Record<string, string> = {};
 
-async function fetchGoogleFontBase64(fontFamily: string): Promise<string> {
+type FetchedFontFace = {
+  weight: number;
+  base64: string;
+  format: 'truetype' | 'opentype' | 'woff' | 'woff2';
+  mime: string;
+};
+
+function detectFontFormat(url: string): FetchedFontFace['format'] {
+  const u = url.toLowerCase();
+  if (u.includes('.woff2')) return 'woff2';
+  if (u.includes('.woff')) return 'woff';
+  if (u.includes('.otf') || u.includes('opentype')) return 'opentype';
+  return 'truetype';
+}
+
+function fontMime(format: FetchedFontFace['format']): string {
+  if (format === 'woff2') return 'font/woff2';
+  if (format === 'woff') return 'font/woff';
+  if (format === 'opentype') return 'font/otf';
+  return 'font/ttf';
+}
+
+async function httpsGetText(url: string, headers: Record<string, string>, timeoutMs = 4000): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { headers, timeout: timeoutMs }, (res) => {
+      // Follow one redirect (Google Fonts sometimes 302s)
+      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        httpsGetText(res.headers.location, headers, timeoutMs).then(resolve).catch(reject);
+        return;
+      }
+      let body = '';
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => resolve(body));
+      res.on('error', reject);
+    });
+    req.on('timeout', () => { req.destroy(); reject(new Error('Font CSS fetch timeout')); });
+    req.on('error', reject);
+  });
+}
+
+async function httpsGetBuffer(url: string, timeoutMs = 5000): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { timeout: timeoutMs }, (res) => {
+      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        httpsGetBuffer(res.headers.location, timeoutMs).then(resolve).catch(reject);
+        return;
+      }
+      const chunks: Buffer[] = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+      res.on('error', reject);
+    });
+    req.on('timeout', () => { req.destroy(); reject(new Error('Font binary download timeout')); });
+    req.on('error', reject);
+  });
+}
+
+/**
+ * Fetch Brand DNA fonts as embeddable @font-face CSS for Sharp/librsvg.
+ * Prefer real TTF (Fontsource CDN) — Google CSS now mostly serves woff, which
+ * librsvg often ignores when mislabeled as truetype (previous bug → system fallback).
+ */
+async function fetchGoogleFontFaceCss(fontFamily: string, weights: number[] = [400, 700]): Promise<string> {
   if (!fontFamily || ['sans-serif', 'serif', 'system-ui', 'monospace', 'arial', 'helvetica'].includes(fontFamily.toLowerCase())) {
     return '';
   }
 
-  if (fontCache[fontFamily] !== undefined) {
-    return fontCache[fontFamily];
+  const cacheKey = `${fontFamily}|${weights.join(',')}`;
+  if (fontFaceCache[cacheKey] !== undefined) {
+    return fontFaceCache[cacheKey];
   }
 
+  const fontId = fontFamily.trim().toLowerCase().replace(/\s+/g, '-');
+  const faces: FetchedFontFace[] = [];
+
   try {
-    const escapedFamily = encodeURIComponent(fontFamily);
-    const googleFontsCssUrl = `https://fonts.googleapis.com/css2?family=${escapedFamily}&display=swap`;
+    // 1) Fontsource TTF — reliable for Sharp/librsvg
+    for (const weight of weights) {
+      const ttfUrls = [
+        `https://cdn.jsdelivr.net/fontsource/fonts/${fontId}@latest/latin-${weight}-normal.ttf`,
+        `https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/${fontId.replace(/-/g, '')}/static/${fontFamily.replace(/\s+/g, '')}-${weight === 700 ? 'Bold' : 'Regular'}.ttf`,
+      ];
+      for (const ttfUrl of ttfUrls) {
+        try {
+          const fontBuffer = await httpsGetBuffer(ttfUrl);
+          // Reject HTML error pages / tiny responses
+          if (fontBuffer.length < 1000) continue;
+          const head = fontBuffer.slice(0, 4).toString('binary');
+          if (head === 'ttcf' || head.charCodeAt(0) === 0x00 || head.includes('OTTO') || head.includes('true')) {
+            faces.push({
+              weight,
+              base64: fontBuffer.toString('base64'),
+              format: head.includes('OTTO') ? 'opentype' : 'truetype',
+              mime: head.includes('OTTO') ? 'font/otf' : 'font/ttf',
+            });
+            break;
+          }
+          // Many TTFs start with 0x00010000 — binary check above may miss; accept if size looks real
+          if (fontBuffer.length > 8000) {
+            faces.push({
+              weight,
+              base64: fontBuffer.toString('base64'),
+              format: 'truetype',
+              mime: 'font/ttf',
+            });
+            break;
+          }
+        } catch {
+          // try next URL
+        }
+      }
+    }
 
-    const cssText = await new Promise<string>((resolve, reject) => {
-      const req = https.get(googleFontsCssUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        },
-        timeout: 3000
-      }, (res) => {
-        let body = '';
-        res.on('data', (chunk) => { body += chunk; });
-        res.on('end', () => resolve(body));
-        res.on('error', reject);
+    // 2) Google CSS fallback (woff/woff2) with CORRECT format() label
+    if (faces.length === 0) {
+      const weightParam = weights.join(';');
+      const escapedFamily = encodeURIComponent(fontFamily).replace(/%20/g, '+');
+      const googleFontsCssUrl = `https://fonts.googleapis.com/css2?family=${escapedFamily}:wght@${weightParam}&display=swap`;
+      const cssText = await httpsGetText(googleFontsCssUrl, {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
       });
-      req.on('timeout', () => { req.destroy(); reject(new Error('Font CSS fetch timeout')); });
-      req.on('error', reject);
-    });
+      const faceBlocks = cssText.split('@font-face').slice(1);
+      for (const block of faceBlocks) {
+        const weightMatch = block.match(/font-weight:\s*(\d+)/i);
+        const srcMatches = [...block.matchAll(/url\((https:\/\/fonts\.gstatic\.com\/[^)]+)\)(?:\s+format\(['"]?([a-z0-9-]+)['"]?\))?/gi)];
+        if (!srcMatches.length) continue;
+        const ranked = srcMatches.map((m) => {
+          const hint = (m[2] || '').toLowerCase();
+          let format: FetchedFontFace['format'] = detectFontFormat(m[1]);
+          if (hint.includes('woff2')) format = 'woff2';
+          else if (hint.includes('woff')) format = 'woff';
+          else if (hint.includes('opentype')) format = 'opentype';
+          else if (hint.includes('truetype')) format = 'truetype';
+          const score = format === 'truetype' || format === 'opentype' ? 3 : format === 'woff' ? 2 : 1;
+          return { url: m[1].replace(/['"]/g, ''), format, score };
+        }).sort((a, b) => b.score - a.score);
+        const best = ranked[0];
+        const weight = weightMatch ? parseInt(weightMatch[1], 10) : 400;
+        if (weights.length > 0 && !weights.includes(weight)) continue;
+        const fontBuffer = await httpsGetBuffer(best.url);
+        if (fontBuffer.length < 1000) continue;
+        faces.push({
+          weight,
+          base64: fontBuffer.toString('base64'),
+          format: best.format,
+          mime: fontMime(best.format),
+        });
+      }
+    }
 
-    const urlMatch = cssText.match(/url\((https:\/\/fonts\.gstatic\.com\/[^)]+)\)/);
-    if (!urlMatch || !urlMatch[1]) {
+    if (faces.length === 0) {
+      fontFaceCache[cacheKey] = '';
       fontCache[fontFamily] = '';
       return '';
     }
 
-    const fontUrl = urlMatch[1];
-    const fontBuffer = await new Promise<Buffer>((resolve, reject) => {
-      const req = https.get(fontUrl, { timeout: 3000 }, (res) => {
-        const chunks: Buffer[] = [];
-        res.on('data', (chunk) => chunks.push(chunk));
-        res.on('end', () => resolve(Buffer.concat(chunks)));
-        res.on('error', reject);
-      });
-      req.on('timeout', () => { req.destroy(); reject(new Error('Font binary download timeout')); });
-      req.on('error', reject);
-    });
+    const byWeight = new Map<number, FetchedFontFace>();
+    for (const face of faces) {
+      const prev = byWeight.get(face.weight);
+      const rank = (f: FetchedFontFace) => (f.format === 'truetype' || f.format === 'opentype' ? 2 : f.format === 'woff' ? 1 : 0);
+      if (!prev || rank(face) > rank(prev)) byWeight.set(face.weight, face);
+    }
 
-    const base64 = fontBuffer.toString('base64');
-    fontCache[fontFamily] = base64;
-    return base64;
+    const css = Array.from(byWeight.values()).map((face) => `@font-face {
+            font-family: '${fontFamily}';
+            src: url('data:${face.mime};base64,${face.base64}') format('${face.format}');
+            font-weight: ${face.weight};
+            font-style: normal;
+          }`).join('\n');
+
+    fontFaceCache[cacheKey] = css;
+    const preferred = byWeight.get(700) || byWeight.get(400) || Array.from(byWeight.values())[0];
+    fontCache[fontFamily] = preferred?.base64 || '';
+    console.log(`[FONT ENGINE] Embedded '${fontFamily}' weights=[${Array.from(byWeight.keys()).join(',')}] via ${preferred?.format}`);
+    return css;
   } catch (err: any) {
     console.warn(`[FONT ENGINE] Could not fetch Google Font '${fontFamily}' dynamically (${err.message}). Using SVG font-family fallback.`);
+    fontFaceCache[cacheKey] = '';
     fontCache[fontFamily] = '';
     return '';
   }
+}
+
+/** @deprecated Prefer fetchGoogleFontFaceCss — kept for any residual callers */
+async function fetchGoogleFontBase64(fontFamily: string): Promise<string> {
+  await fetchGoogleFontFaceCss(fontFamily, [400, 700]);
+  return fontCache[fontFamily] || '';
 }
 
 async function uploadBase64ToFirebase(base64: string, tenantId: string, name: string): Promise<string> {
@@ -402,7 +523,7 @@ export class AiImageGenerationService {
       visualRanking = [],
       capitalizationRule = 'uppercase',
       footerBrandToggle = true,
-      generatorModel = 'both',
+      generatorModel = 'none',
       backgroundBrandColor = '#F7F4EF',
       accentBrandColor = '#D4A373',
       depthBrandColor = '#1E1E1C',
@@ -410,7 +531,7 @@ export class AiImageGenerationService {
       visionResult,
       templateIntent = 'educational',
       logoUrl,
-      designSpec
+      designSpec,
     } = params;
 
     // Fast-path: Skip AI image generation entirely for text-only editorial layouts
@@ -453,14 +574,11 @@ export class AiImageGenerationService {
       };
     }
 
-    let cleanPrompt = '';
-    let imageBuffer: Buffer | null = null;
-
     const isRealClientPhoto = photoUrl && (photoUrl.startsWith('http') || photoUrl.startsWith('data:image/') || photoUrl.includes('raw_assets') || photoUrl.includes('storage') || photoUrl.includes('temp'));
 
-    if (isRealClientPhoto || generatorModel === 'none') {
-      console.log(`[PASS-THROUGH SHARP COMPOSITOR] Bypassing AI image editor for slide ${index} to guarantee 100% client face preservation.`);
-      imageBuffer = await downloadImageAsBuffer(photoUrl);
+    if (isRealClientPhoto) {
+      console.log(`[PASS-THROUGH SHARP COMPOSITOR] Keeping original photo for slide ${index} and adapting it to layout '${layoutType}'.`);
+      const imageBuffer = await downloadImageAsBuffer(photoUrl);
       const base64Image = imageBuffer.toString('base64');
       const overlayResult = await this.overlayBrandingAndText({
         base64Image,
@@ -499,171 +617,11 @@ export class AiImageGenerationService {
       };
     }
 
-    // Bypass AI image generation entirely for procedural text-only families
-    if (layoutType === 'text_palette_minimal' || !photoUrl && layoutType?.includes('text_')) {
-      // Create a minimal 1x1 transparent pixel base64. The renderer will cover it with SVG backgrounds.
-      const transparent1x1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
-      const overlayResult = await this.overlayBrandingAndText({
-        base64Image: transparent1x1,
-        overlayText,
-        headline,
-        subheadline,
-        cta,
-        isFirst,
-        isLast,
-        brandColor,
-        secondaryColor,
-        businessName,
-        index,
-        totalSlides,
-        brandFont,
-        bodyFont,
-        layoutType,
-        beforePhotoUrl,
-        visualRanking,
-        capitalizationRule,
-        footerBrandToggle,
-        backgroundBrandColor,
-        accentBrandColor,
-        depthBrandColor,
-        outputSize,
-        captionText: overlayText,
-        visionResult,
-        designSpec,
-      });
-      const url = await uploadBase64ToFirebase(overlayResult.base64, tenantId, `slide_${index}`);
-      return {
-        url,
-        variants: { gemini: url, dalle: url },
-        compositionFailed: overlayResult.compositionFailed,
-        compositionWeak: overlayResult.compositionWeak,
-        failReason: overlayResult.failReason,
-      };
-    }
-
-    // Compile dynamic lifestyle/studio assets for non-booking educational/moodboard posts
-    // Subjects use Brand DNA aesthetic direction instead of hardcoded beige/travertine
-    const brandAestheticHint = aesthetic || 'minimal, premium beauty editorial';
-
-    // Canva-Style Aesthetic Multiplexer: Force the AI into distinct aesthetic categories 
-    // rather than repeating "lifestyle interior" every time.
-    const lifestyleSubjects = [
-      `A high-end studio beauty editorial shot, highly polished, premium skin glow, minimal props, in ${brandAestheticHint} style, using brand colors: primary ${brandColor}, secondary ${secondaryColor}, background ${backgroundBrandColor}`,
-      `Clean architectural interior of a luxury clinical ${serviceType} space, emphasizing premium materials, soft natural light, shadows, matching palette: ${brandColor}, ${secondaryColor}`,
-      `Extreme macro photography of smooth premium textures (like silk, thick cream, or polished stone) related to ${serviceType}, styled in ${brandAestheticHint} aesthetic, using exact brand accent: ${accentBrandColor}`,
-      `An abstract, flowing composition of soft lighting and shadow geometries evoking the feeling of premium ${serviceType}, in exact brand colors: ${brandColor}, ${secondaryColor}, ${backgroundBrandColor}`
-    ];
-    // Use modulo so a 4-slide carousel cycles perfectly through 4 distinct visual flavors
-    const chosenSubject = lifestyleSubjects[index % 4];
-
-    const prompt = customPrompt || (isBeforePhoto
-      ? buildBeforeSlidePrompt({ overlayText: '', businessName, brandColor })
-      : buildSlidePrompt({
-        overlayText: '',
-        businessName,
-        brandColor,
-        secondaryColor,
-        aesthetic,
-        serviceType,
-        isFirst,
-        isLast,
-      }));
-
-    const rankingStyleText = visualRanking && visualRanking.length > 0
-      ? `Visual style priorities: ${visualRanking.join(', ')}`
-      : 'minimal, premium beauty editorial';
-
-    // Build moodboard context block for the image generation AI
-    const moodboardBlock = moodboardVisionSummary
-      ? `\n- MOODBOARD DIRECTION (from brand reference images — match this feel): ${moodboardVisionSummary}`
-      : '';
-
-    const facePreservationClause = `
-    
-CRITICAL IMAGE REQUIREMENTS:
-- Subject: ${chosenSubject}
-- BRAND COLOR PALETTE (MANDATORY — the generated image MUST use these exact colors as the dominant palette):
-  * Primary brand color: ${brandColor}
-  * Secondary brand color: ${secondaryColor}
-  * Background color: ${backgroundBrandColor}
-  * Accent color: ${accentBrandColor}
-  * The image's dominant tones, surfaces, backgrounds, and accents MUST visually match these hex colors. Do NOT invent your own color scheme.
-- Aesthetic style: ${brandAestheticHint}. ${rankingStyleText}${moodboardBlock}
-- Photographic quality: Captured on a medium-format 80MP camera, ultra-detailed textures, razor-sharp focus on details, Hasselblad/Leica photography style, 8k resolution, cinematic natural lighting.
-- Do NOT feature any people, faces, or bodies. Focus entirely on organic, luxury interiors and clinic product details.
-- The image must look like a professional, high-fashion campaign photography asset.
-- CRITICAL: Do NOT write, draw, or render any text overlays, titles, or logo elements directly onto the image. The image must contain only the raw photographic result.`;
-
-    cleanPrompt = prompt + facePreservationClause;
-
-
-
-    let base64 = '';
-
-    // Real client photos are already handled and returned early in the pass-through compositor block.
-    // Standard text-to-image asset generation happens below for lifestyle/concept slides.
-    console.log(`Generating lifestyle base images using generatorModel: ${generatorModel} for slide ${index}...`);
-
-    const geminiTask = (async () => {
-      if (generatorModel === 'dalle') return null;
-      const geminiKey = process.env['GEMINI_API_KEY'];
-      if (!geminiKey) return null;
-      try {
-        const aiClient = new GoogleGenAI({ apiKey: geminiKey });
-        const response = await aiClient.models.generateContent({
-          model: 'gemini-2.5-flash-image',
-          contents: cleanPrompt,
-          config: { responseModalities: ['image'] } as any,
-        });
-        const outputPart = response.candidates?.[0]?.content?.parts?.find((part: any) => part.inlineData);
-        return outputPart?.inlineData?.data || null;
-      } catch (err) {
-        console.error(`Gemini generation failed for slide ${index}:`, err);
-        return null;
-      }
-    })();
-
-    const dalleTask = (async () => {
-      if (generatorModel === 'gemini') return null;
-      try {
-        console.log(`Generating GPT Image 1 image for slide ${index}...`);
-        const response = await openai.images.generate({
-          model: 'gpt-image-1',
-          prompt: cleanPrompt,
-          size: outputSize === '1080x1920' ? '1024x1536' as any : '1024x1024',
-        });
-        const base64 = response.data?.[0]?.b64_json;
-        if (base64) {
-          return base64;
-        }
-        return null;
-      } catch (err) {
-        console.warn(`GPT Image 1 generation failed for slide ${index}:`, err);
-        return null;
-      }
-    })();
-
-    const [geminiResult, dalleResult] = await Promise.all([geminiTask, dalleTask]);
-
-    // Both models should generate - return both for technician to choose
-    if (geminiResult || dalleResult) {
-      console.log(`Image generation finished for slide ${index}:`);
-      if (geminiResult) console.log(`   • Gemini: Generated ✅`);
-      if (dalleResult) console.log(`   • DALL-E: Generated ✅`);
-      if (!geminiResult) console.log(`   • Gemini: Failed ❌`);
-      if (!dalleResult) console.log(`   • DALL-E: Failed ❌`);
-
-      // Use primary result for main display, store both for technician choice
-      base64 = geminiResult || dalleResult || '';
-    } else {
-      throw new Error(`No image generated from any model for slide ${index}`);
-    }
-
-    if (!base64) throw new Error(`OpenAI image generation failed completely for slide ${index}`);
-
-    // Apply branding/text overlay to both models' images
+    // No original photo — compose the selected template on a brand canvas. Never invent a replacement image.
+    console.log(`[TEMPLATE COMPOSITOR] No source photo for slide ${index}; rendering layout '${layoutType}' without a generated still.`);
+    const transparent1x1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
     const overlayResult = await this.overlayBrandingAndText({
-      base64Image: base64,
+      base64Image: transparent1x1,
       overlayText,
       headline,
       subheadline,
@@ -689,71 +647,10 @@ CRITICAL IMAGE REQUIREMENTS:
       captionText: overlayText,
       visionResult,
       designSpec,
-      logoUrl,
-      logoPosition,
     });
-
-    // Upload primary image
-    const primaryUrl = await uploadBase64ToFirebase(overlayResult.base64, tenantId, `slide_${index}_primary`);
-
-    // If both models generated images, also upload the alternative
-    let variants: { gemini?: string; dalle?: string } | undefined;
-    if (geminiResult && dalleResult && generatorModel === 'both') {
-      // Apply overlay to alternative image for comparison using alternative text logic
-      const altBase64 = geminiResult === base64 ? dalleResult : geminiResult;
-
-      // Simple heuristic to create a different text variation for the alt model
-      // so the slides don't look completely identical. 
-      // If it's a cover slide, we might use a slightly different hook format.
-      let altOverlayText = overlayText;
-      if (overlayText.length > 20 && overlayText.includes(' ')) {
-        const words = overlayText.split(' ');
-        if (words.length > 5) {
-          altOverlayText = words.slice(0, Math.ceil(words.length * 0.8)).join(' ') + '...';
-        } else {
-          altOverlayText = overlayText.toUpperCase();
-        }
-      } else {
-        altOverlayText = overlayText.toUpperCase() !== overlayText ? overlayText.toUpperCase() : overlayText.toLowerCase();
-      }
-
-      const altOverlayResult = await this.overlayBrandingAndText({
-        base64Image: altBase64,
-        overlayText: altOverlayText,
-        isFirst,
-        isLast,
-        brandColor,
-        secondaryColor,
-        businessName,
-        index,
-        totalSlides,
-        brandFont,
-        bodyFont,
-        layoutType,
-        beforePhotoUrl,
-        visualRanking,
-        capitalizationRule,
-        footerBrandToggle,
-        backgroundBrandColor,
-        accentBrandColor,
-        outputSize,
-        captionText: altOverlayText,
-        visionResult,
-        designSpec,
-      });
-
-      const altUrl = await uploadBase64ToFirebase(altOverlayResult.base64, tenantId, `slide_${index}_alt`);
-
-      // Return both variants for technician choice
-      variants = {
-        gemini: geminiResult === base64 ? primaryUrl : altUrl,
-        dalle: dalleResult === base64 ? primaryUrl : altUrl,
-      };
-    }
-
+    const url = await uploadBase64ToFirebase(overlayResult.base64, tenantId, `slide_${index}`);
     return {
-      url: primaryUrl,
-      variants,
+      url,
       compositionFailed: overlayResult.compositionFailed,
       compositionWeak: overlayResult.compositionWeak,
       failReason: overlayResult.failReason,
@@ -790,7 +687,7 @@ CRITICAL IMAGE REQUIREMENTS:
     designSpec?: import('./template-engine/interfaces').ISemanticDesignSpec;
     logoPosition?: 'bottom_right' | 'bottom_left' | 'top_right' | 'top_left';
   }): Promise<GeneratedSlide[]> {
-    const { afterPhotoUrl, beforePhotoUrl, concepts, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', depthBrandColor = '#1E1E1C', moodboardVisionSummary, visionResult, visionResultBefore, templateIntent = 'educational', designSpec, ...rest } = params;
+    const { afterPhotoUrl, beforePhotoUrl, concepts, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'none', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', depthBrandColor = '#1E1E1C', moodboardVisionSummary, visionResult, visionResultBefore, templateIntent = 'educational', designSpec, ...rest } = params;
     const total = concepts.length;
 
     // Derive pool dynamically from compiled layouts — never goes stale when new layouts are added
@@ -1070,7 +967,7 @@ CRITICAL IMAGE REQUIREMENTS:
     designSpec?: import('./template-engine/interfaces').ISemanticDesignSpec;
     logoPosition?: 'bottom_right' | 'bottom_left' | 'top_right' | 'top_left';
   }): Promise<GeneratedSlide[]> {
-    const { afterPhotoUrl, beforePhotoUrl, frames, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'both', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', depthBrandColor = '#1E1E1C', moodboardVisionSummary, visionResult, visionResultBefore, templateIntent, semanticFlow, designSpec, ...rest } = params;
+    const { afterPhotoUrl, beforePhotoUrl, frames, artDirectorBrief, layoutType = 'random_diverse', visualRanking = [], capitalizationRule = 'uppercase', footerBrandToggle = true, generatorModel = 'none', backgroundBrandColor = '#F7F4EF', accentBrandColor = '#D4A373', depthBrandColor = '#1E1E1C', moodboardVisionSummary, visionResult, visionResultBefore, templateIntent, semanticFlow, designSpec, ...rest } = params;
     const total = frames.length;
 
     // Derive pool dynamically from compiled layouts — never goes stale when new layouts are added
@@ -1123,14 +1020,15 @@ CRITICAL IMAGE REQUIREMENTS:
       frames.map(async (frame, i) => {
         const isFirst = i === 0;
         const isLast = i === total - 1;
-        // Cover uses before photo (if available) or after; slide 3 (reveal) uses after photo. Non-outcome frames generate lifestyle assets.
-        let photoUrl: string | undefined = undefined;
+        // Keep the original photo on every frame — the selected template adapts around it.
+        let photoUrl: string | undefined = afterPhotoUrl;
         let usingBefore = false;
-        if (isFirst) {
-          photoUrl = beforePhotoUrl || afterPhotoUrl;
-          usingBefore = !!beforePhotoUrl;
-        } else if (i === 2 || i === total - 2) {
-          photoUrl = afterPhotoUrl;
+        if (isFirst && beforePhotoUrl) {
+          photoUrl = beforePhotoUrl;
+          usingBefore = true;
+        } else if (i === 1 && beforePhotoUrl) {
+          photoUrl = beforePhotoUrl;
+          usingBefore = true;
         }
 
         const brief = artDirectorBrief?.find(b => b.index === frame.index);
@@ -2177,27 +2075,10 @@ CRITICAL IMAGE REQUIREMENTS:
         ? (DECORATIONS[template.decoration]?.(decoCtx) ?? '')
         : '';
 
-      // Fetch the custom fonts from Brand DNA dynamically as Base64 to embed directly in the SVG
-      const brandFontBase64 = await fetchGoogleFontBase64(brandFont);
-      const bodyFontBase64 = await fetchGoogleFontBase64(bodyFont);
-
-      // Pre-compile dynamic font faces to avoid nested template literal parsing issues
-      const brandFontFace = brandFontBase64
-        ? `@font-face {
-            font-family: '${brandFont}';
-            src: url('data:font/ttf;base64,${brandFontBase64}') format('truetype');
-            font-weight: bold;
-            font-style: normal;
-          }`
-        : '';
-
-      const bodyFontFace = bodyFontBase64
-        ? `@font-face {
-            font-family: '${bodyFont}';
-            src: url('data:font/ttf;base64,${bodyFontBase64}') format('truetype');
-            font-weight: normal;
-            font-style: normal;
-          }`
+      // Fetch Brand DNA fonts (headline + body) with correct format + weights for Sharp
+      const brandFontFace = await fetchGoogleFontFaceCss(brandFont, [400, 700, 900]);
+      const bodyFontFace = bodyFont && bodyFont !== brandFont
+        ? await fetchGoogleFontFaceCss(bodyFont, [400, 600, 700])
         : '';
 
       // Footer always pinned to bottom bar — never top/side brand marks that collide with headlines
@@ -2231,11 +2112,12 @@ CRITICAL IMAGE REQUIREMENTS:
               ${bodyFontFace}
               
               .overlay-text { font-family: '${brandFont}', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+              .overlay-text-body { font-family: '${bodyFont || brandFont}', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
               .text-centered { text-anchor: middle; }
               .text-left { text-anchor: start; }
               .footer-bg { fill: ${validSecondaryColor}; }
               .footer-brand { font-family: '${brandFont}', system-ui, sans-serif; font-size: ${footerFontSize}px; font-weight: bold; fill: ${dynamicFooterTextColor}; letter-spacing: ${footerLetterSpacing}px; text-anchor: start; }
-              .footer-tracker { font-family: '${bodyFont}', system-ui, sans-serif; font-size: 13px; font-weight: normal; fill: ${dynamicFooterTextColor}; letter-spacing: 1px; text-anchor: end; }
+              .footer-tracker { font-family: '${bodyFont || brandFont}', system-ui, sans-serif; font-size: 13px; font-weight: normal; fill: ${dynamicFooterTextColor}; letter-spacing: 1px; text-anchor: end; }
             </style>
           </defs>
           

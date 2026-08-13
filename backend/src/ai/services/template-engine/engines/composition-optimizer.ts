@@ -508,9 +508,8 @@ export class CompositionOptimizer {
     };
 
     /**
-     * Bidirectional balance inside the template slot:
-     * - LONG copy: widen band + more lines first, shrink font last (avoid ugly crushed boxes)
-     * - SHORT copy: grow type + hug width so text doesn't look lost in a huge empty pocket
+     * Fit copy into the template slot using Brand DNA / geometry metrics as the size base.
+     * Widen/hug the box for long/short copy; only shrink type when the slot cannot hold it.
      */
     const adaptLayerToSlot = (layer: IDSLTextLayer, box: BoundingBox) => {
       const text =
@@ -532,13 +531,13 @@ export class CompositionOptimizer {
       const isLong = chars > 22 || words.length > 5 || longest.length > 10;
       const isShort = chars <= 14 && words.length <= 3;
 
-      // Max width we may grow into (recipe band / full safe — never invent a new layout)
+      // Max width from recipe slot — prefer template maxWidth over inventing a band
       const recipeW = recipeTextWidth(layer);
       const maxW = Math.min(
         fullSafe.width,
-        Math.max(box.width, recipeW, Math.round(canvasW * (isLong ? 0.88 : 0.72))),
+        Math.max(box.width, recipeW, Math.round(canvasW * (isLong ? 0.84 : 0.70))),
       );
-      const minW = Math.round(canvasW * (isHeading ? 0.32 : 0.28));
+      const minW = Math.round(canvasW * (isHeading ? 0.30 : 0.26));
 
       // Height budget: prefer expanding into free band over crushing type
       const footerClear = Math.max(constraints.margins.bottom, 88);
@@ -550,15 +549,20 @@ export class CompositionOptimizer {
       const maxH = Math.max(
         box.height,
         Math.min(
-          Math.round(canvasHeight * (isHeading ? 0.32 : 0.16)),
+          Math.round(canvasHeight * (isHeading ? 0.30 : 0.15)),
           Math.max(48, bandBottom - box.y),
         ),
       );
 
       let width = Math.min(Math.max(box.width, recipeW), maxW);
-      // Length-ladder size is authoritative (short↑ / long↓) — then slot clamps only
+      // Brand DNA / geometry metrics are the base; adapt only fits into the slot
+      const metricsBase = isHeading
+        ? (typographyMetrics?.heroSize || estimatedFontSizes[layer.id] || canvasHeight * 0.055)
+        : (layer.role === 'tagline' || layer.role === 'cta'
+          ? (typographyMetrics?.primarySize || estimatedFontSizes[layer.id] || canvasHeight * 0.03)
+          : (typographyMetrics?.bodySize || estimatedFontSizes[layer.id] || canvasHeight * 0.022));
       const pickSize = (w: number) => this.qc.adaptFontSizeToContent(
-        (estimatedFontSizes[layer.id] || canvasHeight * 0.055) * groupScale,
+        metricsBase * groupScale,
         text,
         layer.role || 'body',
         canvasHeight,
@@ -566,6 +570,10 @@ export class CompositionOptimizer {
         priority,
       );
       let fontPx = pickSize(width);
+      const markPreserve = (size: number) => {
+        // Keep DNA size when we stayed near metrics (fit shrink < 15%)
+        (layer as any)._preserveHeroSize = isHeading && size >= metricsBase * groupScale * 0.85;
+      };
 
       const measure = (size: number, w: number) => {
         const cpl = Math.max(4, Math.floor((w * 0.96) / Math.max(1, size * charRatio)));
@@ -600,60 +608,62 @@ export class CompositionOptimizer {
 
         let m = measure(fontPx, width);
         let guard = 0;
-        const floorPx = canvasHeight * (isHeading ? 0.036 : 0.02);
+        const floorPx = Math.max(
+          canvasHeight * (isHeading ? 0.036 : 0.02),
+          metricsBase * groupScale * 0.72,
+        );
         while (m.needH > maxH && fontPx > floorPx && guard < 12) {
           fontPx = Math.floor(fontPx * 0.94);
           m = measure(fontPx, width);
           guard++;
         }
-        const height = Math.min(maxH, Math.max(box.height, m.needH + Math.round(fontPx * 0.15)));
+        // Extra air under long lines so the text pocket doesn't feel crushed
+        const height = Math.min(maxH, Math.max(box.height, m.needH + Math.round(fontPx * 0.22)));
         (layer as any)._estimatedFontSize = Math.round(fontPx);
         (layer as any)._fittedLineCount = m.lines;
         (layer as any)._copyBalance = 'long';
-        (layer as any)._preserveHeroSize = false;
+        markPreserve(fontPx);
         return { ...box, width, height };
       }
 
-      // --- SHORT: ladder already grew type — hug width so the pocket matches the size ---
+      // --- SHORT: keep DNA size; hug width with clean even padding (template card feel) ---
       if (isShort && isHeading) {
         fontPx = pickSize(width);
+        // Cap any short bump at DNA ceiling — do not invent a larger display size
+        fontPx = Math.min(fontPx, metricsBase * groupScale * 1.08);
         let m = measure(fontPx, width);
-        // Soft grow only if ladder left us under-filling and height allows
-        const maxShort = canvasHeight * (priority === 'typography_hero' ? 0.115 : 0.10);
-        let growGuard = 0;
-        while (fontPx < maxShort && m.needH <= maxH * 0.92 && m.lines <= 2 && growGuard < 6) {
-          const next = Math.floor(fontPx * 1.06);
-          const trial = measure(next, width);
-          if (trial.needH > maxH) break;
-          fontPx = next;
-          m = trial;
-          growGuard++;
-        }
+        const pad = Math.round(fontPx * 0.55);
         const huggedW = Math.min(
           maxW,
-          Math.max(minW, Math.round(m.needW * 1.15 + fontPx * 0.35)),
+          Math.max(minW, Math.round(m.needW + pad * 2)),
         );
-        const height = Math.min(maxH, Math.max(m.needH + Math.round(fontPx * 0.2), Math.round(fontPx * lh * m.lines)));
+        const height = Math.min(
+          maxH,
+          Math.max(m.needH + Math.round(fontPx * 0.28), Math.round(fontPx * lh * m.lines + fontPx * 0.12)),
+        );
         const x = Math.max(constraints.safeX, Math.round((canvasW - huggedW) / 2));
         (layer as any)._estimatedFontSize = Math.round(fontPx);
         (layer as any)._fittedLineCount = m.lines;
         (layer as any)._copyBalance = 'short';
-        (layer as any)._preserveHeroSize = false;
+        markPreserve(fontPx);
         (layer as any).alignment = 'center';
         return { x, y: box.y, width: huggedW, height };
       }
 
-      // --- MEDIUM: ladder size + modest height fit ---
+      // --- MEDIUM: DNA size + modest height fit ---
       fontPx = pickSize(width);
       let m = measure(fontPx, width);
       let guard = 0;
-      const floorPx = canvasHeight * (isHeading ? 0.036 : 0.02);
+      const floorPx = Math.max(
+        canvasHeight * (isHeading ? 0.036 : 0.02),
+        metricsBase * groupScale * 0.72,
+      );
       while (m.needH > maxH && fontPx > floorPx && guard < 10) {
         fontPx = Math.floor(fontPx * 0.94);
         m = measure(fontPx, width);
         guard++;
       }
-      const height = Math.min(maxH, Math.max(box.height, m.needH + Math.round(fontPx * 0.15)));
+      const height = Math.min(maxH, Math.max(box.height, m.needH + Math.round(fontPx * 0.22)));
       const anchor = String(layer.anchor || '');
       if (anchor.includes('center') || (layer as any).alignment === 'center') {
         box = {
@@ -668,7 +678,7 @@ export class CompositionOptimizer {
       (layer as any)._estimatedFontSize = Math.round(fontPx);
       (layer as any)._fittedLineCount = m.lines;
       (layer as any)._copyBalance = 'medium';
-      (layer as any)._preserveHeroSize = false;
+      markPreserve(fontPx);
       return box;
     };
 
