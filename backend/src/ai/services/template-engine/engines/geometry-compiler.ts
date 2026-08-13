@@ -69,10 +69,14 @@ export class GeometryCompiler {
     const visualPriority =
       intent?.visualPriority || designSpec?.composition?.visualPriority || 'image_hero';
 
-    // 1b. SPATIAL POLICY — structural composition difference by priority
+    // 1b. SPATIAL POLICY — structural composition difference by priority + ArtDirection rhythm
     const spatial = LayoutEngine.deriveSpatialPolicy(visualPriority, {
       negativeSpaceMultiplier: behavior.negativeSpaceMultiplier,
       readingFlow: intent?.readingFlow,
+      density: (behavior as any).density,
+      whitespace: intent?.whitespace
+        || ((behavior.negativeSpaceMultiplier >= 1.5) ? 'airy'
+          : (behavior.negativeSpaceMultiplier <= 0.7) ? 'tight' : 'comfortable'),
     });
 
     // Expected text-panel size on the primary split axis (before subject carve)
@@ -126,8 +130,9 @@ export class GeometryCompiler {
     let maxHeroRatio: number;
     let minHeroRatio: number;
     if (visualPriority === 'typography_hero') {
-      maxHeroRatio = isStory ? 0.28 : 0.32; // of text panel
-      minHeroRatio = 0.12;
+      // Fill most of the (moderate) text panel — large type, not tiny type in empty space
+      maxHeroRatio = isStory ? 0.42 : 0.48;
+      minHeroRatio = 0.22;
     } else if (visualPriority === 'image_hero') {
       maxHeroRatio = isStory ? 0.55 : 0.58; // of smaller overlay band
       minHeroRatio = 0.22;
@@ -138,9 +143,20 @@ export class GeometryCompiler {
 
     const maxHero = Math.round(panelH * maxHeroRatio);
     const minHero = Math.round(panelH * minHeroRatio);
-    // Also never exceed ~12% of full canvas for readability/aesthetic ceiling
-    const canvasCeiling = Math.round(canvasHeight * (visualPriority === 'typography_hero' ? 0.14 : visualPriority === 'image_hero' ? 0.09 : 0.11));
+    // typography_hero: allow large presence; airy whitespace means room TO FILL with type
+    const canvasCeiling = Math.round(canvasHeight * (
+      visualPriority === 'typography_hero' ? 0.20
+        : visualPriority === 'image_hero' ? 0.09
+          : 0.11
+    ));
     heroSize = Math.max(minHero, Math.min(heroSize, maxHero, canvasCeiling));
+    // Floor: never leave typography_hero micro-sized when panel/negative space is large
+    if (visualPriority === 'typography_hero') {
+      const airyFloor = Math.round(canvasHeight * (
+        (behavior.negativeSpaceMultiplier >= 1.4) ? 0.085 : 0.07
+      ));
+      heroSize = Math.max(heroSize, airyFloor, minHero);
+    }
 
     let bodySize = Math.round(heroSize * curve.body);
     if (bodySize < 16) bodySize = 16;

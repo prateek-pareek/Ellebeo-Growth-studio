@@ -123,16 +123,10 @@ export class PrimitiveEngine {
       }
     };
 
-    this.registry['handmade_mark'] = {
-      category: 'effects',
-      render: (ctx, layer) => {
-        const color = ctx.colorHierarchy ? ctx.colorHierarchy.accent : ctx.validBrandColor;
-        return `
-        <!-- Abstract Handmade Mark (Brush Stroke) -->
-        <path d="M${ctx.w * 0.8},${ctx.h * 0.15} Q${ctx.w * 0.85},${ctx.h * 0.12} ${ctx.w * 0.9},${ctx.h * 0.16} T${ctx.w * 0.95},${ctx.h * 0.14}" fill="none" stroke="${color}" stroke-width="${ctx.scaleStroke!(4)}" stroke-linecap="round" opacity="${ctx.resolveOpacity!(0.6)}" />
-      `;
-      }
-    };
+    // NOTE: 'handmade_mark' used to be registered here as a single brush-stroke primitive, but it
+    // was immediately overwritten below (~line 869) by a random-delegate version. That made this
+    // definition permanently dead code, so it has been removed — the delegate at line 869 is the
+    // one real registration.
 
     this.registry['museum_border'] = {
       category: 'geometry',
@@ -496,11 +490,32 @@ export class PrimitiveEngine {
 
     this.registry['glass_card'] = {
       category: 'layout',
-      render: (ctx) => `
-        <g transform="translate(60, ${ctx.h - 260})">
-          <rect x="0" y="0" width="${ctx.w - 120}" height="200" rx="24" fill="${ctx.validSecondaryColor}" fill-opacity="${ctx.resolveOpacity!(0.8)}" stroke="${ctx.validBrandColor}" stroke-width="${ctx.scaleStroke!(1.5)}" style="backdrop-filter: blur(10px);" filter="drop-shadow(0 20px 40px rgba(0,0,0,0.15))" />
+      render: (ctx) => {
+        const zones = ((ctx.canonicalGeometry as any)?.protectedZones || []) as Array<{
+          x: number; y: number; width: number; height: number;
+        }>;
+        const textish = zones
+          .filter(z => z.width > 80 && z.height > 40 && z.width < ctx.w * 0.92 && z.height < ctx.h * 0.55)
+          .sort((a, b) => (b.width * b.height) - (a.width * a.height));
+        const heading = textish[0];
+        const padX = 40;
+        const padY = 28;
+        const w = heading
+          ? Math.min(ctx.w - 120, Math.max(320, heading.width + padX * 2))
+          : Math.max(320, ctx.w - 120);
+        const h = heading ? Math.max(140, heading.height + padY * 2) : 200;
+        const x = heading
+          ? Math.max(60, Math.round(heading.x + heading.width / 2 - w / 2))
+          : 60;
+        const y = heading
+          ? Math.max(60, heading.y - padY)
+          : Math.max(60, ctx.h - 260);
+        return `
+        <g transform="translate(${x}, ${y})">
+          <rect x="0" y="0" width="${w}" height="${h}" rx="24" fill="${ctx.validSecondaryColor}" fill-opacity="${ctx.resolveOpacity!(0.8)}" stroke="${ctx.validBrandColor}" stroke-width="${ctx.scaleStroke!(1.5)}" filter="drop-shadow(0 20px 40px rgba(0,0,0,0.15))" />
         </g>
-      `
+      `;
+      }
     };
 
     this.registry['organic_blob'] = {
@@ -1055,15 +1070,34 @@ export class PrimitiveEngine {
 
     this.registry['glass_card'] = {
       category: 'geometry', render: (ctx, layer) => {
-        const w = 400;
-        const h = 250;
-        const x = ctx.constraints.safeX;
-        const y = ctx.h - ctx.constraints.safeY - h;
+        // Prefer the headline's allocated pocket (injected into protectedZones before
+        // decorations render) so the panel hugs the real type — not a fixed bottom-left box.
+        const zones = ((ctx.canonicalGeometry as any)?.protectedZones || []) as Array<{
+          x: number; y: number; width: number; height: number;
+        }>;
+        const textish = zones
+          .filter(z => z.width > 80 && z.height > 40 && z.width < ctx.w * 0.92 && z.height < ctx.h * 0.55)
+          .sort((a, b) => (b.width * b.height) - (a.width * a.height));
+        const heading = textish[0];
+        const padX = 36;
+        const padY = 28;
+        const w = heading
+          ? Math.min(ctx.w - ctx.constraints.safeX * 2, Math.max(280, heading.width + padX * 2))
+          : Math.min(520, ctx.w - ctx.constraints.safeX * 2);
+        const h = heading
+          ? Math.max(120, heading.height + padY * 2)
+          : 200;
+        const x = heading
+          ? Math.max(ctx.constraints.safeX, Math.round(heading.x + heading.width / 2 - w / 2))
+          : Math.round((ctx.w - w) / 2);
+        const y = heading
+          ? Math.max(ctx.constraints.safeY, heading.y - padY)
+          : Math.round(ctx.h * 0.32);
         return `
-      <!-- Glassmorphism Card -->
+      <!-- Glassmorphism Card (bound to headline pocket) -->
       <g transform="translate(${x}, ${y})">
-        <rect x="0" y="0" width="${w}" height="${h}" rx="16" fill="${ctx.validSecondaryColor}" opacity="${ctx.resolveOpacity!(0.6)}" filter="blur(8px)" />
-        <rect x="0" y="0" width="${w}" height="${h}" rx="16" fill="none" stroke="${ctx.validSecondaryColor}" stroke-width="${ctx.scaleStroke!(1.5)}" opacity="${ctx.resolveOpacity!(0.8)}" />
+        <rect x="0" y="0" width="${w}" height="${h}" rx="16" fill="${ctx.validSecondaryColor}" opacity="${ctx.resolveOpacity!(0.55)}" />
+        <rect x="0" y="0" width="${w}" height="${h}" rx="16" fill="none" stroke="${ctx.validSecondaryColor}" stroke-width="${ctx.scaleStroke!(1.5)}" opacity="${ctx.resolveOpacity!(0.7)}" />
       </g>`;
       }
     };
@@ -1489,10 +1523,20 @@ export class PrimitiveEngine {
 
     this.registry['large_numeral_bullet'] = {
       category: 'geometry', render: (ctx, layer) => {
+        // Quiet watermark — never a 250px gold numeral fighting the headline.
+        const pad = Math.max(ctx.constraints.safeX, Math.round(ctx.w * 0.05));
+        const size = Math.round(ctx.h * 0.14);
+        const anchor = String(layer?.anchor || 'top_left');
+        let x = pad;
+        let y = pad + size;
+        if (anchor.includes('right')) x = ctx.w - pad;
+        if (anchor.includes('bottom')) y = ctx.h - Math.max(ctx.constraints.margins?.bottom || pad, pad) - 8;
+        if (anchor.includes('center') && !anchor.includes('left') && !anchor.includes('right')) x = ctx.w / 2;
+        const anchorAttr = anchor.includes('right') ? 'end' : (anchor.includes('left') || anchor === 'top_left' ? 'start' : 'middle');
         return `
-      <!-- Educational Large Numeral Background -->
-      <text x="${ctx.constraints.safeX}" y="${ctx.constraints.safeY + 180}" font-family="Georgia, serif" font-size="250" font-weight="900" fill="${ctx.validBrandColor}" opacity="${ctx.resolveOpacity!(0.08)}" text-anchor="start">
-        1.
+      <!-- Quiet educational numeral watermark -->
+      <text x="${x}" y="${y}" font-family="Georgia, serif" font-size="${size}" font-weight="700" fill="${ctx.validBrandColor}" opacity="${ctx.resolveOpacity!(0.12)}" text-anchor="${anchorAttr}">
+        01
       </text>`;
       }
     };
@@ -1710,9 +1754,16 @@ export class PrimitiveEngine {
           const isLast = i === steps - 1;
           dots += `<circle cx="${cx}" cy="${y}" r="${isLast ? 8 : 5}" fill="${isLast ? ctx.validBrandColor : ctx.validBackgroundColor}" stroke="${ctx.validBrandColor}" stroke-width="${ctx.scaleStroke!(2)}" />`;
         }
+        // data-bounds lets renderPrimitive()'s collision engine actually see where this sits —
+        // without it, a bare <line>/<circle> group is invisible to isSafePlacement() and this
+        // track can be positioned (via the hardcoded offsetPercent above) straight across a
+        // headline with no relocate/shrink/suppress ever kicking in.
+        const dotRadius = 8;
+        const boundsY = y - dotRadius - 4;
+        const boundsHeight = (dotRadius + 4) * 2;
         return `
       <!-- Transformation Family Timeline Track -->
-      <g>
+      <g data-bounds="${x1},${boundsY},${x2 - x1},${boundsHeight}">
         <line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="${ctx.validBrandColor}" stroke-width="${ctx.scaleStroke!(1.5)}" opacity="${ctx.resolveOpacity!(0.35)}" />
         ${dots}
       </g>`;
@@ -1834,11 +1885,33 @@ export class PrimitiveEngine {
     return 0.299 * r + 0.587 * g + 0.114 * b;
   }
 
-  public renderPrimitive(name: string, ctx: PrimitiveContext, layer?: IDSLDecorationLayer | IDSLTextLayer): string {
-    const primitive = this.registry[name];
+  /**
+   * Renders a primitive by name.
+   *
+   * Return value carries meaning that callers MUST distinguish:
+   *  - `null`   → the component name is genuinely unregistered (a real DSL/authoring error).
+   *  - `''`     → the component was found and handled, but intentionally produced no visual
+   *               output (e.g. delegated to another engine, or hard-collision-disabled by the
+   *               Collision Engine below). This is an expected, silent outcome — NOT an error —
+   *               and must never be surfaced as a "missing component" placeholder.
+   *  - non-empty string → the rendered SVG fragment.
+   */
+  public renderPrimitive(name: string, ctx: PrimitiveContext, layer?: IDSLDecorationLayer | IDSLTextLayer): string | null {
+    // Aliases for family-inject / theme names that map to real registry entries
+    const ALIASES: Record<string, string> = {
+      gallery_frame: 'museum_border',
+      masking_tape: 'editorial_tape',
+      gold_accents: 'elegant_line_art',
+      tape: 'editorial_tape',
+    };
+    const resolvedName = ALIASES[name] || name;
+    const primitive = this.registry[resolvedName];
     if (!primitive) {
-      console.warn(`[PrimitiveEngine] Warning: Primitive '${name}' not found.`);
-      return '';
+      console.warn(`[PrimitiveEngine] Warning: Primitive '${name}'${resolvedName !== name ? ` (alias→${resolvedName})` : ''} not found.`);
+      return null;
+    }
+    if (resolvedName !== name) {
+      console.log(`[PrimitiveEngine] Aliased '${name}' → '${resolvedName}'`);
     }
 
     // --- Inject Responsive Helpers ---
@@ -1855,7 +1928,8 @@ export class PrimitiveEngine {
       if (ctx.tokens && ctx.tokens.opacityMultiplier !== undefined) {
         finalOpacity = baseOpacity * ctx.tokens.opacityMultiplier;
       }
-      return Math.min(1.0, Math.max(0.02, parseFloat(finalOpacity.toFixed(2))));
+      // Floor high enough that family primitives remain visible on photo/canvas
+      return Math.min(1.0, Math.max(0.28, parseFloat(finalOpacity.toFixed(2))));
     };
 
     ctx.isSafePlacement = (candidateBox: BoundingBox): boolean => {

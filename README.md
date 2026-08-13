@@ -24,21 +24,24 @@ This repository contains the full source code for the Elle.Be.O Growth Studio pl
 
 ### Local Development
 
-1. **Backend**:
-   ```bash
-   cd backend
-   npm install
-   # Configure .env
-   npm run start:dev
-   ```
+From the repo root (runs both apps with auto-reload on code changes):
 
-2. **Frontend**:
-   ```bash
-   cd frontend
-   npm install
-   # Configure .env
-   npm run dev
-   ```
+```bash
+# Install root + app dependencies once
+npm install
+npm install --prefix backend
+npm install --prefix frontend
+# Configure backend/.env and frontend/.env
+
+npm run dev
+```
+
+Or run apps individually:
+
+```bash
+npm run dev:backend
+npm run dev:frontend
+```
 
 ## License
 

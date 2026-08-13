@@ -153,6 +153,50 @@ export class LayoutEngine {
     return { x, y, width: w, height: h };
   }
 
+  /**
+   * Cover-crop window in source pixels (matches processPortraitFit face-aware cover).
+   * Keeps face focus near the crop center when possible.
+   */
+  public static coverCropWindow(
+    sourceW: number,
+    sourceH: number,
+    targetW: number,
+    targetH: number,
+    focusXPercent = 50,
+    focusYPercent = 40,
+  ): { left: number; top: number; width: number; height: number; scale: number } {
+    const scale = Math.max(targetW / Math.max(1, sourceW), targetH / Math.max(1, sourceH));
+    const width = Math.min(sourceW, Math.max(1, Math.round(targetW / scale)));
+    const height = Math.min(sourceH, Math.max(1, Math.round(targetH / scale)));
+    const cx = (Math.min(100, Math.max(0, focusXPercent)) / 100) * sourceW;
+    const cy = (Math.min(100, Math.max(0, focusYPercent)) / 100) * sourceH;
+    const left = Math.max(0, Math.min(sourceW - width, Math.round(cx - width / 2)));
+    const top = Math.max(0, Math.min(sourceH - height, Math.round(cy - height / 2)));
+    return { left, top, width, height, scale };
+  }
+
+  /** Map a source % point onto canvas after face-aware cover crop. */
+  public static mapSourcePercentThroughCover(
+    sourceXPercent: number,
+    sourceYPercent: number,
+    sourceW: number,
+    sourceH: number,
+    targetW: number,
+    targetH: number,
+    focusXPercent = 50,
+    focusYPercent = 40,
+  ): { x: number; y: number } {
+    const crop = LayoutEngine.coverCropWindow(
+      sourceW, sourceH, targetW, targetH, focusXPercent, focusYPercent,
+    );
+    const sx = (sourceXPercent / 100) * sourceW;
+    const sy = (sourceYPercent / 100) * sourceH;
+    return {
+      x: Math.round((sx - crop.left) * crop.scale),
+      y: Math.round((sy - crop.top) * crop.scale),
+    };
+  }
+
   public getSubjectBox(): BoundingBox | undefined {
     return this.subjectBox;
   }
@@ -610,7 +654,12 @@ export class LayoutEngine {
 
       if (anchor.includes('top')) y = targetRegion.y;
       else if (anchor.includes('bottom')) y = targetRegion.y + Math.max(0, targetRegion.height - boxHeight);
-      else if (anchor === 'center' || anchor.includes('middle')) {
+      else if (
+        anchor === 'center'
+        || anchor.includes('middle')
+        || anchor.includes('center')
+      ) {
+        // center / middle / center_left / center_right / middle_* → vertical middle
         y = targetRegion.y + Math.max(0, (targetRegion.height - boxHeight) / 2);
       }
       return { x, y };
@@ -640,54 +689,133 @@ export class LayoutEngine {
   }
 
   /**
+   * Seed spatial axis from the Template Agent recipe (image mask / padding / anchors).
+   * visualPriority only tunes share/fonts inside this contract — it must not invent a
+   * panel split that contradicts a full-bleed or inset template.
+   */
+  public static seedPolicyFromTemplate(
+    dsl: { layers?: Array<{ type?: string; mask?: string; paddingPercent?: number; anchor?: string; orientation?: string }>; id?: string },
+    base: SpatialAllocationPolicy,
+  ): SpatialAllocationPolicy {
+    const imageLayer = (dsl.layers || []).find(l => l.type === 'image');
+    if (!imageLayer) {
+      // Text-only recipes: no photo panel to carve
+      return { ...base, splitAxis: 'overlay' };
+    }
+
+    const mask = String(imageLayer.mask || 'rectangle');
+    const pad = Number(imageLayer.paddingPercent ?? 0);
+    const anchor = String(imageLayer.anchor || 'center');
+    const id = String(dsl.id || '');
+
+    // Explicit split recipes — image surrenders a real half
+    // before_after_split is special: photos are stitched full-frame by the renderer;
+    // text must use overlay anchors (e.g. bottom_center), not a carved panel.
+    if (mask === 'before_after_split' || id.includes('before_after')) {
+      return { ...base, splitAxis: 'overlay' };
+    }
+
+    if (
+      mask === 'split'
+      || id.includes('split')
+    ) {
+      const horizontal =
+        imageLayer.orientation === 'horizontal'
+        || anchor.includes('left')
+        || anchor.includes('right')
+        || id.includes('horizontal');
+      return {
+        ...base,
+        splitAxis: horizontal ? 'horizontal' : 'vertical',
+        preferredTextBias:
+          anchor.includes('left') || anchor.includes('top') ? 'end' : 'start',
+      };
+    }
+
+    // Full-bleed / near-full photo — ALWAYS overlay (text on photo, not a surrendered panel)
+    if (mask === 'full_bleed' || pad <= 2) {
+      return { ...base, splitAxis: 'overlay' };
+    }
+
+    // Inset circle / arch / polaroid / padded rectangle — photo sized by padding+anchor;
+    // text overlays remaining negative space (still overlay axis, full imageRegion)
+    if (mask === 'circle' || mask === 'arch' || mask === 'polaroid' || pad > 2) {
+      return { ...base, splitAxis: 'overlay' };
+    }
+
+    return base;
+  }
+
+  /**
    * Derive scalable spatial ratios from visualPriority (+ whitespace / reading flow).
    * This is the structural difference between typography_hero and image_hero —
    * not a font-size knob.
    */
   public static deriveSpatialPolicy(
     visualPriority: string,
-    opts?: { negativeSpaceMultiplier?: number; readingFlow?: string },
+    opts?: {
+      negativeSpaceMultiplier?: number;
+      readingFlow?: string;
+      /** ArtDirection rhythm: tight|comfortable|airy|luxury mapped via multiplier already; density high|medium|low */
+      density?: string;
+      whitespace?: string;
+    },
   ): SpatialAllocationPolicy {
     const neg = Math.max(0.5, Math.min(2.0, opts?.negativeSpaceMultiplier ?? 1.0));
     const flow = opts?.readingFlow || 'center_down';
+    const density = (opts?.density || 'medium').toLowerCase();
+    const whitespace = (opts?.whitespace || '').toLowerCase();
+    // tight/high density → use more of available negative space (larger band), not leave huge empty regions
+    const fillBoost =
+      (density === 'high' ? 1.18 : density === 'low' ? 0.92 : 1.0)
+      * (whitespace === 'tight' ? 1.12 : whitespace === 'airy' || whitespace === 'luxury' ? 0.92 : 1.0);
 
     if (visualPriority === 'typography_hero') {
-      // Type owns a real panel; image surrenders canvas share
-      const textShare = Math.min(0.70, Math.max(0.52, 0.58 * (0.9 + 0.15 * neg)));
+      // Moderate panel — hero presence comes from LARGE type inside the panel,
+      // not from stealing most of the photo. Keep image ≥ ~52% of primary axis.
+      // Airy/luxury whitespace should NOT shrink the panel (type fills the breathing room).
+      const typeFillBoost =
+        (density === 'high' ? 1.08 : density === 'low' ? 0.95 : 1.0)
+        * (whitespace === 'tight' ? 1.06 : whitespace === 'airy' || whitespace === 'luxury' ? 1.04 : 1.0);
+      const textShare = Math.min(0.48, Math.max(0.36, 0.42 * (0.95 + 0.05 * Math.min(neg, 1.2)) * typeFillBoost));
       const splitAxis: SpatialAllocationPolicy['splitAxis'] =
         flow === 'z_pattern' || flow === 'left_right' ? 'horizontal' : 'vertical';
       return {
         textShare,
-        minTextShare: 0.48,
-        maxTextShare: 0.72,
+        minTextShare: 0.34,
+        maxTextShare: 0.50, // hard cap — never crush photo to a sliver
         splitAxis,
         preferredTextBias: 'start',
       };
     }
 
     if (visualPriority === 'image_hero') {
+      // Overlay band should fill available negative space under tight/high rhythm —
+      // not leave a large unused lower third while type sits in a tiny top pocket.
+      const textShare = Math.min(0.42, Math.max(0.26, 0.30 * (0.95 + 0.05 * neg) * fillBoost));
       return {
-        textShare: Math.min(0.34, Math.max(0.24, 0.28 * (0.95 + 0.05 * neg))),
-        minTextShare: 0.22,
-        maxTextShare: 0.36,
+        textShare,
+        minTextShare: 0.24,
+        maxTextShare: 0.44,
         splitAxis: 'overlay',
         preferredTextBias: 'start',
       };
     }
 
     if (visualPriority === 'cta_hero') {
+      // CTA still prefers panel when possible — overlay only as base; escalation upgrades
+      const textShare = Math.min(0.48, Math.max(0.32, 0.36 * (0.95 + 0.05 * neg) * fillBoost));
       return {
-        textShare: Math.min(0.40, Math.max(0.30, 0.34 * (0.95 + 0.05 * neg))),
-        minTextShare: 0.28,
-        maxTextShare: 0.42,
+        textShare,
+        minTextShare: 0.30,
+        maxTextShare: 0.55,
         splitAxis: 'overlay',
         preferredTextBias: 'end',
       };
     }
 
-    // composition_hero — balanced panel split
     return {
-      textShare: Math.min(0.55, Math.max(0.40, 0.45 * (0.9 + 0.1 * neg))),
+      textShare: Math.min(0.55, Math.max(0.40, 0.45 * (0.9 + 0.1 * neg) * fillBoost)),
       minTextShare: 0.38,
       maxTextShare: 0.58,
       splitAxis: flow === 'center_down' ? 'vertical' : 'horizontal',
@@ -713,32 +841,93 @@ export class LayoutEngine {
   }
 
   /**
-   * Diagnostic Fallback Escalation (Phase 2):
-   * When a spatial policy fails QC repeatedly (e.g., subject collision or clipping),
-   * escalate to a structurally different axis or significantly larger textShare.
+   * In-place spatial repair: flip bias / nudge share WITHOUT changing axis.
+   * Used for typography/collision repair before any axis escalation.
+   */
+  public static adjustSpatialPolicyInPlace(
+    failedPolicy: SpatialAllocationPolicy | undefined,
+    priority: string,
+    reason?: string,
+  ): SpatialAllocationPolicy {
+    const base = failedPolicy || LayoutEngine.deriveSpatialPolicy(priority);
+    const shareCap = priority === 'typography_hero' ? 0.50
+      : priority === 'image_hero' ? 0.44
+        : 0.68;
+    const adjusted: SpatialAllocationPolicy = {
+      ...base,
+      preferredTextBias: base.preferredTextBias === 'start' ? 'end' : 'start',
+      textShare: Math.min(shareCap, Math.max(base.minTextShare, base.textShare * 1.08)),
+      maxTextShare: Math.min(shareCap, base.maxTextShare),
+    };
+    console.log(
+      `[SpatialAdjust] ${base.splitAxis}@${(base.textShare || 0).toFixed(2)} ` +
+      `bias ${base.preferredTextBias}→${adjusted.preferredTextBias} ` +
+      `share→${adjusted.textShare.toFixed(2)} (same axis, reason=${reason || 'repair'} priority=${priority})`,
+    );
+    return adjusted;
+  }
+
+  /**
+   * Escalate to a structurally different spatial contract.
+   * Bounded: will not oscillate vertical↔horizontal if that axis was already tried.
+   * Preserves visualPriority share caps so hierarchy is not destroyed.
    */
   public static escalateSpatialPolicy(
-    failedPolicy: SpatialAllocationPolicy,
+    failedPolicy: SpatialAllocationPolicy | undefined,
     priority: string,
+    reason?: string,
+    triedAxes: Array<'overlay' | 'vertical' | 'horizontal'> = [],
   ): SpatialAllocationPolicy {
-    const escalated = { ...failedPolicy };
-    
-    if (failedPolicy.splitAxis === 'overlay') {
-       // Overlay failed, try vertical band
-       escalated.splitAxis = 'vertical';
-       escalated.textShare = Math.max(0.40, failedPolicy.textShare * 1.25);
-    } else if (failedPolicy.splitAxis === 'vertical') {
-       // Vertical failed, try horizontal column
-       escalated.splitAxis = 'horizontal';
-       escalated.textShare = Math.max(0.40, failedPolicy.textShare * 1.25);
+    const base = failedPolicy || LayoutEngine.deriveSpatialPolicy(priority);
+    const escalated: SpatialAllocationPolicy = { ...base };
+    const shareCap = priority === 'typography_hero' ? 0.50
+      : priority === 'image_hero' ? 0.44
+        : 0.68;
+
+    const pickAxis = (preferred: 'vertical' | 'horizontal'): 'vertical' | 'horizontal' | 'overlay' => {
+      if (!triedAxes.includes(preferred)) return preferred;
+      const other = preferred === 'vertical' ? 'horizontal' : 'vertical';
+      if (!triedAxes.includes(other)) return other;
+      // Both split axes tried — stay on current axis and only adjust share/bias
+      return base.splitAxis;
+    };
+
+    if (base.splitAxis === 'overlay' || reason === 'whitespace_tight_to_subject') {
+      escalated.splitAxis = pickAxis('vertical');
+      escalated.textShare = Math.min(shareCap, Math.max(0.36, (base.textShare || 0.28) * 1.25));
+      escalated.preferredTextBias = base.preferredTextBias === 'start' ? 'end' : 'start';
+    } else if (base.splitAxis === 'vertical') {
+      const next = pickAxis('horizontal');
+      if (next === base.splitAxis) {
+        // Oscillation guard: grow share / flip bias only
+        escalated.textShare = Math.min(shareCap, base.textShare * 1.1);
+        escalated.preferredTextBias = base.preferredTextBias === 'start' ? 'end' : 'start';
+      } else {
+        escalated.splitAxis = next;
+        escalated.textShare = Math.min(shareCap, Math.max(0.36, base.textShare * 1.08));
+        escalated.preferredTextBias = base.preferredTextBias === 'start' ? 'end' : 'start';
+      }
     } else {
-       // All axes tried, just increase the text share aggressively
-       escalated.textShare = Math.min(0.85, failedPolicy.textShare * 1.4);
+      const next = pickAxis('vertical');
+      if (next === base.splitAxis) {
+        escalated.textShare = Math.min(shareCap, base.textShare * 1.1);
+        escalated.preferredTextBias = base.preferredTextBias === 'start' ? 'end' : 'start';
+      } else {
+        escalated.splitAxis = next;
+        escalated.textShare = Math.min(shareCap, Math.max(0.38, base.textShare * 1.08));
+        escalated.preferredTextBias = base.preferredTextBias === 'start' ? 'end' : 'start';
+      }
     }
-    
-    // Ensure we respect basic bounds
-    escalated.minTextShare = Math.max(failedPolicy.minTextShare, escalated.textShare * 0.8);
-    escalated.maxTextShare = Math.min(1.0, escalated.textShare * 1.2);
+
+    escalated.minTextShare = Math.min(escalated.textShare, Math.max(base.minTextShare, escalated.textShare * 0.85));
+    escalated.maxTextShare = Math.min(shareCap, Math.max(base.maxTextShare, escalated.textShare));
+
+    console.log(
+      `[SpatialEscalation] ${base.splitAxis}@${(base.textShare || 0).toFixed(2)} ` +
+      `→ ${escalated.splitAxis}@${escalated.textShare.toFixed(2)} ` +
+      `(bias=${escalated.preferredTextBias} reason=${reason || 'retry'} ` +
+      `priority=${priority} cap=${shareCap} tried=[${triedAxes.join(',')||'none'}])`,
+    );
 
     return escalated;
   }
@@ -760,17 +949,24 @@ export class LayoutEngine {
       readingFlow: behavior.readingJourney === 'z_pattern' ? 'z_pattern' : 'center_down',
     });
 
-    // Legacy bleed overrides still honored when they force a stronger split
+    // Honor explicit spatial policy axis first. Bleed hints may UPGRADE overlay→split,
+    // but must NEVER downgrade an escalated vertical/horizontal panel back to overlay.
     let axis = policy.splitAxis;
-    if (behavior.imageBleedExtent === 'asymmetrical_65' && axis === 'overlay') {
-      axis = 'horizontal';
-    } else if (behavior.imageBleedExtent === 'split_50' && axis === 'overlay') {
-      axis = 'horizontal';
-    } else if (
-      (behavior.imageBleedExtent === 'full_bleed_band' || behavior.imageBleedExtent === 'full')
-      && (visualPriority === 'image_hero' || visualPriority === 'cta_hero')
-    ) {
-      axis = 'overlay';
+    const policyWasExplicit = !!spatialPolicy;
+    if (!policyWasExplicit || axis === 'overlay') {
+      if (behavior.imageBleedExtent === 'asymmetrical_65' && axis === 'overlay') {
+        axis = 'horizontal';
+      } else if (behavior.imageBleedExtent === 'split_50' && axis === 'overlay') {
+        axis = 'horizontal';
+      } else if (behavior.imageBleedExtent === 'panel_surrender' && axis === 'overlay') {
+        axis = 'vertical';
+      } else if (
+        !policyWasExplicit
+        && (behavior.imageBleedExtent === 'full_bleed_band' || behavior.imageBleedExtent === 'full')
+        && (visualPriority === 'image_hero' || visualPriority === 'cta_hero')
+      ) {
+        axis = 'overlay';
+      }
     }
 
     const bias = this.resolveTextBias(policy.preferredTextBias, axis, subjectHint);
@@ -878,28 +1074,40 @@ export class LayoutEngine {
       };
     }
 
-    // Overlay band — photo full-bleed; text in subject-aware band (image_hero / cta_hero)
+    // Overlay band — photo full-bleed; text placed in subject-aware safe frame.
+    // Use the FULL safe content area as textRegion so template anchors (top/center/bottom)
+    // can resolve correctly — a thin band collapses independent anchors into one cluster.
     const imageRegion: BoundingBox = { x: 0, y: 0, width: this.canvasWidth, height: this.canvasHeight };
+    const fullSafe: BoundingBox = {
+      x: constraints.safeX,
+      y: constraints.safeY,
+      width: constraints.contentMaxWidth,
+      height: Math.max(80, this.canvasHeight - constraints.safeY - constraints.margins.bottom),
+    };
+    // Optional reading-band hint for image_hero density (scrim prefers actualTextRegion anyway)
     const bandH = Math.max(
-      Math.round(this.canvasHeight * policy.textShare),
-      Math.round(constraints.safeY + this.canvasHeight * 0.16),
+      Math.round(this.canvasHeight * Math.min(0.55, Math.max(0.22, policy.textShare))),
+      Math.round(constraints.safeY + this.canvasHeight * 0.18),
     );
-    let textRegion: BoundingBox;
-    if (bias === 'end') {
-      const y = this.canvasHeight - constraints.margins.bottom - bandH;
-      textRegion = {
-        x: constraints.safeX,
-        y: Math.max(constraints.safeY, y),
-        width: constraints.contentMaxWidth,
-        height: bandH,
-      };
-    } else {
-      textRegion = {
-        x: constraints.safeX,
-        y: constraints.safeY,
-        width: constraints.contentMaxWidth,
-        height: bandH,
-      };
+    let textRegion: BoundingBox = { ...fullSafe };
+    // Only shrink to a band when share is small AND bias is set — still prefer full safe for placement
+    if (policy.textShare < 0.28) {
+      if (bias === 'end') {
+        const y = this.canvasHeight - constraints.margins.bottom - bandH;
+        textRegion = {
+          x: constraints.safeX,
+          y: Math.max(constraints.safeY, y),
+          width: constraints.contentMaxWidth,
+          height: bandH,
+        };
+      } else {
+        textRegion = {
+          x: constraints.safeX,
+          y: constraints.safeY,
+          width: constraints.contentMaxWidth,
+          height: bandH,
+        };
+      }
     }
 
     const carvedTextRegion = this.carveSubjectsFromRegion(textRegion, 'overlay');

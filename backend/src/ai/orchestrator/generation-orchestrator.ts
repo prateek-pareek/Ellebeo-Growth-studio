@@ -38,14 +38,47 @@ import { validateStateTransition } from '../types/job-payload.types';
 import type { JobState, BusinessGoalType } from '../types/job-payload.types';
 
 function getTemplateIntent(pillar: string): 'educational' | 'promotion' | 'testimonial' | 'before_after' | 'brand_story' {
-  switch (pillar) {
-    case 'education_tips': return 'educational';
-    case 'service_spotlight': return 'promotion';
-    case 'client_results': return 'before_after';
-    case 'behind_the_scenes': return 'brand_story';
-    case 'quotes_testimonials': return 'testimonial';
-    default: return 'brand_story';
+  const key = (pillar || '').toLowerCase().replace(/\s+/g, '_');
+  switch (key) {
+    case 'education_tips':
+    case 'education':
+      return 'educational';
+    case 'service_spotlight':
+      return 'promotion';
+    case 'client_results':
+    case 'transformations':
+      return 'before_after';
+    case 'behind_the_scenes':
+    case 'behind_the_chair':
+      return 'brand_story';
+    case 'quotes_testimonials':
+    case 'client_stories':
+      return 'testimonial';
+    default:
+      return 'brand_story';
   }
+}
+
+/** Map gallery rendererKeys / legacy grid IDs onto real CompositionEngine recipes. */
+function mapLayoutHintToRecipe(layoutHint: string | null | undefined): string {
+  if (!layoutHint) return '';
+  // Legacy gallery rendererKeys → CompositionEngine recipe ids.
+  // New gallery templates should set rendererKey to an existing recipe id
+  // (e.g. before_after_side_by_side, editorial_full_bleed) so no map entry is required.
+  const map: Record<string, string> = {
+    split_before_after: 'before_after_side_by_side',
+    full_bleed_clean: 'editorial_full_bleed',
+    passepartout_text: 'editorial_portrait_hero',
+    passepartout_clean: 'editorial_feature_story',
+    text_only_editorial: 'premium_text_only',
+    testimonial_card: 'testimonial_quote_portrait',
+    giant_type_overlay: 'premium_hero_statement',
+    bold_editorial_poster: 'magazine_masthead_cover',
+    translucent_split: 'before_after_labeled',
+    art_director_split: 'editorial_split',
+    side_panel_split: 'clinical_hero',
+  };
+  return map[layoutHint] || layoutHint;
 }
 
 // New services and chains
@@ -526,23 +559,43 @@ export class GenerationOrchestrator {
     let reelScriptPromise: Promise<ReelScriptResult | null> = Promise.resolve(null);
 
     if (payload.layoutHint) {
-      determinedGrid.layout = payload.layoutHint;
-      console.log(`[TEMPLATE AGENT] Bypassed — using tenant's explicit template layout hint: ${determinedGrid.layout}`);
+      determinedGrid.layout = mapLayoutHintToRecipe(payload.layoutHint);
+      // Gallery before/after templates must steer Template Agent + composition intent
+      if (payload.layoutHint === 'split_before_after' || determinedGrid.layout.startsWith('before_after')) {
+        (determinedGrid as any).templateIntentOverride = 'before_after';
+      }
+      console.log(
+        `[TEMPLATE AGENT] Bypassed — using tenant's explicit template layout hint: ` +
+        `${payload.layoutHint} → ${determinedGrid.layout}`,
+      );
     } else if (captionResult) {
       const isCarouselOpt = (generationOptions.outputFormats as string[]).includes('carousel');
-      agentDecisionPromise = this.templateAgent.selectTemplate({
-        brief: captionResult.caption,
-        brandName: brandDNA.businessName || 'Brand',
-        aesthetic: (brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA.visualRanking) : null) ?? brandDNA.aestheticDirection ?? 'minimal editorial',
-        textLength: captionResult.caption.length,
-        slideIndex: 0,
-        totalSlides: isCarouselOpt ? 4 : 1,
-        gridConstraints: determinedGrid.gridConstraints,
-        visionResult: visionResult,
-      }).catch(err => {
-        console.error('[Orchestrator Step 3.5 Template Agent Error]:', err);
-        return null;
-      });
+      const isStoryOpt = (generationOptions.outputFormats as string[]).includes('story');
+      // Multi-slide jobs select layouts once per slide inside generateCarousel/generateStory.
+      // Do NOT pre-select cover here — that caused duplicate Template Agent calls for slide 1.
+      if (isCarouselOpt || isStoryOpt) {
+        console.log(`[TEMPLATE AGENT] Deferred to per-slide selection (${isCarouselOpt ? 'carousel' : 'story'})`);
+        agentDecisionPromise = Promise.resolve(null);
+        // Do not pre-bind a cover layout — generateCarousel/Story selects each slide once
+        if (!payload.layoutHint) {
+          determinedGrid.layout = '';
+          (determinedGrid as any).designSpec = undefined;
+        }
+      } else {
+        agentDecisionPromise = this.templateAgent.selectTemplate({
+          brief: captionResult.caption,
+          brandName: brandDNA.businessName || 'Brand',
+          aesthetic: (brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA.visualRanking) : null) ?? brandDNA.aestheticDirection ?? 'minimal editorial',
+          textLength: captionResult.caption.length,
+          slideIndex: 0,
+          totalSlides: 1,
+          gridConstraints: determinedGrid.gridConstraints,
+          visionResult: visionResult,
+        }).catch(err => {
+          console.error('[Orchestrator Step 3.5 Template Agent Error]:', err);
+          return null;
+        });
+      }
     }
 
     if (captionResult && generationOptions.platform.length > 1) {
@@ -602,12 +655,13 @@ export class GenerationOrchestrator {
           outputSize: '1024x1024',
           layoutType: determinedGrid.layout,
           visualRanking: brandDNA.visualRanking ?? [],
-          generatorModel: 'both',
+          generatorModel: 'none',
           backgroundBrandColor: brandDNA.backgroundBrandColor ?? '#F7F4EF',
           accentBrandColor: brandDNA.accentBrandColor ?? '#D4A373',
           depthBrandColor: brandDNA.depthBrandColor ?? '#1E1E1C',
           moodboardVisionSummary: moodboardVisionSummary ?? undefined,
-          templateIntent: getTemplateIntent(determinedGrid.pillar)
+          templateIntent: (determinedGrid as any).templateIntentOverride
+              || getTemplateIntent(determinedGrid.pillar),
         });
         let heroUrl = heroImage.url;
         if (brandDNA.logoUrl) {
@@ -632,10 +686,8 @@ export class GenerationOrchestrator {
       else componentStatus.image = 'failed';
     }
 
-    // ——— Step 5.55: AI-designed feed image (gpt-image-1) ——————————————————————
-    // Skipped entirely for medical-aesthetics technicians — Step 5.5 already
-    // produced a brand-safe hero image with no client photo involved, and this
-    // step's job is specifically to edit the real photo, which must never happen here.
+    // ——— Step 5.55: Feed image = original photo adapted to the selected template ———
+    // Never rewrite or restyle the source photo with an image model.
     const feedPhotoUrlRaw = isMedicalPractitioner
       ? undefined
       : payload.imageAssets.find(a => a.isAfterPhoto)?.rawStoragePath
@@ -647,70 +699,52 @@ export class GenerationOrchestrator {
         feedPhotoUrl = await this.sharpPipeline.blurImage(feedPhotoUrlRaw, tenantId);
       } catch (err) {
         console.error('[Orchestrator Step 5.55 Consent Blur Error]:', err);
-        feedPhotoUrl = undefined; // fail closed — never send an unblurred face to the AI model
+        feedPhotoUrl = undefined;
       }
     }
 
     if (feedPhotoUrl && captionResult && imageResult) {
-      await this.progressEmitter.emitSubProgress(jobId, tenantId, 'generating_text', 22, 'Designing your feed image...');
-      const safeFeedPhotoUrl = feedPhotoUrl;
+      await this.progressEmitter.emitSubProgress(jobId, tenantId, 'generating_text', 22, 'Fitting your photo into the selected template...');
       try {
-        const feedPrompt = `Transform this beauty photo into a professional Instagram feed post for "${brandDNA.businessName}".
-Brand colors: ${brandDNA.primaryBrandColor ?? '#1a1a1a'} and ${brandDNA.secondaryBrandColor ?? '#f5f0eb'}.
-Aesthetic: ${(brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA.visualRanking) : null) ?? brandDNA.aestheticDirection ?? 'minimal editorial premium beauty'}.
-Caption hook: "${captionResult.hookSentence || captionResult.caption.slice(0, 80)}"
-Requirements:
-${consentShowFace
-            ? '- Keep the real photo as the main visual — preserve the person/hair authentically'
-            : '- The client\'s face is already obscured for privacy — do NOT sharpen, restore, reconstruct, or otherwise reveal any facial detail; keep it fully obscured'}
-- Add subtle brand-matched design: clean typography, brand color accents
-- Minimal overlay — let the photo shine
-- Professional beauty industry aesthetic
-- Square format, Instagram-ready`;
-
-        const imageBuffer = await (async () => {
-          const https = await import('https');
-          const http = await import('http');
-          return new Promise<Buffer>((resolve, reject) => {
-            const protocol = safeFeedPhotoUrl.startsWith('https') ? https : http;
-            (protocol as any).get(safeFeedPhotoUrl, (res: any) => {
-              const chunks: Buffer[] = [];
-              res.on('data', (c: Buffer) => chunks.push(c));
-              res.on('end', () => resolve(Buffer.concat(chunks)));
-              res.on('error', reject);
-            }).on('error', reject);
-          });
-        })();
-
-        const OpenAI = (await import('openai')).default;
-        const openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
-        const imageFile = new File([imageBuffer], 'photo.jpg', { type: 'image/jpeg' });
-        const response = await openai.images.edit({
-          model: 'gpt-image-1',
-          image: imageFile,
-          prompt: feedPrompt,
-          size: '1024x1024',
+        const headingFont = brandDNA.brandFont || (brandDNA.brandDnaV2 as any)?.typography?.heading_font || 'Playfair Display';
+        const bodyFont = (brandDNA.brandDnaV2 as any)?.typography?.body_font || 'Inter';
+        const feedSlide = await this.aiImageGen.generateSlide({
+          photoUrl: feedPhotoUrl,
+          overlayText: captionResult.hookSentence || captionResult.caption.slice(0, 80),
+          title: 'Feed image',
+          index: 0,
+          isFirst: true,
+          isLast: true,
+          isBeforePhoto: false,
+          tenantId,
+          businessName: brandDNA.businessName,
+          brandColor: brandDNA.primaryBrandColor ?? '#1a1a1a',
+          secondaryColor: brandDNA.secondaryBrandColor ?? '#f5f0eb',
+          aesthetic: (brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA.visualRanking) : null) ?? brandDNA.aestheticDirection ?? 'minimal editorial premium beauty',
+          serviceType: appointment?.serviceCategory ?? 'beauty treatment',
+          outputSize: '1024x1024',
+          layoutType: determinedGrid.layout,
+          designSpec: (determinedGrid as any).designSpec,
+          brandFont: headingFont,
+          bodyFont,
+          visualRanking: brandDNA.visualRanking ?? [],
+          generatorModel: 'none',
+          backgroundBrandColor: brandDNA.backgroundBrandColor ?? '#F7F4EF',
+          accentBrandColor: brandDNA.accentBrandColor ?? '#D4A373',
+          depthBrandColor: brandDNA.depthBrandColor ?? '#1E1E1C',
+          moodboardVisionSummary: moodboardVisionSummary ?? undefined,
+          templateIntent: (determinedGrid as any).templateIntentOverride
+            || getTemplateIntent(determinedGrid.pillar),
+          logoUrl: typeof brandDNA.logoUrl === 'string' ? brandDNA.logoUrl : undefined,
+          logoPosition: brandDNA.logoPosition as any,
         });
-
-        const base64 = response.data?.[0]?.b64_json;
-        if (base64) {
-          const { firebaseStorage } = await import('../../config/firebase.client');
-          if (firebaseStorage) {
-            const buffer = Buffer.from(base64, 'base64');
-            const bucket = firebaseStorage.bucket();
-            const filePath = `generated/${tenantId}/feed_${Date.now()}.png`;
-            const file = bucket.file(filePath);
-            await file.save(buffer, { contentType: 'image/png', public: true });
-            let aiFeedUrl = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
-            // Apply logo overlay if set in Brand DNA
-            if (brandDNA.logoUrl) {
-              aiFeedUrl = await this.logoOverlay.applyLogo({ imageUrl: aiFeedUrl, logoUrl: brandDNA.logoUrl as string, position: brandDNA.logoPosition as any, tenantId });
-            }
-            imageResult = { ...imageResult, variants: { ...imageResult.variants, feedUrl: aiFeedUrl } };
-            aiImageCostUSD = AI_CONFIG.imageCosts['gpt-image-1-1024'];
-          }
+        let feedUrl = feedSlide.url;
+        if (brandDNA.logoUrl) {
+          feedUrl = await this.logoOverlay.applyLogo({ imageUrl: feedUrl, logoUrl: brandDNA.logoUrl as string, position: brandDNA.logoPosition as any, tenantId });
         }
+        imageResult = { ...imageResult, variants: { ...imageResult.variants, feedUrl } };
       } catch (err) {
+        console.error('[Orchestrator Step 5.55 Template Fit Error]:', err);
       }
     }
 
@@ -734,12 +768,17 @@ ${consentShowFace
     let carouselSlides: CarouselSlides | null = null;
     const isCarousel = (generationOptions.outputFormats as string[]).includes('carousel');
     // Medical-aesthetics technicians: never source the client's real photo into
-    // carousel/story generation. Leaving these blank makes every slide/frame
-    // take the existing "no photo provided" brand-safe lifestyle-image path.
+    // carousel/story generation. Blank URLs render the selected template on a
+    // brand canvas instead of inventing a replacement photo.
     let afterPhotoUrl = payload.imageAssets.find(a => a.isAfterPhoto)?.rawStoragePath
       ?? payload.imageAssets[0]?.rawStoragePath
       ?? '';
     let beforePhotoUrl = payload.imageAssets.find(a => a.isBeforePhoto)?.rawStoragePath;
+
+    if (isMedicalPractitioner) {
+      afterPhotoUrl = '';
+      beforePhotoUrl = undefined;
+    }
 
     // Consent gate: blur the raw source photos before any further AI processing
     // (enhancement/carousel/story) touches them — never let an unblurred face
@@ -831,7 +870,8 @@ ${consentShowFace
             moodboardVisionSummary: moodboardVisionSummary ?? undefined,
             visionResult: visionResult ?? undefined,
             visionResultBefore: visionResultBefore ?? undefined,
-            templateIntent: getTemplateIntent(determinedGrid.pillar)
+            templateIntent: (determinedGrid as any).templateIntentOverride
+              || getTemplateIntent(determinedGrid.pillar),
           });
           // Apply logo to each carousel slide
           const slidesWithLogo = brandDNA.logoUrl
@@ -912,7 +952,8 @@ ${consentShowFace
             visionResult: visionResult ?? undefined,
             visionResultBefore: visionResultBefore ?? undefined,
             semanticFlow: this.narrativePlanner.getRecipe(payload.businessGoal as any).semanticFlow,
-            templateIntent: getTemplateIntent(determinedGrid.pillar)
+            templateIntent: (determinedGrid as any).templateIntentOverride
+              || getTemplateIntent(determinedGrid.pillar),
           });
           const framesWithLogo = brandDNA.logoUrl
             ? await Promise.all(aiFrames.map(async f => ({ ...f, url: await this.logoOverlay.applyLogo({ imageUrl: f.url, logoUrl: brandDNA.logoUrl as string, position: brandDNA.logoPosition as any, tenantId }) })))
