@@ -1376,6 +1376,39 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
     // Do not seed a fake full-frame hero-image occupied region — that lied about free space
     // for any fallback path without allocatedBox.
 
+    // Pre-pass: render every text/text_group layer now so `occupiedRegions` carries FINAL
+    // fitted geometry (position + shrink-wrapped size) before any decoration/primitive runs.
+    // Previously this depended on DSL array order — a decoration only saw a text layer's
+    // real bounds if that text layer happened to appear earlier in dsl.layers — which meant
+    // primitives like text_scrim couldn't rely on it unconditionally. Caches each layer's
+    // rendered SVG so the main loop below appends it at the exact same point (same z-order)
+    // as before — only the *timing* of the engine call moves, not the position of its output.
+    const textLayerSvgCache = new Map<any, string>();
+    const buildTypoCtx = (): TypographyContext => ({
+      ...ctx,
+      constraints,
+      layoutEngine,
+      layoutState,
+      colorHierarchy,
+      designTokens: ctx.designTokens,
+      typographyMetrics: ctx.typographyMetrics,
+      typographyTokens: designRecipe.typography,
+      designSpec: ctx.designSpec,
+      designLanguage: ctx.designLanguage,
+      visualPriority: ctx.designLanguage?.intent?.visualPriority || ctx.designSpec?.composition?.visualPriority,
+      escapeXml: (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;'),
+    });
+    for (const layer of overlayLayers) {
+      if (layer.type === 'text') {
+        textLayerSvgCache.set(layer, typographyEngine.renderTextLayer(buildTypoCtx(), layer as IDSLTextLayer));
+      } else if (layer.type === 'text_group') {
+        textLayerSvgCache.set(layer, typographyEngine.renderTextGroupLayer(
+          buildTypoCtx() as import('../services/template-engine/engines/typography-engine').TypographyContext,
+          layer as import('../services/template-engine/interfaces').IDSLTextGroupLayer,
+        ));
+      }
+    }
+
     // Text-band / panel readability: scrim only when type overlays the photo (overlay axis).
     // Dedicated panels sit on brand background — no scrim needed.
     // Prefer the post-fit `actualTextRegion` (real union bounds of the placed text layers) so the
@@ -1549,39 +1582,12 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
         // CONDITIONAL SCRIM REMOVED IN SPRINT 3.
         // We now rely on high-contrast Structural Containers (Cards/Pills) instead of muddy full-bleed gradients.
 
-        // Then render the text on top
-        const typoCtx: TypographyContext = {
-          ...ctx,
-          constraints,
-          layoutEngine,
-          layoutState,
-          colorHierarchy,
-          designTokens: ctx.designTokens,
-          typographyMetrics: ctx.typographyMetrics,
-          typographyTokens: designRecipe.typography,
-          designSpec: ctx.designSpec,
-          designLanguage: ctx.designLanguage,
-          visualPriority: ctx.designLanguage?.intent?.visualPriority || ctx.designSpec?.composition?.visualPriority,
-          escapeXml: (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
-        };
-        svg += typographyEngine.renderTextLayer(typoCtx, textLayer);
+        // Text itself was already rendered in the pre-pass above (so occupiedRegions is
+        // populated before any primitive runs) — just append the cached SVG at this point
+        // to preserve the existing z-order (primitives/decorations behind, text on top).
+        svg += textLayerSvgCache.get(textLayer) ?? '';
       } else if (layer.type === 'text_group') {
-        const textGroupLayer = layer as import('../services/template-engine/interfaces').IDSLTextGroupLayer;
-        const typoCtx: import('../services/template-engine/engines/typography-engine').TypographyContext = {
-          ...ctx,
-          constraints,
-          layoutEngine,
-          layoutState,
-          colorHierarchy,
-          designTokens: ctx.designTokens,
-          typographyMetrics: ctx.typographyMetrics,
-          typographyTokens: designRecipe.typography,
-          designSpec: ctx.designSpec,
-          designLanguage: ctx.designLanguage,
-          visualPriority: ctx.designLanguage?.intent?.visualPriority || ctx.designSpec?.composition?.visualPriority,
-          escapeXml: (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
-        };
-        svg += typographyEngine.renderTextGroupLayer(typoCtx, textGroupLayer);
+        svg += textLayerSvgCache.get(layer) ?? '';
       }
     }
 

@@ -660,19 +660,23 @@ export class TypographyEngine {
 
     // Write to Shared Layout State
     if (ctx.layoutState) {
+      // width: effectiveMaxW (not maxW) — maxW is the pre-shrink allocation ceiling;
+      // effectiveMaxW is what actually got shrink-wrapped to the real content above
+      // (line ~555). Anything reading this region for final geometry (e.g. a
+      // text_scrim primitive) needs the tight value, not the original ceiling.
       ctx.layoutState.occupiedRegions.push({
         id: layer.id,
         role: layer.role,
         x: boxX,
         y: y,
-        width: maxW,
+        width: effectiveMaxW,
         height: textHeight,
         baseline: baselineY,
         fontSize: style.fontSize,
         lineHeight: lineHeight,
         zIndex: layer.zIndex,
         visualWeight: style.fontWeight,
-        opticalCenter: { x: boxX + maxW / 2, y: y + textHeight / 2 }
+        opticalCenter: { x: boxX + effectiveMaxW / 2, y: y + textHeight / 2 }
       });
     }
 

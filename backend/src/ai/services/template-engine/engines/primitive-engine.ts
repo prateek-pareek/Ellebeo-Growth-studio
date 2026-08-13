@@ -1269,6 +1269,67 @@ export class PrimitiveEngine {
       }
     };
 
+    // text_scrim — the replacement for the hardcoded structural scrim <rect> in
+    // layout-renderers.ts (Task 1/2: /brand_dna... AI pipeline work list). That
+    // rect sized itself from the pre-fit spatial allocation band, not the final
+    // rendered text — this primitive hugs the ACTUAL text instead, by reading
+    // ctx.layoutState.occupiedRegions, which layout-renderers.ts's pre-pass now
+    // populates with final fitted geometry for every text/text_group layer
+    // before any primitive (including this one) runs.
+    //
+    // Deliberately does NOT use a translate()/data-bounds pattern the generic
+    // collision-retry engine (renderPrimitive, below) can parse — this scrim is
+    // SUPPOSED to overlap the text it's covering (which decorationPrimitiveCtx
+    // registers as a protected zone for OTHER decorations to avoid), so it runs
+    // its own face-only avoidance instead of the generic relocate/shrink/disable
+    // logic meant for freely-repositionable decorations.
+    this.registry['text_scrim'] = {
+      category: 'effects',
+      render: (ctx, layer) => {
+        const TEXT_ROLES = ['heading', 'tagline', 'body', 'footnote'];
+        const regions = (ctx.layoutState?.occupiedRegions || []).filter((r) => TEXT_ROLES.includes(r.role));
+        if (regions.length === 0) return ''; // Nothing rendered yet to hug — no primitive, no empty panel.
+
+        const minX = Math.min(...regions.map((r) => r.x));
+        const minY = Math.min(...regions.map((r) => r.y));
+        const maxX = Math.max(...regions.map((r) => r.x + r.width));
+        const maxY = Math.max(...regions.map((r) => r.y + r.height));
+
+        const pad = (layer as any)?.padding ?? 10;
+        let scrimX = minX - pad;
+        let scrimY = minY - pad;
+        let scrimW = (maxX - minX) + pad * 2;
+        let scrimH = (maxY - minY) + pad * 2;
+
+        // Respect canvas bounds.
+        scrimW = Math.min(scrimW, ctx.w);
+        scrimH = Math.min(scrimH, ctx.h);
+        scrimX = Math.max(0, Math.min(scrimX, ctx.w - scrimW));
+        scrimY = Math.max(0, Math.min(scrimY, ctx.h - scrimH));
+
+        // Respect face/subject collision rules — same avoidance behaviour as the
+        // legacy scrim: try shifting below the face, else skip entirely rather
+        // than covering it.
+        const face = ctx.canonicalGeometry?.faceBox || ctx.canonicalGeometry?.subjectMass;
+        if (face) {
+          const overlapsFace = scrimX < face.x + face.width && scrimX + scrimW > face.x
+            && scrimY < face.y + face.height && scrimY + scrimH > face.y;
+          if (overlapsFace) {
+            const below = face.y + face.height + 8;
+            if (below + scrimH < ctx.h - 8) scrimY = below;
+            else return ''; // Nowhere safe to place it — skip rather than cover the face.
+          }
+        }
+
+        const fill = (layer as any)?.fill || '#0A0A0A';
+        const opacity = (layer as any)?.opacity ?? ctx.resolveOpacity!(0.36);
+        const radius = (layer as any)?.radius ?? 12;
+
+        return `<!-- text_scrim: hugs ${regions.length} rendered text region(s) -->
+        <rect x="${scrimX}" y="${scrimY}" width="${scrimW}" height="${scrimH}" fill="${fill}" fill-opacity="${opacity}" rx="${radius}" />`;
+      },
+    };
+
     // Text Containers (Delegated to TypographyEngine)
     this.registry['solid_card'] = { category: 'geometry', render: () => '' };
     this.registry['pill_label'] = { category: 'geometry', render: () => '' };
