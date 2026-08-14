@@ -32,6 +32,8 @@ ${angle === 'technical'
 Avoid generic AI tells like "luxurious", "obsessed", "glow up", or "transformative experience". Instead, focus on technical precision and direct value.
 Never generate fake client names. If name is not provided, do not use any client names.
 
+CRITICAL LENGTH DISCIPLINE: The message below contains a "## LENGTH REQUIREMENT" section — treat that as a HARD CAP on the "caption" field, not a suggestion. A senior strategist's actual skill is compression: choosing the ONE most valuable technical/clinical detail and cutting everything else, never stacking multiple details into extra sentences or paragraphs just because they're relevant. Being "technical" means precise word choice, not longer copy.
+
 OUTPUT INSTRUCTIONS:
 - You must reply in valid JSON format only.
 - Do NOT output any markdown tags (like \`\`\`json), prefix, or suffix.

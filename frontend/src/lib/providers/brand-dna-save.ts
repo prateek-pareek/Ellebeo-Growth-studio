@@ -38,7 +38,7 @@ export async function saveBrandDnaRecord(
       depthBrandColor: record.visual_identity.palette.depth || undefined,
       primaryTone: record.voice_v2.three_words || undefined,
       emojiPolicy: record.voice_v2.emoji_usage || "minimal",
-      captionLengthPreference: record.voice_v2.caption_length || "medium",
+      captionLengthPreference: record.voice_v2.caption_length || "short",
       primaryPersona: record.ideal_client_v2.summary || undefined,
       moodboardUrls: record.moodboard.map((m) => m.storage_path).filter(Boolean),
       moodboardLabels: record.moodboard.map((m) => m.usage).filter(Boolean),

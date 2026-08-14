@@ -54,7 +54,7 @@ const PLATFORM_RULES: Record<SocialPlatform, string> = {
 };
 
 const CAPTION_LENGTH_TARGETS: Record<string, string> = {
-  short: '40–60 words maximum. Hook sentence + result + CTA only. Every word earns its place. No filler, no setup.',
+  short: 'STRICT MAXIMUM 2 LINES total (roughly 15–25 words) — this is a hard cap, not a suggestion. One fused hook+result sentence, then the CTA on its own short line if needed. Do NOT write a separate body paragraph or a third line of context, no matter how relevant it feels — cut detail until it fits in 2 lines.',
   medium: '60–100 words. Hook + one sentence of context or craft detail + result + CTA. Do not pad.',
   long: '100–150 words. Hook + brief story or technical detail + transformation + CTA. Maximum depth without padding.',
 };
@@ -154,7 +154,7 @@ export class PromptBuilder {
     const visionSection = visionResult ? this.buildVisionSection(visionResult) : '';
     const goalSection = GOAL_FRAMING[businessGoal] ?? 'Generate engaging content.';
     const platformSection = PLATFORM_RULES[platform];
-    const lengthTarget = CAPTION_LENGTH_TARGETS[brandDNA.captionLengthPreference] || CAPTION_LENGTH_TARGETS['medium'];
+    const lengthTarget = CAPTION_LENGTH_TARGETS[brandDNA.captionLengthPreference] || CAPTION_LENGTH_TARGETS['short'];
     const lengthSection = `CAPTION LENGTH: ${lengthTarget} Do NOT write a long essay. Instagram users stop reading after 2–3 lines.`;
 
     const consentSection = this.buildConsentRestrictionsSection(consentRestrictions);
