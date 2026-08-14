@@ -105,7 +105,10 @@ export function mapBrandDnaProfileToLegacyRecord(profile: BrandDnaProfile): Bran
     brandFont: profile.typographyHeading ?? profile.typographyBody ?? null,
     locationCity: null,
     brandTier: 'mainstream',
-    captionLengthPreference: 'medium',
+    // The current v2 onboarding flow has no caption-length control at all —
+    // default to the tight 2-line target rather than the legacy 'medium'
+    // (60-100 words), which is what every real tenant was silently getting.
+    captionLengthPreference: 'short',
     emojiStyle: 'minimal',
     averageConfidenceScore: 0.5,
     preferredModelOverride: null,
