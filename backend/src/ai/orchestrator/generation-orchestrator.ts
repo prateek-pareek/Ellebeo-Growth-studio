@@ -192,6 +192,45 @@ export class GenerationOrchestrator {
     }
 
     const { jobId, tenantId, clientId, consentSnapshot, brandDNA, generationOptions } = payload;
+
+    // Idempotency guard: BullMQ retries the WHOLE job on any throw, including one
+    // that happens after the result was already fully persisted (e.g. a transient
+    // websocket/notify failure late in Step 7-8 below). Without this, a retry
+    // silently reruns the entire expensive, non-deterministic pipeline and
+    // produces a second post even though the first one already finished — this
+    // is what shows up on the frontend as "generation completes, then ~seconds
+    // later starts the same generation again."
+    const existingJob = await this.prisma.generationJob.findUnique({ where: { id: jobId } });
+    if (existingJob && (existingJob.state === 'completed' || existingJob.state === 'blocked')) {
+      const existingItem = await this.prisma.contentItem.findFirst({ where: { generationJobId: jobId } });
+      if (existingItem) {
+        console.warn(`[Orchestrator] Job ${jobId} is a stale retry of an already-${existingJob.state} job — skipping re-generation.`);
+        await this.progressEmitter.emit(jobId, tenantId, existingJob.state as JobState).catch(() => { });
+        return {
+          jobId,
+          tenantId,
+          appointmentId: payload.appointmentId,
+          contentItemId: existingItem.id,
+          captionStatus: (existingItem.captionStatus as ComponentStatus) ?? 'completed',
+          imageStatus: (existingItem.imageStatus as ComponentStatus) ?? 'completed',
+          reelStatus: (existingItem.reelStatus as ComponentStatus) ?? 'completed',
+          caption: null,
+          platformVariants: null,
+          processedImage: null,
+          reel: null,
+          reelScript: null,
+          visionAnalysis: null,
+          modelUsed: 'cached',
+          totalTokensInput: 0,
+          totalTokensOutput: 0,
+          estimatedCostUSD: 0,
+          totalProcessingTimeMs: 0,
+          brandVoiceConfidenceScore: existingItem.confidenceScore ?? 0,
+          completedAt: existingItem.createdAt?.toISOString?.() ?? new Date().toISOString(),
+        };
+      }
+    }
+
     const jobStart = Date.now();
 
     // Percent/ETA for this job are computed live from elapsed-time-vs-total-
@@ -1105,7 +1144,10 @@ ${consentShowFace
       where: { id: jobId },
       data: { estimatedCostUsd: totalCostUSD },
     }).catch(() => { });
-    await this.progressEmitter.emit(jobId, tenantId, targetState);
+    // Guarded: the result is already fully persisted above — a transient
+    // websocket-emit failure here must never look like the job failed and
+    // trigger a full BullMQ retry (which would silently regenerate everything).
+    await this.progressEmitter.emit(jobId, tenantId, targetState).catch(() => { });
 
     // â”€â”€ Step 8: Notify tenant â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     this.notify?.({
