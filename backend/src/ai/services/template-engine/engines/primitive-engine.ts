@@ -1286,7 +1286,11 @@ export class PrimitiveEngine {
     this.registry['text_scrim'] = {
       category: 'effects',
       render: (ctx, layer) => {
-        const TEXT_ROLES = ['heading', 'tagline', 'body', 'footnote'];
+        // 'cluster' is the role IDSLTextGroupLayer (grouped headline+subheadline+cta)
+        // pushes as ONE aggregate region — see typography-engine.ts renderTextGroupLayer.
+        // Without it here, any layout using a text_group (the common case) had zero
+        // matching regions and this primitive silently rendered nothing.
+        const TEXT_ROLES = ['heading', 'tagline', 'body', 'footnote', 'cluster'];
         const regions = (ctx.layoutState?.occupiedRegions || []).filter((r) => TEXT_ROLES.includes(r.role));
         if (regions.length === 0) return ''; // Nothing rendered yet to hug — no primitive, no empty panel.
 
