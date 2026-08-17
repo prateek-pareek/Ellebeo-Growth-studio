@@ -633,10 +633,15 @@ CRITICAL IMAGE REQUIREMENTS:
 
     const dalleTask = (async () => {
       if (generatorModel === 'gemini') return null;
+      // --- LAYOUT_MODE=ai_freeform: use gpt-image-2 for pixels in this
+      // experimental path only. Default path (flag unset) keeps gpt-image-1,
+      // exactly as before — old literal commented, not deleted.
+      const imageModel = process.env['LAYOUT_MODE'] === 'ai_freeform' ? 'gpt-image-2' : 'gpt-image-1';
+      // const imageModel = 'gpt-image-1'; // pre-ai_freeform default, restored above when flag unset
       try {
-        console.log(`Generating GPT Image 1 image for slide ${index}...`);
+        console.log(`Generating ${imageModel} image for slide ${index}...`);
         const response = await openai.images.generate({
-          model: 'gpt-image-1',
+          model: imageModel,
           prompt: cleanPrompt,
           size: outputSize === '1080x1920' ? '1024x1536' as any : '1024x1024',
         });
@@ -646,7 +651,7 @@ CRITICAL IMAGE REQUIREMENTS:
         }
         return null;
       } catch (err) {
-        console.warn(`GPT Image 1 generation failed for slide ${index}:`, err);
+        console.warn(`${imageModel} generation failed for slide ${index}:`, err);
         return null;
       }
     })();
@@ -883,6 +888,20 @@ CRITICAL IMAGE REQUIREMENTS:
         continue;
       }
 
+      // --- LAYOUT_MODE=ai_freeform: skip Template Agent selection for the
+      // remaining slides too — geometry is synthesized live per slide inside
+      // generateSlide() instead (see Step 3 of this pass).
+      if (process.env['LAYOUT_MODE'] === 'ai_freeform') {
+        const sentinel = '__ai_freeform__';
+        agentDecisions.push({
+          selected_layout_id: sentinel,
+          reasoning: 'ai_freeform mode — geometry synthesized live from Visual Communication Spec',
+          designSpec: undefined,
+        });
+        uniqueLayoutsForSlides.push(sentinel);
+        continue;
+      }
+
       const semanticSlide = params.semanticFlow?.find(s => s.slideType === concept.slideType);
 
       const decision = await this.templateAgent.selectTemplate({
@@ -1108,6 +1127,20 @@ CRITICAL IMAGE REQUIREMENTS:
       if (i === 0 && params.layoutType) {
         agentDecisions.push({ selected_layout_id: params.layoutType, reasoning: 'Pre-selected cover layout from orchestrator', designSpec: params.designSpec });
         uniqueLayoutsForFrames.push(params.layoutType);
+        continue;
+      }
+
+      // --- LAYOUT_MODE=ai_freeform: skip Template Agent selection for the
+      // remaining frames too — geometry is synthesized live per frame inside
+      // generateSlide() instead (see Step 3 of this pass).
+      if (process.env['LAYOUT_MODE'] === 'ai_freeform') {
+        const sentinel = '__ai_freeform__';
+        agentDecisions.push({
+          selected_layout_id: sentinel,
+          reasoning: 'ai_freeform mode — geometry synthesized live from Visual Communication Spec',
+          designSpec: undefined,
+        });
+        uniqueLayoutsForFrames.push(sentinel);
         continue;
       }
 
@@ -1536,7 +1569,12 @@ CRITICAL IMAGE REQUIREMENTS:
         computedLayoutType = legacyHintMap[computedLayoutType];
       }
 
-      if (!COMPILED_LAYOUTS[computedLayoutType]) {
+      // --- LAYOUT_MODE=ai_freeform: computedLayoutType is a sentinel (see Step 4
+      // of this pass, generation-orchestrator.ts), never a real recipe/family id —
+      // skip the dynamic-compile fallback entirely rather than feeding it a
+      // meaningless family name. resolveLayoutTemplate below already degrades
+      // gracefully (universal_dynamic_* defaults) for an unrecognized id.
+      if (process.env['LAYOUT_MODE'] !== 'ai_freeform' && !COMPILED_LAYOUTS[computedLayoutType]) {
         console.log(`[Dynamic Compilation] Layout '${computedLayoutType}' not found in COMPILED_LAYOUTS, compiling dynamically...`);
         const layoutAssembler = new LayoutAssemblerService();
         const dsl = layoutAssembler.compileFamilyToDSL(computedLayoutType, index || 0, businessName || 'Brand');
@@ -1626,7 +1664,9 @@ CRITICAL IMAGE REQUIREMENTS:
       }
 
       // ====================================================================
-      // SHADOW MODE: VISUAL COMMUNICATION DIRECTOR
+      // VISUAL COMMUNICATION DIRECTOR — shadow mode (logged only) when
+      // LAYOUT_MODE is unset; authoritative geometry source below when
+      // LAYOUT_MODE=ai_freeform (see synthesizeGeometryFromVisualSpec).
       // ====================================================================
       const visualSpec = await this.visualCommunicationDirector.generateSpec({
         brandName: businessName || 'Brand',
@@ -1644,7 +1684,12 @@ CRITICAL IMAGE REQUIREMENTS:
       console.log(`====================================================================\n`);
 
       // Step 3 (Plan): Optimizer + visual QC gate; alternate layout if gate fails
-      let rawDsl = COMPILED_LAYOUTS[computedLayoutType];
+      // --- LAYOUT_MODE=ai_freeform: skip the recipe-table lookup here — rawDsl
+      // is synthesized further below, once effectiveHeadline/Subheadline/Cta are
+      // finalized, from the Art Director's own regionPlan instead.
+      let rawDsl: any = process.env['LAYOUT_MODE'] === 'ai_freeform'
+        ? undefined
+        : COMPILED_LAYOUTS[computedLayoutType]; // original lookup, used whenever the flag is unset
       let optimizedDsl: any = undefined;
       let compositionFailed = false;
       let failReason: string | undefined;
@@ -1714,6 +1759,23 @@ CRITICAL IMAGE REQUIREMENTS:
       if (!effectiveHeadline && !overlayText) {
         compositionFailed = true;
         failReason = 'missing_headline';
+      }
+
+      // --- LAYOUT_MODE=ai_freeform: synthesize geometry live from the Art
+      // Director's own regionPlan instead of the ~1810-entry template recipe
+      // table. Everything below (DesignCompiler, LayoutEngine/Composition-
+      // Optimizer, primitives, the scoring gate) already treats rawDsl
+      // generically, so nothing else in this function needs to change.
+      if (process.env['LAYOUT_MODE'] === 'ai_freeform') {
+        rawDsl = this.artDirectionEngine.synthesizeGeometryFromVisualSpec(visualSpec, {
+          faceBox,
+          subjectBox,
+          w,
+          h,
+          slideIndex: index || 0,
+          textContent: { headline: effectiveHeadline, subheadline: effectiveSubheadline, cta: effectiveCta },
+        });
+        console.log(`[AI Freeform] Bypassing template recipe table for slide ${index ?? 0} — geometry synthesized from Visual Communication Spec`);
       }
 
       const runOptimize = (_layoutId: string, dslIn: any, escalatedPolicy?: any) => {

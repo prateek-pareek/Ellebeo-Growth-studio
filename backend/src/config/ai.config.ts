@@ -385,6 +385,9 @@ export const AI_CONFIG = {
   // Update if OpenAI's image pricing changes or quality setting is adjusted.
   imageCosts: {
     'gpt-image-1-1024': 0.045,
+    // Placeholder — confirm the real per-image price from your OpenAI billing/
+    // pricing page and adjust; used only when LAYOUT_MODE=ai_freeform.
+    'gpt-image-2-1024': 0.045,
   },
 } as const;
 

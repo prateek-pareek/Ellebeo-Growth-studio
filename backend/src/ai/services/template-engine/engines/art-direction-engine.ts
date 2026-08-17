@@ -1,6 +1,7 @@
 import designKnowledgeMap from '../../../config/design-knowledge-map.json';
-import { VisualRecipe, ColorRecipe, TypographyRecipe, PrimitiveRecipe, TextureRecipe, HeroRecipe, IDesignIntent, ISemanticDesignSpec } from '../interfaces';
+import { VisualRecipe, ColorRecipe, TypographyRecipe, PrimitiveRecipe, TextureRecipe, HeroRecipe, IDesignIntent, ISemanticDesignSpec, IVisualCommunicationSpec, ICompiledLayoutDSL, IDSLImageLayer, IDSLTextLayer, IDSLSceneLayer, LayoutAnchor } from '../interfaces';
 import { selectDeterministically } from '../utils/deterministic-hash.util';
+import { BoundingBox } from './layout-engine';
 
 // ─── 1. INTERFACES ───
 
@@ -664,5 +665,127 @@ export class ArtDirectionEngine {
     }
 
     return { color, typography, primitive, texture, hero };
+  }
+
+  // ==========================================
+  // LAYOUT_MODE=ai_freeform: geometry synthesized live from the Art Director's
+  // own intent, instead of a ~1810-entry static recipe lookup.
+  // ==========================================
+
+  /**
+   * Turns the Visual Communication Director's regionPlan into a plain
+   * ICompiledLayoutDSL — the exact same shape CompositionEngine.buildRecipe()
+   * returns for a table-lookup recipe. Everything downstream (DesignCompiler,
+   * LayoutEngine/CompositionOptimizer, primitives, the scoring gate) already
+   * treats this shape generically, so nothing else needs to change to consume it.
+   */
+  public synthesizeGeometryFromVisualSpec(
+    spec: IVisualCommunicationSpec,
+    ctx: {
+      faceBox?: BoundingBox;
+      subjectBox?: BoundingBox;
+      w: number;
+      h: number;
+      slideIndex: number;
+      textContent: { headline?: string; subheadline?: string; cta?: string };
+    },
+  ): ICompiledLayoutDSL {
+    const plan = spec.regionPlan || { imageAnchor: 'top' as const, imageSharePercent: 55, textAnchor: 'bottom' as const };
+
+    const IMAGE_GEOMETRY: Record<string, { mask: IDSLImageLayer['mask']; anchor: LayoutAnchor; paddingPercent: number }> = {
+      full: { mask: 'full_bleed', anchor: 'center', paddingPercent: 0 },
+      top: { mask: 'rectangle', anchor: 'top_center', paddingPercent: 4 },
+      bottom: { mask: 'rectangle', anchor: 'bottom_center', paddingPercent: 4 },
+      left: { mask: 'rectangle', anchor: 'middle_left', paddingPercent: 0 },
+      right: { mask: 'rectangle', anchor: 'middle_right', paddingPercent: 0 },
+    };
+    const imageGeometry = IMAGE_GEOMETRY[plan.imageAnchor] || IMAGE_GEOMETRY.top;
+
+    const TEXT_ANCHOR: Record<string, LayoutAnchor> = {
+      top: 'top_center', bottom: 'bottom_center', left: 'middle_left', right: 'middle_right', overlay: 'center',
+    };
+    const OPPOSITE: Record<string, string> = { top: 'bottom', bottom: 'top', left: 'right', right: 'left' };
+    const BAND_PERCENT: Record<string, { x0: number; x1: number; y0: number; y1: number }> = {
+      top: { x0: 0, x1: 100, y0: 0, y1: 30 },
+      bottom: { x0: 0, x1: 100, y0: 70, y1: 100 },
+      left: { x0: 0, x1: 40, y0: 0, y1: 100 },
+      right: { x0: 60, x1: 100, y0: 0, y1: 100 },
+      overlay: { x0: 20, x1: 80, y0: 30, y1: 70 },
+    };
+
+    const bandRect = (band: string): BoundingBox => {
+      const b = BAND_PERCENT[band] || BAND_PERCENT.bottom;
+      return {
+        x: Math.round((b.x0 / 100) * ctx.w),
+        y: Math.round((b.y0 / 100) * ctx.h),
+        width: Math.round(((b.x1 - b.x0) / 100) * ctx.w),
+        height: Math.round(((b.y1 - b.y0) / 100) * ctx.h),
+      };
+    };
+    // Same AABB overlap test text_scrim already uses for face avoidance
+    // (primitive-engine.ts) — reused here rather than reinvented.
+    const overlaps = (a: BoundingBox, b: BoundingBox): boolean =>
+      a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+    const collidesWithSubject = (band: string): boolean => {
+      const rect = bandRect(band);
+      return [ctx.faceBox, ctx.subjectBox].filter((s): s is BoundingBox => !!s).some((subj) => overlaps(rect, subj));
+    };
+
+    // Don't stack text on the same side as the image for a separated/framed/
+    // stacked relationship — auto-flip to the opposite band in that case.
+    const nonOverlappingRelationship = ['separated', 'framed', 'stacked'].includes(spec.relationship);
+    let requestedTextBand: string = plan.textAnchor;
+    if (nonOverlappingRelationship && requestedTextBand === plan.imageAnchor && OPPOSITE[plan.imageAnchor]) {
+      requestedTextBand = OPPOSITE[plan.imageAnchor];
+    }
+
+    // Never place text over a detected face/subject — try the requested band,
+    // then a short fallback chain. The downstream CompositionOptimizer still
+    // treats faceBox as an obstacle regardless, so this is a head start, not
+    // the only line of defense.
+    const fallbackChain = [requestedTextBand, OPPOSITE[plan.imageAnchor], 'bottom', 'top', 'overlay'].filter(Boolean) as string[];
+    const resolvedTextBand = fallbackChain.find((band) => !collidesWithSubject(band)) || requestedTextBand;
+
+    const textAnchor = TEXT_ANCHOR[resolvedTextBand] || 'bottom_center';
+    const alignment: 'left' | 'center' | 'right' =
+      textAnchor === 'top_center' || textAnchor === 'bottom_center' || textAnchor === 'center' ? 'center' : 'left';
+    const maxWidthPercent = resolvedTextBand === 'left' || resolvedTextBand === 'right' ? 45 : 85;
+
+    const layers: IDSLSceneLayer[] = [];
+    layers.push({
+      id: 'ai_freeform_image', type: 'image', zIndex: 10,
+      mask: imageGeometry.mask, anchor: imageGeometry.anchor, paddingPercent: imageGeometry.paddingPercent,
+    } as IDSLImageLayer);
+
+    if (ctx.textContent.headline) {
+      layers.push({
+        id: 'ai_freeform_heading', type: 'text', zIndex: 30, role: 'heading',
+        anchor: textAnchor, alignment, maxWidthPercent,
+      } as IDSLTextLayer);
+    }
+    if (ctx.textContent.subheadline) {
+      layers.push({
+        id: 'ai_freeform_tagline', type: 'text', zIndex: 31, role: 'tagline',
+        anchor: textAnchor, alignment, maxWidthPercent,
+      } as IDSLTextLayer);
+    }
+    if (ctx.textContent.cta) {
+      layers.push({
+        id: 'ai_freeform_cta', type: 'text', zIndex: 32, role: 'cta',
+        anchor: textAnchor, alignment, maxWidthPercent,
+      } as IDSLTextLayer);
+    }
+
+    console.log(
+      `[AI Freeform] Synthesized geometry: image=${plan.imageAnchor}/${imageGeometry.mask} text=${resolvedTextBand}` +
+      `${resolvedTextBand !== requestedTextBand ? ` (moved from ${requestedTextBand} to avoid face/subject)` : ''}`,
+    );
+
+    return {
+      schemaVersion: '1.0',
+      layoutVersion: '1.0',
+      id: `ai_freeform_${ctx.slideIndex}`,
+      layers,
+    };
   }
 }

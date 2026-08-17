@@ -623,6 +623,16 @@ export class GenerationOrchestrator {
           determinedGrid.layout = '';
           (determinedGrid as any).designSpec = undefined;
         }
+      } else if (process.env['LAYOUT_MODE'] === 'ai_freeform') {
+        // --- ai_freeform: skip TemplateAgentService entirely — its selection
+        // would just be discarded. Sentinel layoutType is recognized by the
+        // guards added in ai-image-generation.service.ts (Step 3 of this pass).
+        console.log('[TEMPLATE AGENT] Skipped — LAYOUT_MODE=ai_freeform synthesizes geometry live instead');
+        agentDecisionPromise = Promise.resolve({
+          selected_layout_id: '__ai_freeform__',
+          reasoning: 'ai_freeform mode — geometry synthesized live from Visual Communication Spec',
+          designSpec: undefined,
+        });
       } else {
         agentDecisionPromise = this.templateAgent.selectTemplate({
           brief: captionResult.caption,

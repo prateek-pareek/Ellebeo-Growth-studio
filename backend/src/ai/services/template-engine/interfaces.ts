@@ -174,6 +174,15 @@ export interface IVisualCommunicationSpec {
   
   // Direction for the Primitive Engine to select specific components
   primitiveIntent: 'framing' | 'accent' | 'structural' | 'none';
+
+  // Coarse geometry hint (percent/anchor only, never exact pixels) — authoritative
+  // when LAYOUT_MODE=ai_freeform bypasses the template recipe table; ignored
+  // otherwise (shadow mode). Optional so existing consumers are unaffected.
+  regionPlan?: {
+    imageAnchor: 'top' | 'bottom' | 'left' | 'right' | 'full';
+    imageSharePercent: number;
+    textAnchor: 'top' | 'bottom' | 'left' | 'right' | 'overlay';
+  };
 }
 
 export type CompositionHero = 'headline' | 'image' | 'badge' | 'balanced';
