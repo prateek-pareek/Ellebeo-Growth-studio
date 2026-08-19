@@ -1,6 +1,6 @@
 import type { SceneAssetKind, VideoType } from '../contract';
 
-export type AssetSource = 'technician' | 'stock';
+export type AssetSource = 'technician' | 'stock' | 'ai_clip';
 
 export interface TechnicianAssetInput {
   url: string;
@@ -22,6 +22,11 @@ export interface AssetResolveInput {
   technicianAssets: TechnicianAssetInput[];
   query?: string;
   medicalAesthetics: boolean;
+  /** Phase 7 opt-in: attempt AI-generated clips for missing scenes before
+   * falling back to stock. Ignored by providers that don't support it. */
+  preferAiClips?: boolean;
+  /** Per-scene prompts for AI-generated clips, matched by missing-scene order. */
+  clipPrompts?: string[];
 }
 
 export interface AssetProvider {

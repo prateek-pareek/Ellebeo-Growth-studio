@@ -173,6 +173,8 @@ export class VideoPipelineService {
           toolCalls: 0,
           repaired: false,
           requestedSceneCount: sceneCount,
+          useAiClips: Boolean(dto.useAiClips),
+          clipPrompts: dto.clipPrompts,
           voiceId: defaultVoiceId(brandDna.primaryTone),
           brandVoice: [
             brandDna.businessName,

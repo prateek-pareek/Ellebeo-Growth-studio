@@ -44,6 +44,8 @@ export interface DirectorLoopState {
   stockQuery?: string;
   voiceId?: string;
   voiceover?: VoiceoverAsset;
+  useAiClips?: boolean;
+  clipPrompts?: string[];
 }
 
 export interface DirectorJobRecord {
@@ -118,6 +120,10 @@ export function parseLoopState(raw: unknown): DirectorLoopState {
     stockQuery: typeof value.stockQuery === 'string' ? value.stockQuery : undefined,
     voiceId: typeof value.voiceId === 'string' ? value.voiceId : undefined,
     voiceover: isVoiceoverAsset(value.voiceover) ? value.voiceover : undefined,
+    useAiClips: Boolean(value.useAiClips),
+    clipPrompts: Array.isArray(value.clipPrompts)
+      ? value.clipPrompts.filter((p): p is string => typeof p === 'string')
+      : undefined,
   };
 }
 
@@ -226,6 +232,8 @@ export async function processDirectorJob(
         })),
         query: state.stockQuery,
         medicalAesthetics: plan.compliance.medicalAesthetics,
+        preferAiClips: state.useAiClips,
+        clipPrompts: state.clipPrompts,
       });
       const nextPlan = applyResolvedAssetsToPlan(plan, resolved);
       state = { ...state, step: 'assets', assetsResolved: true, error: undefined };

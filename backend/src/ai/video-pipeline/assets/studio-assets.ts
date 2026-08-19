@@ -67,7 +67,7 @@ export async function resolveStudioAssets(
   return assets;
 }
 
-function normalizeTechnician(asset: TechnicianAssetInput): ResolvedSceneAsset | null {
+export function normalizeTechnician(asset: TechnicianAssetInput): ResolvedSceneAsset | null {
   const url = asset.url?.trim();
   if (!url || !/^https?:\/\//i.test(url)) return null;
   const kind = asset.kind === 'VIDEO' || asset.kind === 'GENERATED_CLIP' ? asset.kind : 'IMAGE';

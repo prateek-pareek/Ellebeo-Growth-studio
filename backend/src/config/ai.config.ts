@@ -314,6 +314,22 @@ export const AI_CONFIG = {
     maxCostUsdPerVideo: 0.25,
     directorMaxTokens: 1024,
     scriptMaxTokens: 1024,
+
+    // Phase 7 — AI video clips (opt-in per request via CreateReelsDto.useAiClips,
+    // gated again by this env flag). Never used for medical-aesthetics brands
+    // (blocked at both the asset-resolve strategy and the compliance hard gate).
+    aiClips: {
+      flag: 'GROWTH_STUDIO_VIDEO_AI_CLIPS' as const,
+      provider: 'gemini_veo' as const,
+      model: process.env['GEMINI_VIDEO_MODEL'] || 'veo-3.1-fast-generate-preview',
+      defaultDurationSeconds: 6,
+      maxClipsPerVideo: 4,
+      costUsdPerClip: 0.5,
+      maxCostUsdPerVideo: 2.0,
+      pollIntervalMs: 5_000,
+      maxPollAttempts: 36, // 36 × 5s = 3 minutes
+      timeoutMs: 20_000,
+    },
   },
 
   // --------------------------------------------------------------------------
