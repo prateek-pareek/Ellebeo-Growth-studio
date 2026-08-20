@@ -1,6 +1,8 @@
 import { createFileRoute, Link, Outlet, useLocation } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useBrandDna } from "@/lib/providers/brand-dna-provider";
+import { GuidedBrandDnaFlow } from "@/components/gemini-lab/GuidedBrandDnaFlow";
+import { PromptEditor } from "@/components/gemini-lab/PromptEditor";
 
 export const Route = createFileRoute("/brand")({
   head: () => ({
@@ -12,6 +14,8 @@ export const Route = createFileRoute("/brand")({
   }),
   component: BrandPage,
 });
+
+const noop = () => {};
 
 function humanizeTag(value: string): string {
   if (!value) return "";
@@ -27,6 +31,20 @@ function consentDotClass(status: string): string {
 function BrandPage() {
   const { data: brandDNA, loading, isEmpty, error, refresh } = useBrandDna();
   const location = useLocation();
+  const [dnaEditing, setDnaEditing] = useState(false);
+  // Stable identities. Passing inline arrows here re-ran the flow's load effect
+  // on every render, which refetched in a loop until the API returned 429.
+  const refreshedOnce = useRef(false);
+  const handleDnaReady = useCallback(
+    (ready: boolean) => {
+      // The production record below is only worth refetching when the guided
+      // flow reports it has one, and only the first time.
+      if (!ready || refreshedOnce.current) return;
+      refreshedOnce.current = true;
+      refresh();
+    },
+    [refresh],
+  );
 
   useEffect(() => {
     if (location.pathname === "/brand") {
@@ -72,25 +90,77 @@ function BrandPage() {
         <h1 className="page-title max-w-[22ch]">
           Your Brand DNA is <span className="italic text-taupe">ready</span>.
         </h1>
-        <p className="mt-4 text-sm text-taupe leading-relaxed max-w-[52ch]">
-          {brandDNA.oneLiner} Powers every caption, template and calendar recommendation.
+        <p className="mt-4 text-base text-taupe leading-relaxed max-w-[52ch]">
+          {/* oneLiner is the studio's own words and may or may not end in a
+              full stop, so it cannot simply be run into the next clause — that
+              rendered as "hair Powers every caption…". */}
+          {brandDNA.oneLiner ? `${brandDNA.oneLiner.replace(/\s*[.!?]?\s*$/, "")}. ` : ""}
+          It powers every caption, template and calendar recommendation.
         </p>
-        <div className="mt-5 flex flex-wrap gap-3">
-          <span className="text-[10px] uppercase tracking-widest border border-border bg-muted px-3 py-1.5 rounded-full">{brandDNA.category}</span>
+        {/* One action, not three lookalikes.
+            The category was a pill styled like a button but did nothing, and
+            "Edit Brand DNA" led to the old long form — which is no longer how
+            this page is edited. Making a post is the only thing you actually
+            come here to do next. */}
+        <div className="mt-6 flex flex-wrap items-center gap-4">
           <Link
-            to="/brand/onboarding"
-            className="text-[10px] uppercase tracking-widest border border-border bg-card px-3 py-1.5 rounded-full hover:bg-nude/30 transition-colors"
+            to="/gemini-lab"
+            className="text-[11px] uppercase tracking-[0.22em] bg-foreground text-offwhite px-6 py-3 hover:bg-taupe transition-colors"
           >
-            Edit Brand DNA
+            Make a post
           </Link>
-          <Link
-            to="/generate"
-            className="text-[10px] uppercase tracking-widest bg-foreground text-offwhite px-3 py-1.5 rounded-full hover:bg-taupe transition-colors"
-          >
-            Generate content
-          </Link>
+          {brandDNA.category && (
+            <span className="text-sm text-taupe">{brandDNA.category}</span>
+          )}
         </div>
       </header>
+
+      {/*
+        The guided Brand DNA — mood, essence, palette, typography, story.
+        It previously lived only inside the Studio flow, which meant a salon had
+        to start making a post before it could say who it was. Identity belongs
+        on the Brand page; the record below is the same data, read-only.
+      */}
+      <div className="mb-12">
+        <GuidedBrandDnaFlow
+          context="brand"
+          applyBrandDna
+          onApplyChange={noop}
+          editing={dnaEditing}
+          onEditingChange={setDnaEditing}
+          onReady={handleDnaReady}
+        />
+      </div>
+
+      {/*
+        How your posts are written.
+        These instruction blocks have been editable on the server since they
+        were written, with no screen anywhere — so "I can't edit the system
+        prompt" was literally true. They belong next to the brand, because
+        that is what they are: how this studio sounds.
+      */}
+      {/* Folded away by default.
+          These are the generator's own instructions — useful to a studio with
+          a strong view about wording, technical noise to everyone else. The
+          shipped wording is written to be the best answer on its own, so the
+          normal path is never to open this at all. */}
+      <section className="mb-12">
+        <details className="group">
+          <summary className="flex items-center justify-between gap-4 cursor-pointer list-none py-3 border-b hairline">
+            <span>
+              <span className="eyebrow block">Advanced — how the words are written</span>
+              <span className="mt-1 block text-sm text-taupe">
+                Already tuned. Open only if you want to change how your posts sound.
+              </span>
+            </span>
+            <span className="shrink-0 text-sm text-taupe group-open:hidden">Open</span>
+            <span className="shrink-0 text-sm text-taupe hidden group-open:inline">Close</span>
+          </summary>
+          <div className="pt-6">
+            <PromptEditor />
+          </div>
+        </details>
+      </section>
 
       {/* ── What it powers ───────────────────────────────────────────────── */}
       <section className="mb-12">

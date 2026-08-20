@@ -30,6 +30,12 @@ export const AI_CONFIG = {
       maxTokens: 2048,
       timeoutMs: 45_000,
     },
+    // Isolated Gemini Lab playground only — does not feed the Sharp compositor.
+    imageGeneration: {
+      provider: 'google' as const,
+      modelId: 'gemini-2.5-flash-image',
+      timeoutMs: 90_000,
+    },
     reelScript: {
       provider: 'openai' as const,
       modelId: 'gemini-flash-latest',
@@ -275,6 +281,20 @@ export const AI_CONFIG = {
     },
     quality: 'auto' as const,
     format: 'auto' as const,
+  },
+
+  // --------------------------------------------------------------------------
+  // Agentic video pipeline (GROWTH_STUDIO_VIDEO — default off)
+  // --------------------------------------------------------------------------
+  video: {
+    flag: 'GROWTH_STUDIO_VIDEO' as const,
+    defaultCriticMaxRevisions: 2,
+    renderProvider: 'shotstack' as const,
+    maxToolCallsPerAgent: 6,
+    maxTokensPerVideo: 8_000,
+    maxCostUsdPerVideo: 0.25,
+    directorMaxTokens: 1024,
+    scriptMaxTokens: 1024,
   },
 
   // --------------------------------------------------------------------------

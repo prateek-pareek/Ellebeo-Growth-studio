@@ -1,4 +1,9 @@
 @import url("https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@300;400;500;600&display=swap");
+/* The five other Brand DNA type pairings. Without these, choosing "Natural
+   organic" showed the words "Fraunces / Source Sans 3" set in Playfair — the
+   preview named a typeface it could not actually render, which is the one
+   thing a brand preview must not do. */
+@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Source+Sans+3:wght@300;400;600&family=Cinzel:wght@400;600&family=Outfit:wght@300;400;600&display=swap");
 @import "tailwindcss" source(none);
 @source "../src";
 @import "tw-animate-css";
@@ -129,6 +134,82 @@
   ::selection {
     background-color: var(--nude);
     color: var(--charcoal);
+  }
+}
+
+/* ── Gemini Lab flow ───────────────────────────────────────────────────────
+   The studio flow uses a few shared primitives. They are written to match the
+   surrounding pages — uppercase, wide tracking, ink on parchment — rather than
+   introducing a second button language alongside the inline Tailwind ones. */
+@layer components {
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+  }
+  .btn:disabled,
+  .btn[aria-disabled="true"] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    background-color: var(--foreground);
+    color: var(--offwhite);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background-color: var(--taupe);
+  }
+  .btn-ghost {
+    background-color: transparent;
+    border: 1px solid var(--border);
+    color: var(--foreground);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background-color: var(--nude);
+  }
+  .btn-sm {
+    padding: 0.5rem 1rem;
+  }
+
+  /* Form fields. Deliberately NOT .btn: a button centres its label, refuses to
+     wrap and sizes its own text — all wrong for something you type into. */
+  .field {
+    display: block;
+    width: 100%;
+    padding: 0.7rem 0.9rem;
+    font-family: var(--font-sans);
+    font-size: 16px; /* below 16px iOS zooms the page on focus */
+    line-height: 1.5;
+    text-align: start;
+    white-space: normal;
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--foreground);
+    background-color: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+  }
+  .field:focus {
+    outline: none;
+    border-color: var(--foreground);
+  }
+  .field:disabled { opacity: 0.55; cursor: not-allowed; }
+}
+
+@layer utilities {
+  /* The page container the rest of the app centres on. */
+  .page-shell {
+    width: 100%;
+    max-width: 1200px;
+    margin-inline: auto;
+    padding-inline: 1.5rem;
   }
 }
 

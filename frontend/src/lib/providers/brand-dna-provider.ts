@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 
 export type BrandDnaView = {
@@ -215,5 +215,11 @@ export function useBrandDna(): UseBrandDnaResult {
       });
   }, [tick]);
 
-  return { ...state, refresh: () => setTick((t) => t + 1) };
+  // Stable across renders. As a fresh arrow each time, any consumer that put
+  // `refresh` (or a callback closing over it) in an effect's dependency list
+  // re-ran that effect on every render — which is how the Brand page ended up
+  // refetching in a loop until the API answered 429.
+  const refresh = useCallback(() => setTick((t) => t + 1), []);
+
+  return { ...state, refresh };
 }

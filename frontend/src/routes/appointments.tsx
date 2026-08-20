@@ -793,7 +793,7 @@ function AppointmentRow({ a, onReminderSent, isMedicalAesthetics }: { a: Appoint
         )}
         {isMedicalAesthetics || a.consent === "granted" ? (
           <Link
-            to="/generate"
+            to="/gemini-lab"
             search={{ appointment: a.id }}
             className="inline-flex items-center bg-brass text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-elevated hover:brightness-105 hover:shadow-elevated-lg active:scale-[0.97] transition-all"
           >

@@ -80,10 +80,14 @@ export class CompositionOptimizer {
     content = trimmedContent;
 
     for (const layer of optimized.layers) {
-      if (layer.allowedAnchors && layer.allowedAnchors.length > 0) {
-        const preferred = this.preferredAnchorsForFlow(flow, priority, layer.allowedAnchors);
-        const pool = preferred.length > 0 ? preferred : layer.allowedAnchors;
-        (layer as any).anchor = pool[0];
+      // Template slot is a starting idea — cleanliness may move type off it.
+      if (!(layer as any)._templateAnchor) {
+        (layer as any)._templateAnchor = (layer as any).anchor
+          || (layer.allowedAnchors && layer.allowedAnchors[0])
+          || undefined;
+      }
+      if (!(layer as any).anchor && layer.allowedAnchors && layer.allowedAnchors.length > 0) {
+        (layer as any).anchor = layer.allowedAnchors[0];
       }
 
       // Honor template maxWidthPercent — do NOT crush recipe measure (58% broke
@@ -112,10 +116,8 @@ export class CompositionOptimizer {
           : behaviorProfile?.negativeSpaceMultiplier <= 0.7 ? 'tight' : 'comfortable'),
     });
 
-    // Template Agent owns composition geometry (mask / padding / anchors). visualPriority only
-    // tunes share/fonts INSIDE that contract — never invent a panel that contradicts the recipe.
-    // Re-seed on every call (including repair/escalation) so axis swaps cannot break full-bleed
-    // or inset templates.
+    // Template seeds the photo treatment (overlay / circle / split). Type may move
+    // for a clean readable slide — do not treat recipe boxes as a hard lock.
     policy = LayoutEngine.seedPolicyFromTemplate(optimized, policy);
 
     const roleWeight: Record<string, number> = { heading: 4, tagline: 3, body: 2, footnote: 1, cta: 0 };
@@ -209,7 +211,7 @@ export class CompositionOptimizer {
 
     const protectedSubjects = layoutEngine.getProtectedSubjects();
     const sBox = layoutEngine.getSubjectBox() || layoutEngine.getFaceBox();
-    const subjectHaloRatio = 0.04;
+    const subjectHaloRatio = 0.07;
     const subjectHalo = Math.round(Math.min(canvasW, canvasHeight) * subjectHaloRatio);
 
     const isDedicatedPanel = regions.spatial.splitAxis !== 'overlay'
@@ -240,96 +242,35 @@ export class CompositionOptimizer {
       const isInsetMask = mask === 'circle' || mask === 'arch' || mask === 'polaroid'
         || (mask === 'rectangle' && Number((optimized.layers?.find((l: any) => l.type === 'image') as any)?.paddingPercent || 0) > 2);
       const isBA = mask === 'before_after_split';
-      // Only treat inset photos as obstacles — full-bleed overlays may intentionally sit near type
-      if (isInsetMask || regions.spatial.splitAxis === 'overlay' || isBA) {
-        if (isBA) {
-          // Protect the after panel so type cannot cover the reveal face (Slide 3 bug)
-          const orientation = String(
-            (optimized.layers?.find((l: any) => l.type === 'image') as any)?.orientation || 'vertical',
-          );
-          const afterZone: BoundingBox = orientation === 'horizontal'
-            ? { x: 0, y: Math.round(canvasHeight * 0.48), width: canvasW, height: Math.round(canvasHeight * 0.52) }
-            : { x: Math.round(canvasW * 0.48), y: 0, width: Math.round(canvasW * 0.52), height: canvasHeight };
-          obstacles.push(afterZone);
-          regions.textRegion = orientation === 'horizontal'
-            ? {
-              x: constraints.safeX,
-              y: constraints.safeY,
-              width: canvasW - constraints.safeX * 2,
-              height: Math.max(120, Math.round(canvasHeight * 0.42) - constraints.safeY),
-            }
-            : {
-              x: constraints.safeX,
-              y: constraints.safeY,
-              width: Math.max(140, Math.round(canvasW * 0.42) - constraints.safeX),
-              height: canvasHeight - constraints.safeY - 90,
-            };
-          if (optimized.canvasRegions) optimized.canvasRegions.textRegion = regions.textRegion;
-        } else if (isInsetMask) {
-          // Inset photos: reserve a BOTTOM band for type (same pattern as good slides 2/4).
-          // Never leave textRegion as a side carve or full-canvas center (puts type on the face).
-          const footerClear = Math.max(constraints.margins.bottom, 88);
-          const gap = 16;
-          const isCircleLike = mask === 'circle' || mask === 'arch' || mask === 'polaroid';
-          let belowBand: BoundingBox;
-          if (isCircleLike) {
-            obstacles.push(imageOccupied);
-            const belowY = imageOccupied.y + imageOccupied.height + gap;
-            const belowH = Math.max(72, canvasHeight - footerClear - belowY);
-            belowBand = {
-              x: constraints.safeX,
-              y: Math.min(belowY, canvasHeight - footerClear - 72),
-              width: canvasW - constraints.safeX * 2,
-              height: Math.min(belowH, Math.max(72, canvasHeight - footerClear - belowY)),
-            };
-          } else {
-            // Padded/rounded rectangle: protect UPPER photo (face), keep LOWER band free for type
-            const upperProtect: BoundingBox = {
-              x: imageOccupied.x,
-              y: imageOccupied.y,
-              width: imageOccupied.width,
-              height: Math.round(imageOccupied.height * 0.58),
-            };
-            obstacles.push(upperProtect);
-            const bandH = Math.max(96, Math.round(imageOccupied.height * 0.22));
-            const bandY = Math.min(
-              imageOccupied.y + imageOccupied.height - bandH - gap,
-              canvasHeight - footerClear - bandH,
-            );
-            belowBand = {
-              x: Math.max(constraints.safeX, imageOccupied.x + Math.round(imageOccupied.width * 0.08)),
-              y: Math.max(imageOccupied.y + Math.round(imageOccupied.height * 0.55), bandY),
-              width: Math.min(
-                canvasW - constraints.safeX * 2,
-                Math.round(imageOccupied.width * 0.84),
-              ),
-              height: bandH,
-            };
+      if (isBA) {
+        const orientation = String(
+          (optimized.layers?.find((l: any) => l.type === 'image') as any)?.orientation || 'vertical',
+        );
+        const afterZone: BoundingBox = orientation === 'horizontal'
+          ? { x: 0, y: Math.round(canvasHeight * 0.48), width: canvasW, height: Math.round(canvasHeight * 0.52) }
+          : { x: Math.round(canvasW * 0.48), y: 0, width: Math.round(canvasW * 0.52), height: canvasHeight };
+        obstacles.push(afterZone);
+        regions.textRegion = orientation === 'horizontal'
+          ? {
+            x: constraints.safeX,
+            y: constraints.safeY,
+            width: canvasW - constraints.safeX * 2,
+            height: Math.max(120, Math.round(canvasHeight * 0.42) - constraints.safeY),
           }
-          regions.textRegion = belowBand;
-          if (optimized.canvasRegions) optimized.canvasRegions.textRegion = belowBand;
-          if (optimized.canonicalGeometry) optimized.canonicalGeometry.textRegion = belowBand;
-        } else if (regions.spatial.splitAxis === 'overlay') {
-          obstacles.push(imageOccupied);
-          const carved = this.carveBoxAroundObstacle(
-            {
-              x: constraints.safeX,
-              y: constraints.safeY,
-              width: canvasW - constraints.safeX * 2,
-              height: canvasHeight - constraints.safeY - constraints.margins.bottom,
-            },
-            imageOccupied,
-          );
-          if (carved && carved.width >= 120 && carved.height >= 80) {
-            regions.textRegion = carved;
-            if (optimized.canvasRegions) optimized.canvasRegions.textRegion = carved;
-            if (optimized.canonicalGeometry) optimized.canonicalGeometry.textRegion = carved;
-          }
-        }
+          : {
+            x: constraints.safeX,
+            y: constraints.safeY,
+            width: Math.max(140, Math.round(canvasW * 0.42) - constraints.safeX),
+            height: canvasHeight - constraints.safeY - 90,
+          };
+        if (optimized.canvasRegions) optimized.canvasRegions.textRegion = regions.textRegion;
+      } else if (isInsetMask || regions.spatial.splitAxis === 'overlay') {
+        obstacles.push(imageOccupied);
       }
     }
 
-    // Face / subject mass is a HARD obstacle — never place type on the client face
+    // Face / subject mass is a HARD obstacle. Overlay keeps the full recipe frame
+    // and dodges in placeLayerBox so template anchors are not collapsed to a band.
     if (!isDedicatedPanel && sBox) {
       const faceObstacle: BoundingBox = {
         x: Math.max(0, sBox.x - subjectHalo),
@@ -338,10 +279,12 @@ export class CompositionOptimizer {
         height: Math.min(canvasHeight, sBox.height + subjectHalo * 2),
       };
       obstacles.push(faceObstacle);
-      const carvedFace = this.carveBoxAroundObstacle(regions.textRegion, faceObstacle);
-      if (carvedFace && carvedFace.width >= 100 && carvedFace.height >= 60) {
-        regions.textRegion = carvedFace;
-        if (optimized.canvasRegions) optimized.canvasRegions.textRegion = carvedFace;
+      if (regions.spatial.splitAxis !== 'overlay') {
+        const carvedFace = this.carveBoxAroundObstacle(regions.textRegion, faceObstacle);
+        if (carvedFace && carvedFace.width >= 100 && carvedFace.height >= 60) {
+          regions.textRegion = carvedFace;
+          if (optimized.canvasRegions) optimized.canvasRegions.textRegion = carvedFace;
+        }
       }
     }
     for (const sub of protectedSubjects) {
@@ -489,7 +432,7 @@ export class CompositionOptimizer {
     const fullSafe: BoundingBox = {
       x: constraints.safeX,
       y: constraints.safeY,
-      width: constraints.contentMaxWidth,
+      width: Math.max(120, canvasW - constraints.safeX * 2),
       height: Math.max(80, canvasHeight - constraints.safeY - constraints.margins.bottom),
     };
 
@@ -641,12 +584,14 @@ export class CompositionOptimizer {
           maxH,
           Math.max(m.needH + Math.round(fontPx * 0.28), Math.round(fontPx * lh * m.lines + fontPx * 0.12)),
         );
-        const x = Math.max(constraints.safeX, Math.round((canvasW - huggedW) / 2));
+        const recipeA = String((layer as any)._templateAnchor || layer.anchor || '');
+        const x = recipeA.includes('center') || recipeA === 'center'
+          ? Math.max(constraints.safeX, Math.round(box.x + (box.width - huggedW) / 2))
+          : Math.max(constraints.safeX, box.x);
         (layer as any)._estimatedFontSize = Math.round(fontPx);
         (layer as any)._fittedLineCount = m.lines;
         (layer as any)._copyBalance = 'short';
         markPreserve(fontPx);
-        (layer as any).alignment = 'center';
         return { x, y: box.y, width: huggedW, height };
       }
 
@@ -688,9 +633,9 @@ export class CompositionOptimizer {
       boxH: number,
       fallbackAnchor: string,
     ): BoundingBox => {
-      const anchor = String(layer.anchor || fallbackAnchor);
+      const recipeAnchor = String((layer as any)._templateAnchor || layer.anchor || fallbackAnchor);
       const placeRegion = regions.spatial.splitAxis === 'overlay' ? fullSafe : regions.textRegion;
-      let pos = layoutEngine.resolveAnchor(anchor, width, boxH, constraints, placeRegion);
+      let pos = layoutEngine.resolveAnchor(recipeAnchor, width, boxH, constraints, placeRegion);
       let box: BoundingBox = { x: pos.x, y: pos.y, width, height: boxH };
 
       const overlapsBox = (a: BoundingBox, b: BoundingBox) =>
@@ -702,10 +647,10 @@ export class CompositionOptimizer {
       const dodge = (obstacle: BoundingBox | null | undefined) => {
         if (!obstacle) return;
         if (!overlapsBox(box, obstacle)) return;
-        const free = this.carveBoxAroundObstacle(fullSafe, obstacle);
+        const free = this.carveBoxAroundObstacle(fullSafe, obstacle, recipeAnchor);
         if (free && free.width >= 100 && free.height >= Math.min(60, boxH)) {
           pos = layoutEngine.resolveAnchor(
-            anchor,
+            recipeAnchor,
             Math.min(width, free.width),
             Math.min(boxH, free.height),
             constraints,
@@ -717,7 +662,6 @@ export class CompositionOptimizer {
             width: Math.min(width, free.width),
             height: Math.min(boxH, Math.max(boxH, Math.round(free.height * 0.5))),
           };
-          // Prefer keeping original height when free band is tall enough
           if (free.height >= boxH) box.height = boxH;
         }
       };
@@ -740,128 +684,12 @@ export class CompositionOptimizer {
         });
       }
 
-      // Inset photos: ALWAYS bottom-center type (match good slides 2/4) — never mid-face / left-on-disk
-      const imgMask = String(
-        (optimized.layers?.find((l: any) => l.type === 'image') as any)?.mask || '',
-      );
-      const imgPad = Number(
-        (optimized.layers?.find((l: any) => l.type === 'image') as any)?.paddingPercent || 0,
-      );
-      const isCircleLike = imgMask === 'circle' || imgMask === 'arch' || imgMask === 'polaroid';
-      const isPaddedRect = imgMask === 'rectangle' && imgPad > 2;
-      if (imageOccupied && (isCircleLike || isPaddedRect) && (layer.role === 'heading' || layer.role === 'tagline')) {
-        const footerClear = Math.max(constraints.margins.bottom, 88);
-        const gap = 16;
-        if (isCircleLike) {
-          const belowY = imageOccupied.y + imageOccupied.height + gap;
-          const availBelow = canvasHeight - footerClear - belowY;
-          const useH = Math.min(boxH, Math.max(56, availBelow - 4));
-          box.width = Math.min(width, Math.round(canvasW * 0.86));
-          box.x = Math.max(constraints.safeX, Math.round((canvasW - box.width) / 2));
-          if (availBelow >= 56) {
-            box.y = belowY;
-            box.height = useH;
-          } else {
-            // Tight under disk: sit in the lower free arc above footer, still centered
-            box.y = Math.max(
-              imageOccupied.y + Math.round(imageOccupied.height * 0.72),
-              canvasHeight - footerClear - useH,
-            );
-            box.height = useH;
-          }
-        } else {
-          // Padded photo: bottom band ON the image (slide 2/4), not mid-chest
-          const bandH = Math.max(boxH, Math.round(imageOccupied.height * 0.2));
-          box.width = Math.min(width, Math.round(imageOccupied.width * 0.82));
-          box.height = Math.min(bandH, Math.round(canvasHeight * 0.2));
-          box.x = Math.max(
-            constraints.safeX,
-            Math.round(imageOccupied.x + (imageOccupied.width - box.width) / 2),
-          );
-          box.y = Math.min(
-            imageOccupied.y + imageOccupied.height - box.height - gap,
-            canvasHeight - footerClear - box.height,
-          );
-          // Prefer solid_card so type stays readable on the photo (like slide 2/4)
-          if (layer.role === 'heading' && !(layer as any).component) {
-            (layer as any).component = 'solid_card';
-            (layer as any)._forceCardInk = '#1A1A1A';
-          }
-        }
-        (layer as any).alignment = 'center';
-        (layer as any).anchor = 'bottom_center';
-        // Dark blur behind circle → prefer light ink (no mid-disk card)
-        if (isCircleLike && layer.role === 'heading') {
-          (layer as any)._forceOverlayInk = '#F7F4EF';
-        }
-      } else if (!imageOccupied && sBox && layer.role === 'heading' && regions.spatial.splitAxis === 'overlay') {
-        // Full-bleed face: park headline in bottom safe band above footer (not top-left on hair)
-        const footerClear = Math.max(constraints.margins.bottom, 88);
-        const bandH = Math.max(boxH, Math.round(canvasHeight * 0.12));
-        box.width = Math.min(width, Math.round(canvasW * 0.82));
-        box.height = bandH;
-        box.x = Math.max(constraints.safeX, Math.round((canvasW - box.width) / 2));
-        box.y = Math.max(
-          sBox.y + sBox.height + subjectHalo,
-          canvasHeight - footerClear - bandH,
-        );
-        if (box.y + box.height > canvasHeight - footerClear) {
-          box.y = canvasHeight - footerClear - bandH;
-        }
-        (layer as any).alignment = 'center';
-        (layer as any).anchor = 'bottom_center';
-        if (!(layer as any).component) {
-          (layer as any).component = 'solid_card';
-          (layer as any)._forceCardInk = '#1A1A1A';
-        }
-      } else if (
-        !imageOccupied
-        && !sBox
-        && layer.role === 'heading'
-        && (priority === 'typography_hero' || priority === 'cta_hero')
-      ) {
-        // Text-only / CTA slides: keep headline centered in a wide safe column
-        box.width = Math.min(width, Math.round(canvasW * 0.78));
-        box.x = Math.max(constraints.safeX, Math.round((canvasW - box.width) / 2));
-        box.y = Math.max(
-          constraints.safeY,
-          Math.round((canvasHeight - constraints.margins.bottom - boxH) / 2),
-        );
-        (layer as any).alignment = 'center';
-        (layer as any).anchor = 'center';
-      }
-
-      const isInsetPhoto = isCircleLike || isPaddedRect;
+      (layer as any).anchor = recipeAnchor;
       box = this.clampBoxToSafe(box, constraints, canvasW, canvasHeight);
-      // Inset: clamp to the dedicated bottom band; overlay full-bleed uses fullSafe
       box = this.clampBoxToRegion(
         box,
-        isInsetPhoto
-          ? regions.textRegion
-          : (regions.spatial.splitAxis === 'overlay' ? fullSafe : regions.textRegion),
+        regions.spatial.splitAxis === 'overlay' ? fullSafe : regions.textRegion,
       );
-
-      // Hard reject: never leave heading on face / circle disk
-      const hardObstacles: BoundingBox[] = [];
-      if (isCircleLike && imageOccupied) hardObstacles.push(imageOccupied);
-      if (sBox && (isCircleLike || !isPaddedRect)) hardObstacles.push(sBox);
-      for (const obs of hardObstacles) {
-        if (!overlapsBox(box, obs)) continue;
-        // For padded rect we ALLOW overlap with lower photo band — skip chest-only via y check
-        if (isPaddedRect && imageOccupied && box.y >= imageOccupied.y + imageOccupied.height * 0.55) {
-          continue;
-        }
-        const footerClear = Math.max(constraints.margins.bottom, 88);
-        box.width = Math.min(box.width, Math.round(canvasW * 0.86));
-        box.y = Math.min(
-          canvasHeight - footerClear - box.height,
-          obs.y + obs.height + 16,
-        );
-        box.x = Math.max(constraints.safeX, Math.round((canvasW - box.width) / 2));
-        (layer as any).alignment = 'center';
-        (layer as any).anchor = 'bottom_center';
-        box = this.clampBoxToSafe(box, constraints, canvasW, canvasHeight);
-      }
       return box;
     };
 
@@ -891,15 +719,35 @@ export class CompositionOptimizer {
         }
         let box = placeLayerBox(layer, width, boxH, 'center');
         box = adaptLayerToSlot(layer, box);
-        // Re-clamp after height growth so we stay in the safe/recipe band
         box = this.clampBoxToSafe(box, constraints, canvasW, canvasHeight);
-        const isInset = ['circle', 'arch', 'polaroid'].includes(
-          String((optimized.layers?.find((l: any) => l.type === 'image') as any)?.mask || ''),
-        );
         box = this.clampBoxToRegion(
           box,
-          isInset ? regions.textRegion
-            : (regions.spatial.splitAxis === 'overlay' ? fullSafe : regions.textRegion),
+          regions.spatial.splitAxis === 'overlay' ? fullSafe : regions.textRegion,
+        );
+        const circleDisk = ['circle', 'arch', 'polaroid'].includes(
+          String((optimized.layers?.find((l: any) => l.type === 'image') as any)?.mask || ''),
+        );
+        box = this.forceClearSubject(
+          box,
+          [
+            ...(sBox ? [{
+              x: Math.max(0, sBox.x - subjectHalo),
+              y: Math.max(0, sBox.y - subjectHalo),
+              width: sBox.width + subjectHalo * 2,
+              height: sBox.height + subjectHalo * 2,
+            }] : []),
+            ...protectedSubjects.map(sub => ({
+              x: Math.max(0, sub.x - subjectHalo),
+              y: Math.max(0, sub.y - subjectHalo),
+              width: sub.width + subjectHalo * 2,
+              height: sub.height + subjectHalo * 2,
+            })),
+            ...(circleDisk && imageOccupied ? [imageOccupied] : []),
+          ],
+          fullSafe,
+          constraints,
+          canvasW,
+          canvasHeight,
         );
         layer.allocatedBox = box;
         (layer as any)._groupScale = groupScale;
@@ -1045,6 +893,7 @@ export class CompositionOptimizer {
         fontSize: (l as any)._estimatedFontSize
           || (l.role === 'heading' ? typographyMetrics?.heroSize : typographyMetrics?.primarySize)
           || canvasHeight * 0.04,
+        templateAnchor: String((l as any)._templateAnchor || l.anchor || ''),
       })),
       constraints,
       canvasW,
@@ -1054,27 +903,24 @@ export class CompositionOptimizer {
       groupScale,
     });
 
-    // Post-QC hard repair: relocate off face / circle — prefer BELOW band, never left carve
+    // Post-QC: if type still sits on a face, force it into a clear pocket.
     if ((quality.critical || []).includes('subject_collision') && (sBox || imageOccupied)) {
-      const obs = imageOccupied || sBox!;
       for (const layer of allTextLayers) {
         if (!(layer as any).allocatedBox || (layer as any)._omitForComposition) continue;
-        if ((layer as any).role !== 'heading') continue;
-        const box = (layer as any).allocatedBox as BoundingBox;
-        const hits = box.x < obs.x + obs.width && box.x + box.width > obs.x
-          && box.y < obs.y + obs.height && box.y + box.height > obs.y;
-        if (!hits) continue;
-        const footerClear = Math.max(constraints.margins.bottom, 88);
-        const w = Math.min(box.width, Math.round(canvasW * 0.86));
-        const h = Math.min(box.height, Math.max(48, canvasHeight - footerClear - (obs.y + obs.height + 16)));
-        (layer as any).allocatedBox = {
-          x: Math.max(constraints.safeX, Math.round((canvasW - w) / 2)),
-          y: Math.min(canvasHeight - footerClear - h, obs.y + obs.height + 16),
-          width: w,
-          height: h,
-        };
-        (layer as any).alignment = 'center';
-        (layer as any).anchor = 'bottom_center';
+        if ((layer as any).role !== 'heading' && (layer as any).role !== 'tagline') continue;
+        (layer as any).allocatedBox = this.forceClearSubject(
+          (layer as any).allocatedBox,
+          [
+            ...(sBox ? [sBox] : []),
+            ...(imageOccupied && ['circle', 'arch', 'polaroid'].includes(
+              String((optimized.layers?.find((l: any) => l.type === 'image') as any)?.mask || ''),
+            ) ? [imageOccupied] : []),
+          ],
+          fullSafe,
+          constraints,
+          canvasW,
+          canvasHeight,
+        );
       }
     }
 
@@ -1279,80 +1125,99 @@ export class CompositionOptimizer {
     if (!imageLayer) return null;
     const mask = String(imageLayer.mask || 'rectangle');
     if (mask === 'full_bleed' || mask === 'before_after_split') return null;
-
     const pad = Number(imageLayer.paddingPercent ?? 0);
-    const anchor = String(imageLayer.anchor || 'center');
-
+    if (mask !== 'circle' && mask !== 'arch' && mask !== 'polaroid' && !(mask === 'rectangle' && pad > 0)) {
+      return null;
+    }
+    const slot = LayoutEngine.recipeImageSlot(canvasW, canvasH, imageLayer);
     if (mask === 'circle') {
-      // Match renderer: 60% centered disk (photo framing unchanged; text avoids this box)
-      const size = Math.floor(Math.min(canvasW, canvasH) * 0.6);
-      const paddingPx = Math.floor(canvasW * (pad || 15) / 100);
-      let cx = canvasW / 2;
-      let cy = canvasH / 2;
-      if (anchor.includes('right')) cx = canvasW - paddingPx - size / 2;
-      if (anchor.includes('left')) cx = paddingPx + size / 2;
-      if (anchor.includes('top')) cy = paddingPx + size / 2;
-      if (anchor.includes('bottom')) cy = canvasH - paddingPx - size / 2;
-      const halo = Math.round(size * 0.06);
+      const halo = Math.round(slot.width * 0.06);
       return {
-        x: Math.max(0, Math.floor(cx - size / 2) - halo),
-        y: Math.max(0, Math.floor(cy - size / 2) - halo),
-        width: Math.min(canvasW, size + halo * 2),
-        height: Math.min(canvasH, size + halo * 2),
+        x: Math.max(0, slot.x - halo),
+        y: Math.max(0, slot.y - halo),
+        width: Math.min(canvasW, slot.width + halo * 2),
+        height: Math.min(canvasH, slot.height + halo * 2),
       };
     }
-
-    if (mask === 'arch' || mask === 'polaroid' || (mask === 'rectangle' && pad > 2)) {
-      const rawPadding = Math.min(Math.max(0, pad || 10), 30);
-      const marginX = Math.round(canvasW * (rawPadding / 100));
-      const marginY = Math.round(canvasH * (rawPadding / 100));
-      let targetW = canvasW - marginX * 2;
-      let targetH = canvasH - marginY * 2;
-      // Arch/polaroid are typically shorter than full padded rectangle
-      if (mask === 'arch' || mask === 'polaroid') {
-        targetW = Math.round(Math.min(canvasW, canvasH) * 0.72);
-        targetH = Math.round(targetW * (mask === 'polaroid' ? 1.15 : 1.05));
-      }
-      let top = marginY;
-      let left = marginX;
-      if (anchor.includes('bottom')) top = canvasH - targetH - marginY;
-      else if (anchor.includes('top')) top = marginY;
-      else top = Math.round((canvasH - targetH) / 2);
-      if (anchor.includes('right')) left = canvasW - targetW - marginX;
-      else if (anchor.includes('left')) left = marginX;
-      else left = Math.round((canvasW - targetW) / 2);
-      return { x: left, y: top, width: targetW, height: targetH };
-    }
-
-    return null;
+    return slot;
   }
 
-  /** Pick the largest rectangle inside `region` that does not intersect `obstacle`. */
-  private carveBoxAroundObstacle(region: BoundingBox, obstacle: BoundingBox): BoundingBox | null {
+  /** Move type fully off faces / photo disks. Never leave a heading on a client face. */
+  private forceClearSubject(
+    box: BoundingBox,
+    keepOut: BoundingBox[],
+    fullSafe: BoundingBox,
+    constraints: LayoutConstraints,
+    canvasW: number,
+    canvasH: number,
+  ): BoundingBox {
+    const hits = (a: BoundingBox, b: BoundingBox) =>
+      a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+    let out = { ...box };
+    for (const obs of keepOut) {
+      if (!obs || obs.width < 8 || obs.height < 8) continue;
+      if (!hits(out, obs)) continue;
+      const free = this.carveBoxAroundObstacle(fullSafe, obs, 'bottom_center');
+      if (free && free.width >= 80 && free.height >= 48) {
+        out = {
+          x: Math.max(free.x, Math.min(Math.max(out.x, free.x), free.x + free.width - Math.min(out.width, free.width))),
+          y: free.y >= obs.y ? free.y : Math.max(free.y, obs.y + obs.height + 12),
+          width: Math.min(out.width, free.width),
+          height: Math.min(Math.max(out.height, 48), free.height),
+        };
+      } else {
+        const footer = Math.max(constraints.margins.bottom, 88);
+        const maxY = canvasH - footer;
+        const availBelow = Math.max(0, maxY - (obs.y + obs.height) - 8);
+        const availAbove = Math.max(0, obs.y - constraints.safeY - 8);
+        const h = Math.min(out.height, Math.round(canvasH * 0.14));
+        if (availBelow >= 40) {
+          out = {
+            x: constraints.safeX,
+            y: obs.y + obs.height + 8,
+            width: Math.min(out.width, canvasW - constraints.safeX * 2),
+            height: Math.min(h, availBelow),
+          };
+        } else if (availAbove >= 40) {
+          const useH = Math.min(h, availAbove);
+          out = {
+            x: constraints.safeX,
+            y: obs.y - 8 - useH,
+            width: Math.min(out.width, canvasW - constraints.safeX * 2),
+            height: useH,
+          };
+        }
+      }
+    }
+    return this.clampBoxToSafe(out, constraints, canvasW, canvasH);
+  }
+
+  /** Pick the free rectangle inside `region` that best keeps the recipe text slot. */
+  private carveBoxAroundObstacle(
+    region: BoundingBox,
+    obstacle: BoundingBox,
+    recipeAnchor = 'center',
+  ): BoundingBox | null {
     const gap = 16;
     const candidates: BoundingBox[] = [
-      // below obstacle (prefer for centered portraits — avoids text-on-disk)
       {
         x: region.x,
         y: Math.max(region.y, obstacle.y + obstacle.height + gap),
         width: region.width,
         height: 0,
       },
-      // above obstacle
       {
         x: region.x,
         y: region.y,
         width: region.width,
         height: Math.min(region.height, obstacle.y - gap - region.y),
       },
-      // left of obstacle
       {
         x: region.x,
         y: region.y,
         width: Math.min(region.width, obstacle.x - gap - region.x),
         height: region.height,
       },
-      // right of obstacle
       {
         x: Math.max(region.x, obstacle.x + obstacle.width + gap),
         y: region.y,
@@ -1371,14 +1236,36 @@ export class CompositionOptimizer {
       }))
       .filter(c => c.width >= 120 && c.height >= 80);
     if (!valid.length) return null;
-    // Prefer full-width bands (below/above) over side strips when areas are close —
-    // side pockets cause left-aligned type overlapping centered circle photos.
-    valid.sort((a, b) => {
-      const aFull = a.width >= region.width * 0.85 ? 1 : 0;
-      const bFull = b.width >= region.width * 0.85 ? 1 : 0;
-      if (aFull !== bFull) return bFull - aFull;
-      return b.width * b.height - a.width * a.height;
-    });
+
+    const anchor = String(recipeAnchor || 'center');
+    const wantV = anchor.includes('top') ? 'top' : anchor.includes('bottom') ? 'bottom' : 'mid';
+    const wantH = anchor.includes('left') ? 'left' : anchor.includes('right') ? 'right' : 'mid';
+    const regionCx = region.x + region.width / 2;
+    const regionCy = region.y + region.height / 2;
+    const obsCx = obstacle.x + obstacle.width / 2;
+    const obstacleOnLeft = obsCx < regionCx - region.width * 0.08;
+    const obstacleOnRight = obsCx > regionCx + region.width * 0.08;
+
+    const score = (c: BoundingBox) => {
+      const cx = c.x + c.width / 2;
+      const cy = c.y + c.height / 2;
+      const hScore = wantH === 'left'
+        ? -cx
+        : wantH === 'right'
+          ? cx
+          : obstacleOnLeft
+            ? cx
+            : obstacleOnRight
+              ? -cx
+              : -Math.abs(cx - regionCx);
+      const vScore = wantV === 'top'
+        ? -cy
+        : wantV === 'bottom'
+          ? cy
+          : -Math.abs(cy - regionCy);
+      return hScore + vScore * 1.15 + (c.width * c.height) / 80000;
+    };
+    valid.sort((a, b) => score(b) - score(a));
     return valid[0];
   }
 

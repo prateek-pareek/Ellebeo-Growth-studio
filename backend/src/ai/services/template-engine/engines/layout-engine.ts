@@ -84,10 +84,10 @@ export class LayoutEngine {
    * so type clears the client image, not only the face rectangle.
    */
   public static expandFaceToSubject(face: BoundingBox, canvasW: number, canvasH: number): BoundingBox {
-    const footerReserve = Math.round(canvasH * 0.12);
-    const extendDown = Math.round(Math.max(face.height * 1.75, canvasH * 0.22));
-    const extendUp = Math.round(face.height * 0.2);
-    const widen = Math.round(face.width * 0.18);
+    const footerReserve = Math.round(canvasH * 0.16);
+    const extendDown = Math.round(Math.min(canvasH * 0.14, Math.max(face.height * 0.55, canvasH * 0.08)));
+    const extendUp = Math.round(face.height * 0.32);
+    const widen = Math.round(face.width * 0.14);
     const y = Math.max(0, face.y - extendUp);
     const bottom = Math.min(canvasH - footerReserve, face.y + face.height + extendDown);
     const x = Math.max(0, face.x - widen);
@@ -154,8 +154,50 @@ export class LayoutEngine {
   }
 
   /**
+   * Fit the original photo into a target box without extreme crop or shrink.
+   * maxCrop 1 = contain (no cut). Infinity = cover (fill, may cut).
+   * Default 1.18 = fill the slot but never crop more than ~18% past contain.
+   * Eyes sit at ~38% of the output frame so heads are not chopped.
+   */
+  public static smartFitWindow(
+    sourceW: number,
+    sourceH: number,
+    targetW: number,
+    targetH: number,
+    focusXPercent = 50,
+    focusYPercent = 40,
+    maxCrop = 1.18,
+  ): { left: number; top: number; width: number; height: number; scale: number; padX: number; padY: number } {
+    const srcW = Math.max(1, sourceW);
+    const srcH = Math.max(1, sourceH);
+    const tw = Math.max(1, targetW);
+    const th = Math.max(1, targetH);
+    const contain = Math.min(tw / srcW, th / srcH);
+    const cover = Math.max(tw / srcW, th / srcH);
+    const cap = Number.isFinite(maxCrop) && maxCrop > 0 ? maxCrop : Number.POSITIVE_INFINITY;
+    const scale = Math.min(cover, contain * cap);
+    const width = Math.min(srcW, Math.max(1, Math.round(tw / scale)));
+    const height = Math.min(srcH, Math.max(1, Math.round(th / scale)));
+    const cx = (Math.min(100, Math.max(0, focusXPercent)) / 100) * srcW;
+    const cy = (Math.min(100, Math.max(0, focusYPercent)) / 100) * srcH;
+    const left = Math.max(0, Math.min(srcW - width, Math.round(cx - width / 2)));
+    const top = Math.max(0, Math.min(srcH - height, Math.round(cy - height * 0.38)));
+    const outW = width * scale;
+    const outH = height * scale;
+    return {
+      left,
+      top,
+      width,
+      height,
+      scale,
+      padX: Math.round((tw - outW) / 2),
+      padY: Math.round((th - outH) / 2),
+    };
+  }
+
+  /**
    * Cover-crop window in source pixels (matches processPortraitFit face-aware cover).
-   * Keeps face focus near the crop center when possible.
+   * Eyes sit in the upper third of the frame so heads are not cut.
    */
   public static coverCropWindow(
     sourceW: number,
@@ -164,18 +206,110 @@ export class LayoutEngine {
     targetH: number,
     focusXPercent = 50,
     focusYPercent = 40,
+    maxCrop = Number.POSITIVE_INFINITY,
   ): { left: number; top: number; width: number; height: number; scale: number } {
-    const scale = Math.max(targetW / Math.max(1, sourceW), targetH / Math.max(1, sourceH));
-    const width = Math.min(sourceW, Math.max(1, Math.round(targetW / scale)));
-    const height = Math.min(sourceH, Math.max(1, Math.round(targetH / scale)));
-    const cx = (Math.min(100, Math.max(0, focusXPercent)) / 100) * sourceW;
-    const cy = (Math.min(100, Math.max(0, focusYPercent)) / 100) * sourceH;
-    const left = Math.max(0, Math.min(sourceW - width, Math.round(cx - width / 2)));
-    const top = Math.max(0, Math.min(sourceH - height, Math.round(cy - height / 2)));
-    return { left, top, width, height, scale };
+    const fit = LayoutEngine.smartFitWindow(
+      sourceW, sourceH, targetW, targetH, focusXPercent, focusYPercent, maxCrop,
+    );
+    return { left: fit.left, top: fit.top, width: fit.width, height: fit.height, scale: fit.scale };
   }
 
-  /** Map a source % point onto canvas after face-aware cover crop. */
+  /** Pixel box where the original photo is placed for this recipe (mask + pad + anchor). */
+  public static recipeImageSlot(
+    canvasW: number,
+    canvasH: number,
+    imageLayer?: { mask?: string; paddingPercent?: number; anchor?: string } | null,
+  ): BoundingBox {
+    if (!imageLayer) return { x: 0, y: 0, width: canvasW, height: canvasH };
+    const mask = String(imageLayer.mask || 'rectangle');
+    if (mask === 'full_bleed' || mask === 'before_after_split' || mask === 'split') {
+      return { x: 0, y: 0, width: canvasW, height: canvasH };
+    }
+
+    const pad = Number(imageLayer.paddingPercent ?? 0);
+    const anchor = String(imageLayer.anchor || 'center');
+
+    if (mask === 'circle') {
+      const size = Math.floor(Math.min(canvasW, canvasH) * 0.6);
+      const paddingPx = Math.floor(canvasW * (pad || 15) / 100);
+      let cx = canvasW / 2;
+      let cy = canvasH / 2;
+      if (anchor.includes('right')) cx = canvasW - paddingPx - size / 2;
+      if (anchor.includes('left')) cx = paddingPx + size / 2;
+      if (anchor.includes('top')) cy = paddingPx + size / 2;
+      if (anchor.includes('bottom')) cy = canvasH - paddingPx - size / 2;
+      return {
+        x: Math.floor(cx - size / 2),
+        y: Math.floor(cy - size / 2),
+        width: size,
+        height: size,
+      };
+    }
+
+    const rawPadding = Math.min(Math.max(0, pad), 30);
+    const marginX = Math.round(canvasW * (rawPadding / 100));
+    const marginY = Math.round(canvasH * (rawPadding / 100));
+    let targetW = Math.max(1, canvasW - marginX * 2);
+    let targetH = Math.max(1, canvasH - marginY * 2);
+    if (mask === 'arch' || mask === 'polaroid') {
+      targetW = Math.round(Math.min(canvasW, canvasH) * 0.72);
+      targetH = Math.round(targetW * (mask === 'polaroid' ? 1.15 : 1.05));
+    }
+    if (rawPadding <= 0 && mask === 'rectangle') {
+      return { x: 0, y: 0, width: canvasW, height: canvasH };
+    }
+
+    let top: number;
+    let left: number;
+    if (anchor === 'top_left') {
+      top = marginY; left = marginX;
+    } else if (anchor === 'top_right') {
+      top = marginY; left = canvasW - targetW - marginX;
+    } else if (anchor === 'top_center') {
+      top = marginY; left = Math.round((canvasW - targetW) / 2);
+    } else if (anchor === 'bottom_left') {
+      top = canvasH - targetH - marginY; left = marginX;
+    } else if (anchor === 'bottom_right') {
+      top = canvasH - targetH - marginY; left = canvasW - targetW - marginX;
+    } else if (anchor === 'bottom_center') {
+      top = canvasH - targetH - marginY; left = Math.round((canvasW - targetW) / 2);
+    } else if (anchor === 'center_left' || anchor === 'middle_left') {
+      top = Math.round((canvasH - targetH) / 2); left = marginX;
+    } else if (anchor === 'center_right' || anchor === 'middle_right') {
+      top = Math.round((canvasH - targetH) / 2); left = canvasW - targetW - marginX;
+    } else {
+      top = Math.round((canvasH - targetH) / 2);
+      left = Math.round((canvasW - targetW) / 2);
+    }
+    return { x: left, y: top, width: targetW, height: targetH };
+  }
+
+  /** Map a source % point into the recipe photo slot after the same cover crop. */
+  public static mapSourcePercentIntoSlot(
+    sourceXPercent: number,
+    sourceYPercent: number,
+    sourceW: number,
+    sourceH: number,
+    slot: BoundingBox,
+    focusXPercent = 50,
+    focusYPercent = 40,
+    maxCrop = 1.18,
+  ): { x: number; y: number } {
+    const local = LayoutEngine.mapSourcePercentThroughCover(
+      sourceXPercent,
+      sourceYPercent,
+      sourceW,
+      sourceH,
+      Math.max(1, slot.width),
+      Math.max(1, slot.height),
+      focusXPercent,
+      focusYPercent,
+      maxCrop,
+    );
+    return { x: slot.x + local.x, y: slot.y + local.y };
+  }
+
+  /** Map a source % point onto canvas after the same smart-fit as processPortraitFit. */
   public static mapSourcePercentThroughCover(
     sourceXPercent: number,
     sourceYPercent: number,
@@ -185,15 +319,16 @@ export class LayoutEngine {
     targetH: number,
     focusXPercent = 50,
     focusYPercent = 40,
+    maxCrop = 1.18,
   ): { x: number; y: number } {
-    const crop = LayoutEngine.coverCropWindow(
-      sourceW, sourceH, targetW, targetH, focusXPercent, focusYPercent,
+    const fit = LayoutEngine.smartFitWindow(
+      sourceW, sourceH, targetW, targetH, focusXPercent, focusYPercent, maxCrop,
     );
     const sx = (sourceXPercent / 100) * sourceW;
     const sy = (sourceYPercent / 100) * sourceH;
     return {
-      x: Math.round((sx - crop.left) * crop.scale),
-      y: Math.round((sy - crop.top) * crop.scale),
+      x: Math.round((sx - fit.left) * fit.scale + Math.max(0, fit.padX)),
+      y: Math.round((sy - fit.top) * fit.scale + Math.max(0, fit.padY)),
     };
   }
 
@@ -935,8 +1070,8 @@ export class LayoutEngine {
   /**
    * Allocates image vs text regions from visualPriority spatial policy.
    * typography_hero / composition_hero: image surrenders a real panel (non-overlapping).
-   * image_hero / cta_hero: photo stays full-bleed; text gets a subject-aware overlay band.
-   * Subject/face protection chooses which side the text panel occupies.
+   * image_hero / cta_hero: photo stays full-bleed; text uses the full safe frame
+   * so recipe anchors (top/center/bottom) resolve to the designed slot.
    */
   public allocateRegions(
     behavior: { imageBleedExtent?: string; readingJourney?: string },
@@ -1074,48 +1209,19 @@ export class LayoutEngine {
       };
     }
 
-    // Overlay band — photo full-bleed; text placed in subject-aware safe frame.
-    // Use the FULL safe content area as textRegion so template anchors (top/center/bottom)
-    // can resolve correctly — a thin band collapses independent anchors into one cluster.
+    // Overlay — keep the FULL safe frame so template anchors resolve to the designed slot.
     const imageRegion: BoundingBox = { x: 0, y: 0, width: this.canvasWidth, height: this.canvasHeight };
     const fullSafe: BoundingBox = {
       x: constraints.safeX,
       y: constraints.safeY,
-      width: constraints.contentMaxWidth,
+      width: Math.max(120, this.canvasWidth - constraints.safeX * 2),
       height: Math.max(80, this.canvasHeight - constraints.safeY - constraints.margins.bottom),
     };
-    // Optional reading-band hint for image_hero density (scrim prefers actualTextRegion anyway)
-    const bandH = Math.max(
-      Math.round(this.canvasHeight * Math.min(0.55, Math.max(0.22, policy.textShare))),
-      Math.round(constraints.safeY + this.canvasHeight * 0.18),
-    );
-    let textRegion: BoundingBox = { ...fullSafe };
-    // Only shrink to a band when share is small AND bias is set — still prefer full safe for placement
-    if (policy.textShare < 0.28) {
-      if (bias === 'end') {
-        const y = this.canvasHeight - constraints.margins.bottom - bandH;
-        textRegion = {
-          x: constraints.safeX,
-          y: Math.max(constraints.safeY, y),
-          width: constraints.contentMaxWidth,
-          height: bandH,
-        };
-      } else {
-        textRegion = {
-          x: constraints.safeX,
-          y: constraints.safeY,
-          width: constraints.contentMaxWidth,
-          height: bandH,
-        };
-      }
-    }
-
-    const carvedTextRegion = this.carveSubjectsFromRegion(textRegion, 'overlay');
     canonicalGeometry.imageRegion = imageRegion;
-    canonicalGeometry.textRegion = carvedTextRegion;
+    canonicalGeometry.textRegion = fullSafe;
     return {
       imageRegion,
-      textRegion: carvedTextRegion,
+      textRegion: fullSafe,
       spatial: { ...policy, splitAxis: 'overlay', preferredTextBias: bias },
       canonicalGeometry
     };

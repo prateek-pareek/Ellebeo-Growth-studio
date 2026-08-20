@@ -188,8 +188,8 @@ const stitchBeforeAfterImages = async (ctx: BaseCtx, orientation: 'vertical' | '
     const dividerColor = '#FFFFFF';
     if (orientation === 'horizontal') {
       const halfH = Math.round(stitchH / 2);
-      const topHalf = await processPortraitFit(beforeBuffer, stitchW, halfH, ctx.validBackgroundColor, 'cover');
-      const bottomHalf = await processPortraitFit(ctx.imageBuffer, stitchW, halfH, ctx.validBackgroundColor, 'cover');
+      const topHalf = await processPortraitFit(beforeBuffer, stitchW, halfH, ctx.validBackgroundColor, 'cover', ctx.faceFocus);
+      const bottomHalf = await processPortraitFit(ctx.imageBuffer, stitchW, halfH, ctx.validBackgroundColor, 'cover', ctx.faceFocus);
       const divider = Buffer.from(
         `<svg width="${stitchW}" height="2" xmlns="http://www.w3.org/2000/svg">` +
         `<rect width="${stitchW}" height="2" fill="${dividerColor}" fill-opacity="0.85"/></svg>`,
@@ -201,8 +201,8 @@ const stitchBeforeAfterImages = async (ctx: BaseCtx, orientation: 'vertical' | '
       ];
     } else {
       const halfW = Math.round(stitchW / 2);
-      const leftHalf = await processPortraitFit(beforeBuffer, halfW, stitchH, ctx.validBackgroundColor, 'cover');
-      const rightHalf = await processPortraitFit(ctx.imageBuffer, halfW, stitchH, ctx.validBackgroundColor, 'cover');
+      const leftHalf = await processPortraitFit(beforeBuffer, halfW, stitchH, ctx.validBackgroundColor, 'cover', ctx.faceFocus);
+      const rightHalf = await processPortraitFit(ctx.imageBuffer, halfW, stitchH, ctx.validBackgroundColor, 'cover', ctx.faceFocus);
       const divider = Buffer.from(
         `<svg width="2" height="${stitchH}" xmlns="http://www.w3.org/2000/svg">` +
         `<rect width="2" height="${stitchH}" fill="${dividerColor}" fill-opacity="0.85"/></svg>`,
@@ -379,25 +379,13 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
         }
 
         if (imageLayer.mask === 'circle') {
-          // Recipe geometry: ~60% centered disk (do not shrink/nudge the client photo)
-          const size = Math.floor(Math.min(ctx.w, ctx.h) * 0.6);
-          const paddingPx = Math.floor(ctx.w * (Number(imageLayer.paddingPercent) || 15) / 100);
-
-          let cx = ctx.w / 2;
-          let cy = ctx.h / 2;
-
-          if (imageLayer.anchor) {
-            if (imageLayer.anchor.includes('right')) cx = ctx.w - paddingPx - (size / 2);
-            if (imageLayer.anchor.includes('left')) cx = paddingPx + (size / 2);
-            if (imageLayer.anchor.includes('top')) cy = paddingPx + (size / 2);
-            if (imageLayer.anchor.includes('bottom')) cy = ctx.h - paddingPx - (size / 2);
-          }
-
-          const leftOffset = Math.floor(cx - (size / 2));
-          const topOffset = Math.floor(cy - (size / 2));
+          const slot = LayoutEngine.recipeImageSlot(ctx.w, ctx.h, imageLayer);
+          const size = slot.width;
+          const leftOffset = slot.x;
+          const topOffset = slot.y;
 
           const circleSvg = `<svg width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${size / 2}" fill="#fff"/></svg>`;
-          const splitPhoto = await processPortraitFit(ctx.imageBuffer, size, size, ctx.validBackgroundColor, 'cover');
+          const splitPhoto = await processPortraitFit(ctx.imageBuffer, size, size, ctx.validBackgroundColor, 'cover', ctx.faceFocus);
           const roundedPhoto = await sharp(splitPhoto).composite([{ input: Buffer.from(circleSvg), blend: 'dest-in' }]).png().toBuffer();
 
           // Background: Blurry, toned version of the original client image
@@ -488,50 +476,12 @@ export const BASE_TREATMENTS: Record<string, (ctx: BaseCtx) => Promise<BaseResul
             top = Math.round(ctx.h * 0.25) + 14;
             left = Math.round(ctx.w / 2 - 190) + 14;
           } else {
-            // Recipe paddingPercent is authoritative (template accuracy).
-            // Soft-cap only pathological values (>30%) so future recipes stay expressible.
-            const rawPadding = Math.min(Math.max(0, Number(imageLayer.paddingPercent) || 0), 30);
-            insetPad = rawPadding;
-            const marginX = Math.round(ctx.w * (rawPadding / 100));
-            const marginY = Math.round(ctx.h * (rawPadding / 100));
-
-            targetW = Math.max(1, ctx.w - (marginX * 2));
-            targetH = Math.max(1, ctx.h - (marginY * 2));
-
-            // When pad is 0, fill the canvas exactly (true full-bleed rectangle)
-            if (rawPadding <= 0) {
-              targetW = ctx.w;
-              targetH = ctx.h;
-              top = 0;
-              left = 0;
-            } else {
-            // Anchor Positioning Math (All 9 Anchors + middle_* aliases)
-            const anchor = String(imageLayer.anchor || 'center');
-            if (anchor === 'top_left') {
-              top = marginY; left = marginX;
-            } else if (anchor === 'top_right') {
-              top = marginY; left = ctx.w - targetW - marginX;
-            } else if (anchor === 'top_center') {
-              top = marginY; left = Math.round((ctx.w - targetW) / 2);
-            } else if (anchor === 'bottom_left') {
-              top = ctx.h - targetH - marginY; left = marginX;
-            } else if (anchor === 'bottom_right') {
-              top = ctx.h - targetH - marginY; left = ctx.w - targetW - marginX;
-            } else if (anchor === 'bottom_center') {
-              top = ctx.h - targetH - marginY; left = Math.round((ctx.w - targetW) / 2);
-            } else if (anchor === 'center_left' || anchor === 'middle_left') {
-              top = Math.round((ctx.h - targetH) / 2); left = marginX;
-            } else if (anchor === 'center_right' || anchor === 'middle_right') {
-              top = Math.round((ctx.h - targetH) / 2); left = ctx.w - targetW - marginX;
-            } else if (anchor === 'middle_center' || anchor === 'middle') {
-              top = Math.round((ctx.h - targetH) / 2);
-              left = Math.round((ctx.w - targetW) / 2);
-            } else {
-              // Exact center
-              top = Math.round((ctx.h - targetH) / 2);
-              left = Math.round((ctx.w - targetW) / 2);
-            }
-            }
+            const slot = LayoutEngine.recipeImageSlot(ctx.w, ctx.h, imageLayer);
+            insetPad = Math.min(Math.max(0, Number(imageLayer.paddingPercent) || 0), 30);
+            targetW = slot.width;
+            targetH = slot.height;
+            top = slot.y;
+            left = slot.x;
           }
 
           const scaledPhoto = await processPortraitFit(ctx.imageBuffer, targetW, targetH, ctx.validBackgroundColor, 'cover', ctx.faceFocus);
@@ -1079,6 +1029,7 @@ export type DecoCtx = {
   activeTheme?: string;
   visualRanking?: string[];
   capitalizationRule?: string;
+  photoBandIsDark?: boolean;
 };
 
 export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
@@ -1520,6 +1471,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           designSpec: ctx.designSpec,
           designLanguage: ctx.designLanguage,
           visualPriority: ctx.designLanguage?.intent?.visualPriority || ctx.designSpec?.composition?.visualPriority,
+          photoBandIsDark: ctx.photoBandIsDark,
           escapeXml: (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
         };
         svg += typographyEngine.renderTextLayer(typoCtx, textLayer);
@@ -1537,6 +1489,7 @@ export const DECORATIONS: Record<string, (ctx: DecoCtx) => string> = {
           designSpec: ctx.designSpec,
           designLanguage: ctx.designLanguage,
           visualPriority: ctx.designLanguage?.intent?.visualPriority || ctx.designSpec?.composition?.visualPriority,
+          photoBandIsDark: ctx.photoBandIsDark,
           escapeXml: (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
         };
         svg += typographyEngine.renderTextGroupLayer(typoCtx, textGroupLayer);

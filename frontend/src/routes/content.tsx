@@ -173,7 +173,7 @@ function ContentPage() {
                 {readyAppointments.slice(0, 3).map((a) => (
                   <Link
                     key={a.id}
-                    to="/generate"
+                    to="/gemini-lab"
                     search={{ appointment: a.id }}
                     className="text-[11px] font-medium rounded-full border border-border bg-muted px-3.5 py-1.5 hover:border-brass/50 hover:text-brass-ink transition-colors"
                   >
@@ -185,7 +185,7 @@ function ContentPage() {
           </div>
           <div className="lg:col-span-5 flex lg:justify-end">
             <Link
-              to="/generate"
+              to="/gemini-lab"
               className="inline-flex items-center gap-2 bg-brass text-white text-xs font-semibold px-5 py-3 rounded-xl shadow-elevated hover:brightness-105 hover:shadow-elevated-lg active:scale-[0.97] transition-all"
             >
               <Sparkles className="size-3.5" />
@@ -431,7 +431,26 @@ function ContentPage() {
             {templates.slice(0, 4).map((t) => (
               <Link to="/templates" key={t.id} className="group">
                 <div className="aspect-[4/5] overflow-hidden rounded-xl bg-nude/30 mb-3">
-                  <img src={t.preview} alt={t.name} className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-700" loading="lazy" />
+                  {/* The preview is a Brand DNA moodboard photo, which a tenant
+                      may not have yet. Rendering <img src=""> in that case asks
+                      the browser to fetch the current page as an image and
+                      draws a broken-image icon, so fall back the same way the
+                      Templates page does. */}
+                  {t.preview ? (
+                    <img src={t.preview} alt={t.name} className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-700" loading="lazy" />
+                  ) : (
+                    <div
+                      className="w-full h-full flex items-center justify-center p-4"
+                      style={{ backgroundColor: t.backgroundColor || undefined }}
+                    >
+                      <span
+                        className="text-center text-sm leading-snug opacity-70"
+                        style={{ fontFamily: t.headingFont || undefined, color: t.accentColor || undefined }}
+                      >
+                        {t.name}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <p className="eyebrow mb-1">{t.type} · {t.pillar}</p>
                 <p className="font-serif text-base leading-tight">{t.name}</p>
@@ -961,7 +980,7 @@ function EmptyState({ hasFilters, onClear }: { hasFilters: boolean; onClear: () 
           </button>
         )}
         <Link
-          to="/generate"
+          to="/gemini-lab"
           className="inline-flex items-center gap-2 bg-brass text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-elevated hover:brightness-105 hover:shadow-elevated-lg active:scale-[0.97] transition-all"
         >
           <Sparkles className="size-3.5" />

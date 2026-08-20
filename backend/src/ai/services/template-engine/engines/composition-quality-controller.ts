@@ -36,6 +36,45 @@ export interface AllocatedTextBox {
   /** Estimated rendered font size (px) — used for readable-size / hierarchy gates */
   fontSize?: number;
   fill?: string;
+  /** Optional starting slot from the template idea — not a hard match requirement. */
+  templateAnchor?: string;
+}
+
+export function verticalSlotForAnchor(anchor?: string): 'top' | 'middle' | 'bottom' {
+  const a = String(anchor || '').toLowerCase();
+  if (a.includes('top')) return 'top';
+  if (a.includes('bottom')) return 'bottom';
+  return 'middle';
+}
+
+export function horizontalSlotForAnchor(anchor?: string): 'left' | 'center' | 'right' {
+  const a = String(anchor || '').toLowerCase();
+  if (a.includes('left')) return 'left';
+  if (a.includes('right')) return 'right';
+  return 'center';
+}
+
+/** True when the box center sits in the template's designed third of the canvas. */
+export function matchesTemplateSlot(
+  box: BoundingBox,
+  canvasW: number,
+  canvasH: number,
+  templateAnchor?: string,
+): boolean {
+  if (!templateAnchor) return true;
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  const v = verticalSlotForAnchor(templateAnchor);
+  const h = horizontalSlotForAnchor(templateAnchor);
+  const vOk =
+    v === 'top' ? cy <= canvasH * 0.42
+      : v === 'bottom' ? cy >= canvasH * 0.58
+        : cy >= canvasH * 0.28 && cy <= canvasH * 0.72;
+  const hOk =
+    h === 'left' ? cx <= canvasW * 0.45
+      : h === 'right' ? cx >= canvasW * 0.55
+        : Math.abs(cx - canvasW / 2) <= canvasW * 0.28;
+  return vOk && hOk;
 }
 
 export interface VisualQualityResult {
@@ -347,7 +386,6 @@ export class CompositionQualityController {
     const critical: string[] = [];
     const metrics: Record<string, number> = {};
     const priority = params.intent?.visualPriority || 'image_hero';
-    const flow = params.intent?.readingFlow || 'center_down';
     const active = params.boxes.filter(b => b.box && !b.omitted);
     const subjects = params.subjectBoxes || [];
 
@@ -491,33 +529,8 @@ export class CompositionQualityController {
       metrics.groupScale = params.groupScale;
     }
 
-    // --- 8. Reading flow ---
-    if (heading?.box) {
-      const hx = heading.box.x + heading.box.width / 2;
-      const hy = heading.box.y + heading.box.height / 2;
-      if (flow === 'z_pattern' && hx > params.canvasW * 0.62) {
-        score -= 1.5;
-        issues.push('reading_flow');
-      } else if (flow === 'center_down' || flow === 'center_anchored') {
-        // image_hero prefers band placement (top/bottom) — center-X is fine, mid-Y over subject is not
-        if (priority !== 'image_hero') {
-          const centered = Math.abs(hx - params.canvasW / 2) < params.canvasW * 0.22;
-          if (!centered) {
-            score -= 1;
-            issues.push('reading_flow');
-          }
-        } else {
-          const inBand = hy < params.canvasH * 0.32 || hy > params.canvasH * 0.68;
-          if (!inBand) {
-            score -= 1.5;
-            issues.push('reading_flow_band');
-          }
-        }
-      } else if (flow === 'left_right' && hx > params.canvasW * 0.55) {
-        score -= 1.2;
-        issues.push('reading_flow');
-      }
-    }
+    // Template is a style idea, not a box-for-box contract. Do not punish
+    // clean type that left the recipe slot to stay readable / off the face.
 
     // Text-text collisions
     for (let i = 0; i < active.length; i++) {
@@ -547,18 +560,14 @@ export class CompositionQualityController {
       }
     } else if (
       issues.includes('whitespace_tight_to_subject')
-      || issues.includes('reading_flow_band')
       || issues.includes('whitespace_crowded')
     ) {
-      // Soft spatial issues: score may still "pass" but geometry must escalate
-      failureCategory = 'spatial_allocation';
+      failureCategory = 'readability';
     }
 
-    /** Soft spatial problems that require a different spatial contract, even if score passes */
+    /** Hard collisions/clipping only — never swap layout just to copy a template box. */
     const needsSpatialEscalation =
-      issues.includes('whitespace_tight_to_subject')
-      || issues.includes('subject_collision')
-      || issues.includes('reading_flow_band')
+      issues.includes('subject_collision')
       || critical.includes('subject_collision')
       || critical.includes('text_clipping');
 

@@ -24,6 +24,7 @@ const NAV: Array<{ to: string; label: string; icon: React.ComponentType<{ classN
 
 const DESKTOP_NAV: Array<{ to: string; label: string }> = [
   { to: "/", label: "Home" },
+  { to: "/gemini-lab", label: "Studio" },
   { to: "/brand", label: "Brand" },
   { to: "/appointments", label: "Appointments" },
   { to: "/bookings", label: "Bookings" },
@@ -153,6 +154,33 @@ export function AppShell() {
       });
   }, [oauthParams]);
 
+  // These two must run on EVERY render, so they sit above the OAuth early
+  // return below. They used to sit under it: `oauthProcessing` starts true on
+  // the /profile?state=… callback and is set false when the connection
+  // finishes, so the render after that ran two more hooks than the render
+  // before it and React threw "Rendered more hooks than during the previous
+  // render" — crashing the page at the end of every Google/Apple connect.
+  const isPlansCallback = useMemo(() => {
+    if (pathname !== "/plans") return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.has("success") || params.has("canceled");
+  }, [pathname]);
+
+  useEffect(() => {
+    // While the OAuth screen owns the page, the auth guard must stay out of
+    // the way — it would otherwise redirect mid-connection. The early return
+    // used to provide this implicitly.
+    if (oauthProcessing) return;
+    if (loading) return;
+    if (isPlansCallback) return;
+    if (!user && !AUTH_ROUTES.includes(pathname)) {
+      navigate({ to: "/landing" });
+    }
+    if (user && AUTH_ROUTES.includes(pathname)) {
+      navigate({ to: "/" });
+    }
+  }, [loading, user, pathname, navigate, isPlansCallback, oauthProcessing]);
+
   // ── Show OAuth processing UI (bypasses auth loading + auth guard) ──
   if (oauthProcessing) {
     return (
@@ -185,23 +213,6 @@ export function AppShell() {
       </div>
     );
   }
-
-  const isPlansCallback = useMemo(() => {
-    if (pathname !== "/plans") return false;
-    const params = new URLSearchParams(window.location.search);
-    return params.has("success") || params.has("canceled");
-  }, [pathname]);
-
-  useEffect(() => {
-    if (loading) return;
-    if (isPlansCallback) return;
-    if (!user && !AUTH_ROUTES.includes(pathname)) {
-      navigate({ to: "/landing" });
-    }
-    if (user && AUTH_ROUTES.includes(pathname)) {
-      navigate({ to: "/" });
-    }
-  }, [loading, user, pathname, navigate, isPlansCallback]);
 
   if (loading) {
     return (

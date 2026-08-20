@@ -278,7 +278,7 @@ Your task is to judge a social media post draft across 10 strategic dimensions a
 
 10-DIMENSIONAL RUBRIC:
 1. Brand Fit (Max 15): Does it sound like a premium, bespoke business, not a generic template?
-2. Grid Fit (Max 10): Does it maintain visual rhythm and structure?
+2. Grid Fit (Max 10): Does it maintain visual rhythm and structure? If the post carries structured content — numbered steps, a price/service list, a do-and-don't checklist, a pull quote — judge that content too: steps must read as a sequence, list values must share one right edge, marks must line up with their text, and nothing may overlap, overflow its area, or be cut off at an edge.
 3. Visual Quality (Max 12): Is the layout elegant, composed, and premium?
 4. Content Variety (Max 10): Does it avoid repeating the same post formats?
 5. Commercial Value (Max 10): Does it build authority or drive client conversion?

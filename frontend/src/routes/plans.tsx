@@ -248,7 +248,7 @@ function PlansPage() {
         {/* Back link */}
         <div className="pt-8 mb-8">
           <Link
-            to="/generate"
+            to="/gemini-lab"
             className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors"
           >
             <ArrowLeft className="size-3" /> Back to generator

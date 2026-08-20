@@ -29,9 +29,10 @@
     "paths": {
       "@ai/*": ["src/ai/*"],
       "@config/*": ["src/config/*"],
-      "@types-local/*": ["src/ai/types/*"]
+      "@types-local/*": ["src/ai/types/*"],
+      "@ellebeo/video-plan": ["src/ai/video-pipeline/contract/index.ts"]
     }
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "tests/load"]
+  "exclude": ["node_modules", "dist", "tests/load", "**/*spec.ts"]
 }

@@ -56,10 +56,13 @@ const FORMAT_META: Record<string, {
 
 const FORMAT_FILTERS = ["All", "Carousel", "Reel", "Story", "Caption", "TikTok"];
 
+/** Formats the Gemini Lab studio composes end to end. */
+const STUDIO_FORMATS = new Set(["Carousel", "Caption", "Story"]);
+
 const PAGE_SIZE = 12;
 
 function TemplatesPage() {
-  const { templates, categories } = useTemplates();
+  const { templates, categories, loading, error } = useTemplates();
   const { data: appointments, loading: apptLoading } = useAppointments();
   const [pillar,   setPillar]   = useState("All");
   const [category, setCategory] = useState("All");
@@ -182,10 +185,46 @@ function TemplatesPage() {
       </section>
 
       {/* ── Grid ─────────────────────────────────────────────────────────── */}
-      {filtered.length === 0 ? (
+      {/* Loading and failure are distinct from "your filter matched nothing".
+          All three used to render the same "No templates match this filter
+          combination", so a slow request looked like an empty library and a
+          failed one looked like the technician's own filter was at fault. */}
+      {loading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5" aria-busy="true">
+          {Array.from({ length: 6 }, (_, i) => (
+            <div key={i} className="rounded-2xl bg-card shadow-elevated overflow-hidden">
+              <div className="aspect-[4/5] bg-muted/40 animate-pulse" />
+              <div className="p-5 flex flex-col gap-2">
+                <div className="h-4 w-3/4 rounded bg-muted/40 animate-pulse" />
+                <div className="h-3 w-full rounded bg-muted/30 animate-pulse" />
+                <div className="h-3 w-2/3 rounded bg-muted/30 animate-pulse" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : error ? (
+        <div className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-2xl bg-muted/20 py-10 text-center">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-taupe mb-2">Could not load</p>
+          <p className="text-sm text-taupe mb-4">The template library did not load. This is usually a connection problem.</p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="text-sm underline underline-offset-4 hover:text-foreground transition-colors"
+          >
+            Try again
+          </button>
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-2xl bg-muted/20 py-10 text-center">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-taupe mb-2">No results</p>
-          <p className="text-sm text-taupe">No templates match this filter combination.</p>
+          <p className="text-sm text-taupe mb-4">No templates match this filter combination.</p>
+          <button
+            type="button"
+            onClick={() => { setPillar("All"); setCategory("All"); setFormat("All"); }}
+            className="text-sm underline underline-offset-4 hover:text-foreground transition-colors"
+          >
+            Clear filters
+          </button>
         </div>
       ) : (
         <>
@@ -219,36 +258,35 @@ function TemplateCard({ template: t }: { template: Template }) {
   return (
     <article className="group flex flex-col rounded-2xl bg-card shadow-elevated hover:shadow-elevated-lg hover:-translate-y-1 transition-all duration-300 overflow-hidden">
 
-      {/* Preview — the tenant's own moodboard photo + brand palette, never a generic stock image */}
+      {/* Preview — the tenant's own moodboard photo + brand palette, never a
+          generic stock image.
+
+          The photo well is only reserved when there IS a photo. It is filled
+          from the Brand DNA moodboard, which most tenants have not uploaded
+          yet, and the empty state used to hold a 4:5 well — over 500px of
+          nothing carrying a copy of the template name that the card body
+          already prints two lines below. Without an image the card collapses
+          to a compact band that keeps the badges and drops the void. */}
       <div
-        className="relative aspect-[4/5] overflow-hidden bg-nude/30"
+        className={`relative overflow-hidden bg-nude/30 ${t.preview ? "aspect-[4/5]" : "h-12"}`}
         style={t.preview ? undefined : { backgroundColor: t.backgroundColor || undefined }}
       >
-        {t.preview ? (
+        {t.preview && (
           <img
             src={t.preview}
             alt={t.name}
             loading="lazy"
             className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
           />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center p-6">
-            <span
-              className="text-center text-lg leading-snug opacity-70"
-              style={{ fontFamily: t.headingFont || undefined, color: t.accentColor || undefined }}
-            >
-              {t.name}
-            </span>
-          </div>
         )}
         {/* Format badge — top left */}
-        <div className={`absolute top-3 left-3 inline-flex items-center gap-1.5 backdrop-blur-sm border px-2.5 py-1.5 rounded-full ${meta.bg} ${meta.border}`}>
+        <div className={`absolute ${t.preview ? "top-3" : "top-1/2 -translate-y-1/2"} left-3 inline-flex items-center gap-1.5 backdrop-blur-sm border px-2.5 py-1.5 rounded-full ${meta.bg} ${meta.border}`}>
           <Icon className={`size-3 ${meta.color}`} />
           <span className={`text-[9px] font-bold uppercase tracking-widest ${meta.color}`}>{meta.label}</span>
         </div>
         {/* Pillar badge — top right */}
         {t.pillar && (
-          <div className="absolute top-3 right-3 bg-foreground/70 backdrop-blur-sm px-2 py-1 rounded-full">
+          <div className={`absolute ${t.preview ? "top-3" : "top-1/2 -translate-y-1/2"} right-3 bg-foreground/70 backdrop-blur-sm px-2 py-1 rounded-full`}>
             <span className="text-[8px] uppercase tracking-widest text-offwhite">{t.pillar}</span>
           </div>
         )}
@@ -300,14 +338,28 @@ function TemplateCard({ template: t }: { template: Template }) {
         </div>
 
         {/* CTA */}
+        {/* Carousel, Caption and Story are what the studio composes today.
+            Reel and TikTok are still scripted in the older flow, so those keep
+            going there rather than opening a picker that cannot list them. */}
+        {STUDIO_FORMATS.has(t.type) ? (
+          <Link
+            to="/gemini-lab"
+            search={{ templateSlug: t.slug }}
+            className="bg-foreground text-offwhite px-5 py-3 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors inline-flex items-center justify-center gap-1.5"
+          >
+            <Icon className="size-3" />
+            Use {meta.label} template
+          </Link>
+        ) : (
         <Link
           to="/generate"
           search={{ templateGoal: t.goal, templateFormat: t.type, templateCategories: t.categories.join(','), templateSlug: t.slug }}
           className="inline-flex items-center justify-center gap-2 bg-brass text-white text-[10px] font-bold uppercase tracking-widest px-4 py-2.5 rounded-xl shadow-elevated hover:brightness-105 hover:shadow-elevated-lg active:scale-[0.97] transition-all"
         >
           <Icon className="size-3" />
-          Use {meta.label} template
+          Script {meta.label}
         </Link>
+        )}
       </div>
     </article>
   );

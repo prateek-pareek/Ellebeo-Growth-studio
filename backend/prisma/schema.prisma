@@ -284,6 +284,9 @@ model Tenant {
   notifications          Notification[]
   feedbacks              ContentFeedback[]
   performances           PostPerformance[]
+  geminiLabBrandDna      GeminiLabBrandDna?
+  geminiLabTemplates     GeminiLabTemplate[]
+  geminiLabPosts         GeminiLabPost[]
 
   @@index([userId])
   @@index([status])
@@ -442,6 +445,127 @@ model BrandDNA {
   @@unique([tenantId, isCurrent], name: "unique_current_brand_dna")
   @@index([tenantId])
   @@map("brand_dna")
+  @@schema("platform")
+}
+
+/// Gemini Lab–only guided Brand DNA. Isolated from production BrandDNA /generate.
+/// Designed post layouts for Gemini Lab, as data rather than code.
+///
+/// Separate from `Template` on purpose: that model carries content taxonomy
+/// (format, pillar, zones of purpose) and no geometry whatsoever, and it is
+/// shared with the /generation pipeline. Layout is a different concern with a
+/// different owner, so it gets its own table rather than overloading one that
+/// other services depend on.
+///
+/// Modelled on how brand platforms govern templates: geometry is fixed, every
+/// property is locked by default, and `allows` is the explicit list of what the
+/// generator may vary. A row with `tenantId` null is part of the shared
+/// library; a row with one belongs to that salon alone.
+/// A post the studio decided to keep.
+///
+/// Until now Gemini Lab produced four options, the technician picked one, and
+/// the result existed only as a PNG in a browser download. Nothing was stored,
+/// so there was no library of past work, nothing to schedule, and nothing for
+/// the rest of the product to show.
+///
+/// Deliberately Gemini-Lab-owned rather than folded into ContentItem: that
+/// model requires an appointment, and a price card or an aftercare poster has
+/// no appointment to belong to. Forcing one would mean inventing a fake
+/// appointment or changing a model the /generation pipeline depends on.
+model GeminiLabPost {
+  id       String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId String  @map("tenant_id") @db.Uuid
+
+  /// Where the rendered image lives. Cloudinary, same as the rest of the app.
+  imageUrl String  @map("image_url") @db.VarChar(2000)
+  /// What kind of post this is, and how it was designed — the same axes the
+  /// options are labelled with in the UI.
+  format          String  @db.VarChar(40)
+  photoMode       String  @map("photo_mode") @db.VarChar(32)
+  templateId      String? @map("template_id") @db.VarChar(120)
+  paletteTreatment String? @map("palette_treatment") @db.VarChar(40)
+  typePairing     String? @map("type_pairing") @db.VarChar(120)
+  aspectRatio     String  @default("4:5") @map("aspect_ratio") @db.VarChar(10)
+
+  headline String? @db.Text
+  /// hook / body / cta / hashtags, as the caption panel shows them.
+  caption  Json?
+
+  /// Null until the studio schedules it. The calendar reads this.
+  scheduledFor DateTime? @map("scheduled_for") @db.Timestamptz
+  status       String    @default("kept") @db.VarChar(20)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, scheduledFor])
+  @@index([tenantId, createdAt])
+  @@map("gemini_lab_posts")
+  @@schema("platform")
+}
+
+model GeminiLabTemplate {
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// Stable identifier used in logs, creative memory and preference learning.
+  key       String  @db.VarChar(120)
+  /// Null for the shared library. Set for a salon's own layouts.
+  tenantId  String? @map("tenant_id") @db.Uuid
+  name      String  @db.VarChar(160)
+  /// What the layout is for, shown to the model so it writes copy that fits the shape.
+  intent    String  @db.Text
+  /// framed | full_bleed | typographic | dual_framed
+  photoMode String  @map("photo_mode") @db.VarChar(32)
+  /// Grid regions on the 12x12 safe area: { photo?, text, block? }
+  regions   Json
+  /// Defaults the layout was designed with: textAlign, typeAlign, typeScale, photoShapes.
+  defaults  Json
+  /// What the generator may vary here. Absent means the layout's own defaults are fixed.
+  allows    Json?
+  /// Formats this layout genuinely suits. Empty means any.
+  suits     String[]
+  /// builtin | figma | custom — where the geometry came from.
+  source    String  @default("builtin") @db.VarChar(32)
+  version   Int     @default(1)
+  isActive  Boolean @default(true) @map("is_active")
+  sortOrder Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
+  @@index([photoMode, isActive])
+  @@map("gemini_lab_templates")
+  @@schema("platform")
+}
+
+model GeminiLabBrandDna {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @unique @map("tenant_id") @db.Uuid
+  currentStep Int       @default(1) @map("current_step")
+  draft       Json
+  profile     Json?
+  // Rolling list of recent composition/style signatures for this brand, so
+  // generation can actively avoid repeating a look it just produced.
+  // Without this the pipeline is stateless and eventually re-serves the
+  // same design no matter how varied a single generation is.
+  recentLooks Json?     @map("recent_looks")
+  // Per-tenant overrides for the creative-director prompt blocks. Null means
+  // "use the shipped defaults", so an untouched tenant behaves exactly as
+  // before. Guardrails are never stored here — they live in code where a
+  // prompt edit cannot reach them. See gemini-lab/prompt-registry.ts.
+  promptOverrides Json?  @map("prompt_overrides")
+  completedAt DateTime? @map("completed_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("gemini_lab_brand_dna")
   @@schema("platform")
 }
 
@@ -1148,3 +1272,4 @@ model PostPerformance {
   @@map("post_performances")
   @@schema("platform")
 }
+

@@ -26,6 +26,8 @@ export interface TypographyContext {
   designSpec?: import('../interfaces').ISemanticDesignSpec;
   designLanguage?: { intent?: { visualPriority?: string } };
   visualPriority?: string;
+  /** True when type sits on a photo band that is dark; false when light. Undefined = not on photo. */
+  photoBandIsDark?: boolean;
   typographyMetrics?: {
     heroSize: number;
     primarySize: number;
@@ -635,6 +637,38 @@ export class TypographyEngine {
           <!-- Structural Container: ${layer.component} -->
           <rect x="${cardX - padX}" y="${y - padY}" width="${contentW + padX * 2}" height="${textHeight + padY * 2}" rx="${radius}" fill="${bgFill}" filter="url(#premium_shadow)" />
         `;
+    } else if (
+      typeof ctx.photoBandIsDark === 'boolean'
+      && (layer.role === 'heading' || layer.role === 'tagline' || layer.role === 'cta')
+    ) {
+      // Marketing plate: tight readable backdrop on the original photo (not a full-canvas scrim).
+      const isDark = ctx.photoBandIsDark;
+      const padX = Math.max(16, Math.round(style.fontSize * 0.42));
+      const padY = Math.max(10, Math.round(style.fontSize * 0.26));
+      const trackingEmPlate = this.parseTrackingEm(style.letterSpacing);
+      const casingPlate = (layer as any).capitalizationRule || ctx.typographyTokens?.casing || 'natural';
+      const isUpperPlate = casingPlate === 'force_uppercase' || casingPlate === 'uppercase';
+      const approxLineW = Math.ceil(
+        longestLineChars * style.fontSize * ((isUpperPlate ? 0.82 : 0.65) + Math.max(0, trackingEmPlate)),
+      );
+      const contentW = Math.max(
+        80,
+        Math.min(effectiveMaxW, Math.round(approxLineW * 1.08) || Math.round(style.fontSize * 5)),
+      );
+      let plateX = anchor === 'middle'
+        ? x - contentW / 2
+        : anchor === 'end'
+          ? x - contentW
+          : boxX;
+      if (plateX - padX < minX) plateX = minX + padX;
+      if (plateX + contentW + padX > maxX) plateX = Math.max(minX + padX, maxX - padX - contentW);
+      const plateFill = isDark ? '#0C0C0C' : '#F7F4EF';
+      const plateOpacity = isDark ? 0.58 : 0.90;
+      const plateRx = layer.role === 'cta' ? Math.round((textHeight + padY * 2) / 2) : 14;
+      containerSvg = `
+          <rect x="${plateX - padX}" y="${y - padY}" width="${contentW + padX * 2}" height="${textHeight + padY * 2}" rx="${plateRx}" fill="${plateFill}" fill-opacity="${plateOpacity}" />
+        `;
+      style.fill = isDark ? '#FFFFFF' : '#1A1A1A';
     }
 
     finalSvg = `${containerSvg}<text x="${x}" y="${baselineY}" text-anchor="${anchor}" class="${layer.role === 'heading' ? 'overlay-text' : 'overlay-text-body'}" style="font-family: ${style.fontFamily}; font-size: ${style.fontSize}px; fill: ${style.fill}; font-weight: ${style.fontWeight}; font-style: ${style.fontStyle}; letter-spacing: ${style.letterSpacing};" filter="url(#premium_shadow)"${strokeAddition}${transformStr}${opacityStr}>${content}</text>`;

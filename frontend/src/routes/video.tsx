@@ -60,13 +60,28 @@ function VideoPage() {
         ))}
       </div>
 
-      {loading && <p className="text-sm text-taupe">Loading…</p>}
-      {error && <p className="text-sm text-destructive">Couldn't load video plans.</p>}
-      {!loading && isEmpty && (
+      {/* Loading, failure and "nothing here" are mutually exclusive. They used
+          to render independently, so a failed request showed "Couldn't load
+          video plans." and "No videos here yet." at the same time — the second
+          message flatly contradicting the first. */}
+      {loading ? (
+        <p className="text-sm text-taupe">Loading…</p>
+      ) : error ? (
+        <div className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-xl bg-muted/20 py-14 text-center gap-3">
+          <p className="text-sm text-destructive">Couldn't load video plans.</p>
+          <button
+            type="button"
+            onClick={() => refresh()}
+            className="text-sm underline underline-offset-4 hover:text-foreground transition-colors"
+          >
+            Try again
+          </button>
+        </div>
+      ) : isEmpty ? (
         <div className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-xl bg-muted/20 py-14 text-center">
           <p className="text-sm text-taupe">No videos here yet.</p>
         </div>
-      )}
+      ) : null}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {items.map((row) => (

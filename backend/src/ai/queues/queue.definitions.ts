@@ -233,7 +233,6 @@ export async function closeAllQueues(): Promise<void> {
     imageProcessingQueue.close(),
     videoAssemblyQueue.close(),
     videoRenderQueue.close(),
-    videoDirectorQueue.close(),
     publishScheduledQueue.close(),
     deadLetterQueue.close(),
     contentGenerationQueueEvents.close(),

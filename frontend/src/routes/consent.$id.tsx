@@ -233,7 +233,7 @@ function GrantedView({ data }: { data: NonNullable<ReturnType<typeof useConsentR
           ← Back to appointments
         </Link>
         <Link
-          to="/generate"
+          to="/gemini-lab"
           search={{ appointment: appointment.id }}
           className="bg-foreground text-offwhite px-6 py-3 text-[11px] uppercase tracking-[0.22em] hover:bg-taupe transition-colors"
         >

@@ -124,7 +124,7 @@ function HomePage() {
           </p>
           <div className="flex flex-wrap gap-3 mt-7">
             <Link
-              to="/generate"
+              to="/gemini-lab"
               className="inline-flex items-center gap-2 bg-brass text-white text-xs font-semibold px-5 py-3 rounded-xl shadow-elevated hover:brightness-105 hover:shadow-elevated-lg active:scale-[0.97] transition-all"
             >
               <Sparkles className="size-3.5" />
@@ -283,7 +283,7 @@ function HomePage() {
                           {chip.label}
                         </span>
                         <Link
-                          to="/generate"
+                          to="/gemini-lab"
                           search={{ appointment: a.id }}
                           className="text-[10px] uppercase tracking-widest text-foreground border-b border-foreground/40 pb-0.5 hover:text-taupe hover:border-taupe transition-colors"
                         >
@@ -398,7 +398,7 @@ function HomePage() {
                     Refine Brand DNA
                   </Link>
                   <Link
-                    to="/generate"
+                    to="/gemini-lab"
                     className="flex-1 text-center inline-flex items-center justify-center bg-brass text-white text-xs font-semibold px-3.5 py-2.5 rounded-xl shadow-elevated hover:brightness-105 transition-all"
                   >
                     Generate content
