@@ -8,6 +8,7 @@ import { ConsentGuard } from '../guards/consent.guard';
 import { ModelRouter } from './model-router';
 import { PromptBuilder } from './prompt-builder';
 import { filterDnaForTier, tierDnaLabel } from '../config/brand-dna-tier-filter';
+import { isMedicalAestheticsBrand } from '../config/medical-compliance';
 import { buildStyleDirectionBlock } from '../config/visual-style-library';
 import { VisionAnalysisChain } from '../chains/vision-analysis.chain';
 import { CaptionGenerationChain } from '../chains/caption-generation.chain';
@@ -15,6 +16,7 @@ import { ReelScriptChain } from '../chains/reel-script.chain';
 import { PlatformVariantChain } from '../chains/platform-variant.chain';
 import { OutputValidator } from '../guards/output-validator';
 import { JobProgressEmitter } from '../emitters/job-progress.emitter';
+import { GenerationProgressTracker } from '../services/generation-progress.tracker';
 import { ImagePipelineService } from '../services/image-pipeline.service';
 import { SharpImagePipelineService } from '../services/sharp-image-pipeline.service';
 import { CarouselPipelineService, type CarouselSlides } from '../services/carousel-pipeline.service';
@@ -23,16 +25,61 @@ import { StoryFrameChain } from '../chains/story-frame.chain';
 import { StoryPipelineService, type StoryOutput } from '../services/story-pipeline.service';
 import { AiImageGenerationService } from '../services/ai-image-generation.service';
 import { LogoOverlayService } from '../services/logo-overlay.service';
+import { ContentValidatorService } from '../services/content-validator.service';
 import { ReelShotChain, type ReelShotResult } from '../chains/reel-shot.chain';
 import { extractBrandVoice } from '../config/brand-voice';
-import { AI_CONFIG } from '../../config/ai.config';
+import { AI_CONFIG, estimateTotalJobSeconds } from '../../config/ai.config';
 import { ElevenLabsService } from '../services/elevenlabs.service';
 import { OpenAiTtsService } from '../services/openai-tts.service';
 import type { GenerationJobPayload } from '../types/job-payload.types';
 import type { GenerationResult, ComponentStatus } from '../types/generation-result.types';
 import type { VisionAnalysisResult, CaptionGenerationResult, ReelScriptResult, PlatformVariantResult, ImageProcessingResult, VoiceoverResult } from '../types/chain-output.types';
 import { validateStateTransition } from '../types/job-payload.types';
-import type { JobState } from '../types/job-payload.types';
+import type { JobState, BusinessGoalType } from '../types/job-payload.types';
+
+function getTemplateIntent(pillar: string): 'educational' | 'promotion' | 'testimonial' | 'before_after' | 'brand_story' {
+  const key = (pillar || '').toLowerCase().replace(/\s+/g, '_');
+  switch (key) {
+    case 'education_tips':
+    case 'education':
+      return 'educational';
+    case 'service_spotlight':
+      return 'promotion';
+    case 'client_results':
+    case 'transformations':
+      return 'before_after';
+    case 'behind_the_scenes':
+    case 'behind_the_chair':
+      return 'brand_story';
+    case 'quotes_testimonials':
+    case 'client_stories':
+      return 'testimonial';
+    default:
+      return 'brand_story';
+  }
+}
+
+/** Map gallery rendererKeys / legacy grid IDs onto real CompositionEngine recipes. */
+function mapLayoutHintToRecipe(layoutHint: string | null | undefined): string {
+  if (!layoutHint) return '';
+  // Legacy gallery rendererKeys → CompositionEngine recipe ids.
+  // New gallery templates should set rendererKey to an existing recipe id
+  // (e.g. before_after_side_by_side, editorial_full_bleed) so no map entry is required.
+  const map: Record<string, string> = {
+    split_before_after: 'before_after_side_by_side',
+    full_bleed_clean: 'editorial_full_bleed',
+    passepartout_text: 'editorial_portrait_hero',
+    passepartout_clean: 'editorial_feature_story',
+    text_only_editorial: 'premium_text_only',
+    testimonial_card: 'testimonial_quote_portrait',
+    giant_type_overlay: 'premium_hero_statement',
+    bold_editorial_poster: 'magazine_masthead_cover',
+    translucent_split: 'before_after_labeled',
+    art_director_split: 'editorial_split',
+    side_panel_split: 'clinical_hero',
+  };
+  return map[layoutHint] || layoutHint;
+}
 
 // New services and chains
 import { TierGatingService } from '../services/tier-gating.service';
@@ -45,6 +92,7 @@ import { MoodboardVisionChain } from '../chains/moodboard-vision.chain';
 import { AssetLibraryVisionChain, type AssetLibraryItemInput } from '../chains/asset-library-vision.chain';
 import { TemplateAgentService } from '../services/template-agent.service';
 import { ImageEnhancementService } from '../services/image-enhancement.service';
+import { NarrativePlannerService } from '../services/narrative-planner.service';
 
 type NotifyFn = (dto: {
   tenantId: string;
@@ -73,6 +121,7 @@ export class GenerationOrchestrator {
   private readonly reelShotChain: ReelShotChain;
   private readonly aiImageGen: AiImageGenerationService;
   private readonly logoOverlay: LogoOverlayService;
+  private readonly contentValidator: ContentValidatorService;
 
   // New properties
   private readonly tierGating: TierGatingService;
@@ -85,6 +134,7 @@ export class GenerationOrchestrator {
   private readonly assetLibraryVisionChain: AssetLibraryVisionChain;
   private readonly templateAgent: TemplateAgentService;
   private readonly imageEnhancementService: ImageEnhancementService;
+  private readonly narrativePlanner: NarrativePlannerService;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -112,6 +162,7 @@ export class GenerationOrchestrator {
     this.reelShotChain = new ReelShotChain();
     this.aiImageGen = new AiImageGenerationService();
     this.logoOverlay = new LogoOverlayService();
+    this.contentValidator = new ContentValidatorService();
 
     // New instantiations
     this.tierGating = new TierGatingService(prisma);
@@ -125,6 +176,7 @@ export class GenerationOrchestrator {
     this.assetLibraryVisionChain = new AssetLibraryVisionChain();
     this.templateAgent = new TemplateAgentService();
     this.imageEnhancementService = new ImageEnhancementService();
+    this.narrativePlanner = new NarrativePlannerService();
   }
 
   // --------------------------------------------------------------------------
@@ -132,7 +184,7 @@ export class GenerationOrchestrator {
   // --------------------------------------------------------------------------
 
   async run(payload: GenerationJobPayload): Promise<GenerationResult> {
-    // Tweak jobs only carry { jobId } in the BullMQ payload â€” detect and delegate
+    // Tweak jobs only carry { jobId } in the BullMQ payload — detect and delegate
     if (!payload.tenantId) {
       return this.runTweak(payload.jobId);
     }
@@ -140,12 +192,19 @@ export class GenerationOrchestrator {
     const { jobId, tenantId, clientId, consentSnapshot, brandDNA, generationOptions } = payload;
     const jobStart = Date.now();
 
+    // Percent/ETA for this job are computed live from elapsed-time-vs-total-
+    // estimate (see GenerationProgressTracker) rather than stamped as a fixed
+    // value per checkpoint — every checkpoint below only needs to report a
+    // conservative structural floor + human-readable step text.
+    const totalEstimatedSeconds = estimateTotalJobSeconds(generationOptions.outputFormats as string[]);
+    GenerationProgressTracker.init(jobId, totalEstimatedSeconds, AI_CONFIG.progressMap.queued.step);
+
     // Validate Subscription Tier limits and gates (Tier 1 vs Tier 2 vs Tier 3)
     const tenantRecord = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     const isNonBooking = !payload.appointmentId;
     await this.tierGating.validateRequest(tenantId, tenantRecord?.subscriptionTier ?? 'basic', isNonBooking);
 
-    // â”€â”€ Checkpoint 2: Consent re-validation inside worker â”€â”€
+    // ——— Checkpoint 2: Consent re-validation inside worker ———
     const consentCheck = await this.consentGuard.validateAtProcessing(
       consentSnapshot,
       clientId
@@ -157,6 +216,7 @@ export class GenerationOrchestrator {
 
     // Track partial results for partial success support
     let visionResult: VisionAnalysisResult | null = null;
+    let visionResultBefore: VisionAnalysisResult | null = null;
     let captionResult: CaptionGenerationResult | null = null;
     let generationOptionsResult: (CaptionGenerationResult & { generatedBy: string })[] = [];
     let reelScriptResult: ReelScriptResult | null = null;
@@ -173,11 +233,11 @@ export class GenerationOrchestrator {
     let totalTokensOut = 0;
     let modelUsed = AI_CONFIG_MODEL_LABEL(payload);
 
-    // â”€â”€ Step 1: Vision Analysis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ——— Step 1: Vision Analysis —————————————————————————————————————————————
     await this.transitionState(jobId, 'queued', 'processing_image');
     await this.progressEmitter.emit(jobId, tenantId, 'processing_image');
 
-    // Always advance through processing_vision â€” required by state machine regardless of whether images exist
+    // Always advance through processing_vision — required by state machine regardless of whether images exist
     await this.transitionState(jobId, 'processing_image', 'processing_vision');
 
     // Run appointment image vision + moodboard vision in parallel (both non-fatal)
@@ -204,33 +264,56 @@ export class GenerationOrchestrator {
     const appointmentVisionTask = (async () => {
       if (payload.imageAssets.length === 0) return;
       await this.progressEmitter.emit(jobId, tenantId, 'processing_vision');
-      const primaryImage = payload.imageAssets[0]!;
-      const isLocalVisionUrl = primaryImage.rawStoragePath.startsWith('http://localhost') ||
-        primaryImage.rawStoragePath.startsWith('http://127.');
-      if (isLocalVisionUrl) return;
-      try {
-        const imageUrl = (process.env['CLOUDINARY_CLOUD_NAME'] && primaryImage.cloudinaryPublicId)
-          ? `https://res.cloudinary.com/${process.env['CLOUDINARY_CLOUD_NAME']}/image/upload/${primaryImage.cloudinaryPublicId}`
-          : primaryImage.rawStoragePath;
-        const visionAnalysis = await this.visionChain.analyse({
-          imageUrl,
-          storagePath: primaryImage.rawStoragePath,
-          imageHash: primaryImage.s3ObjectHash,
-          cachedResult: primaryImage.visionAnalysisCache,
-        });
-        visionResult = visionAnalysis.result;
-      } catch {
-        // Non-fatal â€” caption still generated from appointment context
-      }
+
+      const visionPromises = payload.imageAssets.map(async (asset) => {
+        const isLocalVisionUrl = asset.rawStoragePath.startsWith('http://localhost') ||
+          asset.rawStoragePath.startsWith('http://127.');
+        if (isLocalVisionUrl) return;
+
+        try {
+          const imageUrl = (process.env['CLOUDINARY_CLOUD_NAME'] && asset.cloudinaryPublicId)
+            ? `https://res.cloudinary.com/${process.env['CLOUDINARY_CLOUD_NAME']}/image/upload/${asset.cloudinaryPublicId}`
+            : asset.rawStoragePath;
+
+          const visionAnalysis = await this.visionChain.analyse({
+            imageUrl,
+            storagePath: asset.rawStoragePath,
+            imageHash: asset.s3ObjectHash,
+            cachedResult: asset.visionAnalysisCache,
+          });
+
+          if (asset.isBeforePhoto) {
+            visionResultBefore = visionAnalysis.result;
+          } else {
+            visionResult = visionAnalysis.result;
+          }
+        } catch (error: any) {
+          console.error(`[Vision Task] Vision extraction failed silently. Error: ${error?.message || error}`);
+        }
+      });
+
+      await Promise.all(visionPromises);
     })();
 
     const moodboardVisionTask = (async () => {
-      if (moodboardUrls.length === 0) return;
-      try {
-        const summary = await this.moodboardVisionChain.analyse(moodboardUrls, moodboardLabels);
-        if (summary) moodboardVisionSummary = summary;
-      } catch {
-        // Non-fatal â€” generation continues without moodboard vision if it fails
+      const cache: any[] = Array.isArray((brandDNA as any).moodboardIntentsCache)
+        ? (brandDNA as any).moodboardIntentsCache
+        : [];
+
+      if (cache.length > 0) {
+        // "Roulette" Algorithm: pick 1 lighting, 1 texture, 1 mood to prevent hallucination
+        const lightings = cache.filter(c => c.intent.toLowerCase() === 'lighting');
+        const textures = cache.filter(c => c.intent.toLowerCase() === 'texture');
+        const moods = cache.filter(c => ['mood', 'vibe', 'style'].includes(c.intent.toLowerCase()));
+
+        const selected = [];
+        if (lightings.length > 0) selected.push(lightings[Math.floor(Math.random() * lightings.length)].summary);
+        if (textures.length > 0) selected.push(textures[Math.floor(Math.random() * textures.length)].summary);
+        if (moods.length > 0) selected.push(moods[Math.floor(Math.random() * moods.length)].summary);
+
+        if (selected.length > 0) {
+          moodboardVisionSummary = selected.join(' ');
+        }
       }
     })();
 
@@ -240,13 +323,13 @@ export class GenerationOrchestrator {
         const summary = await this.assetLibraryVisionChain.analyse(rawAssetLibrary);
         if (summary) assetLibraryVisionSummary = summary;
       } catch {
-        // Non-fatal â€” generation continues without asset library vision if it fails
+        // Non-fatal — generation continues without asset library vision if it fails
       }
     })();
 
     await Promise.all([appointmentVisionTask, moodboardVisionTask, assetLibraryVisionTask]);
 
-    // â”€â”€ Step 2: Prompt Building â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ——— Step 2: Prompt Building —————————————————————————————————————————————
     await this.transitionState(jobId, 'processing_vision', 'building_prompt');
     await this.progressEmitter.emit(jobId, tenantId, 'building_prompt');
 
@@ -319,6 +402,52 @@ export class GenerationOrchestrator {
       assetLibraryVisionSummary: assetLibraryVisionSummary ?? undefined,
     });
 
+    // ——— Pre-Launch: Parallel Image Processing Task —————————————————────────
+    const isMedicalPractitioner = (brandDNA as any).serviceCategory === 'injectables_cosmetic' || (brandDNA as any).serviceCategory === 'laser_treatments' || ['medical', 'injectables', 'laser', 'nurse'].some(k => brandDNA.businessName?.toLowerCase().includes(k)); // simple proxy for isMedicalAestheticsBrand if not imported; wait, isMedicalAestheticsBrand is available globally in the file? Let me check line 538.
+    const consentShowFace = !!(consentCheck.activeRestrictions as any)?.show_face;
+    let nonMedicalImageProcessingPromise: Promise<ImageProcessingResult | null> = Promise.resolve(null);
+
+    if (!isMedicalPractitioner && payload.imageAssets.length > 0) {
+      nonMedicalImageProcessingPromise = (async () => {
+        const primaryAsset = payload.imageAssets[0]!;
+        const isLocalUrl = primaryAsset.rawStoragePath.startsWith('http://localhost') || primaryAsset.rawStoragePath.startsWith('http://127.');
+        const useCloudinary = !!process.env['CLOUDINARY_CLOUD_NAME'] && !isLocalUrl;
+
+        try {
+          let result: ImageProcessingResult | null = null;
+          if (useCloudinary) {
+            result = await this.imagePipeline.process({
+              rawStoragePath: primaryAsset.rawStoragePath,
+              existingCloudinaryId: primaryAsset.cloudinaryPublicId,
+              consentShowFace,
+              brandPrimaryColour: brandDNA.primaryBrandColor ?? '#000000',
+              brandSecondaryColour: brandDNA.secondaryBrandColor ?? '#ffffff',
+              outputFormats: ['feed', 'story', 'reel'],
+              contentItemId: 'deferred',
+              tenantId,
+            });
+          } else {
+            result = await this.sharpPipeline.process({
+              rawImageUrl: primaryAsset.rawStoragePath,
+              consentShowFace,
+              outputFormats: ['feed', 'story', 'reel'],
+              contentItemId: 'deferred',
+              tenantId,
+            });
+            if (process.env['CLOUDINARY_CLOUD_NAME'] && result) {
+              try {
+                const cloudinaryId = await this.imagePipeline.uploadUrl(result.variants.feedUrl, tenantId);
+                result = { ...result, cloudinaryPublicId: cloudinaryId };
+              } catch (err) { }
+            }
+          }
+          return result;
+        } catch (err) {
+          return null;
+        }
+      })();
+    }
+
     // ── Step 3: Caption Generation ──────────────────────────────────────────
     await this.transitionState(jobId, 'building_prompt', 'generating_text');
     await this.progressEmitter.emit(jobId, tenantId, 'generating_text');
@@ -366,11 +495,11 @@ export class GenerationOrchestrator {
         return lastResult; // Fallback to last attempt if retry fails
       };
 
-      // Generate Option 1: Technical & Clinical copy (with enforcement)
-      const opt1 = await generateWithEnforcement('technical', assembledPrompt);
-
-      // Generate Option 2: Empathetic & Warm copy (with enforcement)
-      const opt2 = await generateWithEnforcement('empathetic', assembledPrompt);
+      // Generate Options concurrently
+      const [opt1, opt2] = await Promise.all([
+        generateWithEnforcement('technical', assembledPrompt),
+        generateWithEnforcement('empathetic', assembledPrompt)
+      ]);
 
       captionResult = {
         caption: opt1.caption,
@@ -424,198 +553,272 @@ export class GenerationOrchestrator {
       componentStatus.caption = 'failed';
     }
 
-    // ── Step 3.5: Template Agent Layout Selection ─────────────────────────────
-    if (captionResult) {
-      try {
-        const isCarouselOpt = (generationOptions.outputFormats as string[]).includes('carousel');
-        const agentDecision = await this.templateAgent.selectTemplate({
+    // ── Step 3.5 & 4 & 5: Parallel Template, Variants, and Reel ─────────────
+    let agentDecisionPromise: Promise<any> = Promise.resolve(null);
+    let platformVariantsPromise: Promise<PlatformVariantResult[] | null> = Promise.resolve(null);
+    let reelScriptPromise: Promise<ReelScriptResult | null> = Promise.resolve(null);
+
+    if (payload.layoutHint) {
+      determinedGrid.layout = mapLayoutHintToRecipe(payload.layoutHint);
+      // Gallery before/after templates must steer Template Agent + composition intent
+      if (payload.layoutHint === 'split_before_after' || determinedGrid.layout.startsWith('before_after')) {
+        (determinedGrid as any).templateIntentOverride = 'before_after';
+      }
+      console.log(
+        `[TEMPLATE AGENT] Bypassed — using tenant's explicit template layout hint: ` +
+        `${payload.layoutHint} → ${determinedGrid.layout}`,
+      );
+    } else if (captionResult) {
+      const isCarouselOpt = (generationOptions.outputFormats as string[]).includes('carousel');
+      const isStoryOpt = (generationOptions.outputFormats as string[]).includes('story');
+      // Multi-slide jobs select layouts once per slide inside generateCarousel/generateStory.
+      // Do NOT pre-select cover here — that caused duplicate Template Agent calls for slide 1.
+      if (isCarouselOpt || isStoryOpt) {
+        console.log(`[TEMPLATE AGENT] Deferred to per-slide selection (${isCarouselOpt ? 'carousel' : 'story'})`);
+        agentDecisionPromise = Promise.resolve(null);
+        // Do not pre-bind a cover layout — generateCarousel/Story selects each slide once
+        if (!payload.layoutHint) {
+          determinedGrid.layout = '';
+          (determinedGrid as any).designSpec = undefined;
+        }
+      } else {
+        agentDecisionPromise = this.templateAgent.selectTemplate({
           brief: captionResult.caption,
           brandName: brandDNA.businessName || 'Brand',
           aesthetic: (brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA.visualRanking) : null) ?? brandDNA.aestheticDirection ?? 'minimal editorial',
           textLength: captionResult.caption.length,
           slideIndex: 0,
-          totalSlides: isCarouselOpt ? 4 : 1,
+          totalSlides: 1,
           gridConstraints: determinedGrid.gridConstraints,
           visionResult: visionResult,
+        }).catch(err => {
+          console.error('[Orchestrator Step 3.5 Template Agent Error]:', err);
+          return null;
         });
-
-        // Assign directly to allow Universal Dynamic Renderer to handle new templates
-        determinedGrid.layout = agentDecision.selected_layout_id;
-        console.log(`[TEMPLATE AGENT] Intelligent selection passed to rendering engine: ${determinedGrid.layout}`);
-      } catch (err) {
-        console.error('[Orchestrator Step 3.5 Template Agent Error]:', err);
       }
     }
 
-    // ── Step 4: Platform Variants (conditional) ───────────────────────────────
     if (captionResult && generationOptions.platform.length > 1) {
-      try {
-        platformVariants = await this.platformVariantChain.generateVariants({
-          primaryCaption: captionResult,
-          targetPlatforms: generationOptions.platform,
-          brandDNA,
-        });
-      } catch (err) {
-        // Non-fatal â€” primary caption is still valid
-      }
+      platformVariantsPromise = this.platformVariantChain.generateVariants({
+        primaryCaption: captionResult,
+        targetPlatforms: generationOptions.platform,
+        brandDNA,
+      }).catch(err => null);
     }
 
-    // â”€â”€ Step 5: Reel Script (conditional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (captionResult && generationOptions.outputFormats.includes('reel')) {
-      try {
-        reelScriptResult = await this.reelScriptChain.generate({
-          caption: captionResult,
-          visionResult,
-          brandDNA,
-        });
-        componentStatus.reel = 'completed';
-      } catch (err) {
-        componentStatus.reel = 'failed';
-      }
+      /* reelScriptPromise = this.reelScriptChain.generate({
+        caption: captionResult,
+        visionResult,
+        brandDNA,
+      }).then(res => { componentStatus.reel = 'completed'; return res; })
+        .catch(err => { componentStatus.reel = 'failed'; return null; }); */
     }
 
-    // â”€â”€ Step 5.5: Image Processing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    await this.progressEmitter.emitSubProgress(jobId, tenantId, 'generating_text', 18, 'Selecting your layout and visual direction...');
+
+    const [agentDecision, variants, reelScript] = await Promise.all([
+      agentDecisionPromise,
+      platformVariantsPromise,
+      reelScriptPromise
+    ]);
+
+    if (agentDecision) {
+      determinedGrid.layout = agentDecision.selected_layout_id;
+      (determinedGrid as any).designSpec = agentDecision.designSpec;
+      console.log(`[TEMPLATE AGENT] Intelligent selection passed to rendering engine: ${determinedGrid.layout}`);
+    }
+    platformVariants = variants;
+    reelScriptResult = reelScript;
+
+    // ——— Step 5.5: Image Processing ———————————————————————————————————————————
+    await this.progressEmitter.emitSubProgress(jobId, tenantId, 'generating_text', 20, 'Styling your photo to match your brand...');
     let imageResult: ImageProcessingResult | null = null;
     let aiImageCostUSD = 0;
-    if (payload.imageAssets.length > 0) {
-      const primaryAsset = payload.imageAssets[0]!;
-      const consentShowFace = !!(consentCheck.activeRestrictions as any)?.show_face;
 
-      // Localhost URLs can't be reached by Cloudinary/OpenAI â€” use Sharp instead
-      const isLocalUrl = primaryAsset.rawStoragePath.startsWith('http://localhost') ||
-        primaryAsset.rawStoragePath.startsWith('http://127.');
-      const useCloudinary = !!process.env['CLOUDINARY_CLOUD_NAME'] && !isLocalUrl;
-
+    if (isMedicalPractitioner) {
       try {
-        if (useCloudinary) {
-          imageResult = await this.imagePipeline.process({
-            rawStoragePath: primaryAsset.rawStoragePath,
-            existingCloudinaryId: primaryAsset.cloudinaryPublicId,
-            consentShowFace,
-            brandPrimaryColour: brandDNA.primaryBrandColor ?? '#000000',
-            brandSecondaryColour: brandDNA.secondaryBrandColor ?? '#ffffff',
-            outputFormats: ['feed', 'story', 'reel'],
-            contentItemId: 'deferred',
-            tenantId,
-          });
-        } else {
-          // Sharp handles localhost + no-Cloudinary cases
-          imageResult = await this.sharpPipeline.process({
-            rawImageUrl: primaryAsset.rawStoragePath,
-            consentShowFace,
-            outputFormats: ['feed', 'story', 'reel'],
-            contentItemId: 'deferred',
-            tenantId,
-          });
-
-          // If Cloudinary is configured, upload the Sharp-processed Firebase image
-          // so carousel slides can be generated using Cloudinary text overlays
-          if (process.env['CLOUDINARY_CLOUD_NAME'] && imageResult) {
-            try {
-              const cloudinaryId = await this.imagePipeline.uploadUrl(imageResult.variants.feedUrl, tenantId);
-              imageResult = { ...imageResult, cloudinaryPublicId: cloudinaryId };
-            } catch (err) {
-            }
-          }
+        const heroImage = await this.aiImageGen.generateSlide({
+          photoUrl: '',
+          overlayText: '',
+          title: 'Hero image',
+          index: 0,
+          isFirst: true,
+          isLast: true,
+          isBeforePhoto: false,
+          tenantId,
+          businessName: brandDNA.businessName,
+          brandColor: brandDNA.primaryBrandColor ?? '#1a1a1a',
+          secondaryColor: brandDNA.secondaryBrandColor ?? '#f5f0eb',
+          aesthetic: (brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA.visualRanking) : null) ?? brandDNA.aestheticDirection ?? 'minimal editorial premium beauty',
+          serviceType: appointment?.serviceCategory ?? 'beauty treatment',
+          outputSize: '1024x1024',
+          layoutType: determinedGrid.layout,
+          visualRanking: brandDNA.visualRanking ?? [],
+          generatorModel: 'none',
+          backgroundBrandColor: brandDNA.backgroundBrandColor ?? '#F7F4EF',
+          accentBrandColor: brandDNA.accentBrandColor ?? '#D4A373',
+          depthBrandColor: brandDNA.depthBrandColor ?? '#1E1E1C',
+          moodboardVisionSummary: moodboardVisionSummary ?? undefined,
+          templateIntent: (determinedGrid as any).templateIntentOverride
+              || getTemplateIntent(determinedGrid.pillar),
+        });
+        let heroUrl = heroImage.url;
+        if (brandDNA.logoUrl) {
+          heroUrl = await this.logoOverlay.applyLogo({ imageUrl: heroUrl, logoUrl: brandDNA.logoUrl as string, position: brandDNA.logoPosition as any, tenantId });
         }
+        imageResult = {
+          cloudinaryPublicId: null as any,
+          variants: { feedUrl: heroUrl, storyUrl: heroUrl, thumbnailUrl: heroUrl },
+          faceBlurred: true,
+          facesDetectedCount: 0,
+          brandOverlayApplied: true,
+          originalStoragePath: '',
+        };
         componentStatus.image = 'completed';
       } catch (err) {
+        console.error('[Orchestrator Step 5.5 Medical Compliance Hero Image Error]:', err);
         componentStatus.image = 'failed';
       }
+    } else if (payload.imageAssets.length > 0) {
+      imageResult = await nonMedicalImageProcessingPromise;
+      if (imageResult) componentStatus.image = 'completed';
+      else componentStatus.image = 'failed';
     }
 
-    // â”€â”€ Step 5.55: AI-designed feed image (gpt-image-1) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    const feedPhotoUrl = payload.imageAssets.find(a => a.isAfterPhoto)?.rawStoragePath
+    // ——— Step 5.55: Feed image = original photo adapted to the selected template ———
+    // Never rewrite or restyle the source photo with an image model.
+    const feedPhotoUrlRaw = isMedicalPractitioner
+      ? undefined
+      : payload.imageAssets.find(a => a.isAfterPhoto)?.rawStoragePath
       ?? payload.imageAssets[0]?.rawStoragePath;
 
-    if (feedPhotoUrl && captionResult && imageResult) {
+    let feedPhotoUrl: string | undefined = feedPhotoUrlRaw;
+    if (feedPhotoUrlRaw && !consentShowFace) {
       try {
-        const feedPrompt = `Transform this beauty photo into a professional Instagram feed post for "${brandDNA.businessName}".
-Brand colors: ${brandDNA.primaryBrandColor ?? '#1a1a1a'} and ${brandDNA.secondaryBrandColor ?? '#f5f0eb'}.
-Aesthetic: ${(brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA.visualRanking) : null) ?? brandDNA.aestheticDirection ?? 'minimal editorial premium beauty'}.
-Caption hook: "${captionResult.hookSentence || captionResult.caption.slice(0, 80)}"
-Requirements:
-- Keep the real photo as the main visual â€” preserve the person/hair authentically
-- Add subtle brand-matched design: clean typography, brand color accents
-- Minimal overlay â€” let the photo shine
-- Professional beauty industry aesthetic
-- Square format, Instagram-ready`;
-
-        const imageBuffer = await (async () => {
-          const https = await import('https');
-          const http = await import('http');
-          return new Promise<Buffer>((resolve, reject) => {
-            const protocol = feedPhotoUrl.startsWith('https') ? https : http;
-            (protocol as any).get(feedPhotoUrl, (res: any) => {
-              const chunks: Buffer[] = [];
-              res.on('data', (c: Buffer) => chunks.push(c));
-              res.on('end', () => resolve(Buffer.concat(chunks)));
-              res.on('error', reject);
-            }).on('error', reject);
-          });
-        })();
-
-        const OpenAI = (await import('openai')).default;
-        const openai = new OpenAI({ apiKey: process.env['OPENAI_API_KEY'] });
-        const imageFile = new File([imageBuffer], 'photo.jpg', { type: 'image/jpeg' });
-        const response = await openai.images.edit({
-          model: 'gpt-image-1',
-          image: imageFile,
-          prompt: feedPrompt,
-          size: '1024x1024',
-        });
-
-        const base64 = response.data?.[0]?.b64_json;
-        if (base64) {
-          const { firebaseStorage } = await import('../../config/firebase.client');
-          if (firebaseStorage) {
-            const buffer = Buffer.from(base64, 'base64');
-            const bucket = firebaseStorage.bucket();
-            const filePath = `generated/${tenantId}/feed_${Date.now()}.png`;
-            const file = bucket.file(filePath);
-            await file.save(buffer, { contentType: 'image/png', public: true });
-            let aiFeedUrl = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
-            // Apply logo overlay if set in Brand DNA
-            if (brandDNA.logoUrl) {
-              aiFeedUrl = await this.logoOverlay.applyLogo({ imageUrl: aiFeedUrl, logoUrl: brandDNA.logoUrl as string, position: brandDNA.logoPosition as any, tenantId });
-            }
-            imageResult = { ...imageResult, variants: { ...imageResult.variants, feedUrl: aiFeedUrl } };
-            aiImageCostUSD = AI_CONFIG.imageCosts['gpt-image-1-1024'];
-          }
-        }
+        feedPhotoUrl = await this.sharpPipeline.blurImage(feedPhotoUrlRaw, tenantId);
       } catch (err) {
+        console.error('[Orchestrator Step 5.55 Consent Blur Error]:', err);
+        feedPhotoUrl = undefined;
       }
     }
 
-    // â”€â”€ Step 5.6: Carousel Slides (conditional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // Upload before photo to Cloudinary for before/after alternation
+    if (feedPhotoUrl && captionResult && imageResult) {
+      await this.progressEmitter.emitSubProgress(jobId, tenantId, 'generating_text', 22, 'Fitting your photo into the selected template...');
+      try {
+        const headingFont = brandDNA.brandFont || (brandDNA.brandDnaV2 as any)?.typography?.heading_font || 'Playfair Display';
+        const bodyFont = (brandDNA.brandDnaV2 as any)?.typography?.body_font || 'Inter';
+        const feedSlide = await this.aiImageGen.generateSlide({
+          photoUrl: feedPhotoUrl,
+          overlayText: captionResult.hookSentence || captionResult.caption.slice(0, 80),
+          title: 'Feed image',
+          index: 0,
+          isFirst: true,
+          isLast: true,
+          isBeforePhoto: false,
+          tenantId,
+          businessName: brandDNA.businessName,
+          brandColor: brandDNA.primaryBrandColor ?? '#1a1a1a',
+          secondaryColor: brandDNA.secondaryBrandColor ?? '#f5f0eb',
+          aesthetic: (brandDNA.visualRanking?.length ? buildStyleDirectionBlock(brandDNA.visualRanking) : null) ?? brandDNA.aestheticDirection ?? 'minimal editorial premium beauty',
+          serviceType: appointment?.serviceCategory ?? 'beauty treatment',
+          outputSize: '1024x1024',
+          layoutType: determinedGrid.layout,
+          designSpec: (determinedGrid as any).designSpec,
+          brandFont: headingFont,
+          bodyFont,
+          visualRanking: brandDNA.visualRanking ?? [],
+          generatorModel: 'none',
+          backgroundBrandColor: brandDNA.backgroundBrandColor ?? '#F7F4EF',
+          accentBrandColor: brandDNA.accentBrandColor ?? '#D4A373',
+          depthBrandColor: brandDNA.depthBrandColor ?? '#1E1E1C',
+          moodboardVisionSummary: moodboardVisionSummary ?? undefined,
+          templateIntent: (determinedGrid as any).templateIntentOverride
+            || getTemplateIntent(determinedGrid.pillar),
+          logoUrl: typeof brandDNA.logoUrl === 'string' ? brandDNA.logoUrl : undefined,
+          logoPosition: brandDNA.logoPosition as any,
+        });
+        let feedUrl = feedSlide.url;
+        if (brandDNA.logoUrl) {
+          feedUrl = await this.logoOverlay.applyLogo({ imageUrl: feedUrl, logoUrl: brandDNA.logoUrl as string, position: brandDNA.logoPosition as any, tenantId });
+        }
+        imageResult = { ...imageResult, variants: { ...imageResult.variants, feedUrl } };
+      } catch (err) {
+        console.error('[Orchestrator Step 5.55 Template Fit Error]:', err);
+      }
+    }
+
+    // ——— Step 5.6: Carousel Slides (conditional) ——————————————————————————————
+    // Upload before photo to Cloudinary for before/after alternation.
+    // Skipped for medical-aesthetics technicians — no version of the client's
+    // photo (blurred or not) is ever uploaded/used; see isMedicalPractitioner above.
     let beforeCloudinaryId: string | undefined;
     const beforeAsset = payload.imageAssets.find(a => a.isBeforePhoto && a.rawStoragePath);
-    if (beforeAsset && process.env['CLOUDINARY_CLOUD_NAME']) {
+    if (!isMedicalPractitioner && beforeAsset && process.env['CLOUDINARY_CLOUD_NAME']) {
       try {
+        // Consent gate: only upload the raw (unblurred) before-photo when face display is allowed
         beforeCloudinaryId = beforeAsset.cloudinaryPublicId
-          ?? await this.imagePipeline.uploadUrl(beforeAsset.rawStoragePath, tenantId);
+          ?? await this.imagePipeline.uploadUrl(
+            consentShowFace ? beforeAsset.rawStoragePath : await this.sharpPipeline.blurImage(beforeAsset.rawStoragePath, tenantId),
+            tenantId,
+          );
       } catch { /* non-fatal */ }
     }
 
     let carouselSlides: CarouselSlides | null = null;
     const isCarousel = (generationOptions.outputFormats as string[]).includes('carousel');
+    // Medical-aesthetics technicians: never source the client's real photo into
+    // carousel/story generation. Blank URLs render the selected template on a
+    // brand canvas instead of inventing a replacement photo.
     let afterPhotoUrl = payload.imageAssets.find(a => a.isAfterPhoto)?.rawStoragePath
       ?? payload.imageAssets[0]?.rawStoragePath
       ?? '';
     let beforePhotoUrl = payload.imageAssets.find(a => a.isBeforePhoto)?.rawStoragePath;
 
+    if (isMedicalPractitioner) {
+      afterPhotoUrl = '';
+      beforePhotoUrl = undefined;
+    }
+
+    // Consent gate: blur the raw source photos before any further AI processing
+    // (enhancement/carousel/story) touches them — never let an unblurred face
+    // reach a downstream AI image model when consent denies face display.
+    if (!consentShowFace) {
+      if (afterPhotoUrl) {
+        try {
+          afterPhotoUrl = await this.sharpPipeline.blurImage(afterPhotoUrl, tenantId);
+        } catch (err) {
+          console.error('[Orchestrator Step 5.6 Consent Blur Error]:', err);
+          afterPhotoUrl = '';
+        }
+      }
+      if (beforePhotoUrl) {
+        try {
+          beforePhotoUrl = await this.sharpPipeline.blurImage(beforePhotoUrl, tenantId);
+        } catch (err) {
+          console.error('[Orchestrator Step 5.6 Consent Blur Error]:', err);
+          beforePhotoUrl = undefined;
+        }
+      }
+    }
+
     // Ticket 5: AI Super Resolution and Inpainting
     const brandColor = brandDNA.primaryBrandColor ?? '#1a1a1a';
+
+    // Execute sequentially to avoid Replicate 429 rate limit retries
     if (afterPhotoUrl) {
-      afterPhotoUrl = await this.imageEnhancementService.enhanceImage(afterPhotoUrl, moodboardVisionSummary ?? '', brandColor);
+      afterPhotoUrl = await this.imageEnhancementService.enhanceImage(afterPhotoUrl as string, moodboardVisionSummary ?? '', brandColor, visionResult);
     }
+
     if (beforePhotoUrl) {
-      beforePhotoUrl = await this.imageEnhancementService.enhanceImage(beforePhotoUrl, moodboardVisionSummary ?? '', brandColor);
+      beforePhotoUrl = await this.imageEnhancementService.enhanceImage(beforePhotoUrl as string, moodboardVisionSummary ?? '', brandColor, visionResult);
     }
 
     if (isCarousel && captionResult) {
+      await this.progressEmitter.emitSubProgress(jobId, tenantId, 'generating_text', 24, 'Building your carousel slides...');
       try {
+        const narrativeRecipe = this.narrativePlanner.getRecipe(payload.businessGoal as BusinessGoalType);
+
         const conceptResult = await this.carouselConceptChain.generate({
           hookSentence: captionResult.hookSentence || captionResult.caption.slice(0, 80),
           callToAction: captionResult.callToAction || 'Book your appointment today',
@@ -623,7 +826,8 @@ Requirements:
           clientFirstName: appointment?.client?.firstName ?? undefined,
           businessGoal: payload.businessGoal,
           brandName: brandDNA.businessName,
-          slideCount: 4,
+          slideCount: narrativeRecipe.slideCount,
+          semanticFlow: narrativeRecipe.semanticFlow,
           brandVoice: extractBrandVoice(brandDNA),
         });
 
@@ -644,6 +848,7 @@ Requirements:
             afterPhotoUrl,
             beforePhotoUrl,
             concepts: conceptResult.concepts,
+            semanticFlow: narrativeRecipe.semanticFlow,
             tenantId,
             businessName: brandDNA.businessName,
             brandColor: brandDNA.primaryBrandColor ?? '#1a1a1a',
@@ -652,15 +857,21 @@ Requirements:
             serviceType: appointment?.serviceCategory ?? 'beauty treatment',
             artDirectorBrief: briefResult.slides,
             layoutType: determinedGrid.layout,
+            designSpec: (determinedGrid as any).designSpec,
             brandFont: headingFont,
             bodyFont: bodyFont,
             visualRanking: brandDNA.visualRanking ?? [],
             capitalizationRule: (brandDNA.brandDnaV2 as any)?.typography?.capitalization_rule || (brandDNA.brandDnaV2 as any)?.typography?.capitalizationRule || 'uppercase',
             footerBrandToggle: (brandDNA.brandDnaV2 as any)?.typography?.footer_brand_toggle !== false && (brandDNA.brandDnaV2 as any)?.typography?.footerBrandToggle !== false,
+            logoUrl: typeof brandDNA.logoUrl === 'string' ? brandDNA.logoUrl : undefined,
             backgroundBrandColor: brandDNA.backgroundBrandColor ?? '#F7F4EF',
             accentBrandColor: brandDNA.accentBrandColor ?? '#D4A373',
             depthBrandColor: brandDNA.depthBrandColor ?? '#1E1E1C',
             moodboardVisionSummary: moodboardVisionSummary ?? undefined,
+            visionResult: visionResult ?? undefined,
+            visionResultBefore: visionResultBefore ?? undefined,
+            templateIntent: (determinedGrid as any).templateIntentOverride
+              || getTemplateIntent(determinedGrid.pillar),
           });
           // Apply logo to each carousel slide
           const slidesWithLogo = brandDNA.logoUrl
@@ -688,6 +899,7 @@ Requirements:
     let storyOutput: StoryOutput | null = null;
     const isStory = (generationOptions.outputFormats as string[]).includes('story');
     if (isStory && captionResult) {
+      await this.progressEmitter.emitSubProgress(jobId, tenantId, 'generating_text', 24, 'Building your story frames...');
       try {
         const storyFrames = await this.storyFrameChain.generate({
           hookSentence: captionResult.hookSentence || captionResult.caption.slice(0, 80),
@@ -700,11 +912,15 @@ Requirements:
         });
 
         // Step 2 of two-step prompting: Generate bespoke visual design briefs via Creative Director Agent
-        const briefResult = await this.creativeDirectorChain.generate({
+        let briefResult = await this.creativeDirectorChain.generate({
           strategistOutput,
           brandDNA,
           concepts: storyFrames.frames,
         });
+
+        // Step 2.5: Content Validation & Trimming
+        storyFrames.frames = this.contentValidator.validateStoryFrames(storyFrames.frames);
+        briefResult.slides = this.contentValidator.validateStoryFrames(briefResult.slides as any) as any;
 
         try {
           const headingFont = brandDNA.brandFont || (brandDNA.brandDnaV2 as any)?.typography?.heading_font || 'Playfair Display';
@@ -722,14 +938,22 @@ Requirements:
             serviceType: appointment?.serviceCategory ?? 'beauty treatment',
             artDirectorBrief: briefResult.slides,
             layoutType: determinedGrid.layout,
+            designSpec: (determinedGrid as any).designSpec,
             brandFont: headingFont,
             bodyFont: bodyFont,
             visualRanking: brandDNA.visualRanking ?? [],
             capitalizationRule: (brandDNA.brandDnaV2 as any)?.typography?.capitalization_rule || (brandDNA.brandDnaV2 as any)?.typography?.capitalizationRule || 'uppercase',
             footerBrandToggle: (brandDNA.brandDnaV2 as any)?.typography?.footer_brand_toggle !== false && (brandDNA.brandDnaV2 as any)?.typography?.footerBrandToggle !== false,
+            logoUrl: typeof brandDNA.logoUrl === 'string' ? brandDNA.logoUrl : undefined,
             backgroundBrandColor: brandDNA.backgroundBrandColor ?? '#F7F4EF',
             accentBrandColor: brandDNA.accentBrandColor ?? '#D4A373',
+            depthBrandColor: brandDNA.depthBrandColor ?? '#1E1E1C',
             moodboardVisionSummary: moodboardVisionSummary ?? undefined,
+            visionResult: visionResult ?? undefined,
+            visionResultBefore: visionResultBefore ?? undefined,
+            semanticFlow: this.narrativePlanner.getRecipe(payload.businessGoal as any).semanticFlow,
+            templateIntent: (determinedGrid as any).templateIntentOverride
+              || getTemplateIntent(determinedGrid.pillar),
           });
           const framesWithLogo = brandDNA.logoUrl
             ? await Promise.all(aiFrames.map(async f => ({ ...f, url: await this.logoOverlay.applyLogo({ imageUrl: f.url, logoUrl: brandDNA.logoUrl as string, position: brandDNA.logoPosition as any, tenantId }) })))
@@ -755,6 +979,7 @@ Requirements:
     let reelShotResult: ReelShotResult | null = null;
     const isReel = (generationOptions.outputFormats as string[]).includes('reel');
     if (isReel && captionResult) {
+      await this.progressEmitter.emitSubProgress(jobId, tenantId, 'generating_text', 26, 'Storyboarding your reel...');
       try {
         reelShotResult = await this.reelShotChain.generate({
           hookSentence: captionResult.hookSentence || captionResult.caption.slice(0, 80),
@@ -772,6 +997,7 @@ Requirements:
     // â”€â”€ Step 5.7: Voiceover (conditional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     let voiceoverResult: VoiceoverResult | null = null;
     if (reelScriptResult && generationOptions.outputFormats.includes('reel')) {
+      await this.progressEmitter.emitSubProgress(jobId, tenantId, 'generating_text', 28, 'Recording your voiceover...');
       try {
         if (process.env['ELEVENLABS_API_KEY']) {
           const voice = reelScriptResult.elevenLabsVoiceSettings;
@@ -798,7 +1024,7 @@ Requirements:
     try {
       const origUrl = payload.imageAssets[0]?.rawStoragePath;
       const genUrl = imageResult?.variants?.feedUrl;
-      
+
       if (origUrl && genUrl) {
         const [origRes, genRes] = await Promise.all([
           fetch(origUrl),
@@ -813,6 +1039,7 @@ Requirements:
       console.warn('[Validation Engine] Failed to fetch image buffers for Face Protection analysis.', e);
     }
 
+    await this.progressEmitter.emitSubProgress(jobId, tenantId, 'generating_text', 92, 'Running quality and brand checks...');
     const scoringResult = await this.scoringGate.evaluate({
       caption: captionResult?.caption ?? '',
       hashtags: captionResult?.hashtags ?? [],
@@ -1109,7 +1336,7 @@ Requirements:
 function AI_CONFIG_MODEL_LABEL(payload: GenerationJobPayload): string {
   return ['premium', 'tier3', 'tier4', 'tier5'].includes(payload.generationOptions.userTier)
     ? 'anthropic/claude-3-5-sonnet-20241022'
-    : 'openai/gpt-4o-mini';
+    : 'google/gemini-flash-latest';
 }
 
 // ---------------------------------------------------------------------------

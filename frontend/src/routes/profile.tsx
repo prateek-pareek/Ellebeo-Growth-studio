@@ -70,11 +70,11 @@ function ProfilePage() {
     <div>
 
       {/* ── Page header ──────────────────────────────────────────────────── */}
-      <header className="mt-6 lg:mt-8 mb-8 flex flex-wrap items-end justify-between gap-6">
+      <header className="mt-6 lg:mt-8 mb-6 flex flex-wrap items-end justify-between gap-6">
         <div className="max-w-[60ch]">
           <p className="eyebrow mb-4">Profile optimisation</p>
           <h1 className="page-title">
-            Make your Elle.Be.O profile <span className="italic">work harder</span>.
+            Make your Elle.Be.O profile <span className="italic text-brass-ink">work harder</span>.
           </h1>
           <p className="mt-6 text-base sm:text-lg text-taupe leading-relaxed">
             Small fixes to your marketplace listing — clearer bio, more photos, better service
@@ -83,7 +83,7 @@ function ProfilePage() {
         </div>
 
         {/* Technician identity + logout */}
-        <div className="flex items-end gap-4">
+        <div className="flex items-end gap-4 max-w-full sm:max-w-[320px]">
           <div className="relative group shrink-0">
             <div className="size-14 rounded-full overflow-hidden ring-1 ring-border bg-nude">
               <InitialsAvatar
@@ -112,16 +112,19 @@ function ProfilePage() {
               onChange={handleAvatarUpload}
             />
           </div>
-          <div>
-            <p className="font-serif text-lg leading-tight">{technician.name}</p>
-            <p className="text-xs text-taupe">
+          <div className="min-w-0">
+            <p className="font-serif text-lg leading-tight truncate">{technician.name}</p>
+            <p
+              className="text-xs text-taupe truncate"
+              title={[technician.handle, technician.city].filter(Boolean).join(" · ")}
+            >
               {technician.handle}
               {technician.handle && technician.city && " · "}
               {technician.city}
             </p>
             <button
               onClick={handleLogout}
-              className="mt-1.5 text-[9px] uppercase tracking-widest text-taupe hover:text-foreground transition-colors flex items-center gap-1"
+              className="mt-1.5 text-[9px] font-semibold uppercase tracking-widest text-taupe hover:text-destructive transition-colors flex items-center gap-1"
             >
               <LogOut className="size-2.5" /> Sign out
             </button>
@@ -129,22 +132,22 @@ function ProfilePage() {
         </div>
       </header>
 
-      <div className="grid grid-cols-12 gap-8 lg:gap-10">
+      <div className="grid grid-cols-12 gap-6">
 
         {/* ── Left: Profile strength ────────────────────────────────────── */}
         <section className="col-span-12 lg:col-span-5">
-          <h2 className="eyebrow mb-6">Profile strength</h2>
-          <div className="artifact p-8">
+          <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground mb-4">Profile strength</h2>
+          <div className="bg-card rounded-2xl shadow-elevated p-8">
             <div className="flex items-baseline justify-between mb-3">
-              <span className="stat-figure-lg">
+              <span className="stat-figure-lg tnum">
                 {profile.completion}
                 <span className="text-base text-taupe font-sans">%</span>
               </span>
-              <span className="text-xs text-taupe uppercase tracking-widest">complete</span>
+              <span className="text-[10px] font-semibold text-taupe uppercase tracking-widest">complete</span>
             </div>
-            <div className="h-px bg-border relative mb-6">
+            <div className="h-1.5 bg-muted rounded-full relative mb-6 overflow-hidden">
               <div
-                className="absolute inset-y-0 left-0 bg-foreground"
+                className="absolute inset-y-0 left-0 bg-brass rounded-full transition-all duration-700"
                 style={{ width: `${profile.completion}%` }}
               />
             </div>
@@ -157,7 +160,7 @@ function ProfilePage() {
             </p>
           </div>
 
-          <div className="mt-8 grid grid-cols-2 gap-px bg-border border hairline">
+          <div className="mt-6 grid grid-cols-2 gap-4">
             <Stat label="Average rating" value={profile.averageRating.toString()} />
             <Stat label="Reviews" value={profile.reviewsCount.toString()} />
             <Stat label="Avg. reply time" value={`${profile.responseTimeHours}h`} />
@@ -167,28 +170,28 @@ function ProfilePage() {
 
         {/* ── Right: Recommended improvements ──────────────────────────── */}
         <section className="col-span-12 lg:col-span-7">
-          <h2 className="eyebrow mb-6">Recommended improvements</h2>
+          <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground mb-4">Recommended improvements</h2>
 
           {profile.suggestions.length === 0 ? (
-            <div className="artifact p-10 text-center">
+            <div className="bg-card rounded-2xl shadow-elevated p-10 text-center">
               <CheckCircle2 className="size-6 text-sage mx-auto mb-3" />
-              <p className="text-[10px] uppercase tracking-widest text-taupe mb-1">All good</p>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-taupe mb-1">All good</p>
               <p className="text-sm text-taupe">Your profile is in great shape.</p>
             </div>
           ) : (
-            <div className="space-y-px bg-border">
+            <div className="bg-card rounded-2xl shadow-elevated overflow-hidden divide-y divide-border">
               {profile.suggestions.map((s, i) => (
-                <div key={i} className="bg-card p-5 flex items-center justify-between gap-4">
+                <div key={i} className="p-5 flex items-center gap-4 hover:bg-muted/40 transition-colors">
                   <p className="text-sm flex-1 leading-snug">{s.label}</p>
                   <span className={
-                    "text-[10px] uppercase tracking-widest shrink-0 " +
-                    (s.impact === "High" ? "text-foreground" : s.impact === "Medium" ? "text-taupe" : "text-taupe/60")
+                    "text-[10px] font-bold uppercase tracking-wide rounded-full px-2.5 py-1 shrink-0 " +
+                    (s.impact === "High" ? "bg-brass/15 text-brass-ink" : s.impact === "Medium" ? "bg-muted text-taupe" : "bg-muted text-taupe/60")
                   }>
                     {s.impact} impact
                   </span>
                   <Link
                     to={s.link as any}
-                    className="text-[10px] uppercase tracking-widest border hairline px-3 py-2 hover:bg-nude/30 transition-colors shrink-0"
+                    className="text-[10px] font-semibold uppercase tracking-widest rounded-lg border border-border px-3.5 py-2 hover:bg-muted transition-colors shrink-0"
                   >
                     Fix
                   </Link>
@@ -197,27 +200,27 @@ function ProfilePage() {
             </div>
           )}
 
-          <div className="mt-10 grid grid-cols-2 gap-px bg-border border hairline">
+          <div className="mt-6 grid grid-cols-2 gap-4">
             <Stat label="Services listed" value={`${profile.servicesListed} / ${profile.servicesRecommended}`} />
             <Stat label="Photos uploaded" value={`${profile.photosCount} / ${profile.photosRecommended}`} />
           </div>
 
-          <div className="mt-8 flex flex-wrap gap-3">
+          <div className="mt-6 flex flex-wrap gap-3">
             <Link
               to="/brand"
-              className="text-[11px] uppercase tracking-[0.2em] border hairline px-4 py-2 hover:bg-nude/30 transition-colors"
+              className="text-xs font-semibold rounded-xl border border-border bg-card px-4 py-2.5 hover:bg-muted transition-colors"
             >
               Edit brand profile
             </Link>
             <Link
               to="/appointments"
-              className="text-[11px] uppercase tracking-[0.2em] bg-foreground text-offwhite px-4 py-2 hover:opacity-90 transition-opacity"
+              className="text-xs font-semibold rounded-xl bg-brass text-white px-4 py-2.5 shadow-elevated hover:brightness-105 hover:shadow-elevated-lg transition-all"
             >
               Add photos from appointments
             </Link>
             <Link
               to="/plans"
-              className="text-[11px] uppercase tracking-[0.2em] border hairline px-4 py-2 hover:bg-nude/30 transition-colors"
+              className="text-xs font-semibold rounded-xl border border-border bg-card px-4 py-2.5 hover:bg-muted transition-colors"
             >
               View plans &amp; billing
             </Link>
@@ -226,8 +229,8 @@ function ProfilePage() {
 
         {/* ── Plan ──────────────────────────────────────────────────────── */}
         <section className="col-span-12">
-          <h2 className="eyebrow mb-6">Plan &amp; billing</h2>
-          <div className="artifact p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+          <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground mb-4">Plan &amp; billing</h2>
+          <div className="bg-card rounded-2xl shadow-elevated p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
             <div>
               <p className="font-serif text-xl mb-1">Unlock more with a Growth Studio plan.</p>
               <p className="text-sm text-taupe leading-relaxed">
@@ -236,7 +239,7 @@ function ProfilePage() {
             </div>
             <Link
               to="/plans"
-              className="shrink-0 text-[11px] uppercase tracking-[0.2em] bg-foreground text-offwhite px-6 py-3 hover:opacity-90 transition-opacity"
+              className="shrink-0 text-xs font-semibold rounded-xl bg-brass text-white px-6 py-3 shadow-elevated hover:brightness-105 hover:shadow-elevated-lg transition-all"
             >
               View plans →
             </Link>
@@ -257,8 +260,8 @@ function ProfilePage() {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-card p-5">
-      <p className="text-[10px] uppercase tracking-widest text-taupe mb-2">{label}</p>
+    <div className="bg-card rounded-2xl shadow-elevated p-5">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-taupe mb-2">{label}</p>
       <p className="font-serif text-2xl tabular-nums">{value}</p>
     </div>
   );
@@ -324,7 +327,10 @@ function ConnectedAccounts() {
       const decoded = decodeState(state);
       if (decoded) {
         if (decoded.platform === "facebook") platform = "facebook";
-        if (decoded.mobileRedirectUri) {
+        // Only the app's own deep link scheme is allowed here — `state` round-trips
+        // through the URL unauthenticated, so a `javascript:` URI must be rejected
+        // before it can ever reach window.location.href.
+        if (decoded.mobileRedirectUri && /^elleobe:\/\//i.test(decoded.mobileRedirectUri)) {
           mobileRedirectUri = decoded.mobileRedirectUri;
           isMobile = true;
         }
@@ -396,19 +402,19 @@ function ConnectedAccounts() {
 
   return (
     <>
-      <h2 className="eyebrow mb-6">Connected accounts</h2>
-      <div className="border hairline">
-        <div className="space-y-px bg-border">
+      <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground mb-4">Connected accounts</h2>
+      <div className="bg-card rounded-2xl shadow-elevated overflow-hidden">
+        <div className="divide-y divide-border">
           {PLATFORMS.map((p) => {
             const account = accounts.find((a) => a.platform === p.id && a.status === "connected");
             const isBusy  = busy === p.id || busy === account?.id;
             const Icon    = p.icon;
 
             return (
-              <div key={p.id} className="bg-card p-5 flex items-center gap-5">
+              <div key={p.id} className="p-5 flex items-center gap-5">
                 {/* Platform icon */}
-                <div className={`shrink-0 size-10 flex items-center justify-center border hairline ${
-                  account ? "bg-foreground border-foreground" : "bg-card"
+                <div className={`shrink-0 size-10 rounded-xl flex items-center justify-center ${
+                  account ? "bg-foreground" : "bg-muted"
                 }`}>
                   <Icon className={`size-4 ${account ? "text-offwhite" : "text-taupe"}`} />
                 </div>
@@ -422,15 +428,15 @@ function ConnectedAccounts() {
                 </div>
 
                 {/* Action */}
-                <div className="shrink-0 flex items-center gap-4">
+                <div className="shrink-0 flex items-center gap-3">
                   {account ? (
                     <>
-                      <span className="text-[10px] uppercase tracking-widest text-sage">Connected</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wide bg-sage/10 text-sage rounded-full px-2.5 py-1">Connected</span>
                       <button
                         type="button"
                         onClick={() => handleDisconnect(account.id, p.label)}
                         disabled={isBusy}
-                        className="text-[10px] uppercase tracking-widest text-taupe hover:text-destructive transition-colors border hairline px-3 py-2 disabled:opacity-40 flex items-center gap-1.5"
+                        className="text-[10px] font-semibold uppercase tracking-widest text-taupe hover:text-destructive transition-colors rounded-lg border border-border px-3.5 py-2 disabled:opacity-40 flex items-center gap-1.5"
                       >
                         {isBusy ? <RefreshCw className="size-3 animate-spin" /> : "Remove"}
                       </button>
@@ -440,7 +446,7 @@ function ConnectedAccounts() {
                       type="button"
                       onClick={() => handleConnect(p.id)}
                       disabled={isBusy || loading}
-                      className="text-[10px] uppercase tracking-[0.2em] bg-foreground text-offwhite px-4 py-2 hover:opacity-90 transition-opacity disabled:opacity-40 flex items-center gap-2"
+                      className="text-[10px] font-bold uppercase tracking-widest bg-brass text-white rounded-lg px-4 py-2 shadow-elevated hover:brightness-105 transition-all disabled:opacity-40 flex items-center gap-2"
                     >
                       {isBusy
                         ? <><RefreshCw className="size-3 animate-spin" /> Connecting…</>
@@ -455,8 +461,8 @@ function ConnectedAccounts() {
         </div>
 
         {/* Footer */}
-        <div className="bg-card border-t hairline px-5 py-3">
-          <p className="text-[9px] text-taupe/60 flex items-center gap-1.5">
+        <div className="border-t border-border px-5 py-3 bg-muted/30">
+          <p className="text-[9px] text-taupe/70 flex items-center gap-1.5">
             <Shield className="size-2.5 shrink-0" />
             Tokens are encrypted and stored securely. We never post without your approval.
           </p>

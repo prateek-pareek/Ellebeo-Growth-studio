@@ -46,6 +46,19 @@ export class SharpImagePipelineService {
   }
 
   // --------------------------------------------------------------------------
+  // Whole-image blur — applied to a raw source photo BEFORE it is handed to an
+  // external AI image model, whenever consent denies face display. A strong
+  // sigma is used (vs. the lighter one for display variants) so the model
+  // cannot "sharpen"/reconstruct facial detail back out of the source.
+  // --------------------------------------------------------------------------
+
+  async blurImage(rawImageUrl: string, tenantId: string): Promise<string> {
+    const imageBuffer = await this.fetchImage(rawImageUrl);
+    const processed = await sharp(imageBuffer).blur(25).jpeg({ quality: 88 }).toBuffer();
+    return this.uploadToFirebase(processed, tenantId, 'consent-blur');
+  }
+
+  // --------------------------------------------------------------------------
 
   private async fetchImage(url: string): Promise<Buffer> {
     const res = await fetch(url);
@@ -104,7 +117,13 @@ export class SharpImagePipelineService {
       metadata: { contentType: 'image/jpeg' },
     });
 
-    return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(storagePath)}?alt=media`;
+    // Generate a signed URL that lasts for 7 days so Replicate can fetch it without 403 Forbidden errors
+    const [url] = await file.getSignedUrl({
+      action: 'read',
+      expires: Date.now() + 1000 * 60 * 60 * 24 * 7,
+    });
+
+    return url;
   }
 }
 

@@ -7,6 +7,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     'BrandDNA', 'Client', 'ConsentRecord', 'Appointment',
     'ImageAsset', 'ContentItem', 'GenerationJob', 'ScheduledPost',
     'Campaign', 'SocialAccount', 'BusinessGoal', 'GoldenExample',
+    'VideoPlan', 'VideoPipelineEvent', 'GeminiLabBrandDna',
   ]);
 
   private readonly softDeleteModels = new Set([
@@ -16,9 +17,14 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   constructor() {
     super();
     this.$use(async (params, next) => {
-      const timeoutMs = 10_000;
+      const timeoutMs = 30_000;
+      const queryPromise = next(params);
+      
+      // Prevent unhandled promise rejection crashing the server if the query fails AFTER the timeout
+      queryPromise.catch(() => {});
+
       return Promise.race([
-        next(params),
+        queryPromise,
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error(`Prisma query timeout after ${timeoutMs}ms`)), timeoutMs),
         ),

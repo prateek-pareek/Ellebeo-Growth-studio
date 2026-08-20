@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as VideoRouteImport } from './routes/video'
 import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as ProfileRouteImport } from './routes/profile'
@@ -16,6 +17,7 @@ import { Route as PlansRouteImport } from './routes/plans'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LandingRouteImport } from './routes/landing'
 import { Route as GenerateRouteImport } from './routes/generate'
+import { Route as GeminiLabRouteImport } from './routes/gemini-lab'
 import { Route as ContentRouteImport } from './routes/content'
 import { Route as CampaignsRouteImport } from './routes/campaigns'
 import { Route as CalendarRouteImport } from './routes/calendar'
@@ -27,6 +29,11 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ConsentIdRouteImport } from './routes/consent.$id'
 import { Route as BrandOnboardingRouteImport } from './routes/brand.onboarding'
 
+const VideoRoute = VideoRouteImport.update({
+  id: '/video',
+  path: '/video',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TemplatesRoute = TemplatesRouteImport.update({
   id: '/templates',
   path: '/templates',
@@ -60,6 +67,11 @@ const LandingRoute = LandingRouteImport.update({
 const GenerateRoute = GenerateRouteImport.update({
   id: '/generate',
   path: '/generate',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GeminiLabRoute = GeminiLabRouteImport.update({
+  id: '/gemini-lab',
+  path: '/gemini-lab',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ContentRoute = ContentRouteImport.update({
@@ -122,6 +134,7 @@ export interface FileRoutesByFullPath {
   '/calendar': typeof CalendarRoute
   '/campaigns': typeof CampaignsRoute
   '/content': typeof ContentRoute
+  '/gemini-lab': typeof GeminiLabRoute
   '/generate': typeof GenerateRoute
   '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
@@ -129,6 +142,7 @@ export interface FileRoutesByFullPath {
   '/profile': typeof ProfileRoute
   '/signup': typeof SignupRoute
   '/templates': typeof TemplatesRoute
+  '/video': typeof VideoRoute
   '/brand/onboarding': typeof BrandOnboardingRoute
   '/consent/$id': typeof ConsentIdRoute
 }
@@ -141,6 +155,7 @@ export interface FileRoutesByTo {
   '/calendar': typeof CalendarRoute
   '/campaigns': typeof CampaignsRoute
   '/content': typeof ContentRoute
+  '/gemini-lab': typeof GeminiLabRoute
   '/generate': typeof GenerateRoute
   '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
@@ -148,6 +163,7 @@ export interface FileRoutesByTo {
   '/profile': typeof ProfileRoute
   '/signup': typeof SignupRoute
   '/templates': typeof TemplatesRoute
+  '/video': typeof VideoRoute
   '/brand/onboarding': typeof BrandOnboardingRoute
   '/consent/$id': typeof ConsentIdRoute
 }
@@ -161,6 +177,7 @@ export interface FileRoutesById {
   '/calendar': typeof CalendarRoute
   '/campaigns': typeof CampaignsRoute
   '/content': typeof ContentRoute
+  '/gemini-lab': typeof GeminiLabRoute
   '/generate': typeof GenerateRoute
   '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
@@ -168,6 +185,7 @@ export interface FileRoutesById {
   '/profile': typeof ProfileRoute
   '/signup': typeof SignupRoute
   '/templates': typeof TemplatesRoute
+  '/video': typeof VideoRoute
   '/brand/onboarding': typeof BrandOnboardingRoute
   '/consent/$id': typeof ConsentIdRoute
 }
@@ -182,6 +200,7 @@ export interface FileRouteTypes {
     | '/calendar'
     | '/campaigns'
     | '/content'
+    | '/gemini-lab'
     | '/generate'
     | '/landing'
     | '/login'
@@ -189,6 +208,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/signup'
     | '/templates'
+    | '/video'
     | '/brand/onboarding'
     | '/consent/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -201,6 +221,7 @@ export interface FileRouteTypes {
     | '/calendar'
     | '/campaigns'
     | '/content'
+    | '/gemini-lab'
     | '/generate'
     | '/landing'
     | '/login'
@@ -208,6 +229,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/signup'
     | '/templates'
+    | '/video'
     | '/brand/onboarding'
     | '/consent/$id'
   id:
@@ -220,6 +242,7 @@ export interface FileRouteTypes {
     | '/calendar'
     | '/campaigns'
     | '/content'
+    | '/gemini-lab'
     | '/generate'
     | '/landing'
     | '/login'
@@ -227,6 +250,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/signup'
     | '/templates'
+    | '/video'
     | '/brand/onboarding'
     | '/consent/$id'
   fileRoutesById: FileRoutesById
@@ -240,6 +264,7 @@ export interface RootRouteChildren {
   CalendarRoute: typeof CalendarRoute
   CampaignsRoute: typeof CampaignsRoute
   ContentRoute: typeof ContentRoute
+  GeminiLabRoute: typeof GeminiLabRoute
   GenerateRoute: typeof GenerateRoute
   LandingRoute: typeof LandingRoute
   LoginRoute: typeof LoginRoute
@@ -247,11 +272,19 @@ export interface RootRouteChildren {
   ProfileRoute: typeof ProfileRoute
   SignupRoute: typeof SignupRoute
   TemplatesRoute: typeof TemplatesRoute
+  VideoRoute: typeof VideoRoute
   ConsentIdRoute: typeof ConsentIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/video': {
+      id: '/video'
+      path: '/video'
+      fullPath: '/video'
+      preLoaderRoute: typeof VideoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/templates': {
       id: '/templates'
       path: '/templates'
@@ -299,6 +332,13 @@ declare module '@tanstack/react-router' {
       path: '/generate'
       fullPath: '/generate'
       preLoaderRoute: typeof GenerateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/gemini-lab': {
+      id: '/gemini-lab'
+      path: '/gemini-lab'
+      fullPath: '/gemini-lab'
+      preLoaderRoute: typeof GeminiLabRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/content': {
@@ -393,6 +433,7 @@ const rootRouteChildren: RootRouteChildren = {
   CalendarRoute: CalendarRoute,
   CampaignsRoute: CampaignsRoute,
   ContentRoute: ContentRoute,
+  GeminiLabRoute: GeminiLabRoute,
   GenerateRoute: GenerateRoute,
   LandingRoute: LandingRoute,
   LoginRoute: LoginRoute,
@@ -400,6 +441,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProfileRoute: ProfileRoute,
   SignupRoute: SignupRoute,
   TemplatesRoute: TemplatesRoute,
+  VideoRoute: VideoRoute,
   ConsentIdRoute: ConsentIdRoute,
 }
 export const routeTree = rootRouteImport

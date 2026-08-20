@@ -3,7 +3,9 @@
 // CRITICAL: Never calls GPT-4o Vision if cache hit exists for this image hash.
 // ============================================================================
 
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
+
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { createHash } from 'crypto';
 import { PrismaClient } from '@prisma/client';
@@ -11,17 +13,20 @@ import { AI_CONFIG } from '../../config/ai.config';
 import type { VisionAnalysisResult } from '../types/chain-output.types';
 import type { ModelRouter } from '../orchestrator/model-router';
 import { wrapSystemPrompt } from '../config/platform-system-prompt';
+import { firebaseStorage } from '../../config/firebase.client';
 
-const VISION_PROMPT_VERSION = 'v2.0';
+const VISION_PROMPT_VERSION = 'v2.6';
 
 // Zod-validated output schema enforcer (inline for strict mode)
 function parseVisionOutput(raw: string): VisionAnalysisResult {
-  // Strip markdown code fences if model wraps output in ```json ... ```
-  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+  // Extract the first JSON object from the string, ignoring conversational filler or markdown
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  const cleaned = jsonMatch ? jsonMatch[0] : raw;
+  
   let parsed: unknown;
   try {
     parsed = JSON.parse(cleaned);
-  } catch {
+  } catch (error) {
     throw new VisionParseError(`Vision model returned non-JSON: ${raw.slice(0, 200)}`);
   }
 
@@ -37,7 +42,52 @@ function parseVisionOutput(raw: string): VisionAnalysisResult {
     facesDetected: Boolean(obj['facesDetected'] ?? false),
     settingDetected: String(obj['settingDetected'] ?? 'salon'),
     framingType: validateFramingType(obj['framingType']),
+    suitabilityScores: {
+      technicalQuality: Number((obj['suitabilityScores'] as any)?.technicalQuality ?? 80),
+      brandCompatibility: Number((obj['suitabilityScores'] as any)?.brandCompatibility ?? 50),
+      composition: Number((obj['suitabilityScores'] as any)?.composition ?? 50),
+    }
   };
+
+  if (obj['faceCoordinates']) {
+    const coords = obj['faceCoordinates'] as Record<string, number>;
+    if (typeof coords.eyesYPercent === 'number' && typeof coords.mouthYPercent === 'number') {
+      result.faceCoordinates = {
+        eyesYPercent: coords.eyesYPercent,
+        mouthYPercent: coords.mouthYPercent,
+        faceCenterXPercent: typeof coords.faceCenterXPercent === 'number' ? coords.faceCenterXPercent : undefined,
+        faceWidthPercent: typeof coords.faceWidthPercent === 'number' ? coords.faceWidthPercent : undefined,
+      };
+      console.log(`[Vision Model] Successfully extracted face coordinates: Eyes at ${coords.eyesYPercent}%, Mouth at ${coords.mouthYPercent}%, X at ${coords.faceCenterXPercent ?? 'n/a'}%`);
+    } else {
+      console.log(`[Vision Model] GPT returned malformed faceCoordinates:`, coords);
+    }
+  } else {
+    console.log(`[Vision Model] No faceCoordinates detected by GPT in this image.`);
+  }
+
+  if (Array.isArray(obj['protectedSubjects'])) {
+    const parsedSubjects = (obj['protectedSubjects'] as any[])
+      .map((s) => ({
+        type: String(s?.type || 'other') as any,
+        centerXPercent: Number(s?.centerXPercent),
+        centerYPercent: Number(s?.centerYPercent),
+        widthPercent: Number(s?.widthPercent),
+        heightPercent: Number(s?.heightPercent),
+      }))
+      .filter(s =>
+        Number.isFinite(s.centerXPercent) &&
+        Number.isFinite(s.centerYPercent) &&
+        Number.isFinite(s.widthPercent) &&
+        Number.isFinite(s.heightPercent) &&
+        s.widthPercent > 3 &&
+        s.heightPercent > 3
+      );
+    if (parsedSubjects.length > 0) {
+      result.protectedSubjects = parsedSubjects;
+      console.log(`[Vision Model] Protected subjects: ${parsedSubjects.map(s => s.type).join(', ')}`);
+    }
+  }
 
   if (!result.servicePerformed) {
     throw new VisionParseError('Vision result missing servicePerformed field');
@@ -65,7 +115,7 @@ function validateImageQuality(
 // ---------------------------------------------------------------------------
 
 export class VisionAnalysisChain {
-  private model: ChatOpenAI | null = null;
+  private model: ChatGoogleGenerativeAI | null = null;
   private readonly cfg: ReturnType<ModelRouter['selectVisionModel']>;
 
   constructor(
@@ -75,65 +125,121 @@ export class VisionAnalysisChain {
     this.cfg = modelRouter.selectVisionModel();
   }
 
-  private getModel(): ChatOpenAI {
+  private getModel(): ChatGoogleGenerativeAI {
     if (!this.model) {
-      if (!process.env['OPENAI_API_KEY']) {
-        throw new Error('OPENAI_API_KEY is required for vision analysis (image processing)');
+      if (!process.env['GEMINI_API_KEY']) {
+        throw new Error('GEMINI_API_KEY is required for vision analysis (image processing)');
       }
-      this.model = new ChatOpenAI({
-        modelName: this.cfg.modelId,
+      this.model = new ChatGoogleGenerativeAI({
+        model: this.cfg.modelId,
         temperature: this.cfg.temperature,
-        maxTokens: this.cfg.maxTokens,
-        timeout: this.cfg.timeoutMs,
-        openAIApiKey: process.env['OPENAI_API_KEY'],
+        maxOutputTokens: this.cfg.maxTokens,
+        apiKey: process.env['GEMINI_API_KEY'],
+        safetySettings: [
+          { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        ],
       });
     }
     return this.model;
   }
 
   // --------------------------------------------------------------------------
-  // Main Entry — Cache-first. Returns cached result if available.
+  // Main Entry — Buffer-First Pipeline with Deterministic Caching
   // --------------------------------------------------------------------------
 
   async analyse(params: {
-    imageUrl: string;   // Cloudinary CDN URL (processed, accessible)
-    storagePath: string; // Used to compute the cache key if no imageHash
-    imageHash?: string | null; // s3ObjectHash if available
-    cachedResult?: string | null; // Pre-fetched from job payload if already cached
+    imageUrl: string;    // Legacy fallback URL (not used for extraction anymore)
+    storagePath: string; // Raw storage path (Firebase or HTTP)
+    imageHash?: string | null; 
+    cachedResult?: string | null; 
   }): Promise<{ result: VisionAnalysisResult; fromCache: boolean }> {
-    const { imageUrl, storagePath, imageHash, cachedResult } = params;
+    const { storagePath, imageHash, cachedResult } = params;
 
     // 1. Check in-payload cache (fastest — already in memory)
     if (cachedResult) {
       try {
         const parsed = JSON.parse(cachedResult) as VisionAnalysisResult;
+        if (parsed.faceCoordinates) {
+          console.log(`[Vision Model] CACHE HIT: Successfully extracted face coordinates: Eyes at ${parsed.faceCoordinates.eyesYPercent}%, Mouth at ${parsed.faceCoordinates.mouthYPercent}%`);
           return { result: parsed, fromCache: true };
+        } else {
+          console.log(`[Vision Model] CACHE HIT: No faceCoordinates detected in cached result. Forcing re-evaluation...`);
+        }
       } catch {
-        // Corrupted cache — fall through to DB check
+        // Corrupted cache — fall through
       }
     }
 
-    // 2. Compute image hash and check PostgreSQL cache
-    const finalHash = imageHash || createHash('sha256').update(storagePath).digest('hex');
+    // 2. Download Image to Buffer Securely (Bypasses 403s and prepares for Gemini Base64)
+    let imageBuffer: Buffer;
+    try {
+      imageBuffer = await this.downloadImageToBuffer(storagePath);
+    } catch (err: any) {
+      console.error(`[Vision Model] FATAL: Failed to download image for analysis: ${err.message}`);
+      throw err; // Fail fast rather than sending garbage to Gemini
+    }
+
+    // 3. Compute deterministic hash from raw bytes (Perfect cache key)
+    const finalHash = imageHash || createHash('sha256').update(imageBuffer).digest('hex');
     const dbCached = await this.checkDBCache(finalHash);
     if (dbCached) {
       return { result: dbCached, fromCache: true };
     }
 
-    // 3. No cache hit — call GPT-4o Vision
-    const result = await this.callVisionModel(imageUrl);
+    // 4. Encode to Base64 Data URI (Strict requirement for Gemini multimodal)
+    // We assume JPEG/PNG based on common usage; Gemini accepts generic image/jpeg data uris fine
+    const base64DataUri = `data:image/jpeg;base64,${imageBuffer.toString('base64')}`;
 
-    // 4. Save to PostgreSQL cache
+    // 5. Call Vision Model
+    const result = await this.callVisionModel(base64DataUri);
+
+    // 6. Save to PostgreSQL cache
     await this.saveToDBCache(finalHash, result);
 
     return { result, fromCache: false };
   }
 
   // --------------------------------------------------------------------------
-  // GPT-4o Vision API Call
+  // Image Loading Service (Internal)
   // --------------------------------------------------------------------------
 
-  private async callVisionModel(imageUrl: string): Promise<VisionAnalysisResult> {
+  private async downloadImageToBuffer(storagePath: string): Promise<Buffer> {
+    // If it's a standard HTTP(S) public URL, fetch it directly
+    if (storagePath.startsWith('http://') || storagePath.startsWith('https://')) {
+      const response = await fetch(storagePath);
+      if (!response.ok) {
+        throw new Error(`HTTP error fetching image: ${response.status} ${response.statusText}`);
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      return Buffer.from(arrayBuffer);
+    }
+
+    // Otherwise, assume it's a Firebase Storage path (e.g. tenants/...)
+    if (!firebaseStorage) {
+      throw new Error('Firebase Storage is not configured. Cannot fetch raw image for Vision Pipeline.');
+    }
+    
+    // Use the backend's admin credentials to pull the file directly over gRPC
+    console.log(`[Vision Model] Downloading image buffer securely from Firebase Admin SDK...`);
+    const bucket = firebaseStorage.bucket();
+    const file = bucket.file(storagePath);
+    
+    try {
+      const [buffer] = await file.download();
+      return buffer;
+    } catch (err: any) {
+      throw new Error(`Firebase Admin download failed for path '${storagePath}': ${err.message}`);
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // GPT-4o / Gemini Vision API Call
+  // --------------------------------------------------------------------------
+
+  private async callVisionModel(base64DataUri: string): Promise<VisionAnalysisResult> {
     const systemPrompt = `You are a senior beauty industry analyst with 15 years of hands-on experience across hair colour, skin treatments, lashes, brows, nails, and injectables.
 Your job is to extract precise, technically accurate information from beauty treatment photos so a copywriter can write a specific, authentic social media caption.
 The quality of your analysis directly determines whether the caption sounds generic or genuinely expert.
@@ -153,15 +259,33 @@ Return ONLY valid JSON — no markdown, no explanation, no preamble.`;
   "keyVisualDetail": "The single most striking, specific, caption-worthy detail in this image — the one thing that makes this result stand out. One short sentence. E.g. 'The way the colour melts from a deep root shadow into a bright, icy blonde at the ends' or 'The extreme lift on her inner corners makes her eyes look dramatically wider'. This should anchor the hook sentence.",
   "imageQuality": "excellent|good|acceptable|poor",
   "facesDetected": true,
+  "faceCoordinates": {
+    "eyesYPercent": 35,
+    "mouthYPercent": 50,
+    "faceCenterXPercent": 50,
+    "faceWidthPercent": 35
+  },
+  "protectedSubjects": [
+    { "type": "face", "centerXPercent": 50, "centerYPercent": 38, "widthPercent": 35, "heightPercent": 40 },
+    { "type": "product", "centerXPercent": 72, "centerYPercent": 70, "widthPercent": 20, "heightPercent": 25 }
+  ],
   "settingDetected": "salon chair|nail table|treatment bed|studio|outdoor|home — be specific",
-  "framingType": "macro|portrait|wide|unknown — macro is very close up, portrait is head/shoulders, wide is full body/room"
+  "framingType": "macro|portrait|wide|unknown — macro is very close up, portrait is head/shoulders, wide is full body/room",
+  "suitabilityScores": {
+    "technicalQuality": 95,
+    "brandCompatibility": 20,
+    "composition": 60
+  }
 }
 
+If facesDetected is true, you MUST include faceCoordinates. Imagine a grid from 0–100 on both axes (0 = top/left, 100 = bottom/right). Estimate eyesYPercent and mouthYPercent to the nearest 5%. Also estimate faceCenterXPercent (horizontal center of the face) and faceWidthPercent (how wide the face is relative to the frame — typically 25–45 for portraits, wider for macros). If no face is detected, omit faceCoordinates entirely.
+Also return protectedSubjects: every visually important region that text must NOT cover — faces, products/bottles, hands, nails/treatment areas, tools, body focal zones. Use type from: face|product|hands|treatment_area|tool|body|other. Give centerX/Y and width/height as % of the image. Include 1–4 subjects. Omit empty array if nothing meaningful.
+CRITICAL: Score technicalQuality (0-100) on sharpness, exposure, and noise. Score brandCompatibility (0-100) purely on the background and setting (is it a messy peeling wall/distracting=20, or a clean luxury salon/aesthetic=95?). Score composition (0-100) on framing and subject placement.
 Be specific. Vague answers like 'hair was coloured' or 'skin looks better' are useless. Use the technical vocabulary a professional technician would use.`,
         },
         {
           type: 'image_url',
-          image_url: { url: imageUrl, detail: 'high' },
+          image_url: { url: base64DataUri, detail: 'high' },
         },
       ],
     });
@@ -192,7 +316,14 @@ Be specific. Vague answers like 'hair was coloured' or 'skin looks better' are u
         return null;
       }
 
-      return record.result as unknown as VisionAnalysisResult;
+      const parsed = record.result as unknown as VisionAnalysisResult;
+      if (parsed.faceCoordinates) {
+        console.log(`[Vision Model] DB CACHE HIT: Successfully extracted face coordinates: Eyes at ${parsed.faceCoordinates.eyesYPercent}%, Mouth at ${parsed.faceCoordinates.mouthYPercent}%`);
+        return parsed;
+      } else {
+        console.log(`[Vision Model] DB CACHE HIT: No faceCoordinates detected in cached result. INVALIDATING DB CACHE...`);
+        return null;
+      }
     } catch {
       return null;
     }

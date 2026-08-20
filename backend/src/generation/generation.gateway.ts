@@ -9,8 +9,9 @@ import {
 } from '@nestjs/websockets';
 import { Socket, Server } from 'socket.io';
 import { WebSocketServer } from '@nestjs/websockets';
+import { getAllowedOrigins } from '../config/cors';
 
-@WebSocketGateway({ namespace: 'generation', cors: { origin: true, credentials: true } })
+@WebSocketGateway({ namespace: 'generation', cors: { origin: getAllowedOrigins(), credentials: true } })
 export class GenerationGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger(GenerationGateway.name);
 

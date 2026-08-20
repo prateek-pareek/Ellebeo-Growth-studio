@@ -49,6 +49,16 @@ enum PromptCategory {
   @@schema("platform")
 }
 
+enum TemplateFormat {
+  carousel
+  reel
+  story
+  caption
+  tiktok
+
+  @@schema("platform")
+}
+
 enum BusinessGoalType {
   attract_new_clients
   fill_quiet_days
@@ -136,6 +146,62 @@ enum BrandTier {
   @@schema("platform")
 }
 
+// --- AGENTIC VIDEO PIPELINE (GROWTH_STUDIO_VIDEO) ---
+
+enum VideoType {
+  slideshow
+  reels
+  ai_clips
+
+  @@schema("platform")
+}
+
+enum SceneAssetKind {
+  image
+  video
+  generated_clip
+  stock
+
+  @@schema("platform")
+}
+
+enum Motion {
+  ken_burns
+  none
+  slide
+
+  @@schema("platform")
+}
+
+enum Transition {
+  fade
+  cut
+  slide
+
+  @@schema("platform")
+}
+
+enum VideoStatus {
+  draft
+  in_review
+  edited
+  rendering
+  rendered
+  published
+  failed
+
+  @@schema("platform")
+}
+
+enum CriticStatus {
+  pending
+  passed
+  failed
+  revising
+
+  @@schema("platform")
+}
+
 model User {
   id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email               String    @unique @db.VarChar(320)
@@ -150,10 +216,11 @@ model User {
   updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   deletedAt           DateTime? @map("deleted_at") @db.Timestamptz
 
-  tenant        Tenant?
-  refreshTokens RefreshToken[]
-  approvedItems ContentItem[]  @relation("ApprovedBy")
-  resolvedJobs  FailedJob[]    @relation("ResolvedBy")
+  tenant           Tenant?
+  refreshTokens    RefreshToken[]
+  approvedItems    ContentItem[]  @relation("ApprovedBy")
+  resolvedJobs     FailedJob[]    @relation("ResolvedBy")
+  technicianVideos VideoPlan[]
 
   @@index([email])
   @@index([role])
@@ -162,35 +229,35 @@ model User {
 }
 
 model Tenant {
-  id                    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId                String           @unique @map("user_id") @db.Uuid
-  businessName          String           @map("business_name") @db.VarChar(255)
-  displayName           String?          @map("display_name") @db.VarChar(255)
-  subscriptionTier      SubscriptionTier @default(free) @map("subscription_tier")
-  subscriptionStartedAt DateTime?        @map("subscription_started_at") @db.Timestamptz
-  subscriptionExpiresAt DateTime?        @map("subscription_expires_at") @db.Timestamptz
-  status                TenantStatus     @default(active)
-  hasGrowthStudioAccess Boolean          @default(false) @map("has_growth_studio_access")
-  generationRestricted  Boolean          @default(false) @map("generation_restricted")
-  generationSuspended   Boolean          @default(false) @map("generation_suspended")
-  abuseFlagCount        Int              @default(0) @map("abuse_flag_count")
-  lastAbuseFlagAt       DateTime?        @map("last_abuse_flag_at") @db.Timestamptz
-  stripeCustomerId         String?          @map("stripe_customer_id") @db.VarChar(255)
-  stripeSubscriptionId     String?          @map("stripe_subscription_id") @db.VarChar(255)
-  appliedStripeSessionIds  String[]         @default([]) @map("applied_stripe_session_ids")
-  trialGenerationsUsed     Int              @default(0) @map("trial_generations_used")
-  planGenerationsTotal     Int              @default(0) @map("plan_generations_total")
-  planGenerationsUsed      Int              @default(0) @map("plan_generations_used")
-  timezone              String           @default("UTC") @db.VarChar(100)
-  locale                String           @default("en-AU") @db.VarChar(20)
-  avatarUrl             String?          @map("avatar_url") @db.VarChar(2000)
-  phone                 String?          @db.VarChar(50)
-  onboardingCompleted   Boolean          @default(false) @map("onboarding_completed")
-  onboardingStep        Int              @default(1) @map("onboarding_step")
-  termsAcceptedAt       DateTime?        @map("terms_accepted_at") @db.Timestamptz
-  createdAt             DateTime         @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt             DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  deletedAt             DateTime?        @map("deleted_at") @db.Timestamptz
+  id                      String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                  String           @unique @map("user_id") @db.Uuid
+  businessName            String           @map("business_name") @db.VarChar(255)
+  displayName             String?          @map("display_name") @db.VarChar(255)
+  subscriptionTier        SubscriptionTier @default(free) @map("subscription_tier")
+  subscriptionStartedAt   DateTime?        @map("subscription_started_at") @db.Timestamptz
+  subscriptionExpiresAt   DateTime?        @map("subscription_expires_at") @db.Timestamptz
+  status                  TenantStatus     @default(active)
+  hasGrowthStudioAccess   Boolean          @default(false) @map("has_growth_studio_access")
+  generationRestricted    Boolean          @default(false) @map("generation_restricted")
+  generationSuspended     Boolean          @default(false) @map("generation_suspended")
+  abuseFlagCount          Int              @default(0) @map("abuse_flag_count")
+  lastAbuseFlagAt         DateTime?        @map("last_abuse_flag_at") @db.Timestamptz
+  stripeCustomerId        String?          @map("stripe_customer_id") @db.VarChar(255)
+  stripeSubscriptionId    String?          @map("stripe_subscription_id") @db.VarChar(255)
+  appliedStripeSessionIds String[]         @default([]) @map("applied_stripe_session_ids")
+  trialGenerationsUsed    Int              @default(0) @map("trial_generations_used")
+  planGenerationsTotal    Int              @default(0) @map("plan_generations_total")
+  planGenerationsUsed     Int              @default(0) @map("plan_generations_used")
+  timezone                String           @default("UTC") @db.VarChar(100)
+  locale                  String           @default("en-AU") @db.VarChar(20)
+  avatarUrl               String?          @map("avatar_url") @db.VarChar(2000)
+  phone                   String?          @db.VarChar(50)
+  onboardingCompleted     Boolean          @default(false) @map("onboarding_completed")
+  onboardingStep          Int              @default(1) @map("onboarding_step")
+  termsAcceptedAt         DateTime?        @map("terms_accepted_at") @db.Timestamptz
+  createdAt               DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt               DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt               DateTime?        @map("deleted_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id])
 
@@ -205,6 +272,8 @@ model Tenant {
   businessGoals          BusinessGoal[]
   generationJobs         GenerationJob[]
   contentItems           ContentItem[]
+  videoPlans             VideoPlan[]
+  videoPipelineEvents    VideoPipelineEvent[]
   socialAccounts         SocialAccount[]
   scheduledPosts         ScheduledPost[]
   campaigns              Campaign[]
@@ -215,6 +284,9 @@ model Tenant {
   notifications          Notification[]
   feedbacks              ContentFeedback[]
   performances           PostPerformance[]
+  geminiLabBrandDna      GeminiLabBrandDna?
+  geminiLabTemplates     GeminiLabTemplate[]
+  geminiLabPosts         GeminiLabPost[]
 
   @@index([userId])
   @@index([status])
@@ -228,11 +300,25 @@ model Tenant {
 // real OpenAI cost data without a redeploy.
 model PlanSettings {
   id                  String   @id @default("default")
-  priceUsd             Float    @default(50) @map("price_usd")
-  generationsIncluded  Int      @default(100) @map("generations_included")
-  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  priceUsd            Float    @default(50) @map("price_usd")
+  generationsIncluded Int      @default(100) @map("generations_included")
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   @@map("plan_settings")
+  @@schema("platform")
+}
+
+// One row per subscription tier — the daily generation/reel allowance for that
+// tier. Admin-editable so the business can cap AI cost exposure per plan
+// without a redeploy. Rows are self-seeded (see GenerationService.getTierLimits)
+// with today's hardcoded defaults on first read of an empty table.
+model TierGenerationLimits {
+  tier              SubscriptionTier @id
+  generationsPerDay Int              @default(5) @map("generations_per_day")
+  reelsPerDay       Int              @default(2) @map("reels_per_day")
+  updatedAt         DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("tier_generation_limits")
   @@schema("platform")
 }
 
@@ -246,6 +332,40 @@ model MasterPrompt {
 
   @@index([category, isActive])
   @@map("master_prompts")
+  @@schema("platform")
+}
+
+// Structural template library — layout "shape" only (format, slide/zone
+// structure, pillar/category tags). Deliberately holds no colour, font, or
+// image data: every generated preview and every real generation renders
+// this structure through the active tenant's BrandDNA (brandDnaV2 palette/
+// typography/moodboard), so the library can never drift out of brand.
+model Template {
+  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug        String         @unique @db.VarChar(255)
+  name        String         @db.VarChar(255)
+  format      TemplateFormat
+  pillar      String?        @db.VarChar(100)
+  categories  String[]
+  goal        String?        @db.VarChar(100)
+  description String?        @db.Text
+  slideCount  Int?           @map("slide_count")
+  // Ordered array of structural zones, e.g.
+  // [{ "order": 1, "type": "photo", "label": "Before" }, { "order": 2, "type": "text", "label": "Technique" }]
+  // Zone "type" describes content purpose only (photo/text/quote/cta) — never a colour or font.
+  zones       Json?
+  // Optional link into layout-templates.config.json's renderer keys, so the
+  // generation pipeline can resolve a matching base/textTemplate/decoration
+  // for this structural template without duplicating that config here.
+  rendererKey String?        @map("renderer_key") @db.VarChar(255)
+  sortOrder   Int            @default(0) @map("sort_order")
+  isActive    Boolean        @default(true) @map("is_active")
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([format, isActive])
+  @@index([pillar])
+  @@map("templates")
   @@schema("platform")
 }
 
@@ -320,9 +440,132 @@ model BrandDNA {
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
+  videoPlans VideoPlan[]
+
   @@unique([tenantId, isCurrent], name: "unique_current_brand_dna")
   @@index([tenantId])
   @@map("brand_dna")
+  @@schema("platform")
+}
+
+/// Gemini Lab–only guided Brand DNA. Isolated from production BrandDNA /generate.
+/// Designed post layouts for Gemini Lab, as data rather than code.
+///
+/// Separate from `Template` on purpose: that model carries content taxonomy
+/// (format, pillar, zones of purpose) and no geometry whatsoever, and it is
+/// shared with the /generation pipeline. Layout is a different concern with a
+/// different owner, so it gets its own table rather than overloading one that
+/// other services depend on.
+///
+/// Modelled on how brand platforms govern templates: geometry is fixed, every
+/// property is locked by default, and `allows` is the explicit list of what the
+/// generator may vary. A row with `tenantId` null is part of the shared
+/// library; a row with one belongs to that salon alone.
+/// A post the studio decided to keep.
+///
+/// Until now Gemini Lab produced four options, the technician picked one, and
+/// the result existed only as a PNG in a browser download. Nothing was stored,
+/// so there was no library of past work, nothing to schedule, and nothing for
+/// the rest of the product to show.
+///
+/// Deliberately Gemini-Lab-owned rather than folded into ContentItem: that
+/// model requires an appointment, and a price card or an aftercare poster has
+/// no appointment to belong to. Forcing one would mean inventing a fake
+/// appointment or changing a model the /generation pipeline depends on.
+model GeminiLabPost {
+  id       String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId String  @map("tenant_id") @db.Uuid
+
+  /// Where the rendered image lives. Cloudinary, same as the rest of the app.
+  imageUrl String  @map("image_url") @db.VarChar(2000)
+  /// What kind of post this is, and how it was designed — the same axes the
+  /// options are labelled with in the UI.
+  format          String  @db.VarChar(40)
+  photoMode       String  @map("photo_mode") @db.VarChar(32)
+  templateId      String? @map("template_id") @db.VarChar(120)
+  paletteTreatment String? @map("palette_treatment") @db.VarChar(40)
+  typePairing     String? @map("type_pairing") @db.VarChar(120)
+  aspectRatio     String  @default("4:5") @map("aspect_ratio") @db.VarChar(10)
+
+  headline String? @db.Text
+  /// hook / body / cta / hashtags, as the caption panel shows them.
+  caption  Json?
+
+  /// Null until the studio schedules it. The calendar reads this.
+  scheduledFor DateTime? @map("scheduled_for") @db.Timestamptz
+  status       String    @default("kept") @db.VarChar(20)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, scheduledFor])
+  @@index([tenantId, createdAt])
+  @@map("gemini_lab_posts")
+  @@schema("platform")
+}
+
+model GeminiLabTemplate {
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// Stable identifier used in logs, creative memory and preference learning.
+  key       String  @db.VarChar(120)
+  /// Null for the shared library. Set for a salon's own layouts.
+  tenantId  String? @map("tenant_id") @db.Uuid
+  name      String  @db.VarChar(160)
+  /// What the layout is for, shown to the model so it writes copy that fits the shape.
+  intent    String  @db.Text
+  /// framed | full_bleed | typographic | dual_framed
+  photoMode String  @map("photo_mode") @db.VarChar(32)
+  /// Grid regions on the 12x12 safe area: { photo?, text, block? }
+  regions   Json
+  /// Defaults the layout was designed with: textAlign, typeAlign, typeScale, photoShapes.
+  defaults  Json
+  /// What the generator may vary here. Absent means the layout's own defaults are fixed.
+  allows    Json?
+  /// Formats this layout genuinely suits. Empty means any.
+  suits     String[]
+  /// builtin | figma | custom — where the geometry came from.
+  source    String  @default("builtin") @db.VarChar(32)
+  version   Int     @default(1)
+  isActive  Boolean @default(true) @map("is_active")
+  sortOrder Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
+  @@index([photoMode, isActive])
+  @@map("gemini_lab_templates")
+  @@schema("platform")
+}
+
+model GeminiLabBrandDna {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @unique @map("tenant_id") @db.Uuid
+  currentStep Int       @default(1) @map("current_step")
+  draft       Json
+  profile     Json?
+  // Rolling list of recent composition/style signatures for this brand, so
+  // generation can actively avoid repeating a look it just produced.
+  // Without this the pipeline is stateless and eventually re-serves the
+  // same design no matter how varied a single generation is.
+  recentLooks Json?     @map("recent_looks")
+  // Per-tenant overrides for the creative-director prompt blocks. Null means
+  // "use the shipped defaults", so an untouched tenant behaves exactly as
+  // before. Guardrails are never stored here — they live in code where a
+  // prompt edit cannot reach them. See gemini-lab/prompt-registry.ts.
+  promptOverrides Json?  @map("prompt_overrides")
+  completedAt DateTime? @map("completed_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("gemini_lab_brand_dna")
   @@schema("platform")
 }
 
@@ -381,6 +624,7 @@ model Client {
   appointments   Appointment[]
   consentRecords ConsentRecord[]
   generationJobs GenerationJob[]
+  videoPlans     VideoPlan[]
 
   @@index([tenantId])
   @@index([email])
@@ -461,6 +705,7 @@ model Appointment {
   consentRecord          ConsentRecord?
   generationJobs         GenerationJob[]
   contentItems           ContentItem[]
+  videoPlans             VideoPlan[]
   imageAssets            ImageAsset[]
   questionnaireResponses AppointmentQuestionnaireResponse[]
 
@@ -504,7 +749,7 @@ model ImageAsset {
 
 model ImageVisionCache {
   hash          String   @id @db.VarChar(64) // SHA256 of image bytes
-  model         String   @db.VarChar(100)    // e.g., 'gpt-4o'
+  model         String   @db.VarChar(100) // e.g., 'gpt-4o'
   promptVersion String   @map("prompt_version") @db.VarChar(50) // e.g., 'v1.0'
   result        Json
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
@@ -583,6 +828,7 @@ model GenerationJob {
   auditLogs    GenerationAuditLog[]
   failedJobs   FailedJob[]
   contentItems ContentItem[]
+  videoPlans   VideoPlan[]
 
   @@index([tenantId, state])
   @@index([appointmentId])
@@ -642,10 +888,117 @@ model ContentItem {
   generationFingerprints GenerationFingerprint[]
   feedbacks              ContentFeedback[]
   performances           PostPerformance[]
+  videoPlans             VideoPlan[]
 
   @@index([tenantId, status])
   @@index([appointmentId])
   @@map("content_items")
+  @@schema("platform")
+}
+
+// The Video Plan contract (planVersion 1) — single source of truth for all three
+// video types (slideshow/reels/ai_clips). Scenes/audio/captions/branding/compliance
+// are kept as one validated JSON blob (mirrors the jobPayload pattern on
+// GenerationJob) rather than normalized tables; denormalized columns below exist
+// only for querying/indexing. The shared zod schema in
+// backend/src/ai/video/video-plan.schema.ts is authoritative for the JSON shape.
+model VideoPlan {
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String       @map("tenant_id") @db.Uuid
+  appointmentId   String       @map("appointment_id") @db.Uuid
+  clientId        String       @map("client_id") @db.Uuid
+  technicianId    String       @map("technician_id") @db.Uuid
+  brandDnaId      String       @map("brand_dna_id") @db.Uuid
+  generationJobId String?      @map("generation_job_id") @db.Uuid
+  contentItemId   String?      @map("content_item_id") @db.Uuid
+  planVersion     Int          @default(1) @map("plan_version")
+  videoType       VideoType    @map("video_type")
+  objective       String?      @db.VarChar(100)
+  durationSeconds Int          @map("duration_seconds")
+  status          VideoStatus  @default(draft)
+  plan            Json
+  criticStatus    CriticStatus @default(pending) @map("critic_status")
+  criticScore     Float?       @map("critic_score")
+  criticRevisions Int          @default(0) @map("critic_revisions")
+  renderProvider  String?      @map("render_provider") @db.VarChar(50)
+  renderId        String?      @map("render_id") @db.VarChar(255)
+  outputUrl       String?      @map("output_url") @db.VarChar(2000)
+  errorMessage    String?      @map("error_message") @db.Text
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  completedAt     DateTime?    @map("completed_at") @db.Timestamptz
+
+  tenant        Tenant               @relation(fields: [tenantId], references: [id])
+  appointment   Appointment          @relation(fields: [appointmentId], references: [id])
+  client        Client               @relation(fields: [clientId], references: [id])
+  technician    User                 @relation(fields: [technicianId], references: [id])
+  brandDna      BrandDNA             @relation(fields: [brandDnaId], references: [id])
+  generationJob GenerationJob?       @relation(fields: [generationJobId], references: [id])
+  contentItem   ContentItem?         @relation(fields: [contentItemId], references: [id])
+  events        VideoPipelineEvent[]
+
+  @@index([tenantId, status])
+  @@index([appointmentId])
+  @@index([renderId])
+  @@map("video_plans")
+  @@schema("platform")
+}
+
+// Phase 9 — observability. One row per lifecycle event or agent call, tied to
+// a VideoPlan. Deliberately one table for both "trace every agent call" and
+// "emit lifecycle events" from the spec, rather than two — a single
+// createdAt-ordered stream is what "a full run is reconstructable from
+// persisted traces" actually needs; splitting them would only make
+// reconstruction harder.
+enum VideoEventType {
+  video_started
+  plan_drafted
+  agent_call
+  critic_scored
+  revision_requested
+  compliance_reviewed
+  assets_ready
+  render_submitted
+  render_completed
+  render_failed
+  published
+
+  @@schema("platform")
+}
+
+model VideoPipelineEvent {
+  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  videoPlanId String         @map("video_plan_id") @db.Uuid
+  tenantId    String         @map("tenant_id") @db.Uuid
+  eventType   VideoEventType @map("event_type")
+  agentName   String?        @map("agent_name") @db.VarChar(50)
+  tokensUsed  Int?           @map("tokens_used")
+  latencyMs   Int?           @map("latency_ms")
+  costUsd     Float?         @map("cost_usd")
+  payload     Json?
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz
+
+  videoPlan VideoPlan @relation(fields: [videoPlanId], references: [id])
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+
+  @@index([videoPlanId, createdAt])
+  @@index([tenantId, eventType])
+  @@map("video_pipeline_events")
+  @@schema("platform")
+}
+
+// Phase 9 — backend-persisted feature flags (Phase 0 found the frontend
+// stub had no backend table at all). Global rollout percentage, not
+// per-tenant overrides — deterministic hash(tenantId) decides which tenants
+// are "in" below the percentage threshold, so the same tenant stays
+// consistently in/out as the percentage ratchets up during a staged rollout.
+model FeatureFlag {
+  key               String   @id
+  enabled           Boolean  @default(false)
+  rolloutPercentage Int      @default(0) @map("rollout_percentage")
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("feature_flags")
   @@schema("platform")
 }
 
@@ -881,15 +1234,15 @@ model Notification {
 }
 
 model ContentFeedback {
-  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId      String      @map("tenant_id") @db.Uuid
-  contentItemId String      @map("content_item_id") @db.Uuid
-  actionType    String      @map("action_type") @db.VarChar(50) // 'rejected', 'edited', 'accepted'
-  reasonTag     String?     @map("reason_tag") @db.VarChar(100)
-  customComment String?     @map("custom_comment") @db.Text
-  originalText  String?     @map("original_text") @db.Text
-  editedText    String?     @map("edited_text") @db.Text
-  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  contentItemId String   @map("content_item_id") @db.Uuid
+  actionType    String   @map("action_type") @db.VarChar(50) // 'rejected', 'edited', 'accepted'
+  reasonTag     String?  @map("reason_tag") @db.VarChar(100)
+  customComment String?  @map("custom_comment") @db.Text
+  originalText  String?  @map("original_text") @db.Text
+  editedText    String?  @map("edited_text") @db.Text
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   tenant      Tenant      @relation(fields: [tenantId], references: [id])
   contentItem ContentItem @relation(fields: [contentItemId], references: [id])
@@ -900,17 +1253,17 @@ model ContentFeedback {
 }
 
 model PostPerformance {
-  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId      String      @map("tenant_id") @db.Uuid
-  contentItemId String      @map("content_item_id") @db.Uuid
-  saves         Int         @default(0)
-  shares        Int         @default(0)
-  comments      Int         @default(0)
-  bookingsCount Int         @default(0) @map("bookings_count")
-  profileClicks Int         @default(0) @map("profile_clicks")
-  layoutType    String      @map("layout_type") @db.VarChar(100)
-  contentPillar String      @map("content_pillar") @db.VarChar(100)
-  syncedAt      DateTime    @default(now()) @map("synced_at") @db.Timestamptz
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  contentItemId String   @map("content_item_id") @db.Uuid
+  saves         Int      @default(0)
+  shares        Int      @default(0)
+  comments      Int      @default(0)
+  bookingsCount Int      @default(0) @map("bookings_count")
+  profileClicks Int      @default(0) @map("profile_clicks")
+  layoutType    String   @map("layout_type") @db.VarChar(100)
+  contentPillar String   @map("content_pillar") @db.VarChar(100)
+  syncedAt      DateTime @default(now()) @map("synced_at") @db.Timestamptz
 
   tenant      Tenant      @relation(fields: [tenantId], references: [id])
   contentItem ContentItem @relation(fields: [contentItemId], references: [id])
@@ -919,3 +1272,4 @@ model PostPerformance {
   @@map("post_performances")
   @@schema("platform")
 }
+

@@ -1,6 +1,7 @@
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { TenantModule } from './tenant/tenant.module';
@@ -19,6 +20,10 @@ import { CrmModule } from './crm/crm.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { BillingModule } from './billing/billing.module';
 import { PublicConsentModule } from './public-consent/public-consent.module';
+import { TemplateModule } from './template/template.module';
+import { VideoModule } from './ai/video/video.module';
+import { FeatureFlagModule } from './feature-flags/feature-flag.module';
+import { GeminiLabModule } from './gemini-lab/gemini-lab.module';
 import { HealthController } from './health/health.controller';
 import { CacheModule } from '@nestjs/cache-manager';
 import { TenantContextMiddleware } from './common/middleware/tenant-context.middleware';
@@ -61,10 +66,19 @@ import { validateEnv } from './config/env.validation';
     NotificationsModule,
     BillingModule,
     PublicConsentModule,
+    TemplateModule,
+    VideoModule,
+    FeatureFlagModule,
+    GeminiLabModule,
     // AiModule,
   ],
   controllers: [HealthController],
-  providers: [],
+  providers: [
+    // ThrottlerModule.forRoot() above only registers config/storage — without
+    // this guard nothing actually enforces it, including the @Throttle()
+    // overrides on login/refresh in auth.controller.ts.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

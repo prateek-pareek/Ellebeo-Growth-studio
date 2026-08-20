@@ -124,3 +124,6 @@ appendonly.aof
 *.tsbuildinfo
 .eslintcache
 .stylelintcache
+
+# Gemini Lab generated-art disk cache (regenerable, keyed by prompt hash)
+.gemini-lab-art-cache/

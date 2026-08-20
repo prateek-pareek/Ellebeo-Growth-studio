@@ -26,7 +26,7 @@ export class AppointmentService {
 
   async getAppointments(tenantId: string, page = 1, pageSize = 20) {
     const safePage = Number.isFinite(page) ? Math.max(1, Number(page)) : 1;
-    const safePageSize = Number.isFinite(pageSize) ? Math.min(100, Math.max(1, Number(pageSize))) : 20;
+    const safePageSize = Number.isFinite(pageSize) ? Math.min(200, Math.max(1, Number(pageSize))) : 20;
     const rows = await this.prisma.appointment.findMany({
       where: {
         tenantId,
@@ -64,12 +64,15 @@ export class AppointmentService {
       clientIds.length > 0
         ? this.prisma.consentRecord.findMany({
             where: { clientId: { in: clientIds }, tenantId, isCurrent: true },
-            select: { clientId: true, status: true },
+            select: { clientId: true, status: true, updatedAt: true },
+            orderBy: { updatedAt: 'asc' },
           })
         : Promise.resolve([]),
     ]);
 
     const linkedMap = new Map(linkedConsents.map((c) => [c.id, c.status]));
+    // orderBy asc + Map overwrite-on-duplicate-key means the most recently
+    // updated record wins when a client has more than one isCurrent:true row.
     const clientMap = new Map(currentConsents.map((c) => [c.clientId, c.status]));
 
     return rows.map((a) => ({
@@ -115,6 +118,7 @@ export class AppointmentService {
         })
       : await this.prisma.consentRecord.findFirst({
           where: { clientId: apt.clientId, tenantId, isCurrent: true },
+          orderBy: { updatedAt: 'desc' },
           select: {
             status: true,
             allowShowFace: true,
@@ -387,6 +391,7 @@ export class AppointmentService {
     if (!consentStatus && apt.clientId) {
       const current = await this.prisma.consentRecord.findFirst({
         where: { clientId: apt.clientId, tenantId, isCurrent: true },
+        orderBy: { updatedAt: 'desc' },
         select: { status: true },
       });
       consentStatus = current?.status ?? null;

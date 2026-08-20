@@ -42,6 +42,10 @@ COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nestjs:nodejs /app/package.json ./
 COPY --from=builder --chown=nestjs:nodejs /app/prisma ./prisma
+# The compositor loads brand typefaces from assets/fonts at RUNTIME, resolving
+# them relative to the app root. Without this the production image has no
+# fonts at all and every generated post loses its typography.
+COPY --from=builder --chown=nestjs:nodejs /app/assets ./assets
 
 # Expose API port
 EXPOSE 3000

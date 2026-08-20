@@ -10,7 +10,9 @@
 // Non-fatal: orchestrator continues without this block if the call fails.
 // ============================================================================
 
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
+
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 
 const EXCLUDED_USAGE = new Set(['do_not_generate', 'do_not_use_publicly', 'private_ref']);
@@ -32,19 +34,24 @@ export type AssetLibraryItemInput = {
 };
 
 export class AssetLibraryVisionChain {
-  private model: ChatOpenAI | null = null;
+  private model: ChatGoogleGenerativeAI | null = null;
 
-  private getModel(): ChatOpenAI {
+  private getModel(): ChatGoogleGenerativeAI {
     if (!this.model) {
-      if (!process.env['OPENAI_API_KEY']) {
-        throw new Error('OPENAI_API_KEY required for asset library vision analysis');
+      if (!process.env['GEMINI_API_KEY']) {
+        throw new Error('GEMINI_API_KEY required for asset library vision analysis');
       }
-      this.model = new ChatOpenAI({
-        modelName: 'gpt-4o',
+      this.model = new ChatGoogleGenerativeAI({
+        model: 'gemini-pro-latest',
         temperature: 0.1,
-        maxTokens: 400,
-        timeout: 25000,
-        openAIApiKey: process.env['OPENAI_API_KEY'],
+        maxOutputTokens: 8192,
+        apiKey: process.env['GEMINI_API_KEY'],
+      safetySettings: [
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      ],
       });
     }
     return this.model;

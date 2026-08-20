@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Query, Res } from '@nestjs/common';
 import { Response } from 'express';
 import { ScheduleService } from './schedule.service';
+import { verifyOAuthState } from './oauth-state.util';
 
 /**
  * Handles OAuth callbacks from external platforms (Instagram/Facebook).
@@ -16,11 +17,17 @@ import { ScheduleService } from './schedule.service';
 export class SocialOAuthController {
   constructor(private readonly scheduleService: ScheduleService) {}
 
-  /** Decode `mobileRedirectUri` from the base64url-encoded state, if present. */
-  private getMobileRedirectUri(state: string, platform: string): string | null {
+  /**
+   * Decode `mobileRedirectUri` from the signed state, if present and the
+   * signature checks out. Only the app's own elleobe:// deep link scheme is
+   * ever redirected to — state round-trips through Meta unauthenticated, so
+   * anything else must be rejected before it reaches res.redirect().
+   */
+  private getMobileRedirectUri(state: string, _platform: string): string | null {
     try {
-      const decoded = JSON.parse(Buffer.from(state, 'base64url').toString());
-      return decoded?.mobileRedirectUri ?? null;
+      const decoded = verifyOAuthState<{ mobileRedirectUri?: string }>(state);
+      const uri = decoded?.mobileRedirectUri;
+      return uri && /^elleobe:\/\//i.test(uri) ? uri : null;
     } catch {
       return null;
     }

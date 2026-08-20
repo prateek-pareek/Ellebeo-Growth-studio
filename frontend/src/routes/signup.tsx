@@ -11,6 +11,7 @@ import { signInWithPopup } from "firebase/auth";
 import { auth, googleProvider, appleProvider } from "@/lib/firebase";
 import { GoogleIcon } from "@/components/GoogleIcon";
 import { AppleIcon } from "@/components/AppleIcon";
+import { Eye, EyeOff } from "lucide-react";
 
 export const Route = createFileRoute("/signup")({
   head: () => ({
@@ -31,6 +32,7 @@ function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [errors, setErrors] = useState<{ businessName?: string; email?: string; password?: string }>({});
+  const [showPassword, setShowPassword] = useState(false);
 
   function validate() {
     const e: { businessName?: string; email?: string; password?: string } = {};
@@ -49,7 +51,7 @@ function SignupPage() {
     try {
       const result = await signInWithPopup(auth, appleProvider);
       const firebaseIdToken = await result.user.getIdToken();
-      const res = await api.post('/auth/apple', { firebaseIdToken });
+      const res = await api.post('/auth/apple/signup', { firebaseIdToken });
       const { accessToken } = res.data.data ?? res.data;
       login(accessToken);
       toast.success("Account created. Welcome to Elle.Be.O.");
@@ -68,7 +70,7 @@ function SignupPage() {
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const firebaseIdToken = await result.user.getIdToken();
-      const res = await api.post('/auth/google', { firebaseIdToken });
+      const res = await api.post('/auth/google/signup', { firebaseIdToken });
       const { accessToken } = res.data.data ?? res.data;
       login(accessToken);
       toast.success("Account created. Welcome to Elle.Be.O.");
@@ -128,7 +130,7 @@ function SignupPage() {
           >
             <p className="eyebrow mb-6">The Intelligence Layer</p>
             <h2 className="font-serif text-5xl leading-tight mb-8">
-              Build a brand that <span className="italic">feels</span> like you.
+              Build a brand that <span className="italic text-brass-ink">feels</span> like you.
             </h2>
             <p className="text-taupe leading-relaxed">
               Elle.Be.O Growth uses AI to capture your unique voice, style, and goals, turning your expertise into a living Brand DNA.
@@ -162,7 +164,7 @@ function SignupPage() {
                 id="business-name"
                 type="text"
                 placeholder="e.g. Noir Aesthetics"
-                className="bg-transparent border-t-0 border-x-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-foreground transition-all"
+                className="bg-transparent border-t-0 border-x-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-brass transition-all"
                 value={businessName}
                 onChange={(e) => { setBusinessName(e.target.value); if (errors.businessName) setErrors(p => ({ ...p, businessName: undefined })); }}
                 required
@@ -177,7 +179,7 @@ function SignupPage() {
                 type="email"
                 autoComplete="email"
                 placeholder="hello@example.com"
-                className="bg-transparent border-t-0 border-x-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-foreground transition-all"
+                className="bg-transparent border-t-0 border-x-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-brass transition-all"
                 value={email}
                 onChange={(e) => { setEmail(e.target.value); if (errors.email) setErrors(p => ({ ...p, email: undefined })); }}
                 required
@@ -187,23 +189,34 @@ function SignupPage() {
 
             <div className="space-y-2">
               <Label htmlFor="password" className="text-[10px] uppercase tracking-widest text-taupe">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="new-password"
-                placeholder="••••••••"
-                className="bg-transparent border-t-0 border-x-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-foreground transition-all"
-                value={password}
-                onChange={(e) => { setPassword(e.target.value); if (errors.password) setErrors(p => ({ ...p, password: undefined })); }}
-                required
-                minLength={8}
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  placeholder="••••••••"
+                  className="bg-transparent border-t-0 border-x-0 border-b rounded-none px-0 pr-7 focus-visible:ring-0 focus-visible:border-brass transition-all"
+                  value={password}
+                  onChange={(e) => { setPassword(e.target.value); if (errors.password) setErrors(p => ({ ...p, password: undefined })); }}
+                  required
+                  minLength={8}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-0 top-1/2 -translate-y-1/2 text-taupe hover:text-foreground transition-colors"
+                  tabIndex={-1}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
               {errors.password && <p className="text-[11px] text-destructive mt-1">{errors.password}</p>}
             </div>
 
-            <Button 
-              type="submit" 
-              className="w-full bg-foreground text-background hover:bg-taupe transition-colors py-6 rounded-none text-[11px] uppercase tracking-[0.2em]"
+            <Button
+              type="submit"
+              className="w-full bg-brass text-white hover:brightness-105 shadow-elevated hover:shadow-elevated-lg transition-all py-6 rounded-xl text-[11px] uppercase tracking-[0.2em]"
               disabled={loading}
             >
               {loading ? "Creating Account…" : "Get Started"}
@@ -220,7 +233,7 @@ function SignupPage() {
               type="button"
               onClick={handleGoogleSignUp}
               disabled={googleLoading}
-              className="w-full bg-transparent border hairline text-foreground hover:bg-card py-6 rounded-none text-[11px] uppercase tracking-[0.2em] flex items-center justify-center gap-3"
+              className="w-full bg-transparent border border-border text-foreground hover:bg-muted py-6 rounded-xl text-[11px] uppercase tracking-[0.2em] flex items-center justify-center gap-3"
             >
               <GoogleIcon />
               {googleLoading ? "Connecting…" : "Continue with Google"}
@@ -229,7 +242,7 @@ function SignupPage() {
               type="button"
               onClick={handleAppleSignUp}
               disabled={googleLoading}
-              className="w-full bg-foreground text-offwhite hover:bg-taupe py-6 rounded-none text-[11px] uppercase tracking-[0.2em] flex items-center justify-center gap-3"
+              className="w-full bg-foreground text-offwhite hover:bg-taupe py-6 rounded-xl text-[11px] uppercase tracking-[0.2em] flex items-center justify-center gap-3"
             >
               <AppleIcon />
               {googleLoading ? "Connecting…" : "Continue with Apple"}

@@ -51,18 +51,18 @@ export class LogoOverlayService {
 
       const gravity = GRAVITY_MAP[position] || 'south_east';
 
-      // Generate final URL with logo overlay
+      // Keep logo inside a consistent safe margin (not hugging the crop edge)
+      const safe = 36;
       const finalUrl = cloudinary.url(baseUpload.public_id, {
         transformation: [
-          { width: 1024, height: 1024, crop: 'fill' },
           {
             overlay: logoUpload.public_id.replace(/\//g, ':'),
             width: 120,
             gravity,
-            x: 20,
-            y: 20,
-            opacity: 95, // Increased opacity
-            effect: 'shadow:50', // Add shadow to guarantee contrast against light and dark splits
+            x: safe,
+            y: safe,
+            opacity: 95,
+            effect: 'shadow:50',
             crop: 'fit',
           },
           { quality: 'auto', fetch_format: 'auto' },

@@ -5,25 +5,32 @@
 // Non-fatal: if vision fails for any image the orchestrator continues without it.
 // ============================================================================
 
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
+
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 
 const MAX_IMAGES = 3; // Cost cap — never more than 3 moodboard images per generation
 
 export class MoodboardVisionChain {
-  private model: ChatOpenAI | null = null;
+  private model: ChatGoogleGenerativeAI | null = null;
 
-  private getModel(): ChatOpenAI {
+  private getModel(): ChatGoogleGenerativeAI {
     if (!this.model) {
-      if (!process.env['OPENAI_API_KEY']) {
-        throw new Error('OPENAI_API_KEY required for moodboard vision analysis');
+      if (!process.env['GEMINI_API_KEY']) {
+        throw new Error('GEMINI_API_KEY required for moodboard vision analysis');
       }
-      this.model = new ChatOpenAI({
-        modelName: 'gpt-4o',
+      this.model = new ChatGoogleGenerativeAI({
+        model: 'gemini-2.5-flash',
         temperature: 0.1,
-        maxTokens: 400,
-        timeout: 25000,
-        openAIApiKey: process.env['OPENAI_API_KEY'],
+        maxOutputTokens: 8192,
+        apiKey: process.env['GEMINI_API_KEY'],
+      safetySettings: [
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      ],
       });
     }
     return this.model;
@@ -61,6 +68,46 @@ export class MoodboardVisionChain {
           type: 'image_url' as const,
           image_url: { url, detail: 'low' as const },
         })),
+      ],
+    });
+
+    const response = await this.getModel().invoke([
+      new SystemMessage(systemPrompt),
+      humanMessage,
+    ]);
+
+    const content =
+      typeof response.content === 'string'
+        ? response.content
+        : String(response.content);
+
+    return content.trim();
+  }
+
+  /**
+   * Intent-Based Extractor: Analyzes a single image for a specific intent (e.g. 'lighting', 'texture').
+   * Used during the setup-time background job to cache specific traits.
+   */
+  async analyseSingleIntent(url: string, intent: string): Promise<string> {
+    if (!url) return '';
+
+    const systemPrompt =
+      `You are a senior art director interpreting a visual moodboard reference for a beauty brand. ` +
+      `I am providing you with ONE reference image. Your goal is to extract ONLY the visual information related to: ${intent.toUpperCase()}. ` +
+      `Ignore all other elements of the image (subject matter, unrelated aesthetics). ` +
+      `Write in clear, directive language, describing the ${intent} perfectly in 1-2 short sentences. ` +
+      `Return a single plain-text string starting with "${intent.charAt(0).toUpperCase() + intent.slice(1)}:". No JSON, no bullets.`;
+
+    const humanMessage = new HumanMessage({
+      content: [
+        {
+          type: 'text',
+          text: `Analyze this image and describe ONLY its ${intent}.`,
+        },
+        {
+          type: 'image_url' as const,
+          image_url: { url, detail: 'low' as const },
+        },
       ],
     });
 

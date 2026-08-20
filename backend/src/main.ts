@@ -15,14 +15,20 @@ import { SmsService } from './notifications/sms.service';
 import { PrismaService } from './prisma/prisma.service';
 import { startNotificationsWorker } from './notifications/notifications.worker';
 import { startPublishWorker } from './schedule/publish.worker';
+import { startVideoDirectorWorker } from './ai/video/video-director.worker';
+import { startVideoRenderWorker } from './ai/video/video-render.worker';
+import { getAllowedOrigins, isOriginAllowed } from './config/cors';
+import { closeRedisClient } from './config/redis.client';
 
 async function bootstrap() {
   // Body parser disabled globally so the Stripe webhook route can access the
   // raw request body (required for signature verification). Re-applied below
   // for every other route.
   const app = await NestFactory.create(AppModule, { bodyParser: false });
+  
+  app.enableShutdownHooks();
 
-  app.use((req: any, res: any, next: any) => {
+  app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (req.originalUrl === '/api/v1/billing/webhook') {
       express.raw({ type: 'application/json' })(req, res, next);
     } else {
@@ -33,14 +39,14 @@ async function bootstrap() {
 
   // Security Middleware
   app.use(helmet());
-  const allowedOrigins = [
-    process.env.FRONTEND_URL || 'http://localhost:5173',
-    process.env.ADMIN_PORTAL_URL || 'http://localhost:3000',
-  ].filter(Boolean);
 
   app.enableCors({
     origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-      callback(null, true);
+      if (isOriginAllowed(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Origin ${origin} not allowed by CORS`));
+      }
     },
     credentials: true,
   });
@@ -79,17 +85,26 @@ async function bootstrap() {
     await notificationsService.send(dto);
   };
 
-  startContentGenerationWorker(generationGateway.server, notifyFn);
+  const prismaService = app.get(PrismaService);
+  startContentGenerationWorker(prismaService, generationGateway.server, notifyFn);
 
   const notificationsGateway = app.get(NotificationsGateway);
   const smsService = app.get(SmsService);
-  const prismaService = app.get(PrismaService);
-  startNotificationsWorker(prismaService as any, notificationsGateway, smsService);
-  startPublishWorker(prismaService as any);
+  startNotificationsWorker(prismaService, notificationsGateway, smsService);
+  startPublishWorker(prismaService);
+  startVideoDirectorWorker(prismaService);
+  startVideoRenderWorker(prismaService);
   console.log("Server is running on port", port);
   console.log("Environment:", process.env.NODE_ENV);
   console.log("Front end url: ", process.env.FRONTEND_URL);
   console.log("Admin portal url: ", process.env.ADMIN_PORTAL_URL);
+  console.log("CORS allowed origins:", getAllowedOrigins());
+  
+  const originalClose = app.close.bind(app);
+  app.close = async () => {
+    await closeRedisClient();
+    return originalClose();
+  };
 }
 
 bootstrap();

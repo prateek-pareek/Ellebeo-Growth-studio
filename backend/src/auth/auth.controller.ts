@@ -7,6 +7,11 @@ import { LoginDto } from './dto/login.dto';
 import { Request, Response } from 'express';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
+// Shape JwtStrategy.validate() attaches to req.user once JwtAuthGuard passes.
+interface AuthenticatedRequest extends Request {
+  user: { userId: string; role: string; tenantId?: string };
+}
+
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -57,6 +62,9 @@ export class AuthController {
     return { message: 'Logged out successfully' };
   }
 
+  // Login-only: rejects unrecognised emails rather than silently provisioning
+  // a new technician account for anyone (e.g. an Elle.Be.O client) who
+  // happens to click "Continue with Google" on the login page.
   @Post('google')
   @HttpCode(HttpStatus.OK)
   async googleLogin(
@@ -71,6 +79,22 @@ export class AuthController {
     return { accessToken, refreshToken };
   }
 
+  // Signup: provisions a new technician + tenant on first sign-in. Only the
+  // /signup page should call this.
+  @Post('google/signup')
+  @HttpCode(HttpStatus.OK)
+  async googleSignup(
+    @Body('firebaseIdToken') firebaseIdToken: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { accessToken, refreshToken } = await this.authService.firebaseSignup(
+      firebaseIdToken, req.ip, req.headers['user-agent'],
+    );
+    this.setRefreshTokenCookie(res, refreshToken);
+    return { accessToken, refreshToken };
+  }
+
   @Post('apple')
   @HttpCode(HttpStatus.OK)
   async appleLogin(
@@ -79,6 +103,20 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const { accessToken, refreshToken } = await this.authService.firebaseLogin(
+      firebaseIdToken, req.ip, req.headers['user-agent'],
+    );
+    this.setRefreshTokenCookie(res, refreshToken);
+    return { accessToken, refreshToken };
+  }
+
+  @Post('apple/signup')
+  @HttpCode(HttpStatus.OK)
+  async appleSignup(
+    @Body('firebaseIdToken') firebaseIdToken: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { accessToken, refreshToken } = await this.authService.firebaseSignup(
       firebaseIdToken, req.ip, req.headers['user-agent'],
     );
     this.setRefreshTokenCookie(res, refreshToken);
@@ -108,21 +146,21 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Get('me')
-  async getProfile(@Req() req: any) {
+  async getProfile(@Req() req: AuthenticatedRequest) {
     return this.authService.getProfile(req.user.userId);
   }
 
   @UseGuards(JwtAuthGuard)
   @Post('accept-terms')
   @HttpCode(HttpStatus.OK)
-  async acceptTerms(@Req() req: any) {
+  async acceptTerms(@Req() req: AuthenticatedRequest) {
     return this.authService.acceptTerms(req.user.userId);
   }
 
   @UseGuards(JwtAuthGuard)
   @Post('upload-avatar')
   @UseInterceptors(FileInterceptor('file'))
-  async uploadAvatar(@Req() req: any, @UploadedFile() file: Express.Multer.File) {
+  async uploadAvatar(@Req() req: AuthenticatedRequest, @UploadedFile() file: Express.Multer.File) {
     return this.authService.uploadAvatar(req.user.userId, file);
   }
 

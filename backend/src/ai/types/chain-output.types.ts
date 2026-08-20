@@ -18,6 +18,39 @@ export interface VisionAnalysisResult {
   facesDetected: boolean;
   settingDetected: string;
   framingType: 'macro' | 'portrait' | 'wide' | 'unknown';
+  faceCoordinates?: {
+    eyesYPercent: number;
+    mouthYPercent: number;
+    /** Horizontal center of the face as % of image width (0=left, 100=right). */
+    faceCenterXPercent?: number;
+    /** Approximate face width as % of image width. */
+    faceWidthPercent?: number;
+  };
+  /**
+   * Protected visual subjects beyond faces — products, hands, treatment areas, tools, etc.
+   * Percentages are relative to the source image (0–100).
+   */
+  protectedSubjects?: Array<{
+    type: 'face' | 'product' | 'hands' | 'treatment_area' | 'tool' | 'body' | 'other';
+    centerXPercent: number;
+    centerYPercent: number;
+    widthPercent: number;
+    heightPercent: number;
+  }>;
+  suitabilityScores: {
+    technicalQuality: number;
+    brandCompatibility: number;
+    composition: number;
+  };
+  
+  // ==========================================
+  // FUTURE EXTENSIBILITY (PHASE 2)
+  // ==========================================
+  safeZones?: Array<{ x: number; y: number; width: number; height: number; type?: string }>;
+  whitespaceRegions?: Array<{ x: number; y: number; width: number; height: number }>;
+  focalPoint?: { x: number; y: number; description?: string };
+  dominantColors?: string[];
+  compositionType?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -86,7 +119,7 @@ export interface TweakResult {
 // ---------------------------------------------------------------------------
 
 export interface LLMConfig {
-  provider: 'openai' | 'anthropic';
+  provider: 'openai' | 'anthropic' | 'google';
   modelId: string;
   temperature: number;
   maxTokens: number;

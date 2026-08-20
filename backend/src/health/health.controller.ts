@@ -1,6 +1,10 @@
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { PrismaService } from '../prisma/prisma.service';
 
+// Docker/Traefik poll this frequently (every few seconds) — rate limiting it
+// could make an otherwise-healthy service look down and trigger a false restart.
+@SkipThrottle()
 @Controller('health')
 export class HealthController {
   constructor(private readonly prisma: PrismaService) {}

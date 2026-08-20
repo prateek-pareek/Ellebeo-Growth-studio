@@ -1,4 +1,6 @@
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
+
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import { StrategistOutput } from './brand-strategist.chain';
 
@@ -19,14 +21,20 @@ export interface CreativeDirectorResult {
 }
 
 export class CreativeDirectorChain {
-  private model: ChatOpenAI;
+  private model: ChatGoogleGenerativeAI;
 
   constructor() {
-    this.model = new ChatOpenAI({
-      modelName: 'gpt-4o',
+    this.model = new ChatGoogleGenerativeAI({
+      model: 'gemini-pro-latest',
       temperature: 0.5,
-      maxTokens: 1500,
-      openAIApiKey: process.env['OPENAI_API_KEY'] ?? '',
+      maxOutputTokens: 8192,
+      apiKey: process.env['GEMINI_API_KEY'] ?? '',
+      safetySettings: [
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      ],
     });
   }
 
@@ -59,6 +67,7 @@ DESIGN RULES (non-negotiable):
 2. The real photo is the hero — do NOT tell the generator to draw cartoon characters, clipart, or replace real background details.
 3. Every slide must have a designated layoutType, panelHexColor, borderHexColor, and textPosition.
 4. Keep overlays minimal and high-contrast. Use white or the Accent/Background hex for text, and Primary/Secondary/Depth hex for panels.
+5. EXTREMELY CRITICAL: NEVER invent, hallucinate, or alter hex codes. You MUST pick EXACTLY one of the 5 hex codes provided above. Returning a different hex code will crash the system.
 
 Return a JSON array of slide design briefs.`;
 

@@ -14,6 +14,7 @@ import type {
 import type { VisionAnalysisResult, AssembledPrompt } from '../types/chain-output.types';
 import { PromptCache } from './prompt-cache';
 import { getGuardrailsForService, type ServiceCategory } from '../config/service-guardrails';
+import { isMedicalAestheticsBrand } from '../config/medical-compliance';
 
 // Business goal → prompt framing instruction
 const GOAL_FRAMING: Record<BusinessGoalType, string> = {
@@ -112,7 +113,7 @@ OUTPUT:
 - Return ONLY valid JSON — no markdown, no explanation, no preamble`;
 
 export class PromptBuilder {
-  constructor(private readonly cache: PromptCache) {}
+  constructor(private readonly cache: PromptCache) { }
 
   async assembleGenerationPrompt(params: {
     brandDNA: BrandDNARecord;
@@ -145,10 +146,10 @@ export class PromptBuilder {
     const { goldenExamplesFragment, goldenExamplesCacheHit } =
       await this.getGoldenExamplesFragment(brandDNA.tenantId, brandDNA.version, goldenExamples);
 
-    const systemPrompt = masterPromptText 
-      ? this.buildDynamicSystemPrompt(masterPromptText) 
+    const systemPrompt = masterPromptText
+      ? this.buildDynamicSystemPrompt(masterPromptText)
       : this.buildSystemPrompt();
-      
+
     const visionSection = visionResult ? this.buildVisionSection(visionResult) : '';
     const goalSection = GOAL_FRAMING[businessGoal] ?? 'Generate engaging content.';
     const platformSection = PLATFORM_RULES[platform];
@@ -159,21 +160,10 @@ export class PromptBuilder {
 
     const appointmentSection = this.buildAppointmentSection(appointmentContext, consentRestrictions);
 
-    // Medical flag: fires from (1) this appointment's category, (2) brand DNA V2 practitioner flag, (3) brand DNA service categories
+    // Medical flag: fires from (1) this appointment's category, or (2)/(3) the technician's
+    // Brand DNA (practitioner flag / service categories) — see medical-compliance.ts.
     const isMedicalByCategory = serviceCategory === 'injectables_cosmetic' || serviceCategory === 'laser_treatments';
-    const isMedicalByDnaFlag = (() => {
-      try {
-        const v2 = brandDNA.brandDnaV2
-          ? (typeof brandDNA.brandDnaV2 === 'string' ? JSON.parse(brandDNA.brandDnaV2) : brandDNA.brandDnaV2)
-          : null;
-        return v2?.compliance?.medical_aesthetics_practitioner === true;
-      } catch { return false; }
-    })();
-    const isMedicalByServiceCategories = Array.isArray(brandDNA.serviceCategories) &&
-      (brandDNA.serviceCategories as string[]).some(
-        (c) => c === 'injectables_cosmetic' || c === 'laser_treatments' || c === 'medical_aesthetics',
-      );
-    const isMedical = isMedicalByCategory || isMedicalByDnaFlag || isMedicalByServiceCategories;
+    const isMedical = isMedicalByCategory || isMedicalAestheticsBrand(brandDNA);
     const medicalComplianceSection = isMedical
       ? `## AHPRA MEDICAL COMPLIANCE RULES (MANDATORY):
 - This is a regulated medical aesthetics service. You MUST follow AHPRA guidelines.
@@ -352,7 +342,7 @@ ${CRAFT_RULES}`;
     if (dna.brandDnaV2) {
       try {
         const v2 = (typeof dna.brandDnaV2 === 'string' ? JSON.parse(dna.brandDnaV2) : dna.brandDnaV2) as Record<string, any>;
-        
+
         const foundations = v2.foundations || {};
         const essence = v2.essence || {};
         const visual = v2.visual_identity || {};
@@ -436,9 +426,17 @@ ${CRAFT_RULES}`;
       Array.isArray(dna.visualRanking) && dna.visualRanking.length > 0
         ? buildStyleDirectionBlock(dna.visualRanking)
         : dna.aestheticDirection ? `**Aesthetic direction:** ${str(dna.aestheticDirection)}` : '',
-      Array.isArray(dna.moodboardLabels) && dna.moodboardLabels.length > 0
-        ? `**Visual references (moodboard — use for feel, not to copy):** ${(dna.moodboardLabels as string[]).map((label, i) => `Reference ${i + 1}: ${label}`).join('. ')}.`
-        : '',
+      (function () {
+        const cache = Array.isArray((dna as any).moodboardIntentsCache) ? (dna as any).moodboardIntentsCache : [];
+        const moods = cache.filter((c: any) => ['mood', 'vibe', 'style'].includes(c.intent?.toLowerCase()));
+        if (moods.length > 0) {
+          const selectedMoods = moods.map((m: any) => m.summary).join(' ');
+          return `**Moodboard Tone Directive (CRITICAL):** Adopt a brand voice and aesthetic tone that perfectly matches this moodboard direction: ${selectedMoods}`;
+        }
+        return Array.isArray(dna.moodboardLabels) && dna.moodboardLabels.length > 0
+          ? `**Visual references (moodboard — use for feel, not to copy):** ${(dna.moodboardLabels as string[]).map((label, i) => `Reference ${i + 1}: ${label}`).join('. ')}.`
+          : '';
+      })(),
       dna.depthBrandColor ? `**Depth brand colour (for text/headings only):** ${str(dna.depthBrandColor)}` : '',
       dna.formattingStyle ? `**Caption style notes:** ${str(dna.formattingStyle)}` : '',
       preferred.length ? `**Vocabulary you love (use these):** ${preferred.join(', ')}` : '',

@@ -1,6 +1,7 @@
 import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/providers/auth-provider";
+import { useFeatureFlag } from "@/lib/feature-flags";
 import { InitialsAvatar } from "@/components/InitialsAvatar";
 import { NotificationBell } from "@/components/NotificationPanel";
 import { api } from "@/lib/api";
@@ -23,10 +24,12 @@ const NAV: Array<{ to: string; label: string; icon: React.ComponentType<{ classN
 
 const DESKTOP_NAV: Array<{ to: string; label: string }> = [
   { to: "/", label: "Home" },
+  { to: "/gemini-lab", label: "Studio" },
   { to: "/brand", label: "Brand" },
   { to: "/appointments", label: "Appointments" },
   { to: "/bookings", label: "Bookings" },
   { to: "/content", label: "Content" },
+  { to: "/video", label: "Video" },
   { to: "/calendar", label: "Calendar" },
   { to: "/templates", label: "Templates" },
   // { to: "/campaigns", label: "Campaigns" },
@@ -34,6 +37,14 @@ const DESKTOP_NAV: Array<{ to: string; label: string }> = [
 ];
 
 const AUTH_ROUTES = ['/login', '/signup', '/auth', '/landing'];
+
+// Only the app's own custom scheme may be used as a post-OAuth redirect target —
+// `state` round-trips through the URL unauthenticated, so an attacker can set
+// mobileRedirectUri to a `javascript:` URI to run script in this origin unless
+// we reject anything that isn't our deep link scheme before it reaches href/location.
+function isSafeMobileRedirectUri(uri: string): boolean {
+  return /^elleobe:\/\//i.test(uri);
+}
 
 /** Safe base64url decode — works with or without the Node Buffer polyfill. */
 function decodeOAuthState(state: string): Record<string, string> | null {
@@ -53,8 +64,16 @@ export function AppShell() {
   const { pathname } = useLocation();
   const { user, loading } = useAuth();
   const navigate = useNavigate();
+  const videoEnabled = useFeatureFlag("GROWTH_STUDIO_VIDEO");
+  const desktopNav = DESKTOP_NAV.filter((item) => item.to !== "/video" || videoEnabled);
   const oauthHandled = useRef(false);
-  const [oauthProcessing, setOauthProcessing] = useState(false);
+  // Computed synchronously so the processing screen is up from the very first
+  // render — this (not `oauthParams`, which is memoized once and never goes
+  // falsy again) is what gates the screen, so clearing it below actually lets
+  // the app render again instead of staying stuck forever.
+  const [oauthProcessing, setOauthProcessing] = useState(
+    () => pathname === "/profile" && new URLSearchParams(window.location.search).has("state"),
+  );
   const [oauthStatus, setOauthStatus] = useState<"processing" | "success" | "error">("processing");
   const [oauthMessage, setOauthMessage] = useState("Connecting your account…");
   const [mobileUrl, setMobileUrl] = useState("");
@@ -82,7 +101,8 @@ export function AppShell() {
     const { code, state, error } = oauthParams;
     const decoded = decodeOAuthState(state);
     const platform = decoded?.platform === "facebook" ? "facebook" : "instagram";
-    const mobileRedirectUri = decoded?.mobileRedirectUri || "";
+    const rawMobileRedirectUri = decoded?.mobileRedirectUri || "";
+    const mobileRedirectUri = isSafeMobileRedirectUri(rawMobileRedirectUri) ? rawMobileRedirectUri : "";
     const isMobile = !!mobileRedirectUri;
 
     // Handle denied / error
@@ -96,6 +116,7 @@ export function AppShell() {
       } else {
         setOauthStatus("error");
         setOauthMessage("Permission was denied. Please try again.");
+        setTimeout(() => setOauthProcessing(false), 3000);
       }
       return;
     }
@@ -128,12 +149,40 @@ export function AppShell() {
         } else {
           setOauthStatus("error");
           setOauthMessage("Connection failed. Please try again.");
+          setTimeout(() => setOauthProcessing(false), 3000);
         }
       });
   }, [oauthParams]);
 
+  // These two must run on EVERY render, so they sit above the OAuth early
+  // return below. They used to sit under it: `oauthProcessing` starts true on
+  // the /profile?state=… callback and is set false when the connection
+  // finishes, so the render after that ran two more hooks than the render
+  // before it and React threw "Rendered more hooks than during the previous
+  // render" — crashing the page at the end of every Google/Apple connect.
+  const isPlansCallback = useMemo(() => {
+    if (pathname !== "/plans") return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.has("success") || params.has("canceled");
+  }, [pathname]);
+
+  useEffect(() => {
+    // While the OAuth screen owns the page, the auth guard must stay out of
+    // the way — it would otherwise redirect mid-connection. The early return
+    // used to provide this implicitly.
+    if (oauthProcessing) return;
+    if (loading) return;
+    if (isPlansCallback) return;
+    if (!user && !AUTH_ROUTES.includes(pathname)) {
+      navigate({ to: "/landing" });
+    }
+    if (user && AUTH_ROUTES.includes(pathname)) {
+      navigate({ to: "/" });
+    }
+  }, [loading, user, pathname, navigate, isPlansCallback, oauthProcessing]);
+
   // ── Show OAuth processing UI (bypasses auth loading + auth guard) ──
-  if (oauthParams || oauthProcessing) {
+  if (oauthProcessing) {
     return (
       <div className="min-h-dvh bg-background flex flex-col items-center justify-center gap-4 px-4 text-center">
         {oauthStatus === "processing" && (
@@ -165,23 +214,6 @@ export function AppShell() {
     );
   }
 
-  const isPlansCallback = useMemo(() => {
-    if (pathname !== "/plans") return false;
-    const params = new URLSearchParams(window.location.search);
-    return params.has("success") || params.has("canceled");
-  }, [pathname]);
-
-  useEffect(() => {
-    if (loading) return;
-    if (isPlansCallback) return;
-    if (!user && !AUTH_ROUTES.includes(pathname)) {
-      navigate({ to: "/landing" });
-    }
-    if (user && AUTH_ROUTES.includes(pathname)) {
-      navigate({ to: "/" });
-    }
-  }, [loading, user, pathname, navigate, isPlansCallback]);
-
   if (loading) {
     return (
       <div className="min-h-dvh bg-background flex items-center justify-center">
@@ -211,20 +243,21 @@ export function AppShell() {
             <span className="eyebrow mt-1">Growth</span>
           </Link>
 
-          <div className="hidden lg:flex items-center gap-7">
-            {DESKTOP_NAV.map((item) => {
+          <div className="hidden lg:flex items-center gap-1">
+            {desktopNav.map((item) => {
               const active = pathname === item.to;
               return (
                 <Link
                   key={item.to}
                   to={item.to}
                   className={
-                    "text-[11px] uppercase tracking-[0.22em] pb-1 transition-colors " +
+                    "relative flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] px-3 py-2 rounded-full transition-colors " +
                     (active
-                      ? "text-foreground border-b border-foreground"
-                      : "text-taupe hover:text-foreground")
+                      ? "text-foreground bg-card shadow-elevated"
+                      : "text-taupe hover:text-foreground hover:bg-nude/20")
                   }
                 >
+                  {active && <span className="size-1.5 rounded-full bg-brass" />}
                   {item.label}
                 </Link>
               );
@@ -235,9 +268,9 @@ export function AppShell() {
             {user ? (
               <>
                 <NotificationBell />
-                <div className="hidden sm:flex flex-col items-end leading-tight">
-                  <span className="text-xs font-medium text-foreground">{user?.tenant?.businessName || user?.email}</span>
-                  <span className="text-[10px] text-taupe">{user?.email}</span>
+                <div className="hidden sm:flex flex-col items-end leading-tight gap-0.5">
+                  <span className="text-sm font-semibold text-foreground">{user?.tenant?.businessName || user?.email}</span>
+                  <span className="text-xs text-taupe">{user?.email}</span>
                 </div>
                 <Link to="/profile">
                   <InitialsAvatar

@@ -11,7 +11,7 @@ export const AI_CONFIG = {
   models: {
     standardText: {
       provider: 'openai' as const,
-      modelId: 'gpt-4o-mini',
+      modelId: 'gemini-flash-latest',
       temperature: 0.75,
       maxTokens: 1024,
       timeoutMs: 30_000,
@@ -25,14 +25,20 @@ export const AI_CONFIG = {
     },
     vision: {
       provider: 'openai' as const,
-      modelId: 'gpt-4o',
+      modelId: 'gemini-2.5-flash',
       temperature: 0.2,       // low — vision output should be factual
-      maxTokens: 512,
+      maxTokens: 2048,
       timeoutMs: 45_000,
+    },
+    // Isolated Gemini Lab playground only — does not feed the Sharp compositor.
+    imageGeneration: {
+      provider: 'google' as const,
+      modelId: 'gemini-2.5-flash-image',
+      timeoutMs: 90_000,
     },
     reelScript: {
       provider: 'openai' as const,
-      modelId: 'gpt-4o-mini',
+      modelId: 'gemini-flash-latest',
       temperature: 0.8,
       maxTokens: 256,
       timeoutMs: 30_000,
@@ -104,6 +110,28 @@ export const AI_CONFIG = {
         removeOnFail: false,
       },
     },
+    videoRender: {
+      name: 'video-render',
+      concurrency: 5,
+      rateLimit: { max: 10, duration: 60_000 },
+      defaultJobOptions: {
+        attempts: 2,
+        backoff: { type: 'exponential' as const, delay: 5_000 },
+        removeOnComplete: { count: 100 },
+        removeOnFail: false,
+      },
+    },
+    videoDirector: {
+      name: 'video-director',
+      concurrency: 3,
+      rateLimit: { max: 10, duration: 60_000 },
+      defaultJobOptions: {
+        attempts: 2,
+        backoff: { type: 'exponential' as const, delay: 5_000 },
+        removeOnComplete: { count: 100 },
+        removeOnFail: false,
+      },
+    },
     deadLetter: {
       name: 'dead-letter-queue',
       concurrency: 0,   // no workers — manual review only
@@ -159,84 +187,84 @@ export const AI_CONFIG = {
   // --------------------------------------------------------------------------
   rateLimits: {
     free: {
-      maxGenerationsPerDay:        2,
-      maxGenerationsPerMonth:      5,
-      maxReelsPerDay:              0,
-      maxImageGenerationsPerDay:   2,
+      maxGenerationsPerDay: 2,
+      maxGenerationsPerMonth: 5,
+      maxReelsPerDay: 0,
+      maxImageGenerationsPerDay: 2,
       maxImageGenerationsPerMonth: 5,
-      maxTweaksPerContentItem:     1,
-      maxConcurrentJobs:           1,
-      minJobIntervalSec:          30,
+      maxTweaksPerContentItem: 1,
+      maxConcurrentJobs: 1,
+      minJobIntervalSec: 30,
     },
     standard: {
-      maxGenerationsPerDay:       10,
-      maxGenerationsPerMonth:    100,
-      maxReelsPerDay:              3,
-      maxImageGenerationsPerDay:  20,
+      maxGenerationsPerDay: 10,
+      maxGenerationsPerMonth: 100,
+      maxReelsPerDay: 3,
+      maxImageGenerationsPerDay: 20,
       maxImageGenerationsPerMonth: 200,
-      maxTweaksPerContentItem:     3,
-      maxConcurrentJobs:           2,
-      minJobIntervalSec:          10,
+      maxTweaksPerContentItem: 3,
+      maxConcurrentJobs: 2,
+      minJobIntervalSec: 10,
     },
     premium: {
-      maxGenerationsPerDay:       30,
-      maxGenerationsPerMonth:    300,
-      maxReelsPerDay:             10,
-      maxImageGenerationsPerDay:  80,
+      maxGenerationsPerDay: 30,
+      maxGenerationsPerMonth: 300,
+      maxReelsPerDay: 10,
+      maxImageGenerationsPerDay: 80,
       maxImageGenerationsPerMonth: 800,
-      maxTweaksPerContentItem:     5,
-      maxConcurrentJobs:           5,
-      minJobIntervalSec:           5,
+      maxTweaksPerContentItem: 5,
+      maxConcurrentJobs: 5,
+      minJobIntervalSec: 5,
     },
     tier1: {
-      maxGenerationsPerDay:        2,
-      maxGenerationsPerMonth:     60,
-      maxReelsPerDay:              0,
-      maxImageGenerationsPerDay:   2,
+      maxGenerationsPerDay: 2,
+      maxGenerationsPerMonth: 60,
+      maxReelsPerDay: 0,
+      maxImageGenerationsPerDay: 2,
       maxImageGenerationsPerMonth: 60,
-      maxTweaksPerContentItem:     2,
-      maxConcurrentJobs:           1,
-      minJobIntervalSec:          20,
+      maxTweaksPerContentItem: 2,
+      maxConcurrentJobs: 1,
+      minJobIntervalSec: 20,
     },
     tier2: {
-      maxGenerationsPerDay:        2,
-      maxGenerationsPerMonth:     60,
-      maxReelsPerDay:              2,
-      maxImageGenerationsPerDay:   2,
+      maxGenerationsPerDay: 2,
+      maxGenerationsPerMonth: 60,
+      maxReelsPerDay: 2,
+      maxImageGenerationsPerDay: 2,
       maxImageGenerationsPerMonth: 60,
-      maxTweaksPerContentItem:     3,
-      maxConcurrentJobs:           2,
-      minJobIntervalSec:          15,
+      maxTweaksPerContentItem: 3,
+      maxConcurrentJobs: 2,
+      minJobIntervalSec: 15,
     },
     tier3: {
-      maxGenerationsPerDay:       50,
-      maxGenerationsPerMonth:    999,
-      maxReelsPerDay:             20,
-      maxImageGenerationsPerDay:  50,
+      maxGenerationsPerDay: 50,
+      maxGenerationsPerMonth: 999,
+      maxReelsPerDay: 20,
+      maxImageGenerationsPerDay: 50,
       maxImageGenerationsPerMonth: 999,
-      maxTweaksPerContentItem:     5,
-      maxConcurrentJobs:           3,
-      minJobIntervalSec:           5,
+      maxTweaksPerContentItem: 5,
+      maxConcurrentJobs: 3,
+      minJobIntervalSec: 5,
     },
     tier4: {
-      maxGenerationsPerDay:       50,
-      maxGenerationsPerMonth:    999,
-      maxReelsPerDay:             20,
-      maxImageGenerationsPerDay:  50,
+      maxGenerationsPerDay: 50,
+      maxGenerationsPerMonth: 999,
+      maxReelsPerDay: 20,
+      maxImageGenerationsPerDay: 50,
       maxImageGenerationsPerMonth: 999,
-      maxTweaksPerContentItem:     5,
-      maxConcurrentJobs:           3,
-      minJobIntervalSec:           5,
+      maxTweaksPerContentItem: 5,
+      maxConcurrentJobs: 3,
+      minJobIntervalSec: 5,
     },
     tier5: {
-      maxGenerationsPerDay:      999,
-      maxGenerationsPerMonth:    999,
-      maxReelsPerDay:            999,
+      maxGenerationsPerDay: 999,
+      maxGenerationsPerMonth: 999,
+      maxReelsPerDay: 999,
       maxImageGenerationsPerDay: 999,
       maxImageGenerationsPerMonth: 999,
-      maxTweaksPerContentItem:    10,
-      maxConcurrentJobs:          10,
-      minJobIntervalSec:           2,
+      maxTweaksPerContentItem: 10,
+      maxConcurrentJobs: 10,
+      minJobIntervalSec: 2,
     },
     regenerationDebounceSec: 10,
   },
@@ -256,6 +284,20 @@ export const AI_CONFIG = {
   },
 
   // --------------------------------------------------------------------------
+  // Agentic video pipeline (GROWTH_STUDIO_VIDEO — default off)
+  // --------------------------------------------------------------------------
+  video: {
+    flag: 'GROWTH_STUDIO_VIDEO' as const,
+    defaultCriticMaxRevisions: 2,
+    renderProvider: 'shotstack' as const,
+    maxToolCallsPerAgent: 6,
+    maxTokensPerVideo: 8_000,
+    maxCostUsdPerVideo: 0.25,
+    directorMaxTokens: 1024,
+    scriptMaxTokens: 1024,
+  },
+
+  // --------------------------------------------------------------------------
   // Shotstack Reel Settings
   // --------------------------------------------------------------------------
   shotstack: {
@@ -268,6 +310,14 @@ export const AI_CONFIG = {
     voiceoverVolume: 1.0,
     outputResolution: '1080' as const,
     outputFps: 30,
+  },
+
+  // --------------------------------------------------------------------------
+  // Runway Gen-3 (text-to-video, ai_clips — Phase 7, opt-in/premium)
+  // --------------------------------------------------------------------------
+  runway: {
+    pollIntervalMs: 5_000,
+    maxPollAttempts: 60,   // 60 x 5s = 5 minutes — clip generation is slower than Shotstack renders
   },
 
   // --------------------------------------------------------------------------
@@ -306,6 +356,53 @@ export const AI_CONFIG = {
   },
 
   // --------------------------------------------------------------------------
+  // Per-state ETA (seconds remaining), shared by JobProgressEmitter (websocket)
+  // and GenerationService (REST polling fallback) so both surfaces agree.
+  // --------------------------------------------------------------------------
+  stateEtaSeconds: {
+    created: 45,
+    queued: 45,
+    processing_image: 35,
+    processing_vision: 25,
+    building_prompt: 20,
+    generating_text: 12,
+    generating_reel: 90,
+    completed: 0,
+    failed: 0,
+    retrying: 30,
+    blocked: 0,
+    dead_letter: 0,
+  } as Record<string, number>,
+
+  // --------------------------------------------------------------------------
+  // Live progress floors (percent), used by GenerationProgressTracker.
+  // Deliberately conservative — real pacing comes from elapsed-time-vs-total-
+  // estimate (recomputed every read), these just (a) guarantee the number
+  // never regresses below a real structural signal, and (b) keep the very
+  // early/late edges honest. Making these too generous (e.g. the old
+  // 20/35/50/70 step-count-based scheme) is exactly what made the bar race
+  // ahead of real backend completion — caption generation finishes a small
+  // fraction of the way into a carousel/story job's true wall-clock time, so
+  // jumping straight to 70% there was a lie the moment the slow image work
+  // started. Terminal states are 100 — once the async work is over, "percent
+  // remaining" is meaningless regardless of pass/fail outcome.
+  // --------------------------------------------------------------------------
+  stateFloorPercent: {
+    created: 0,
+    queued: 2,
+    processing_image: 4,
+    processing_vision: 8,
+    building_prompt: 12,
+    generating_text: 16,
+    generating_reel: 16,
+    completed: 100,
+    failed: 100,
+    retrying: 0,
+    blocked: 100,
+    dead_letter: 100,
+  } as Record<string, number>,
+
+  // --------------------------------------------------------------------------
   // OpenTelemetry
   // --------------------------------------------------------------------------
   otel: {
@@ -328,8 +425,8 @@ export const AI_CONFIG = {
   // Cost Estimation (USD per 1K tokens — update when pricing changes)
   // --------------------------------------------------------------------------
   pricing: {
-    'gpt-4o-mini': { inputPer1k: 0.00015, outputPer1k: 0.0006 },
-    'gpt-4o': { inputPer1k: 0.005, outputPer1k: 0.015 },
+    'gemini-flash-latest': { inputPer1k: 0.00015, outputPer1k: 0.0006 },
+    'gemini-pro-latest': { inputPer1k: 0.005, outputPer1k: 0.015 },
     'claude-3-5-sonnet-20241022': { inputPer1k: 0.003, outputPer1k: 0.015 },
   },
 
@@ -342,3 +439,18 @@ export const AI_CONFIG = {
 } as const;
 
 export type AIConfig = typeof AI_CONFIG;
+
+// ----------------------------------------------------------------------------
+// Total job duration estimate, by requested output formats. Shared by
+// GenerationService (seeds the frontend's initial countdown at job creation)
+// and GenerationOrchestrator (anchors every in-flight progress checkpoint's
+// "seconds remaining" to total elapsed vs. this total, instead of a per-step
+// guess) so the countdown always reflects the whole job, not just the current
+// internal stage.
+// ----------------------------------------------------------------------------
+export function estimateTotalJobSeconds(outputFormats: string[]): number {
+  if (outputFormats.includes('reel')) return 140;
+  if (outputFormats.includes('carousel')) return 75;
+  if (outputFormats.includes('story')) return 65;
+  return 35;
+}

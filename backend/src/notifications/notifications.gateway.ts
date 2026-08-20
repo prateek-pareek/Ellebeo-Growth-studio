@@ -8,8 +8,24 @@ import { Server, Socket } from 'socket.io';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import * as jwt from 'jsonwebtoken';
+import { getAllowedOrigins } from '../config/cors';
 
-@WebSocketGateway({ namespace: 'notifications', cors: { origin: '*' } })
+interface DecodedAccessToken {
+  tenantId?: string;
+  exp?: number;
+}
+
+interface NotificationPayload {
+  id: string;
+  type: string;
+  title: string | null;
+  body: string | null;
+  data?: unknown;
+  createdAt: Date;
+  isReplay?: boolean;
+}
+
+@WebSocketGateway({ namespace: 'notifications', cors: { origin: getAllowedOrigins(), credentials: true } })
 export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
@@ -31,7 +47,7 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
       // Use ignoreExpiration so the WebSocket stays connected while the client
       // is refreshing its access token. We still verify the signature (tamper-proof)
       // and enforce a hard 30-minute grace window beyond the stated expiry.
-      const payload = jwt.verify(token, secret, { ignoreExpiration: true }) as any;
+      const payload = jwt.verify(token, secret, { ignoreExpiration: true }) as DecodedAccessToken;
       const now = Math.floor(Date.now() / 1000);
       if (payload.exp && payload.exp < now - 1800) {
         // Token expired more than 30 minutes ago — reject
@@ -75,7 +91,7 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
     client.rooms.forEach(room => client.leave(room));
   }
 
-  emit(tenantId: string, notification: any) {
+  emit(tenantId: string, notification: NotificationPayload) {
     if (!this.server) {
       return;
     }

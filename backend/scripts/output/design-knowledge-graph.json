@@ -1,0 +1,380 @@
+{
+  "templateCount": 2040,
+  "layoutFamilies": [
+    {
+      "label": "countdown_promo",
+      "count": 348,
+      "pct": 17.058823529411764
+    },
+    {
+      "label": "product_showcase",
+      "count": 264,
+      "pct": 12.941176470588237
+    },
+    {
+      "label": "split",
+      "count": 262,
+      "pct": 12.84313725490196
+    },
+    {
+      "label": "text_only",
+      "count": 261,
+      "pct": 12.794117647058822
+    },
+    {
+      "label": "clinical_hero",
+      "count": 228,
+      "pct": 11.176470588235295
+    },
+    {
+      "label": "minimalist_quote",
+      "count": 186,
+      "pct": 9.117647058823529
+    },
+    {
+      "label": "before_after",
+      "count": 157,
+      "pct": 7.696078431372549
+    },
+    {
+      "label": "editorial",
+      "count": 145,
+      "pct": 7.107843137254902
+    },
+    {
+      "label": "testimonial",
+      "count": 59,
+      "pct": 2.892156862745098
+    },
+    {
+      "label": "quadrant",
+      "count": 45,
+      "pct": 2.2058823529411766
+    },
+    {
+      "label": "transformation",
+      "count": 40,
+      "pct": 1.9607843137254901
+    },
+    {
+      "label": "scrapbook",
+      "count": 19,
+      "pct": 0.9313725490196079
+    },
+    {
+      "label": "announcement",
+      "count": 15,
+      "pct": 0.7352941176470588
+    },
+    {
+      "label": "polaroid",
+      "count": 10,
+      "pct": 0.49019607843137253
+    },
+    {
+      "label": "notification_card",
+      "count": 1,
+      "pct": 0.049019607843137254
+    }
+  ],
+  "visualStyles": [
+    {
+      "label": "organic",
+      "count": 588,
+      "pct": 28.823529411764703
+    },
+    {
+      "label": "minimal",
+      "count": 536,
+      "pct": 26.27450980392157
+    },
+    {
+      "label": "minimalist",
+      "count": 513,
+      "pct": 25.147058823529413
+    },
+    {
+      "label": "modern",
+      "count": 399,
+      "pct": 19.558823529411764
+    },
+    {
+      "label": "editorial",
+      "count": 3,
+      "pct": 0.14705882352941177
+    },
+    {
+      "label": "clinical",
+      "count": 1,
+      "pct": 0.049019607843137254
+    }
+  ],
+  "readingFlows": [
+    {
+      "label": "center-down",
+      "count": 1269,
+      "pct": 62.205882352941174
+    },
+    {
+      "label": "circular",
+      "count": 217,
+      "pct": 10.637254901960784
+    },
+    {
+      "label": "undetermined",
+      "count": 207,
+      "pct": 10.147058823529411
+    },
+    {
+      "label": "center-outward",
+      "count": 169,
+      "pct": 8.284313725490195
+    },
+    {
+      "label": "diagonal",
+      "count": 97,
+      "pct": 4.754901960784314
+    },
+    {
+      "label": "asymmetric",
+      "count": 45,
+      "pct": 2.2058823529411766
+    },
+    {
+      "label": "z-pattern",
+      "count": 36,
+      "pct": 1.7647058823529411
+    }
+  ],
+  "negativeSpace": [
+    {
+      "label": "tight",
+      "count": 1488,
+      "pct": 72.94117647058823
+    },
+    {
+      "label": "moderate",
+      "count": 350,
+      "pct": 17.15686274509804
+    },
+    {
+      "label": "large",
+      "count": 202,
+      "pct": 9.901960784313726
+    }
+  ],
+  "typography": [
+    {
+      "label": "bold_sans",
+      "count": 1495,
+      "pct": 73.2843137254902
+    },
+    {
+      "label": "mixed",
+      "count": 234,
+      "pct": 11.470588235294118
+    },
+    {
+      "label": "script",
+      "count": 122,
+      "pct": 5.980392156862745
+    },
+    {
+      "label": "italic_sans",
+      "count": 110,
+      "pct": 5.392156862745098
+    },
+    {
+      "label": "modern_sans",
+      "count": 64,
+      "pct": 3.1372549019607843
+    },
+    {
+      "label": "fashion_serif",
+      "count": 10,
+      "pct": 0.49019607843137253
+    },
+    {
+      "label": "serif",
+      "count": 5,
+      "pct": 0.24509803921568626
+    }
+  ],
+  "decorationComponents": [
+    {
+      "label": "textured_background",
+      "count": 471,
+      "pct": 17.753486618921976
+    },
+    {
+      "label": "frame_border",
+      "count": 435,
+      "pct": 16.396532227666793
+    },
+    {
+      "label": "shadow",
+      "count": 344,
+      "pct": 12.96645307199397
+    },
+    {
+      "label": "divider",
+      "count": 208,
+      "pct": 7.840180927252168
+    },
+    {
+      "label": "geometric_badge",
+      "count": 170,
+      "pct": 6.407840180927252
+    },
+    {
+      "label": "illustration",
+      "count": 154,
+      "pct": 5.804749340369393
+    },
+    {
+      "label": "rounded_corners",
+      "count": 133,
+      "pct": 5.013192612137203
+    },
+    {
+      "label": "gradient",
+      "count": 124,
+      "pct": 4.6739540143234075
+    },
+    {
+      "label": "outline",
+      "count": 104,
+      "pct": 3.920090463626084
+    },
+    {
+      "label": "circle",
+      "count": 101,
+      "pct": 3.8070109310214852
+    },
+    {
+      "label": "arrow",
+      "count": 65,
+      "pct": 2.4500565397663023
+    },
+    {
+      "label": "star_rating",
+      "count": 56,
+      "pct": 2.1108179419525066
+    },
+    {
+      "label": "striped_background",
+      "count": 50,
+      "pct": 1.8846588767433095
+    },
+    {
+      "label": "polaroid",
+      "count": 37,
+      "pct": 1.394647568790049
+    },
+    {
+      "label": "floral",
+      "count": 31,
+      "pct": 1.1684885035808519
+    },
+    {
+      "label": "heart",
+      "count": 30,
+      "pct": 1.1307953260459858
+    },
+    {
+      "label": "underline",
+      "count": 22,
+      "pct": 0.8292499057670562
+    },
+    {
+      "label": "color_block",
+      "count": 18,
+      "pct": 0.6784771956275913
+    },
+    {
+      "label": "speech_bubble",
+      "count": 17,
+      "pct": 0.6407840180927252
+    },
+    {
+      "label": "dotted_border",
+      "count": 15,
+      "pct": 0.5653976630229929
+    },
+    {
+      "label": "film_strip",
+      "count": 13,
+      "pct": 0.4900113079532605
+    },
+    {
+      "label": "quotation_marks",
+      "count": 12,
+      "pct": 0.4523181304183943
+    },
+    {
+      "label": "ribbon",
+      "count": 7,
+      "pct": 0.2638522427440633
+    },
+    {
+      "label": "numbered_list",
+      "count": 6,
+      "pct": 0.22615906520919715
+    },
+    {
+      "label": "collage",
+      "count": 6,
+      "pct": 0.22615906520919715
+    },
+    {
+      "label": "perforation",
+      "count": 5,
+      "pct": 0.18846588767433095
+    },
+    {
+      "label": "paper_clip",
+      "count": 4,
+      "pct": 0.15077271013946475
+    },
+    {
+      "label": "paper_tape",
+      "count": 3,
+      "pct": 0.11307953260459858
+    },
+    {
+      "label": "grid_lines",
+      "count": 3,
+      "pct": 0.11307953260459858
+    },
+    {
+      "label": "arch_frame",
+      "count": 3,
+      "pct": 0.11307953260459858
+    },
+    {
+      "label": "gold_accents",
+      "count": 2,
+      "pct": 0.07538635506973237
+    },
+    {
+      "label": "doodle",
+      "count": 1,
+      "pct": 0.03769317753486619
+    },
+    {
+      "label": "seal",
+      "count": 1,
+      "pct": 0.03769317753486619
+    },
+    {
+      "label": "pushpin",
+      "count": 1,
+      "pct": 0.03769317753486619
+    },
+    {
+      "label": "camera",
+      "count": 1,
+      "pct": 0.03769317753486619
+    }
+  ]
+}

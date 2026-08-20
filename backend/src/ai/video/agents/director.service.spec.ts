@@ -1,0 +1,444 @@
+import { DirectorService, DirectorError } from './director.service';
+import { safeParseVideoPlan } from '../video-plan.schema';
+
+jest.mock('./script-agent', () => ({
+  runScriptAgent: jest.fn(),
+}));
+jest.mock('./critic-agent', () => ({
+  runCriticAgent: jest.fn(),
+}));
+jest.mock('./compliance-agent', () => ({
+  runComplianceAgent: jest.fn(),
+}));
+
+import { runScriptAgent } from './script-agent';
+import { runCriticAgent } from './critic-agent';
+import { runComplianceAgent } from './compliance-agent';
+
+const PASSING_CRITIQUE = { score: 0.9, passed: true, weakSceneIndices: [], notes: ['On-brand, strong hook.'], tokensUsed: 50 };
+const CLEAN_COMPLIANCE_REVIEW = { output: { flaggedSceneIndices: [], reasons: [] }, toolCallCount: 0, tokensUsed: 30, repaired: false };
+
+const baseParams = {
+  tenantId: '33333333-3333-3333-3333-333333333333',
+  appointmentId: '44444444-4444-4444-4444-444444444444',
+  clientId: '55555555-5555-5555-5555-555555555555',
+  technicianId: '11111111-1111-1111-1111-111111111111',
+  brandDnaId: '22222222-2222-2222-2222-222222222222',
+  imageUrls: ['https://cdn.example.com/1.jpg', 'https://cdn.example.com/2.jpg'],
+  objective: 'fill_quiet_days' as const,
+  brandVoice: { businessName: 'Glow Studio', primaryTone: 'warm', vocabularyBlacklist: [], doNotSay: [] },
+};
+
+function makeMockPrisma() {
+  let created: any = null;
+  return {
+    videoPlan: {
+      create: jest.fn().mockImplementation((args: any) => {
+        created = { id: 'plan-1', ...args.data };
+        return Promise.resolve(created);
+      }),
+      update: jest.fn().mockImplementation((args: any) => {
+        created = { ...created, ...args.data };
+        return Promise.resolve(created);
+      }),
+    },
+    videoPipelineEvent: {
+      create: jest.fn().mockResolvedValue({}),
+    },
+  };
+}
+
+describe('DirectorService.draftSlideshowPlan', () => {
+  beforeEach(() => {
+    (runScriptAgent as jest.Mock).mockReset();
+    (runCriticAgent as jest.Mock).mockReset().mockResolvedValue(PASSING_CRITIQUE);
+    (runComplianceAgent as jest.Mock).mockReset().mockResolvedValue(CLEAN_COMPLIANCE_REVIEW);
+  });
+
+  it('persists a draft row, then a valid in_review plan with the Script agent copy merged in', async () => {
+    (runScriptAgent as jest.Mock).mockResolvedValue({
+      output: {
+        scenes: [
+          { index: 0, headline: 'Glow Up', caption: null },
+          { index: 1, headline: 'Book Today', caption: 'Spots filling fast' },
+        ],
+      },
+      toolCallCount: 0,
+      tokensUsed: 100,
+      repaired: false,
+    });
+
+    const prisma = makeMockPrisma();
+    const director = new DirectorService(prisma as any);
+
+    const result = await director.draftSlideshowPlan(baseParams);
+
+    expect(prisma.videoPlan.create).toHaveBeenCalledTimes(1);
+    expect(prisma.videoPlan.create.mock.calls[0][0].data.status).toBe('draft');
+    expect(prisma.videoPlan.update).toHaveBeenCalledTimes(1);
+    expect(prisma.videoPlan.update.mock.calls[0][0].data.status).toBe('in_review');
+
+    expect(safeParseVideoPlan(result.plan).success).toBe(true);
+    expect(result.plan.scenes[0]!.text.headline).toBe('Glow Up');
+    expect(result.plan.scenes[1]!.text.caption).toBe('Spots filling fast');
+  });
+
+  it('marks the plan failed and rethrows if the Script agent throws', async () => {
+    (runScriptAgent as jest.Mock).mockRejectedValue(new Error('LLM unavailable'));
+    const prisma = makeMockPrisma();
+    const director = new DirectorService(prisma as any);
+
+    await expect(director.draftSlideshowPlan(baseParams)).rejects.toThrow('LLM unavailable');
+    expect(prisma.videoPlan.update).toHaveBeenCalledWith({
+      where: { id: 'plan-1' },
+      data: { status: 'failed', errorMessage: 'LLM unavailable' },
+    });
+  });
+
+  it('throws DirectorError before touching the database when given zero images', async () => {
+    const prisma = makeMockPrisma();
+    const director = new DirectorService(prisma as any);
+
+    await expect(director.draftSlideshowPlan({ ...baseParams, imageUrls: [] })).rejects.toThrow(DirectorError);
+    expect(prisma.videoPlan.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('DirectorService.draftReelsPlan', () => {
+  beforeEach(() => {
+    (runScriptAgent as jest.Mock).mockReset();
+    (runCriticAgent as jest.Mock).mockReset().mockResolvedValue(PASSING_CRITIQUE);
+    (runComplianceAgent as jest.Mock).mockReset().mockResolvedValue(CLEAN_COMPLIANCE_REVIEW);
+  });
+
+  const reelsParams = {
+    ...baseParams,
+    sceneCount: 2,
+    brandTone: 'warm_and_friendly',
+    brandMoodTag: 'elegant',
+    voiceoverEnabled: true,
+  };
+
+  it('persists a draft row, resolves assets via the given AssetProvider, and finalizes to in_review', async () => {
+    (runScriptAgent as jest.Mock).mockResolvedValue({
+      output: {
+        scenes: [
+          { index: 0, headline: 'Glow Up', caption: null },
+          { index: 1, headline: 'Book Today', caption: 'Spots filling fast' },
+        ],
+      },
+      toolCallCount: 0,
+      tokensUsed: 100,
+      repaired: false,
+    });
+
+    const assetProvider = {
+      resolveSceneAssets: jest.fn().mockResolvedValue({
+        scenes: [
+          { index: 0, kind: 'image', url: 'https://cdn.example.com/1.jpg', durationSeconds: 4 },
+          { index: 1, kind: 'image', url: 'https://cdn.example.com/2.jpg', durationSeconds: 6 },
+        ],
+        voiceover: { script: 'Glow Up. Spots filling fast.', voiceId: 'voice-1', assetUrl: 'https://cdn.example.com/vo.mp3', durationSeconds: 10 },
+      }),
+    };
+
+    const prisma = makeMockPrisma();
+    const director = new DirectorService(prisma as any);
+
+    const result = await director.draftReelsPlan({ ...reelsParams, assetProvider: assetProvider as any });
+
+    expect(prisma.videoPlan.create.mock.calls[0][0].data.status).toBe('draft');
+    expect(prisma.videoPlan.create.mock.calls[0][0].data.videoType).toBe('reels');
+    expect(assetProvider.resolveSceneAssets).toHaveBeenCalledTimes(1);
+    expect(prisma.videoPlan.update.mock.calls[0][0].data.status).toBe('in_review');
+
+    expect(safeParseVideoPlan(result.plan).success).toBe(true);
+    expect(result.plan.videoType).toBe('reels');
+    expect(result.plan.audio.voiceover.enabled).toBe(true);
+    expect(result.plan.captions.burnedIn).toBe(true);
+  });
+
+  it('marks the plan failed and rethrows if asset resolution throws', async () => {
+    (runScriptAgent as jest.Mock).mockResolvedValue({
+      output: { scenes: [{ index: 0, headline: 'A', caption: null }, { index: 1, headline: 'B', caption: null }] },
+      toolCallCount: 0,
+      tokensUsed: 50,
+      repaired: false,
+    });
+    const assetProvider = { resolveSceneAssets: jest.fn().mockRejectedValue(new Error('stock search failed')) };
+    const prisma = makeMockPrisma();
+    const director = new DirectorService(prisma as any);
+
+    await expect(director.draftReelsPlan({ ...reelsParams, assetProvider: assetProvider as any })).rejects.toThrow('stock search failed');
+    expect(prisma.videoPlan.update).toHaveBeenLastCalledWith({
+      where: { id: 'plan-1' },
+      data: { status: 'failed', errorMessage: 'stock search failed' },
+    });
+  });
+
+  it('throws DirectorError before touching the database when sceneCount is zero', async () => {
+    const prisma = makeMockPrisma();
+    const director = new DirectorService(prisma as any);
+
+    await expect(director.draftReelsPlan({ ...reelsParams, sceneCount: 0 })).rejects.toThrow(DirectorError);
+    expect(prisma.videoPlan.create).not.toHaveBeenCalled();
+  });
+});
+
+// Phase 5 required self-test: "a deliberately weak seeded draft triggers a
+// revision and comes back with a higher score; the loop never exceeds N."
+describe('DirectorService — critic revision loop', () => {
+  beforeEach(() => {
+    (runScriptAgent as jest.Mock).mockReset();
+    (runCriticAgent as jest.Mock).mockReset();
+    (runComplianceAgent as jest.Mock).mockReset().mockResolvedValue(CLEAN_COMPLIANCE_REVIEW);
+  });
+
+  it('a weak seeded draft triggers exactly one targeted revision and comes back with a higher score', async () => {
+    (runScriptAgent as jest.Mock)
+      .mockResolvedValueOnce({
+        output: { scenes: [{ index: 0, headline: 'Generic Sale', caption: null }, { index: 1, headline: 'Book Today', caption: null }] },
+        toolCallCount: 0, tokensUsed: 50, repaired: false,
+      })
+      .mockResolvedValueOnce({
+        // Targeted revision — only scene 0 comes back.
+        output: { scenes: [{ index: 0, headline: 'Your Glow Starts Here', caption: null }] },
+        toolCallCount: 0, tokensUsed: 40, repaired: false,
+      });
+
+    (runCriticAgent as jest.Mock)
+      .mockResolvedValueOnce({ score: 0.4, passed: false, weakSceneIndices: [0], notes: ['Scene 0 hook is generic'], tokensUsed: 50 })
+      .mockResolvedValueOnce({ score: 0.85, passed: true, weakSceneIndices: [], notes: ['Much stronger now'], tokensUsed: 50 });
+
+    const prisma = makeMockPrisma();
+    const director = new DirectorService(prisma as any);
+
+    const result = await director.draftSlideshowPlan(baseParams);
+
+    expect(runScriptAgent).toHaveBeenCalledTimes(2);
+    expect(runCriticAgent).toHaveBeenCalledTimes(2);
+    expect(result.plan.critic.revisions).toBe(1);
+    expect(result.plan.critic.passed).toBe(true);
+    expect(result.plan.critic.score).toBe(0.85);
+    // The revised scene's copy made it into the final plan.
+    expect(result.plan.scenes[0]!.text.headline).toBe('Your Glow Starts Here');
+    // The untouched scene's copy from the original draft is preserved.
+    expect(result.plan.scenes[1]!.text.headline).toBe('Book Today');
+  });
+
+  it('never exceeds MAX_CRITIC_REVISIONS even if the critic never passes the draft', async () => {
+    (runScriptAgent as jest.Mock).mockResolvedValue({
+      output: { scenes: [{ index: 0, headline: 'Meh', caption: null }] },
+      toolCallCount: 0, tokensUsed: 50, repaired: false,
+    });
+    (runCriticAgent as jest.Mock).mockResolvedValue({
+      score: 0.2, passed: false, weakSceneIndices: [0], notes: ['Still weak'], tokensUsed: 50,
+    });
+
+    const prisma = makeMockPrisma();
+    const director = new DirectorService(prisma as any);
+
+    const result = await director.draftSlideshowPlan({ ...baseParams, imageUrls: ['https://cdn.example.com/1.jpg'] });
+
+    // 1 initial script call + 2 revision calls (MAX_CRITIC_REVISIONS = 2)
+    expect(runScriptAgent).toHaveBeenCalledTimes(3);
+    // 1 initial critique + 2 re-critiques after each revision
+    expect(runCriticAgent).toHaveBeenCalledTimes(3);
+    expect(result.plan.critic.revisions).toBe(2);
+    expect(result.plan.critic.passed).toBe(false);
+  });
+});
+
+// Phase 6 required self-test: "with the flag on, client-image assets
+// rejected and claim-like copy filtered — for slideshow, reels, and
+// ai_clips." (ai_clips coverage: see client-photo-gate.spec.ts's
+// video-type-agnostic test — the same primitive this suite exercises here.)
+describe('DirectorService — compliance hard gate (medicalAesthetics: true)', () => {
+  beforeEach(() => {
+    (runScriptAgent as jest.Mock).mockReset();
+    (runCriticAgent as jest.Mock).mockReset().mockResolvedValue(PASSING_CRITIQUE);
+    (runComplianceAgent as jest.Mock).mockReset().mockResolvedValue(CLEAN_COMPLIANCE_REVIEW);
+  });
+
+  it('slideshow: drops a client-photo-flagged image so it never becomes a scene asset', async () => {
+    (runScriptAgent as jest.Mock).mockResolvedValue({
+      output: { scenes: [{ index: 0, headline: 'Book Today', caption: null }] },
+      toolCallCount: 0, tokensUsed: 50, repaired: false,
+    });
+
+    const prisma = makeMockPrisma();
+    const director = new DirectorService(prisma as any);
+
+    const result = await director.draftSlideshowPlan({
+      ...baseParams,
+      imageUrls: ['https://cdn.example.com/client-face.jpg', 'https://cdn.example.com/clinic-interior.jpg'],
+      clientPhotoFlags: [true, false],
+      medicalAesthetics: true,
+    });
+
+    const usedUrls = result.plan.scenes.map((s) => s.asset.url);
+    expect(usedUrls).not.toContain('https://cdn.example.com/client-face.jpg');
+    expect(usedUrls).toContain('https://cdn.example.com/clinic-interior.jpg');
+  });
+
+  it('slideshow: fails clearly when every supplied image is a client photo', async () => {
+    const prisma = makeMockPrisma();
+    const director = new DirectorService(prisma as any);
+
+    await expect(
+      director.draftSlideshowPlan({
+        ...baseParams,
+        imageUrls: ['https://cdn.example.com/client-face.jpg'],
+        clientPhotoFlags: [true],
+        medicalAesthetics: true,
+      }),
+    ).rejects.toThrow(DirectorError);
+    expect(prisma.videoPlan.create).not.toHaveBeenCalled();
+  });
+
+  it('slideshow: claim-like copy from the Script agent is filtered from the final plan even without any critic/compliance flag', async () => {
+    (runScriptAgent as jest.Mock).mockResolvedValue({
+      output: { scenes: [{ index: 0, headline: 'This treats acne permanently', caption: null }] },
+      toolCallCount: 0, tokensUsed: 50, repaired: false,
+    });
+
+    const prisma = makeMockPrisma();
+    const director = new DirectorService(prisma as any);
+
+    const result = await director.draftSlideshowPlan({
+      ...baseParams,
+      imageUrls: ['https://cdn.example.com/clinic.jpg'],
+      medicalAesthetics: true,
+    });
+
+    expect(result.plan.scenes[0]!.text.headline).toBeNull();
+    expect(result.plan.critic.notes.some((n) => n.includes('Compliance hard gate'))).toBe(true);
+  });
+
+  it('reels: passes clientPhotoFlags through to the AssetProvider so the image hard gate applies there too', async () => {
+    (runScriptAgent as jest.Mock).mockResolvedValue({
+      output: { scenes: [{ index: 0, headline: 'Glow Up', caption: null }] },
+      toolCallCount: 0, tokensUsed: 50, repaired: false,
+    });
+    const assetProvider = {
+      resolveSceneAssets: jest.fn().mockResolvedValue({ scenes: [{ index: 0, kind: 'stock', url: 'https://pixabay.com/clinic.jpg' }] }),
+    };
+
+    const prisma = makeMockPrisma();
+    const director = new DirectorService(prisma as any);
+
+    await director.draftReelsPlan({
+      ...baseParams,
+      sceneCount: 1,
+      brandTone: 'clinical_and_expert',
+      brandMoodTag: 'clinical',
+      voiceoverEnabled: false,
+      imageUrls: ['https://cdn.example.com/client-face.jpg'],
+      clientPhotoFlags: [true],
+      medicalAesthetics: true,
+      assetProvider: assetProvider as any,
+    });
+
+    expect(assetProvider.resolveSceneAssets).toHaveBeenCalledWith(
+      expect.objectContaining({ clientPhotoFlags: [true], medicalAesthetics: true }),
+    );
+  });
+
+  it('reels: the Compliance agent triggers exactly one targeted revision when it flags a scene', async () => {
+    (runScriptAgent as jest.Mock)
+      .mockResolvedValueOnce({
+        output: { scenes: [{ index: 0, headline: "You'll notice a difference", caption: null }] },
+        toolCallCount: 0, tokensUsed: 50, repaired: false,
+      })
+      .mockResolvedValueOnce({
+        output: { scenes: [{ index: 0, headline: 'Book your consultation', caption: null }] },
+        toolCallCount: 0, tokensUsed: 40, repaired: false,
+      });
+    (runComplianceAgent as jest.Mock).mockResolvedValueOnce({
+      output: { flaggedSceneIndices: [0], reasons: ['Implies a treatment outcome'] },
+      toolCallCount: 0, tokensUsed: 30, repaired: false,
+    });
+    const assetProvider = {
+      resolveSceneAssets: jest.fn().mockResolvedValue({ scenes: [{ index: 0, kind: 'image', url: 'https://cdn.example.com/clinic.jpg' }] }),
+    };
+
+    const prisma = makeMockPrisma();
+    const director = new DirectorService(prisma as any);
+
+    const result = await director.draftReelsPlan({
+      ...baseParams,
+      sceneCount: 1,
+      brandTone: 'clinical_and_expert',
+      brandMoodTag: 'clinical',
+      voiceoverEnabled: false,
+      imageUrls: ['https://cdn.example.com/clinic.jpg'],
+      medicalAesthetics: true,
+      assetProvider: assetProvider as any,
+    });
+
+    expect(runScriptAgent).toHaveBeenCalledTimes(2);
+    expect(result.plan.scenes[0]!.text.headline).toBe('Book your consultation');
+    expect(result.plan.critic.notes.some((n) => n.includes('Compliance agent'))).toBe(true);
+  });
+});
+
+// Phase 9 required self-test: "a full run is reconstructable from persisted
+// traces." Proves the Director actually writes a coherent, ordered event
+// stream — not just that render/critic/compliance logic works in isolation.
+describe('DirectorService — observability (Phase 9)', () => {
+  beforeEach(() => {
+    (runScriptAgent as jest.Mock).mockReset();
+    (runCriticAgent as jest.Mock).mockReset();
+    (runComplianceAgent as jest.Mock).mockReset().mockResolvedValue(CLEAN_COMPLIANCE_REVIEW);
+  });
+
+  it('a run with one critic revision produces a coherent, ordered trace a full narrative can be reconstructed from', async () => {
+    (runScriptAgent as jest.Mock)
+      .mockResolvedValueOnce({
+        output: { scenes: [{ index: 0, headline: 'Generic Sale', caption: null }, { index: 1, headline: 'Book Today', caption: null }] },
+        toolCallCount: 0, tokensUsed: 100, repaired: false,
+      })
+      .mockResolvedValueOnce({
+        output: { scenes: [{ index: 0, headline: 'Your Glow Starts Here', caption: null }] },
+        toolCallCount: 0, tokensUsed: 40, repaired: false,
+      });
+    (runCriticAgent as jest.Mock)
+      .mockResolvedValueOnce({ score: 0.4, passed: false, weakSceneIndices: [0], notes: ['Scene 0 hook is generic'], tokensUsed: 55 })
+      .mockResolvedValueOnce({ score: 0.85, passed: true, weakSceneIndices: [], notes: ['Much stronger now'], tokensUsed: 55 });
+
+    const prisma = makeMockPrisma();
+    const director = new DirectorService(prisma as any);
+
+    await director.draftSlideshowPlan(baseParams);
+
+    const events = (prisma.videoPipelineEvent.create as jest.Mock).mock.calls.map((call) => call[0].data);
+
+    // Every event is tied to the same plan and tenant — a run is filterable by videoPlanId alone.
+    for (const e of events) {
+      expect(e.videoPlanId).toBe('plan-1');
+      expect(e.tenantId).toBe(baseParams.tenantId);
+    }
+
+    const eventTypes = events.map((e) => e.eventType);
+    expect(eventTypes).toEqual([
+      'video_started',
+      'agent_call', // script (initial draft)
+      'plan_drafted',
+      'agent_call', // critic (initial)
+      'critic_scored',
+      'revision_requested',
+      'agent_call', // script (targeted revision)
+      'agent_call', // critic (re-critique)
+      'critic_scored',
+      'compliance_reviewed',
+      'assets_ready',
+    ]);
+
+    // The narrative is reconstructable: the revision was requested because the
+    // first critique failed, and the second critique reflects the fix.
+    const scores = events.filter((e) => e.eventType === 'critic_scored').map((e) => e.payload.score);
+    expect(scores).toEqual([0.4, 0.85]);
+    const revisionEvent = events.find((e) => e.eventType === 'revision_requested');
+    expect(revisionEvent.payload.weakSceneIndices).toEqual([0]);
+  });
+});

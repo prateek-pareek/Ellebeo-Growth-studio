@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 
 export type BrandDnaView = {
@@ -12,6 +12,7 @@ export type BrandDnaView = {
   paletteLabeled: Array<{ role: string; hex: string }>;
   moodboard: string[];
   moodboardLabeled: Array<{ url: string; usage: string }>;
+  typography: { headingFont: string; bodyFont: string };
   assetLibrary: Array<{ id: string; url: string; assetType: string; usageRule: string; consentStatus: string }>;
   logoUrl: string;
   logoPosition: string;
@@ -19,6 +20,7 @@ export type BrandDnaView = {
   brandTier: string;
   emojiPolicy: string;
   captionLength: string;
+  isMedicalAestheticsPractitioner: boolean;
   pillars: Array<{
     name: string;
     description: string;
@@ -61,6 +63,15 @@ function mapCloudRow(dna: any): BrandDnaView {
   const v2 = typeof dna.brandDnaV2 === "string" ? JSON.parse(dna.brandDnaV2) : dna.brandDnaV2;
   const v2Moodboard: any[] = Array.isArray(v2?.moodboard) ? v2.moodboard : [];
   const v2AssetLibrary: any[] = Array.isArray(v2?.asset_library) ? v2.asset_library : [];
+
+  // Mirrors backend isMedicalAestheticsBrand() (medical-compliance.ts) — same two
+  // brand-level signals: the compliance practitioner flag and service categories.
+  const isMedicalByDnaFlag = v2?.compliance?.medical_aesthetics_practitioner === true;
+  const serviceCategories: string[] = Array.isArray(dna.serviceCategories) ? dna.serviceCategories : [];
+  const isMedicalByServiceCategories = serviceCategories.some(
+    (c) => c === "injectables_cosmetic" || c === "laser_treatments" || c === "medical_aesthetics",
+  );
+  const isMedicalAestheticsPractitioner = isMedicalByDnaFlag || isMedicalByServiceCategories;
 
   const weight = pillars.length > 0 ? Math.floor(100 / pillars.length) : 0;
   const mappedPillars = pillars.map((p: any, i: number) => ({
@@ -109,6 +120,11 @@ function mapCloudRow(dna: any): BrandDnaView {
     moodboardLabeled: v2Moodboard.length > 0
       ? v2Moodboard.filter((m) => m.storage_path).map((m) => ({ url: m.storage_path, usage: m.usage || "" }))
       : (dna.moodboardUrls || []).map((url: string) => ({ url, usage: "" })),
+    // v2.typography carries the heading/body split; brandFont is the older single-field fallback.
+    typography: {
+      headingFont: v2?.typography?.heading_font || dna.brandFont || "",
+      bodyFont: v2?.typography?.body_font || dna.brandFont || "",
+    },
     assetLibrary: v2AssetLibrary
       .filter((a) => a.storage_path)
       .map((a) => ({
@@ -124,6 +140,7 @@ function mapCloudRow(dna: any): BrandDnaView {
     brandTier: dna.brandTier || "",
     emojiPolicy: dna.emojiPolicy || "minimal",
     captionLength: dna.captionLengthPreference || "medium",
+    isMedicalAestheticsPractitioner,
     pillars: mappedPillars,
     voice: {
       summary: dna.primaryTone || "",
@@ -198,5 +215,11 @@ export function useBrandDna(): UseBrandDnaResult {
       });
   }, [tick]);
 
-  return { ...state, refresh: () => setTick((t) => t + 1) };
+  // Stable across renders. As a fresh arrow each time, any consumer that put
+  // `refresh` (or a callback closing over it) in an effect's dependency list
+  // re-ran that effect on every render — which is how the Brand page ended up
+  // refetching in a loop until the API answered 429.
+  const refresh = useCallback(() => setTick((t) => t + 1), []);
+
+  return { ...state, refresh };
 }

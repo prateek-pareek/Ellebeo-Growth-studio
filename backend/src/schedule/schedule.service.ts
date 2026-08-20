@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SchedulePostDto, UpdateScheduledPostDto } from './dto/schedule.dto';
 import { publishScheduledQueue, type PublishScheduledJobPayload } from '../ai/queues/queue.definitions';
 import { publishScheduledPost } from './publish-post.helper';
+import { signOAuthState, verifyOAuthState } from './oauth-state.util';
 
 @Injectable()
 export class ScheduleService {
@@ -151,7 +152,7 @@ export class ScheduleService {
   getInstagramOAuthUrl(tenantId: string, redirectUri: string, mobileRedirectUri?: string): string {
     const statePayload: Record<string, string> = { tenantId, redirectUri };
     if (mobileRedirectUri) statePayload.mobileRedirectUri = mobileRedirectUri;
-    const state = Buffer.from(JSON.stringify(statePayload)).toString('base64url');
+    const state = signOAuthState(statePayload);
     const params = new URLSearchParams({
       client_id:     process.env.INSTAGRAM_CLIENT_ID!,
       redirect_uri:  redirectUri,
@@ -164,9 +165,7 @@ export class ScheduleService {
   }
 
   async handleInstagramCallback(code: string, stateRaw: string): Promise<void> {
-    const { tenantId, redirectUri: decodedRedirectUri } = JSON.parse(
-      Buffer.from(stateRaw, 'base64url').toString(),
-    ) as { tenantId: string; redirectUri?: string };
+    const { tenantId, redirectUri: decodedRedirectUri } = verifyOAuthState<{ tenantId: string; redirectUri?: string }>(stateRaw);
 
     const clientId     = process.env.INSTAGRAM_CLIENT_ID;
     const clientSecret = process.env.INSTAGRAM_CLIENT_SECRET;
@@ -231,7 +230,7 @@ export class ScheduleService {
   getFacebookOAuthUrl(tenantId: string, redirectUri: string, mobileRedirectUri?: string): string {
     const statePayload: Record<string, string> = { tenantId, platform: 'facebook', redirectUri };
     if (mobileRedirectUri) statePayload.mobileRedirectUri = mobileRedirectUri;
-    const state = Buffer.from(JSON.stringify(statePayload)).toString('base64url');
+    const state = signOAuthState(statePayload);
     const params = new URLSearchParams({
       client_id:     process.env.INSTAGRAM_CLIENT_ID!,
       redirect_uri:  redirectUri,
@@ -243,9 +242,7 @@ export class ScheduleService {
   }
 
   async handleFacebookCallback(code: string, stateRaw: string): Promise<void> {
-    const { tenantId, redirectUri: decodedRedirectUri } = JSON.parse(
-      Buffer.from(stateRaw, 'base64url').toString(),
-    ) as { tenantId: string; platform?: string; redirectUri?: string };
+    const { tenantId, redirectUri: decodedRedirectUri } = verifyOAuthState<{ tenantId: string; platform?: string; redirectUri?: string }>(stateRaw);
 
     const clientId     = process.env.INSTAGRAM_CLIENT_ID!;
     const clientSecret = process.env.INSTAGRAM_CLIENT_SECRET!;

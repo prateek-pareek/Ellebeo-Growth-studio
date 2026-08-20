@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { ChatAnthropic } from '@langchain/anthropic';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 
 export interface ScoringResult {
@@ -26,6 +26,7 @@ export class ScoringGateService {
           outputValidationPassed: false,
           outputHardFailures: [`${type}_FAIL: ${tag} (Slide index ${index})`],
           outputAutoCorrections: [],
+          flagReasons: [],
           requiredRegeneration: type === 'CONTENT',
         }
       });
@@ -79,7 +80,15 @@ export class ScoringGateService {
     if (originalPhotoBuffer && generatedPhotoBuffer && geminiKey) {
       try {
         const aiClient = new GoogleGenerativeAI(geminiKey);
-        const model = aiClient.getGenerativeModel({ model: 'gemini-2.5-flash' });
+        const model = aiClient.getGenerativeModel({
+          model: 'gemini-2.5-flash',
+          safetySettings: [
+            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          ],
+        });
 
         const prompt = `You are a strict compliance auditor for a medical aesthetics brand. Compare the original client photo with the final rendered post.
 Answer STRICTLY with a JSON object:
@@ -173,7 +182,15 @@ Answer STRICTLY with a JSON object:
     if (generatedPhotoBuffer && geminiKey) {
       try {
         const aiClient = new GoogleGenerativeAI(geminiKey);
-        const model = aiClient.getGenerativeModel({ model: 'gemini-2.5-flash' });
+        const model = aiClient.getGenerativeModel({
+          model: 'gemini-2.5-flash',
+          safetySettings: [
+            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          ],
+        });
 
         const prompt = `You are a creative director auditing a generated beauty salon Instagram post.
 Analyze this final image layout. Answer exactly "YES" or "NO" to this question:
@@ -261,7 +278,7 @@ Your task is to judge a social media post draft across 10 strategic dimensions a
 
 10-DIMENSIONAL RUBRIC:
 1. Brand Fit (Max 15): Does it sound like a premium, bespoke business, not a generic template?
-2. Grid Fit (Max 10): Does it maintain visual rhythm and structure?
+2. Grid Fit (Max 10): Does it maintain visual rhythm and structure? If the post carries structured content — numbered steps, a price/service list, a do-and-don't checklist, a pull quote — judge that content too: steps must read as a sequence, list values must share one right edge, marks must line up with their text, and nothing may overlap, overflow its area, or be cut off at an edge.
 3. Visual Quality (Max 12): Is the layout elegant, composed, and premium?
 4. Content Variety (Max 10): Does it avoid repeating the same post formats?
 5. Commercial Value (Max 10): Does it build authority or drive client conversion?
@@ -305,7 +322,7 @@ Slides Count: ${slidesCount}`;
     // Select the best judge using Cross-Model + Anthropic default strategy
     let responseText = '';
     const anthropicKey = process.env['ANTHROPIC_API_KEY'];
-    const openaiKey = process.env['OPENAI_API_KEY'];
+    const openaiKey = process.env['GEMINI_API_KEY'];
     const geminiKey = process.env['GEMINI_API_KEY'];
 
     if (anthropicKey) {
@@ -320,18 +337,32 @@ Slides Count: ${slidesCount}`;
       responseText = typeof res.content === 'string' ? res.content : JSON.stringify(res.content);
     } else if (generatedBy.toLowerCase().includes('gemini') && openaiKey) {
       console.log('LLM Judge: Invoking OpenAI GPT-4o-mini (Cross-Judge)...');
-      const gpt = new ChatOpenAI({
-        modelName: 'gpt-4o-mini',
+      const gpt = new ChatGoogleGenerativeAI({
+        model: 'gemini-flash-latest',
         temperature: 0.1,
-        maxTokens: 1000,
-        openAIApiKey: openaiKey,
+        maxOutputTokens: 8192,
+        apiKey: openaiKey,
+        safetySettings: [
+          { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        ],
       });
       const res = await gpt.invoke([new SystemMessage(systemPrompt), new HumanMessage(userPrompt)]);
       responseText = typeof res.content === 'string' ? res.content : JSON.stringify(res.content);
     } else if (geminiKey) {
       console.log('LLM Judge: Invoking Gemini (Cross-Judge)...');
       const aiClient = new GoogleGenerativeAI(geminiKey);
-      const model = aiClient.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const model = aiClient.getGenerativeModel({
+        model: 'gemini-2.5-flash',
+        safetySettings: [
+          { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        ],
+      });
       const prompt = `${systemPrompt}\n\nUser Input:\n${userPrompt}`;
       const res = await model.generateContent(prompt);
       responseText = res.response.text();

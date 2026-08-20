@@ -96,6 +96,60 @@ export const videoAssemblyQueue = new Queue<VideoAssemblyJobPayload>(
 );
 
 // ---------------------------------------------------------------------------
+// Queue: video-render
+// Video Plan → Shotstack render submission (agentic video pipeline). Distinct
+// from video-assembly (the legacy before/after reel template) — this queue
+// carries a videoPlanId and lets VideoRenderService resolve the full plan.
+// Concurrency: 5 | Rate limit: 10/min | Retry: 2x
+// ---------------------------------------------------------------------------
+
+export interface VideoRenderJobPayload {
+  videoPlanId: string;
+  tenantId: string;
+}
+
+export const videoRenderQueue = new Queue<VideoRenderJobPayload>(
+  AI_CONFIG.queues.videoRender.name,
+  {
+    connection: bullMQConnection,
+    defaultJobOptions: {
+      ...AI_CONFIG.queues.videoRender.defaultJobOptions,
+    },
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Queue: video-director
+// Runs the Director agent's drafting loop (Script agent → Video Plan).
+// Concurrency: 3 (LLM-bound, keep modest) | Rate limit: 10/min | Retry: 2x
+// ---------------------------------------------------------------------------
+
+export interface VideoDirectorJobPayload {
+  tenantId: string;
+  appointmentId: string;
+  clientId: string;
+  technicianId: string;
+  brandDnaId: string;
+  imageUrls: string[];
+  objective: string;
+  videoType: 'slideshow' | 'reels' | 'ai_clips';
+  /** reels only — total scene count (may exceed imageUrls.length; gaps are filled by the Asset agent). */
+  sceneCount?: number;
+  /** reels only — whether to generate an ElevenLabs voiceover. */
+  voiceoverEnabled?: boolean;
+}
+
+export const videoDirectorQueue = new Queue<VideoDirectorJobPayload>(
+  AI_CONFIG.queues.videoDirector.name,
+  {
+    connection: bullMQConnection,
+    defaultJobOptions: {
+      ...AI_CONFIG.queues.videoDirector.defaultJobOptions,
+    },
+  }
+);
+
+// ---------------------------------------------------------------------------
 // Queue: publish-scheduled
 // Delayed jobs — each job fires exactly at the post's scheduledFor time.
 // jobId = scheduledPostId so we can remove/replace without storing a separate ref.
@@ -178,6 +232,7 @@ export async function closeAllQueues(): Promise<void> {
     contentGenerationQueue.close(),
     imageProcessingQueue.close(),
     videoAssemblyQueue.close(),
+    videoRenderQueue.close(),
     publishScheduledQueue.close(),
     deadLetterQueue.close(),
     contentGenerationQueueEvents.close(),

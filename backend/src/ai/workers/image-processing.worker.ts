@@ -16,8 +16,7 @@ const bullMQConnection = {
   tls: process.env['REDIS_TLS'] === 'true' ? {} : undefined,
 };
 
-export function startImageProcessingWorker(): Worker<ImageProcessingJobPayload> {
-  const prisma = new PrismaClient();
+export function startImageProcessingWorker(prisma: PrismaClient): Worker<ImageProcessingJobPayload> {
   const imagePipeline = new ImagePipelineService(prisma);
 
   const worker = new Worker<ImageProcessingJobPayload>(
@@ -58,15 +57,14 @@ export function startImageProcessingWorker(): Worker<ImageProcessingJobPayload> 
     if (!job) return;
 
     // Mark image_status as failed — does NOT fail the entire content pack
-    const prismaInstance = new PrismaClient();
     try {
-      await prismaInstance.$executeRaw`
+      await prisma.$executeRaw`
         UPDATE content_items
         SET image_status = 'failed', updated_at = NOW()
         WHERE job_id = ${job.data.jobId}::uuid
       `;
-    } finally {
-      await prismaInstance.$disconnect();
+    } catch (logErr) {
+      console.error('[Image Processing Worker] Failed to update content item status:', logErr);
     }
   });
 
@@ -78,5 +76,6 @@ export function startImageProcessingWorker(): Worker<ImageProcessingJobPayload> 
 
 // Start automatically when run as a standalone process (dedicated worker container).
 if (require.main === module) {
-  startImageProcessingWorker();
+  const prismaInstance = new PrismaClient();
+  startImageProcessingWorker(prismaInstance);
 }

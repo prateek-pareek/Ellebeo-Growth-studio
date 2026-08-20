@@ -3,6 +3,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GenerateContentDto, TweakContentDto } from './dto/generation.dto';
 import { GenerationGateway } from './generation.gateway';
 import { contentGenerationQueue } from '../ai/queues/queue.definitions';
+import { GenerationProgressTracker } from '../ai/services/generation-progress.tracker';
+import { AI_CONFIG, estimateTotalJobSeconds } from '../config/ai.config';
 
 @Injectable()
 export class GenerationService {
@@ -47,6 +49,7 @@ export class GenerationService {
         ? await this.prisma.consentRecord.findUnique({ where: { id: appointment.consentRecordId } })
         : await this.prisma.consentRecord.findFirst({
           where: { clientId: appointment.clientId, tenantId, isCurrent: true },
+          orderBy: { updatedAt: 'desc' },
         });
 
       if (!consentRecord || consentRecord.status !== 'granted') {
@@ -62,11 +65,14 @@ export class GenerationService {
       throw new BadRequestException('Brand DNA must be configured before generation');
     }
 
-    // ── Daily limit gate for subscribed tiers (tier1/tier2) ──────────────────
-    const limits = this.getTierLimits(tier);
+    // ── Daily limit gate — admin-configurable per tier ────────────────────────
+    // Applies to all 5 paid commercial tiers (tier1-tier5). 'free' is excluded
+    // here — it has its own separate lifetime trial/purchased-pack gate below,
+    // which already serves the same cost-protection purpose for that tier.
+    const limits = await this.getTierLimits(tier);
     const usage = await this.getTodayUsage(tenantId);
 
-    if (!trialBypassed && ['tier1', 'tier2'].includes(tier)) {
+    if (!trialBypassed && ['tier1', 'tier2', 'tier3', 'tier4', 'tier5'].includes(tier)) {
       if (usage.generations >= limits.generations) {
         throw new ForbiddenException({
           error: 'DAILY_LIMIT_REACHED',
@@ -100,6 +106,18 @@ export class GenerationService {
     }
 
     const isReel = (dto.outputFormats as string[]).some(f => f === 'reel');
+
+    // If the job originated from a specific gallery template ("Use template"),
+    // resolve its rendererKey so the orchestrator can honour that exact
+    // structure instead of leaving layout selection entirely to the AI agent.
+    let layoutHint: string | null = null;
+    if (dto.templateSlug) {
+      const template = await this.prisma.template.findUnique({
+        where: { slug: dto.templateSlug },
+        select: { rendererKey: true },
+      });
+      layoutHint = template?.rendererKey ?? null;
+    }
 
     // Create the generation job
     const job = await this.prisma.generationJob.create({
@@ -185,11 +203,14 @@ export class GenerationService {
         goldenExamples: [],
         createdAt: new Date().toISOString(),
         priority: 5,
+        layoutHint,
       } as any,
       { jobId: job.id },
     );
 
-    const estimatedSeconds = isReel ? 120 : 30;
+    // Calibrated per output format — carousel/story do multiple AI image
+    // generations after the caption, reel adds storyboard + voiceover on top.
+    const estimatedSeconds = estimateTotalJobSeconds(dto.outputFormats as string[]);
 
     this.generationGateway.emitJobUpdate(job.id, job.state as any);
 
@@ -210,7 +231,25 @@ export class GenerationService {
     const job = await this.prisma.generationJob.findUnique({ where: { id: jobId } });
     if (!job || job.tenantId !== tenantId) throw new NotFoundException('Job not found');
     this.generationGateway.emitJobUpdate(job.id, job.state as any);
-    return job;
+
+    // Live sub-progress (set by the orchestrator/JobProgressEmitter during this
+    // run) takes priority — it's more granular than the coarse persisted state.
+    // Falls back to the state-based map (e.g. after a server restart clears the
+    // in-memory tracker, or for tweak jobs which never call tracker.init()).
+    const isTerminal = job.state === 'completed' || job.state === 'failed' || job.state === 'blocked' || job.state === 'dead_letter';
+    const live = GenerationProgressTracker.getLive(jobId);
+    const fallback = AI_CONFIG.progressMap[job.state as keyof typeof AI_CONFIG.progressMap];
+
+    return {
+      ...job,
+      // Once the job has actually reached a terminal DB state, that's ground
+      // truth — never let a stale/missing tracker entry show anything but
+      // "done" (100 for completed; the async work is equally "over" for
+      // failed/blocked, so 100 there too — there's no more time left to wait).
+      progressPercent: isTerminal ? 100 : (live?.percent ?? fallback?.percent ?? 0),
+      currentStep: live?.step ?? fallback?.step ?? 'Processing your content...',
+      estimatedSecondsRemaining: isTerminal ? 0 : (live?.estimatedSecondsRemaining ?? AI_CONFIG.stateEtaSeconds[job.state] ?? 30),
+    };
   }
 
   async tweakContent(tenantId: string, dto: TweakContentDto) {
@@ -252,7 +291,7 @@ export class GenerationService {
   async getRateLimitStatus(tenantId: string) {
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
 
-    const limits = this.getTierLimits(tenant?.subscriptionTier ?? 'free');
+    const limits = await this.getTierLimits(tenant?.subscriptionTier ?? 'free');
     const usage = await this.getTodayUsage(tenantId);
 
     const TRIAL_LIMIT = 2;
@@ -291,18 +330,55 @@ export class GenerationService {
     return { priceUsd: settings.priceUsd, generationsIncluded: settings.generationsIncluded };
   }
 
-  private getTierLimits(tier: string): { generations: number; reels: number } {
-    const LIMITS: Record<string, { generations: number; reels: number }> = {
-      free: { generations: 5, reels: 2 },
-      standard: { generations: 50, reels: 10 },
-      premium: { generations: 999, reels: 999 },
-      tier1: { generations: 2, reels: 0 },
-      tier2: { generations: 2, reels: 2 },
-      tier3: { generations: 999, reels: 20 },
-      tier4: { generations: 999, reels: 20 },
-      tier5: { generations: 999, reels: 999 },
-    };
-    return LIMITS[tier] ?? LIMITS['free'];
+  // Defaults match the limits that were hardcoded here before tier limits
+  // became admin-editable — used only to self-seed the DB table on first read.
+  private static readonly DEFAULT_TIER_LIMITS: Record<string, { generations: number; reels: number }> = {
+    free: { generations: 5, reels: 2 },
+    standard: { generations: 50, reels: 10 },
+    premium: { generations: 999, reels: 999 },
+    tier1: { generations: 2, reels: 0 },
+    tier2: { generations: 2, reels: 2 },
+    tier3: { generations: 999, reels: 20 },
+    tier4: { generations: 999, reels: 20 },
+    tier5: { generations: 999, reels: 999 },
+  };
+
+  private tierLimitsCache: { data: Record<string, { generations: number; reels: number }>; fetchedAt: number } | null = null;
+  private static readonly TIER_LIMITS_CACHE_TTL_MS = 60_000;
+
+  private async loadTierLimits(): Promise<Record<string, { generations: number; reels: number }>> {
+    if (this.tierLimitsCache && Date.now() - this.tierLimitsCache.fetchedAt < GenerationService.TIER_LIMITS_CACHE_TTL_MS) {
+      return this.tierLimitsCache.data;
+    }
+
+    let rows = await this.prisma.tierGenerationLimits.findMany();
+
+    if (rows.length === 0) {
+      // First-ever read — seed the table with today's defaults so behavior is
+      // unchanged until an admin actually edits a tier via the admin portal.
+      await this.prisma.tierGenerationLimits.createMany({
+        data: Object.entries(GenerationService.DEFAULT_TIER_LIMITS).map(([tier, v]) => ({
+          tier: tier as any,
+          generationsPerDay: v.generations,
+          reelsPerDay: v.reels,
+        })),
+        skipDuplicates: true,
+      });
+      rows = await this.prisma.tierGenerationLimits.findMany();
+    }
+
+    const data: Record<string, { generations: number; reels: number }> = {};
+    for (const row of rows) {
+      data[row.tier] = { generations: row.generationsPerDay, reels: row.reelsPerDay };
+    }
+
+    this.tierLimitsCache = { data, fetchedAt: Date.now() };
+    return data;
+  }
+
+  private async getTierLimits(tier: string): Promise<{ generations: number; reels: number }> {
+    const data = await this.loadTierLimits();
+    return data[tier] ?? GenerationService.DEFAULT_TIER_LIMITS['free']!;
   }
 
   private async getTodayUsage(tenantId: string): Promise<{ generations: number; reels: number }> {
