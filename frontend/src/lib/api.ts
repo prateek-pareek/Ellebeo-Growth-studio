@@ -24,6 +24,13 @@ api.interceptors.response.use(
     
     // If the error is 401 and we haven't retried yet
     if (error.response?.status === 401 && !originalRequest._retry) {
+      // Nothing to refresh when signed out. Without this, every anonymous
+      // 401 became a refresh call, which the rate limiter answered with 429,
+      // which then redirected — see below.
+      if (!localStorage.getItem('accessToken')) {
+        return Promise.reject(error);
+      }
+
       originalRequest._retry = true;
       
       try {
@@ -42,7 +49,14 @@ api.interceptors.response.use(
         }
       } catch (refreshError) {
         localStorage.removeItem('accessToken');
-        window.location.href = '/login';
+        // Never redirect to /login FROM /login. `window.location.href` is a
+        // full page load, so the login screen would mount, fire the same
+        // authenticated request, get 401, fail to refresh, and navigate to
+        // itself again — the page reloading forever. Measured in production
+        // at 130 requests in a few seconds.
+        if (!window.location.pathname.startsWith('/login')) {
+          window.location.href = '/login';
+        }
         return Promise.reject(refreshError);
       }
     }

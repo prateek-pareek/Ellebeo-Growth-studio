@@ -22,6 +22,11 @@ const LOCAL_DEFAULTS: Partial<Record<FeatureFlagKey, boolean>> = {
 };
 
 async function fetchBackendFlag(key: FeatureFlagKey): Promise<boolean> {
+  // The endpoint requires authentication, so asking while signed out is a
+  // guaranteed 401 — and this hook runs inside AppShell, which renders on the
+  // login screen. Failing closed here means the login page makes no
+  // authenticated calls at all.
+  if (!localStorage.getItem('accessToken')) return false;
   try {
     const res = await api.get(`/feature-flags/${key}`);
     return Boolean(res.data?.data?.enabled ?? res.data?.enabled);
