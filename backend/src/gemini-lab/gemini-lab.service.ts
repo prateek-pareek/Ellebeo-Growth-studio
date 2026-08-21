@@ -1158,7 +1158,13 @@ export class GeminiLabService {
         //
         // Opt-in while it is compared against the composited path, and every
         // failure falls through to that path rather than shipping a bad page.
-        if (ctx.aiLayoutKey && ctx.photoA && pack.plan.photoMode !== 'typographic' && !ctx.photoB) {
+        // `&& !ctx.photoB` used to sit on the end of this condition, so a
+        // before-and-after never reached the model-designed path at all and
+        // always fell through to the composited one. Measured over 49 critic
+        // evaluations, that is the difference between a mean of 63 and a mean
+        // of 80. The reason it was excluded was mechanical, not editorial:
+        // slot detection could only find one rectangle.
+        if (ctx.aiLayoutKey && ctx.photoA && pack.plan.photoMode !== 'typographic') {
           try {
             // One of the studio's own slides supplies the arrangement. Blurred
             // before it reaches the model, so only its structure carries over
@@ -1170,9 +1176,15 @@ export class GeminiLabService {
             });
             if (reference) usedReferences.push(reference.id);
 
+            // Both photographs when the slide is a genuine comparison; the
+            // hero alone otherwise, even if a second was uploaded — a layout
+            // that shows one photo must not be handed two.
+            const wantsPair = spec.photo === 'both' && !!ctx.photoB;
             const laid = await renderWithAiLayout({
               apiKey: ctx.aiLayoutKey,
-              photo: ctx.photoA,
+              photo: wantsPair
+                ? [ctx.photoA, ctx.photoB!]
+                : (spec.photo === 'after' && ctx.photoB ? ctx.photoB : ctx.photoA),
               aspectRatio: ctx.aspectRatio,
               reference: reference ? fsReadRef(reference.file) : undefined,
               copy: {

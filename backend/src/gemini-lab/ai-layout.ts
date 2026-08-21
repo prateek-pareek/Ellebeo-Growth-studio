@@ -105,6 +105,8 @@ export function buildLayoutPrompt(params: {
   photoAspect?: number;
   /** A layout diagram is attached; read the arrangement from it. */
   hasReference?: boolean;
+  /** How many photographs will be placed. 2 is a before-and-after. */
+  photoCount?: number;
 }): string {
   const { copy, brand } = params;
   const p = brand.palette;
@@ -128,8 +130,15 @@ export function buildLayoutPrompt(params: {
 
   lines.push(
     [
-      'THE PHOTOGRAPH AREA — the most important instruction:',
-      `  Leave a space for a photograph and fill it with a SOLID FLAT rectangle of pure magenta ${PLACEHOLDER_HEX}.`,
+      (params.photoCount ?? 1) >= 2
+        ? 'THE TWO PHOTOGRAPH AREAS — the most important instruction:'
+        : 'THE PHOTOGRAPH AREA — the most important instruction:',
+      (params.photoCount ?? 1) >= 2
+        // A before-and-after is only readable when the two frames are the same
+        // size and squarely aligned: different sizes read as a design flourish
+        // rather than a comparison, and the eye stops trusting it.
+        ? `  Leave space for TWO photographs and fill each with a SOLID FLAT rectangle of pure magenta ${PLACEHOLDER_HEX}. They must be EXACTLY the same size and shape as each other, level with one another, and separated by a clear gap of the page's own background — side by side, or one above the other. They must not touch.`
+        : `  Leave a space for a photograph and fill it with a SOLID FLAT rectangle of pure magenta ${PLACEHOLDER_HEX}.`,
       '  That rectangle must be one single flat colour: hard straight edges, no gradient, no texture, no shadow, no caption, no border, and absolutely nothing drawn on top of it or overlapping it.',
       // Size and placement come from the reference when there is one. Stating
       // them as well made the two fight: told both "match this arrangement" and
@@ -137,12 +146,16 @@ export function buildLayoutPrompt(params: {
       // that were scattered, undersized or absent, and every run was refused.
       params.hasReference
         ? '  SIZE AND PLACEMENT: put it exactly where the magenta block sits in the diagram, at the same size and proportion. The diagram decides this, not you.'
-        : '  SIZE: it is the hero of the page. It must cover roughly HALF TO TWO-THIRDS of the entire canvas — think of a magazine page where the photograph dominates and the type sits beside or beneath it. A small rectangle is wrong.',
+        : (params.photoCount ?? 1) >= 2
+          ? '  SIZE: the pair is the hero of the page. Together the two rectangles must cover roughly HALF of the entire canvas, with the type sitting beside or beneath them. Two small rectangles are wrong.'
+          : '  SIZE: it is the hero of the page. It must cover roughly HALF TO TWO-THIRDS of the entire canvas — think of a magazine page where the photograph dominates and the type sits beside or beneath it. A small rectangle is wrong.',
       params.hasReference ? '' : shapeInstruction(params.photoAspect),
       params.hasReference
         ? ''
         : '  PLACEMENT: place it with editorial confidence — flush to one or two edges, off-centre. Do not centre it with equal margins all round.',
-      '  Do NOT draw any people, faces, hair, hands or photographs anywhere on the page. The magenta rectangle is the only image area.',
+      (params.photoCount ?? 1) >= 2
+        ? '  Do NOT draw any people, faces, hair, hands or photographs anywhere on the page. The two magenta rectangles are the only image areas. Do NOT write the words "before" or "after" on them — those labels are added afterwards.'
+        : '  Do NOT draw any people, faces, hair, hands or photographs anywhere on the page. The magenta rectangle is the only image area.',
     ]
       .filter(Boolean)
       .join('\n'),
@@ -165,7 +178,15 @@ export function buildLayoutPrompt(params: {
   lines.push(
     [
       'THE BRAND — design WITH these as your materials:',
-      brand.name ? `  Studio: ${brand.name}` : '',
+      // Not `Studio: <name>`. Framed as a label-and-value the model typeset
+      // the LABEL onto the artwork and anonymised the value, so real posts
+      // came back credited "Studio: X" — the same failure as the typeface
+      // name and the hex code before it. Naming it inside a sentence, with
+      // the instruction attached, leaves nothing that reads like a caption
+      // waiting to be set.
+      brand.name
+        ? `  The studio is called ${brand.name}. If you set its name anywhere, set it exactly as written and nowhere else — never a placeholder, an initial or a stand-in.`
+        : '',
       `  Paper: ${describeColour(p.background)}. Ink: ${describeColour(p.depth)}. Accent: ${describeColour(p.accent)}.`,
       `  Also available: ${describeColour(p.secondary)} and ${describeColour(p.primary)}.`,
       `  Type character: ${describeTypeface(brand.typography.heading)} for display, ${describeTypeface(brand.typography.body)} for everything else.`,
@@ -361,6 +382,83 @@ function isPlaceholder(r: number, g: number, b: number): boolean {
  * separates a usable slot from a model that scattered magenta across the page:
  * a true rectangle fills its own bounding box, a smear does not.
  */
+/**
+ * Every placeholder rectangle on the page, not just the bounding box of all of
+ * them.
+ *
+ * `detectSlot` takes the extent of every placeholder pixel at once. With one
+ * rectangle that is exactly right. With TWO — which is what a before-and-after
+ * needs — the bounding box spans both rectangles AND the gap between them, so
+ * its `rectangularity` lands near 0.5 and the page is rejected as "not a clean
+ * rectangle". That single assumption is why the AI-layout path was switched
+ * off for pairs and why it fell back on roughly one page in six.
+ *
+ * Labelling connected regions separately costs one pass and answers both:
+ * one region behaves exactly as before, two give a pair its slots.
+ */
+export async function detectSlots(
+  png: Buffer,
+  opts: { minCoverage?: number; maxSlots?: number } = {},
+): Promise<{ slots: PhotoSlot[]; coverage: number; reason?: string }> {
+  const { data, info } = await sharp(png).raw().toBuffer({ resolveWithObject: true });
+  const { width: W, height: H, channels: ch } = info;
+
+  const mark = new Uint8Array(W * H);
+  let total = 0;
+  for (let y = 0; y < H; y += 1) {
+    for (let x = 0; x < W; x += 1) {
+      const i = (y * W + x) * ch;
+      if (isPlaceholder(data[i], data[i + 1], data[i + 2])) {
+        mark[y * W + x] = 1;
+        total += 1;
+      }
+    }
+  }
+  const coverage = total / (W * H);
+  if (total === 0) return { slots: [], coverage: 0, reason: 'no placeholder found' };
+
+  // Flood fill, iterative: a recursive fill overflows the stack on a region
+  // covering a third of a 1080x1350 canvas.
+  const seen = new Uint8Array(W * H);
+  const regions: Array<{ x: number; y: number; w: number; h: number; n: number }> = [];
+  const stack: number[] = [];
+  for (let p0 = 0; p0 < W * H; p0 += 1) {
+    if (!mark[p0] || seen[p0]) continue;
+    let minX = W, minY = H, maxX = -1, maxY = -1, n = 0;
+    stack.push(p0);
+    seen[p0] = 1;
+    while (stack.length) {
+      const p = stack.pop()!;
+      const x = p % W;
+      const y = (p - x) / W;
+      n += 1;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+      if (x > 0 && mark[p - 1] && !seen[p - 1]) { seen[p - 1] = 1; stack.push(p - 1); }
+      if (x < W - 1 && mark[p + 1] && !seen[p + 1]) { seen[p + 1] = 1; stack.push(p + 1); }
+      if (y > 0 && mark[p - W] && !seen[p - W]) { seen[p - W] = 1; stack.push(p - W); }
+      if (y < H - 1 && mark[p + W] && !seen[p + W]) { seen[p + W] = 1; stack.push(p + W); }
+    }
+    regions.push({ x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1, n });
+  }
+
+  // Speckle from the model's own antialiasing is not a slot.
+  const usable = regions
+    .filter((r) => r.n / (r.w * r.h) >= 0.75 && r.n / (W * H) >= (opts.minCoverage ?? 0.04))
+    .sort((a, b) => b.n - a.n)
+    .slice(0, opts.maxSlots ?? 2);
+
+  if (usable.length === 0) {
+    return { slots: [], coverage, reason: 'placeholder is not a clean rectangle' };
+  }
+  // Reading order: left to right, then top to bottom — a before sits before
+  // an after, whichever way the model arranged the pair.
+  usable.sort((a, b) => (Math.abs(a.y - b.y) > Math.min(a.h, b.h) / 2 ? a.y - b.y : a.x - b.x));
+  return { slots: usable.map((r) => ({ x: r.x, y: r.y, w: r.w, h: r.h })), coverage };
+}
+
 export async function detectSlot(
   png: Buffer,
   opts: {
@@ -430,6 +528,14 @@ export async function composeWithPhoto(params: {
   photo: Buffer;
   slot: PhotoSlot;
   aspectRatio: string;
+  /**
+   * Resize the finished page to the pipeline's canvas. Default true.
+   *
+   * Off while placing the first of a pair: normalising between photographs
+   * would resize the page out from under slot coordinates that were measured
+   * against it, and the second photo would land in the wrong place.
+   */
+  normalise?: boolean;
 }): Promise<Buffer> {
   const INSET = 3;
   const x = Math.max(0, params.slot.x - INSET);
@@ -455,25 +561,50 @@ export async function composeWithPhoto(params: {
     .png()
     .toBuffer();
 
+  if (params.normalise === false) return composed;
+
   // Normalised to the canvas the rest of the pipeline returns. Padded, never
   // cropped: the model does not always honour the aspect it was given, and
   // cropping finished artwork cuts through whatever sits near the edge.
   const { w: cw, h: chh } = CANVAS[params.aspectRatio] ?? CANVAS['4:5'];
-  // Padded with the page's own corner colour. These layouts sit on a flat
-  // ground, so extending it is invisible, where a blurred backdrop read as a
-  // smeared band across the top and bottom of the post.
-  const corner = await sharp(composed)
-    .extract({ left: 0, top: 0, width: Math.min(24, pageW), height: Math.min(24, pageH) })
-    .resize(1, 1, { fit: 'fill' })
-    .raw()
-    .toBuffer();
+  // Padded with the page's own GROUND — the colour it uses most — so the
+  // extension is invisible.
+  //
+  // This used to sample the top-left corner, on the reasoning that these
+  // layouts sit on a flat ground. They mostly do, but when the model draws a
+  // border around the page the corner IS the border, and the pad then
+  // extended that border into thick bands across the top and bottom of the
+  // finished post. The most common colour is the ground whether or not
+  // anything is drawn around it.
+  const ground = await modalColour(composed);
   return sharp(composed)
-    .resize(cw, chh, {
-      fit: 'contain',
-      background: { r: corner[0], g: corner[1], b: corner[2] },
-    })
+    .resize(cw, chh, { fit: 'contain', background: ground })
     .png()
     .toBuffer();
+}
+
+/** The colour a page uses most, sampled coarsely. */
+async function modalColour(png: Buffer): Promise<{ r: number; g: number; b: number }> {
+  try {
+    const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    const { width: W, height: H, channels: C } = info;
+    const tally = new Map<number, number>();
+    // Coarse buckets: a photograph's gradient would otherwise out-vote a flat
+    // ground by sheer variety.
+    for (let y = 0; y < H; y += 4) {
+      for (let x = 0; x < W; x += 4) {
+        const i = (y * W + x) * C;
+        const k = ((data[i] >> 3) << 10) | ((data[i + 1] >> 3) << 5) | (data[i + 2] >> 3);
+        tally.set(k, (tally.get(k) || 0) + 1);
+      }
+    }
+    let best = 0;
+    let bestN = -1;
+    for (const [k, n] of tally) if (n > bestN) { bestN = n; best = k; }
+    return { r: ((best >> 10) & 31) << 3, g: ((best >> 5) & 31) << 3, b: (best & 31) << 3 };
+  } catch {
+    return { r: 255, g: 255, b: 255 };
+  }
 }
 
 const MODEL = process.env['GEMINI_IMAGE_MODEL'] || 'gemini-2.5-flash-image';
@@ -481,6 +612,8 @@ const MODEL = process.env['GEMINI_IMAGE_MODEL'] || 'gemini-2.5-flash-image';
 /** Asks the model for the page. Returns null when it gives no image. */
 export async function generateLayoutPage(params: {
   apiKey: string;
+  /** How many photographs the page must leave room for. */
+  photoCount?: number;
   copy: LayoutCopy;
   brand: LayoutBrand;
   aspectRatio: string;
@@ -494,6 +627,7 @@ export async function generateLayoutPage(params: {
     aspectRatio: params.aspectRatio,
     photoAspect: params.photoAspect,
     hasReference: !!params.reference,
+    photoCount: params.photoCount,
   });
   const parts: any[] = [{ text: prompt }];
   if (params.reference) {
@@ -530,18 +664,23 @@ export type AiLayoutResult =
  */
 export async function renderWithAiLayout(params: {
   apiKey: string;
-  photo: Buffer;
+  /** The photograph, or the pair, in the order they should be read. */
+  photo: Buffer | Buffer[];
   copy: LayoutCopy;
   brand: LayoutBrand;
   aspectRatio: string;
   /** One of the studio's own slides, to take the arrangement from. */
   reference?: Buffer;
 }): Promise<AiLayoutResult> {
+  const photos = Array.isArray(params.photo) ? params.photo.filter(Boolean) : [params.photo];
+  if (photos.length === 0) return { ok: false, reason: 'no photograph to place' };
+
   // The slot is asked for in the photograph's own proportions, so the crop
-  // that follows trims rather than amputates.
+  // that follows trims rather than amputates. For a pair both frames are the
+  // same shape, so the first photo speaks for both.
   let photoAspect: number | undefined;
   try {
-    const meta = await sharp(params.photo).metadata();
+    const meta = await sharp(photos[0]).metadata();
     if (meta.width && meta.height) photoAspect = meta.width / meta.height;
   } catch {
     photoAspect = undefined;
@@ -554,6 +693,7 @@ export async function renderWithAiLayout(params: {
     aspectRatio: params.aspectRatio,
     photoAspect,
     reference: params.reference,
+    photoCount: photos.length,
   });
   if (!page) return { ok: false, reason: 'model returned no image' };
 
@@ -562,16 +702,46 @@ export async function renderWithAiLayout(params: {
   // of type, on a post whose entire job is to show that client's hair. A
   // reference may choose WHERE the photograph sits; it does not get to make it
   // incidental.
-  const found = await detectSlot(page, { minCoverage: 0.16 });
-  if (!found.slot) {
-    return { ok: false, reason: found.reason ?? 'no usable photo slot' };
+  // Per-slot floor, not per-page: a pair splits the same area in two, so
+  // holding each half to the single-photo floor would refuse every pair.
+  const found = await detectSlots(page, {
+    minCoverage: 0.16 / photos.length,
+    maxSlots: photos.length,
+  });
+  if (found.slots.length < photos.length) {
+    return {
+      ok: false,
+      reason: found.reason ?? `found ${found.slots.length} photo slot(s), needed ${photos.length}`,
+    };
   }
 
-  const image = await composeWithPhoto({
-    page,
-    photo: params.photo,
-    slot: found.slot,
-    aspectRatio: params.aspectRatio,
-  });
-  return { ok: true, image, coverage: found.coverage, rectangularity: found.rectangularity };
+  // There was a floor but no ceiling, and the ceiling matters just as much.
+  // A real run came back with an 89% placeholder: the composited photo then
+  // covered 97.6% of the canvas and the model's design — type, ground,
+  // everything — was buried under it. That is not a designed page, it is a
+  // rectangle, and the composited path at least sets the type deliberately.
+  //
+  // The prompt already asks for half to two-thirds. It was ignored, which is
+  // the whole reason this is measured rather than restated.
+  const MAX_SLOT_COVERAGE = 0.72;
+  if (found.coverage > MAX_SLOT_COVERAGE) {
+    return {
+      ok: false,
+      reason: `placeholder covers ${(found.coverage * 100).toFixed(0)}% of the page — no design left to keep`,
+    };
+  }
+
+  let image = page;
+  for (let i = 0; i < photos.length; i += 1) {
+    image = await composeWithPhoto({
+      page: image,
+      photo: photos[i],
+      slot: found.slots[i],
+      aspectRatio: params.aspectRatio,
+      // Normalise the canvas once, after the last photograph is in. Doing it
+      // per photo would resize the page under the slots measured against it.
+      normalise: i === photos.length - 1,
+    });
+  }
+  return { ok: true, image, coverage: found.coverage, rectangularity: 1 };
 }

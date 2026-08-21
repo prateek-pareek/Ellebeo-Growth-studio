@@ -186,7 +186,11 @@ const FRAMED: PostTemplate[] = [
     textAlign: 'left',
     typeAlign: 'top',
     typeScale: 'dramatic',
-    photoShapes: ['circle', 'rounded', 'rect'],
+    // Not circle-first. A circle keeps only pi/4 of its own box, and on a
+    // deliberately small photo region that measured at 11% of the page — the
+    // "significant dead space" the critic reports on 73% of posts. The circle
+    // is still available; it is no longer the default.
+    photoShapes: ['rounded', 'rect', 'circle'],
     allows: { decoration: false, typeScale: ['dramatic', 'balanced'] },
   },
   {
@@ -197,7 +201,13 @@ const FRAMED: PostTemplate[] = [
     // Deliberately off-centre. A centred medallion over centred type is the
     // "everything down the middle" arrangement the anchor rule exists to stop
     // — it reads as a slide, not a composition.
-    photo: r(2, 1, 6, 5),
+    // Enlarged from r(2,1,6,5). A circle keeps only pi/4 of its box, so the
+    // medallion rendered at 14% of the page and the post read as unfinished.
+    // The type starts at row 7, so rows 1-6 were free the whole time; it
+    // keeps the one-cell gutter at row 6, and sits cols 1-8 so the medallion
+    // stays genuinely off-centre — widening it around col 2 pushed its centre
+    // toward the canvas centre and the anchor rule repaired the type to left.
+    photo: r(1, 1, 8, 5),
     text: r(1, 7, 12, 3),
     block: r(1, 10, 12, 3),
     textAlign: 'center',
